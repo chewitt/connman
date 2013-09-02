@@ -1,0 +1,78 @@
+Session API
+***********
+
+
+Connection management algorithm basics
+======================================
+
+When a session is created, a sorted list of services is added to the
+session. The services are filtered and sorted according AllowedBearers.
+
+There are three triggers which lead to evaluate the connect
+algorithm:
+
+ - Session.Connect()
+ - Offline
+
+Connect algorithm:
+
+              Session.Connect()
+                       |
+                +------+-------+
+          +-----+ECall Session ?+-----+
+       Yes|     +--------------+      |No
+          |                           |
+        Connect to            +--------------+
+        first available   +---+AvoidHandover?+---+
+        Service           |   +--------------+   |
+                       Yes|                      |No
+                 +----------------+              |
+             +---+In service_list +---+          |
+          Yes|   |and online?     |   |No        |
+             |   +----------------+   |          |
+             |                        |          |
+         Take that one                Take first in
+                                      the service list
+
+Disconnect algorithm
+
+ - Session.Disconnect()
+
+Disconnect algorithm:
+
+  Session.Disconnect()
+       |
+       +--- Session.Change()
+       |
++-----------------+    Yes
+|service not used +-------------+
+|by other session?|             |
++------.----------+             |
+       |No                      |
+       |                        |
+    Service.Disconnect()   Do nothing
+
+Session.Disconnect() will be blocked whenever a ongoing
+emergency call is active.
+
+
+Session States and Transitions
+==============================
+
+There is only one state which is called Free Ride.
+
+The Free Ride state means that a session will go online if a matching
+service goes online without calling Service.Connect() itself. The idea
+behind this is that a session doesn't request a connection for itself
+instead waits until another session actively requires to go online.
+This is comparable to piggy-backing.
+
+Connnect()
+ +------+
+ |      v
++------------+
+|  Free Ride |
++------------+
+  |     ^
+  +-----+
+ Disconnect()
