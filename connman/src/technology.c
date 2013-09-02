@@ -523,6 +523,7 @@ connman_bool_t __connman_technology_get_offlinemode(void)
 
 static void connman_technology_save_offlinemode()
 {
+	DBG("enter");
 	GKeyFile *keyfile;
 
 	keyfile = __connman_storage_load_global();
@@ -539,7 +540,7 @@ static void connman_technology_save_offlinemode()
 	return;
 }
 
-static connman_bool_t connman_technology_load_offlinemode()
+connman_bool_t connman_technology_load_offlinemode()
 {
 	GKeyFile *keyfile;
 	GError *error = NULL;
