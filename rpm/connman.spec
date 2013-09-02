@@ -17,7 +17,6 @@ URL:        http://connman.net/
 Source0:    %{name}-%{version}.tar.bz2
 Source1:    connman.tracing
 Source2:    main.conf
-Source100:  connman.yaml
 Requires:   dbus >= 1.4
 Requires:   wpa_supplicant >= 0.7.1
 Requires:   bluez
