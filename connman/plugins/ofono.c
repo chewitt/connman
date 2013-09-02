@@ -2114,12 +2114,17 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 
 		if (modem->device == NULL)
 			return TRUE;
+		
+		gboolean offlinemode = TRUE;
+		
+		if (modem->online)
+			offlinemode = FALSE;
+
+		connman_device_set_powered(modem->device, modem->online);
 
 		// Ensure that the flight mode status is saved to
 		// file over boot when changed by someone else
-		__connman_technology_set_offlinemode(modem->online);
-
-		connman_device_set_powered(modem->device, modem->online);
+		__connman_technology_set_offlinemode(offlinemode);
 	} else if (g_str_equal(key, "Interfaces") == TRUE) {
 		uint8_t interfaces;
 
