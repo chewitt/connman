@@ -28,10 +28,10 @@
 #include <string.h>
 
 #include <gdbus.h>
+#include "connman.h"
 #include <connman/agent.h>
 #include <connman/setting.h>
 
-#include "connman.h"
 
 static DBusConnection *connection = NULL;
 static guint agent_watch = 0;
@@ -133,6 +133,10 @@ static void agent_receive_message(DBusPendingCall *call, void *user_data)
 	struct connman_agent *queue_data = user_data;
 	DBusMessage *reply;
 	int err;
+    DBusMessageIter iter;
+    char *key;
+    const char *error = NULL;
+    int type;
 
 	DBG("waiting for %p received %p", agent_request, queue_data);
 
@@ -143,6 +147,7 @@ static void agent_receive_message(DBusPendingCall *call, void *user_data)
 	}
 
 	reply = dbus_pending_call_steal_reply(call);
+
 	dbus_pending_call_unref(call);
 	queue_data->call = NULL;
 
@@ -177,7 +182,7 @@ int connman_agent_queue_message(void *user_context,
 	struct connman_agent_driver *driver;
 	int err;
 
-	if (user_context == NULL || callback == NULL)
+	if (/*user_context == NULL ||*/ callback == NULL)
 		return -EBADMSG;
 
 	queue_data = g_new0(struct connman_agent, 1);
@@ -187,12 +192,14 @@ int connman_agent_queue_message(void *user_context,
 	driver = get_driver();
 	DBG("driver %p", driver);
 
+  if (user_context != NULL) {
 	if (driver != NULL && driver->context_ref != NULL) {
 		queue_data->user_context = driver->context_ref(user_context);
 		queue_data->driver = driver;
-	} else
+      } else {
 		queue_data->user_context = user_context;
-
+      }
+  }
 	queue_data->msg = dbus_message_ref(msg);
 	queue_data->timeout = timeout;
 	queue_data->callback = callback;
@@ -276,6 +283,8 @@ int connman_agent_register(const char *sender, const char *path)
 
 	agent_sender = g_strdup(sender);
 	agent_path = g_strdup(path);
+
+//    setTryit(0);
 
 	agent_watch = g_dbus_add_disconnect_watch(connection, sender,
 						agent_disconnect, NULL, NULL);

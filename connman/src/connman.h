@@ -101,6 +101,9 @@ typedef void (* authentication_cb_t) (struct connman_service *service,
 typedef void (* browser_authentication_cb_t) (struct connman_service *service,
 				connman_bool_t authentication_done,
 				const char *error, void *user_data);
+typedef void (* request_connect_cb_t) (/*struct connman_service *service,*/
+				/*connman_bool_t authentication_done,*/
+				const char *error, void *user_data);
 int __connman_agent_request_passphrase_input(struct connman_service *service,
 				authentication_cb_t callback, void *user_data);
 int __connman_agent_request_login_input(struct connman_service *service,
@@ -108,6 +111,10 @@ int __connman_agent_request_login_input(struct connman_service *service,
 int __connman_agent_request_browser(struct connman_service *service,
 				browser_authentication_cb_t callback,
 				const char *url, void *user_data);
+int __connman_agent_request_connection( /*struct connman_service *service,
+        authentication_cb_t callback, */void *user_data);
+
+void  setTryit(int i);
 
 #include <connman/log.h>
 

@@ -625,3 +625,102 @@ int __connman_agent_request_browser(struct connman_service *service,
 
 	return -EINPROGRESS;
 }
+
+
+struct request_connect_reply_data {
+	struct connman_service *service;
+	request_connect_cb_t callback;
+	void *user_data;
+};
+
+static void request_connect_cb(/*connman_bool_t authentication_done,*/
+                              const char *error,void *user_data)
+{
+// handle reply or timeout here
+
+}
+
+static void request_connect_reply(DBusMessage *reply, void *user_data)
+{
+    DBusMessageIter iter;
+    char *key;
+    int type;
+
+    struct request_connect_reply_data *connect_reply_data = user_data;
+    const char *error = NULL;
+
+    dbus_message_iter_init(reply, &iter);
+    if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
+        error = dbus_message_get_error_name(reply);
+        if (g_strcmp0(error, "net.connman.Agent.Error.Canceled") == 0) {
+            setTryit(0);
+        }
+    }
+    dbus_message_iter_init(reply, &iter);
+    dbus_message_iter_get_basic(&iter, &key);
+
+    DBG(" request_connect_reply <<<<<<<<<<<<<<<<<<<<<<<<<<<<< %s", key);
+      
+		if (g_str_equal(key, "Clear")) {
+      setTryit(0);
+		} else if (g_str_equal(key, "Suppress")) {
+      setTryit(1);
+    }
+
+	g_free(connect_reply_data);
+
+}
+
+int __connman_agent_request_connection(void *user_data)
+{
+
+//    int trythis = (int)user_data;
+    DBG(" __connman_agent_request_connection <<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+    
+    request_connect_cb_t callback = request_connect_cb;
+    DBusMessage *message;
+    struct request_connect_reply_data *connect_reply_data;
+    const char *agent_sender, *agent_path;
+    int err;
+
+    connman_agent_get_info(&agent_sender, &agent_path);
+    if (agent_path == NULL) {
+        return -ESRCH;
+    }
+
+    message = dbus_message_new_method_call(agent_sender, agent_path,
+                                           CONNMAN_AGENT_INTERFACE,
+                                           "RequestConnect");
+
+    if (message == NULL) {
+        return -ENOMEM;
+    }
+
+    struct connman_service *def_service;
+    def_service = __connman_service_get_default();
+
+    connect_reply_data = g_try_new0(struct request_connect_reply_data, 1);
+    if (connect_reply_data == NULL) {
+        dbus_message_unref(message);
+        return -ENOMEM;
+    }
+
+    connect_reply_data->service = def_service;
+    connect_reply_data->callback = callback;
+    connect_reply_data->user_data =  user_data;
+// TODO is autoconnect - do not send
+
+    err = connman_agent_queue_message(def_service, message,
+                                      connman_timeout_input_request(),
+                                      request_connect_reply, connect_reply_data);
+
+    if (err < 0 && err != -EBUSY) {
+        DBG("Eerror %d sending connect request", err);
+        dbus_message_unref(message);
+        g_free(connect_reply_data);
+        return err;
+    }
+
+    dbus_message_unref(message);
+    return -EINPROGRESS;
+}

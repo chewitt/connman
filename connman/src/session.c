@@ -2070,7 +2070,11 @@ int __connman_session_init(void)
 	session_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						NULL, cleanup_session);
 
-	sessionmode = FALSE;
+  if (connman_setting_get_bool("StartSession") == TRUE) {
+      sessionmode = TRUE;
+  } else {
+      sessionmode = FALSE;
+  }
 	return 0;
 }
 

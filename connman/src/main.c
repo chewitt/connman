@@ -72,6 +72,7 @@ static struct {
 	connman_bool_t single_tech;
 	char **tethering_technologies;
 	connman_bool_t persistent_tethering_mode;
+       connman_bool_t start_session;
 } connman_settings  = {
 	.bg_scan = TRUE,
 	.pref_timeservers = NULL,
@@ -85,6 +86,7 @@ static struct {
 	.single_tech = FALSE,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = FALSE,
+       .start_session = FALSE,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -99,6 +101,7 @@ static struct {
 #define CONF_SINGLE_TECH                "SingleConnectedTechnology"
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
+#define CONF_START_SESSION               "StartSession"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -113,6 +116,7 @@ static const char *supported_options[] = {
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
+       CONF_START_SESSION,
 	NULL
 };
 
@@ -334,7 +338,12 @@ static void parse_config(GKeyFile *config)
 			CONF_SINGLE_TECH, &error);
 	if (error == NULL)
 		connman_settings.single_tech = boolean;
+	g_clear_error(&error);
 
+	boolean = g_key_file_get_boolean(config, "General",
+			CONF_START_SESSION, &error);
+	if (error == NULL)
+		connman_settings.start_session = boolean;
 	g_clear_error(&error);
 
 	tethering = g_key_file_get_string_list(config, "General",
@@ -525,6 +534,9 @@ connman_bool_t connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_PERSISTENT_TETHERING_MODE) == TRUE)
 		return connman_settings.persistent_tethering_mode;
+
+	if (g_str_equal(key, CONF_START_SESSION) == TRUE)
+		return connman_settings.start_session;
 
 	return FALSE;
 }
