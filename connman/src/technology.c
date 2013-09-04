@@ -560,6 +560,7 @@ connman_bool_t connman_technology_load_offlinemode()
 
 	g_key_file_free(keyfile);
 
+	DBG("offlinemode: %i", offlinemode);
 	return offlinemode;
 }
 
@@ -1319,7 +1320,7 @@ int __connman_technology_add_device(struct connman_device *device)
 
 	__sync_synchronize();
 	if (technology->rfkill_driven == TRUE) {
-		if (technology->enabled == TRUE)
+		if (technology->enabled == TRUE && global_offlinemode == FALSE)
 			__connman_device_enable(device);
 		else
 			__connman_device_disable(device);
