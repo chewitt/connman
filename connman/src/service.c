@@ -505,6 +505,8 @@ done:
 	return err;
 }
 
+static void service_saved_schedule_changed(void);
+
 static int service_save(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -698,6 +700,9 @@ done:
 
 	g_key_file_free(keyfile);
 
+	if (err == 0) {
+		service_saved_schedule_changed();
+	}
 	return err;
 }
 
@@ -2330,6 +2335,31 @@ static void append_struct(gpointer value, gpointer user_data)
 void __connman_service_list_struct(DBusMessageIter *iter)
 {
 	g_sequence_foreach(service_list, append_struct, iter);
+}
+
+static struct connman_service *service_get(const char *identifier);
+
+void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_append_cb_t function)
+{
+	gchar **services;
+	int i;
+	struct connman_service *service;
+
+	services = connman_storage_get_services();
+	for (i = 0; services && services[i]; i++) {
+		service = service_get(services[i]);
+		if (service == NULL || service->path == NULL)
+			continue;
+
+		append_struct_service(iter, function, service);
+	}
+
+	g_strfreev(services);
+}
+
+void __connman_saved_service_list_struct(DBusMessageIter *iter)
+{
+    __connman_saved_service_list_struct_fn(iter, &append_dict_properties);
 }
 
 connman_bool_t __connman_service_is_hidden(struct connman_service *service)
@@ -4116,6 +4146,8 @@ static struct _services_notify {
 	GHashTable *remove;
 } *services_notify;
 
+static int _saved_services_notify_id = 0;
+
 static void service_append_added_foreach(gpointer data, gpointer user_data)
 {
 	struct connman_service *service = data;
@@ -4143,6 +4175,11 @@ static void service_append_ordered(DBusMessageIter *iter, void *user_data)
 	if (service_list != NULL)
 		g_sequence_foreach(service_list,
 					service_append_added_foreach, iter);
+}
+
+static void saved_service_append_ordered(DBusMessageIter *iter, void *user_data)
+{
+    __connman_saved_service_list_struct_fn(iter, NULL);
 }
 
 static void append_removed(gpointer key, gpointer value, gpointer user_data)
@@ -4188,6 +4225,26 @@ static gboolean service_send_changed(gpointer data)
 	return FALSE;
 }
 
+static gboolean saved_service_send_changed(gpointer data)
+{
+	DBusMessage *signal;
+
+	_saved_services_notify_id = 0;
+
+	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+			CONNMAN_MANAGER_INTERFACE, "SavedServicesChanged");
+	if (signal == NULL)
+		return FALSE;
+
+	__connman_dbus_append_objpath_dict_array(signal,
+			saved_service_append_ordered, NULL);
+
+	dbus_connection_send(connection, signal, NULL);
+	dbus_message_unref(signal);
+
+	return FALSE;
+}
+
 static void service_schedule_changed(void)
 {
 	if (services_notify->id != 0)
@@ -4220,6 +4277,14 @@ static void service_schedule_removed(struct connman_service *service)
 			NULL);
 
 	service_schedule_changed();
+}
+
+static void service_saved_schedule_changed(void)
+{
+	if (_saved_services_notify_id != 0)
+		return;
+
+	_saved_services_notify_id = g_timeout_add(100, saved_service_send_changed, NULL);
 }
 
 static connman_bool_t allow_property_changed(struct connman_service *service)

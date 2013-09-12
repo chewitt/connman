@@ -220,6 +220,26 @@ static DBusMessage *get_services(DBusConnection *conn,
 	return reply;
 }
 
+static void append_saved_service_structs(DBusMessageIter *iter, void *user_data)
+{
+	__connman_saved_service_list_struct(iter);
+}
+
+static DBusMessage *get_saved_services(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+
+	reply = dbus_message_new_method_return(msg);
+	if (reply == NULL)
+		return NULL;
+
+	__connman_dbus_append_objpath_dict_array(reply,
+			append_saved_service_structs, NULL);
+
+	return reply;
+}
+
 static DBusMessage *connect_provider(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -409,6 +429,9 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetServices",
 			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
 			get_services) },
+	{ GDBUS_METHOD("GetSavedServices",
+			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
+			get_saved_services) },
 	{ GDBUS_DEPRECATED_ASYNC_METHOD("ConnectProvider",
 			      GDBUS_ARGS({ "provider", "a{sv}" }),
 			      GDBUS_ARGS({ "path", "o" }),
@@ -456,6 +479,8 @@ static const GDBusSignalTable manager_signals[] = {
 	{ GDBUS_SIGNAL("ServicesChanged",
 			GDBUS_ARGS({ "changed", "a(oa{sv})" },
 					{ "removed", "ao" })) },
+	{ GDBUS_SIGNAL("SavedServicesChanged",
+			GDBUS_ARGS({ "changed", "a(oa{sv})" })) },
 	{ },
 };
 

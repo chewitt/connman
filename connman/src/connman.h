@@ -584,6 +584,7 @@ int __connman_service_init(void);
 void __connman_service_cleanup(void);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
+void __connman_saved_service_list_struct(DBusMessageIter *iter);
 
 struct connman_service *__connman_service_lookup_from_index(int index);
 struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
