@@ -2341,6 +2341,7 @@ static struct connman_service *service_get(const char *identifier);
 
 void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_append_cb_t function)
 {
+  /* fixme
 	gchar **services;
 	int i;
 	struct connman_service *service;
@@ -2355,6 +2356,7 @@ void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_
 	}
 
 	g_strfreev(services);
+	*/
 }
 
 void __connman_saved_service_list_struct(DBusMessageIter *iter)
