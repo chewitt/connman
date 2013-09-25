@@ -193,21 +193,21 @@ enum connman_service_type __connman_service_string2type(const char *str)
 	if (str == NULL)
 		return CONNMAN_SERVICE_TYPE_UNKNOWN;
 
-	if (strcmp(str, "ethernet") == 0)
+	if (strncmp(str, "ethernet", 8) == 0)
 		return CONNMAN_SERVICE_TYPE_ETHERNET;
-	if (strcmp(str, "gadget") == 0)
+	if (strncmp(str, "gadget", 6) == 0)
 		return CONNMAN_SERVICE_TYPE_GADGET;
-	if (strcmp(str, "wifi") == 0)
+	if (strncmp(str, "wifi", 4) == 0)
 		return CONNMAN_SERVICE_TYPE_WIFI;
-	if (strcmp(str, "cellular") == 0)
+	if (strncmp(str, "cellular", 8) == 0)
 		return CONNMAN_SERVICE_TYPE_CELLULAR;
-	if (strcmp(str, "bluetooth") == 0)
+	if (strncmp(str, "bluetooth", 9) == 0)
 		return CONNMAN_SERVICE_TYPE_BLUETOOTH;
-	if (strcmp(str, "vpn") == 0)
+	if (strncmp(str, "vpn", 3) == 0)
 		return CONNMAN_SERVICE_TYPE_VPN;
-	if (strcmp(str, "gps") == 0)
+	if (strncmp(str, "gps", 3) == 0)
 		return CONNMAN_SERVICE_TYPE_GPS;
-	if (strcmp(str, "system") == 0)
+	if (strncmp(str, "system", 6) == 0)
 		return CONNMAN_SERVICE_TYPE_SYSTEM;
 
 	return CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -2337,26 +2337,53 @@ void __connman_service_list_struct(DBusMessageIter *iter)
 	g_sequence_foreach(service_list, append_struct, iter);
 }
 
-static struct connman_service *service_get(const char *identifier);
+static void service_destroy(struct connman_service *service);
 
 void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_append_cb_t function)
 {
-  /* fixme
 	gchar **services;
 	int i;
 	struct connman_service *service;
+	GSequenceIter *hash_iter;
 
 	services = connman_storage_get_services();
-	for (i = 0; services && services[i]; i++) {
-		service = service_get(services[i]);
-		if (service == NULL || service->path == NULL)
+	if (services == NULL)
+		return;
+
+	for (i = 0; services[i] != NULL; i++) {
+		hash_iter = g_hash_table_lookup(service_hash, services[i]);
+		if (hash_iter != NULL) {
+			service = g_sequence_get(hash_iter);
+			if (service == NULL)
+				continue;
+
+			connman_service_ref(service);
+		} else {
+			service = connman_service_create();
+			if (service == NULL)
+				continue;
+
+			service->identifier = g_strdup(services[i]);
+			service->path = g_strdup_printf("%s/service/%s", CONNMAN_PATH, service->identifier);
+
+			service->type = __connman_service_string2type(service->identifier);
+
+			service_load(service);
+		}
+
+		if (service->path == NULL)
 			continue;
 
 		append_struct_service(iter, function, service);
+
+		if (hash_iter != NULL) {
+			connman_service_unref(service);
+		} else {
+			service_destroy(service);
+		}
 	}
 
 	g_strfreev(services);
-	*/
 }
 
 void __connman_saved_service_list_struct(DBusMessageIter *iter)
@@ -4181,7 +4208,7 @@ static void service_append_ordered(DBusMessageIter *iter, void *user_data)
 
 static void saved_service_append_ordered(DBusMessageIter *iter, void *user_data)
 {
-    __connman_saved_service_list_struct_fn(iter, NULL);
+    __connman_saved_service_list_struct_fn(iter, &append_dict_properties);
 }
 
 static void append_removed(gpointer key, gpointer value, gpointer user_data)
@@ -4331,32 +4358,10 @@ static const GDBusSignalTable service_signals[] = {
 	{ },
 };
 
-static void service_free(gpointer user_data)
+static void service_destroy(struct connman_service *service)
 {
-	struct connman_service *service = user_data;
-	char *path = service->path;
-
-	DBG("service %p", service);
-
-	reply_pending(service, ENOENT);
-
-	g_hash_table_remove(service_hash, service->identifier);
-
-	__connman_notifier_service_remove(service);
-	service_schedule_removed(service);
-
-	__connman_wispr_stop(service);
-	stats_stop(service);
-
-	service->path = NULL;
-
-	if (path != NULL) {
-		__connman_connection_update_gateway();
-
-		g_dbus_unregister_interface(connection, path,
-						CONNMAN_SERVICE_INTERFACE);
-		g_free(path);
-	}
+	if (service->path != NULL)
+		g_free(service->path);
 
 	g_hash_table_destroy(service->counter_table);
 
@@ -4415,6 +4420,36 @@ static void service_free(gpointer user_data)
 		g_timer_destroy(service->stats_roaming.timer);
 
 	g_free(service);
+}
+
+static void service_free(gpointer user_data)
+{
+	struct connman_service *service = user_data;
+	char *path = service->path;
+
+	DBG("service %p", service);
+
+	reply_pending(service, ENOENT);
+
+	g_hash_table_remove(service_hash, service->identifier);
+
+	__connman_notifier_service_remove(service);
+	service_schedule_removed(service);
+
+	__connman_wispr_stop(service);
+	stats_stop(service);
+
+	service->path = NULL;
+
+	if (path != NULL) {
+		__connman_connection_update_gateway();
+
+		g_dbus_unregister_interface(connection, path,
+						CONNMAN_SERVICE_INTERFACE);
+		g_free(path);
+	}
+
+	service_destroy(service);
 }
 
 static void stats_init(struct connman_service *service)
