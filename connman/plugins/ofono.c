@@ -42,6 +42,7 @@
 #include <connman/technology.h>
 
 #include "mcc.h"
+#include "connman.h"
 
 #define OFONO_SERVICE			"org.ofono"
 

@@ -1471,24 +1471,15 @@ int __connman_technology_disabled(enum connman_service_type type)
 	return technology_disabled(technology);
 }
 
-int __connman_technology_set_offlinemode(connman_bool_t offlinemode)
+void __connman_technology_set_offlinemode(connman_bool_t offlinemode)
 {
 	GSList *list;
 	int err = -EINVAL;
 
 	if (global_offlinemode == offlinemode)
-		return 0;
+		return;
 
 	DBG("offlinemode %s", offlinemode ? "On" : "Off");
-
-	/*
-	 * This is a bit tricky. When you set offlinemode, there is no
-	 * way to differentiate between attempting offline mode and
-	 * resuming offlinemode from last saved profile. We need that
-	 * information in rfkill_update, otherwise it falls back on the
-	 * technology's persistent state. Hence we set the offline mode here
-	 * but save it & call the notifier only if its successful.
-	 */
 
 	global_offlinemode = offlinemode;
 
@@ -1501,15 +1492,12 @@ int __connman_technology_set_offlinemode(connman_bool_t offlinemode)
 
 		if (!offlinemode && technology->enable_persistent)
 			err = technology_enable(technology);
+
+		DBG("technology %i, err %i", technology->type, err);
 	}
 
-	if (err == 0 || err == -EINPROGRESS || err == -EALREADY) {
-		connman_technology_save_offlinemode();
-		__connman_notifier_offlinemode(offlinemode);
-	} else
-		global_offlinemode = connman_technology_load_offlinemode();
-
-	return err;
+	connman_technology_save_offlinemode();
+	__connman_notifier_offlinemode(offlinemode);
 }
 
 void __connman_technology_set_connected(enum connman_service_type type,
