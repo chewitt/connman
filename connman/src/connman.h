@@ -459,7 +459,7 @@ int __connman_technology_add_device(struct connman_device *device);
 int __connman_technology_remove_device(struct connman_device *device);
 int __connman_technology_enabled(enum connman_service_type type);
 int __connman_technology_disabled(enum connman_service_type type);
-int __connman_technology_set_offlinemode(connman_bool_t offlinemode);
+void __connman_technology_set_offlinemode(connman_bool_t offlinemode);
 connman_bool_t __connman_technology_get_offlinemode(void);
 void __connman_technology_set_connected(enum connman_service_type type,
 					connman_bool_t connected);
