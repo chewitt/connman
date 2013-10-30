@@ -240,6 +240,20 @@ static DBusMessage *get_saved_services(DBusConnection *conn,
 	return reply;
 }
 
+static DBusMessage *remove_saved_service(DBusConnection *conn, DBusMessage *msg, void *data)
+{
+    gchar *identifier;
+    int i;
+    struct connman_service *service;
+
+    dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &identifier, DBUS_TYPE_INVALID);
+
+    if (connman_service_remove(identifier) != TRUE)
+        return __connman_error_failed(msg, EINVAL);
+
+    return dbus_message_new_method_return(msg);
+}
+
 static DBusMessage *connect_provider(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -432,6 +446,9 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetSavedServices",
 			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
 			get_saved_services) },
+    { GDBUS_METHOD("RemoveSavedService",
+            GDBUS_ARGS({ "identifier", "s" }), NULL,
+            remove_saved_service) },
 	{ GDBUS_DEPRECATED_ASYNC_METHOD("ConnectProvider",
 			      GDBUS_ARGS({ "provider", "a{sv}" }),
 			      GDBUS_ARGS({ "path", "o" }),
