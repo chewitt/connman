@@ -89,6 +89,7 @@ struct connman_service;
 struct connman_network;
 
 struct connman_service *connman_service_create(void);
+int connman_service_remove(const char *identifier);
 
 #define connman_service_ref(service) \
 	connman_service_ref_debug(service, __FILE__, __LINE__, __func__)
