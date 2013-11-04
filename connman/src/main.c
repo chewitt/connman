@@ -72,7 +72,9 @@ static struct {
 	connman_bool_t single_tech;
 	char **tethering_technologies;
 	connman_bool_t persistent_tethering_mode;
-       connman_bool_t start_session;
+	connman_bool_t start_session;
+	char **ipv6_status_url;
+	char **ipv4_status_url;
 } connman_settings  = {
 	.bg_scan = TRUE,
 	.pref_timeservers = NULL,
@@ -86,7 +88,9 @@ static struct {
 	.single_tech = FALSE,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = FALSE,
-       .start_session = FALSE,
+	.start_session = FALSE,
+	.ipv4_status_url = NULL,
+	.ipv6_status_url = NULL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -101,7 +105,10 @@ static struct {
 #define CONF_SINGLE_TECH                "SingleConnectedTechnology"
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
-#define CONF_START_SESSION               "StartSession"
+#define CONF_START_SESSION              "StartSession"
+
+#define CONF_STATUS_URL_IPV6            "Ipv6StatusUrl"
+#define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -116,7 +123,9 @@ static const char *supported_options[] = {
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
-       CONF_START_SESSION,
+	CONF_START_SESSION,
+	CONF_STATUS_URL_IPV4,
+	CONF_STATUS_URL_IPV6,
 	NULL
 };
 
@@ -238,6 +247,8 @@ static void parse_config(GKeyFile *config)
 	char **interfaces;
 	char **str_list;
 	char **tethering;
+	char **ipv4url;
+	char **ipv6url;
 	gsize len;
 	int timeout;
 
@@ -361,6 +372,24 @@ static void parse_config(GKeyFile *config)
 		connman_settings.persistent_tethering_mode = boolean;
 
 	g_clear_error(&error);
+
+	ipv4url = g_key_file_get_string(config, "General", CONF_STATUS_URL_IPV4, &error);
+	if (error == NULL)
+		connman_settings.ipv4_status_url = ipv4url;
+	else 
+		connman_settings.ipv4_status_url = "http://ipv4.connman.net/online/status.html";
+
+        g_clear_error(&error);
+
+	ipv6url = g_key_file_get_string(config, "General", CONF_STATUS_URL_IPV6, &error);
+	if (error == NULL)
+		connman_settings.ipv6_status_url = ipv6url;
+	else
+		connman_settings.ipv6_status_url = "http://ipv6.connman.net/online/status.html";
+	  
+
+	g_clear_error(&error);
+
 }
 
 static int config_init(const char *file)
@@ -510,13 +539,18 @@ static GOptionEntry options[] = {
 };
 
 const char *connman_option_get_string(const char *key)
-{
+{	
 	if (g_strcmp0(key, "wifi") == 0) {
 		if (option_wifi == NULL)
 			return "nl80211,wext";
 		else
 			return option_wifi;
 	}
+	if (g_str_equal(key, CONF_STATUS_URL_IPV4) == TRUE) {
+		return connman_settings.ipv4_status_url;
+	}
+	if (g_str_equal(key, CONF_STATUS_URL_IPV6) == TRUE)
+		return connman_settings.ipv6_status_url;
 
 	return NULL;
 }
