@@ -5160,6 +5160,7 @@ static void request_input_cb (struct connman_service *service,
 	} else if (err == -ENOKEY) {
 		__connman_service_indicate_error(service,
 					CONNMAN_SERVICE_ERROR_INVALID_KEY);
+        __connman_service_return_error(service, -err, user_data);
 	} else {
 		/* It is not relevant to stay on Failure state
 		 * when failing is due to wrong user input */
