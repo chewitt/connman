@@ -132,7 +132,7 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 		int index, enum connman_ipconfig_method method);
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
-
+static void service_destroy(struct connman_service *service);
 
 struct find_data {
 	const char *path;
@@ -2110,6 +2110,202 @@ int __connman_service_counter_register(const char *counter)
 	return 0;
 }
 
+static void __connman_service_counter_append_saved(const char *counter, const char *identifier)
+{
+    // Ignore saved cellular services. Only report usage for the currently active SIM
+    if (strncmp(identifier, "cellular_", 9) == 0)
+        return;
+
+    struct connman_service *service = connman_service_create();
+    if (service == NULL)
+        return;
+
+    service->identifier = g_strdup(identifier);
+    service->path = g_strdup_printf("%s/service/%s", CONNMAN_PATH, service->identifier);
+
+    DBusMessage *msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
+    if (msg == NULL) {
+        service_destroy(service);
+        return;
+    }
+
+    __connman_stats_service_register(service);
+
+    dbus_message_append_args(msg, DBUS_TYPE_OBJECT_PATH, &service->path, DBUS_TYPE_INVALID);
+
+    DBusMessageIter array;
+    DBusMessageIter dict;
+
+    dbus_message_iter_init_append(msg, &array);
+
+    struct connman_stats_data data;
+
+    // home counter
+    connman_dbus_dict_open(&array, &dict);
+
+    bzero(&data, sizeof(data));
+    if (__connman_stats_get(service, FALSE, &data) == 0)
+        stats_append_counters(&dict, &data, &data, TRUE);
+
+    connman_dbus_dict_close(&array, &dict);
+
+    // roaming counter
+    connman_dbus_dict_open(&array, &dict);
+
+    bzero(&data, sizeof(data));
+    if (__connman_stats_get(service, TRUE, &data) == 0)
+        stats_append_counters(&dict, &data, &data, TRUE);
+
+    connman_dbus_dict_close(&array, &dict);
+
+    __connman_counter_send_usage(counter, msg);
+
+    __connman_stats_service_unregister(service);
+
+    service_destroy(service);
+}
+
+static void __connman_service_counter_append(const char *counter, struct connman_service *service)
+{
+    DBusMessage *msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
+    if (msg == NULL)
+        return;
+
+    dbus_message_append_args(msg, DBUS_TYPE_OBJECT_PATH, &service->path, DBUS_TYPE_INVALID);
+
+    DBusMessageIter array;
+    DBusMessageIter dict;
+
+    dbus_message_iter_init_append(msg, &array);
+
+    struct connman_stats_data data;
+
+    bzero(&data, sizeof(data));
+    if (__connman_stats_get(service, FALSE, &data) == 0) {
+        // Stats already loaded
+
+        // home counter
+        connman_dbus_dict_open(&array, &dict);
+        stats_append_counters(&dict, &data, &data, TRUE);
+        connman_dbus_dict_close(&array, &dict);
+
+        // roaming counter
+        connman_dbus_dict_open(&array, &dict);
+
+        bzero(&data, sizeof(data));
+        if (__connman_stats_get(service, TRUE, &data) == 0)
+            stats_append_counters(&dict, &data, &data, TRUE);
+
+        connman_dbus_dict_close(&array, &dict);
+    } else {
+        __connman_stats_service_register(service);
+
+        // home counter
+        connman_dbus_dict_open(&array, &dict);
+
+        if (__connman_stats_get(service, FALSE, &data) == 0)
+            stats_append_counters(&dict, &data, &data, TRUE);
+
+        connman_dbus_dict_close(&array, &dict);
+
+        // roaming counter
+        connman_dbus_dict_open(&array, &dict);
+
+        bzero(&data, sizeof(data));
+        if (__connman_stats_get(service, TRUE, &data) == 0)
+            stats_append_counters(&dict, &data, &data, TRUE);
+
+        connman_dbus_dict_close(&array, &dict);
+
+        __connman_stats_service_unregister(service);
+    }
+
+    __connman_counter_send_usage(counter, msg);
+}
+
+void __connman_service_counter_send_initial(const char *counter)
+{
+    gchar **services;
+    int i;
+
+    services = connman_storage_get_services();
+    if (services == NULL)
+        return;
+
+    for (i = 0; services[i] != NULL; i++) {
+        GSequenceIter *hash_iter = g_hash_table_lookup(service_hash, services[i]);
+        if (hash_iter == NULL) {
+            __connman_service_counter_append_saved(counter, services[i]);
+            continue;
+        }
+
+        struct connman_service *service = g_sequence_get(hash_iter);
+        if (service == NULL) {
+            __connman_service_counter_append_saved(counter, services[i]);
+            continue;
+        }
+
+        connman_service_ref(service);
+        __connman_service_counter_append(counter, service);
+        connman_service_unref(service);
+    }
+}
+
+static void __connman_service_counter_reset_saved(const char *identifier)
+{
+    struct connman_service *service = connman_service_create();
+    if (service == NULL)
+        return;
+
+    service->identifier = g_strdup(identifier);
+    service->path = g_strdup_printf("%s/service/%s", CONNMAN_PATH, service->identifier);
+
+    __connman_stats_service_register(service);
+
+    struct connman_stats_data data;
+    bzero(&data, sizeof(data));
+
+    __connman_stats_update(service, FALSE, &data);
+    __connman_stats_update(service, TRUE, &data);
+
+    __connman_stats_service_unregister(service);
+
+    service_destroy(service);
+}
+
+void __connman_service_counter_reset_all(const char *type)
+{
+    gchar **services;
+    int i;
+
+    services = connman_storage_get_services();
+    if (services == NULL)
+        return;
+
+    int typeLength = strlen(type);
+
+    for (i = 0; services[i] != NULL; i++) {
+        if (strncmp(services[i], type, typeLength) != 0)
+            continue;
+
+        GSequenceIter *hash_iter = g_hash_table_lookup(service_hash, services[i]);
+        if (hash_iter == NULL) {
+            __connman_service_counter_reset_saved(services[i]);
+            continue;
+        }
+
+        struct connman_service *service = g_sequence_get(hash_iter);
+        if (service == NULL) {
+            __connman_service_counter_reset_saved(services[i]);
+            continue;
+        }
+
+        connman_service_ref(service);
+        reset_stats(service);
+        connman_service_unref(service);
+    }
+}
+
 void __connman_service_counter_unregister(const char *counter)
 {
 	struct connman_service *service;
@@ -2336,8 +2532,6 @@ void __connman_service_list_struct(DBusMessageIter *iter)
 {
 	g_sequence_foreach(service_list, append_struct, iter);
 }
-
-static void service_destroy(struct connman_service *service);
 
 void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_append_cb_t function)
 {
