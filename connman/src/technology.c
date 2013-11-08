@@ -706,6 +706,7 @@ static int technology_affect_devices(struct connman_technology *technology,
 			err = __connman_device_enable(device);
 		else
 			err = __connman_device_disable(device);
+		DBG("tech: %i, err: %i", technology->type, err);
 	}
 
 	return err;
@@ -1401,6 +1402,7 @@ static void powered_changed(struct connman_technology *technology)
 
 static int technology_enabled(struct connman_technology *technology)
 {
+	DBG("");
 	__sync_synchronize();
 	if (technology->enabled == TRUE)
 		return -EALREADY;
@@ -1438,6 +1440,7 @@ int __connman_technology_enabled(enum connman_service_type type)
 
 static int technology_disabled(struct connman_technology *technology)
 {
+	DBG("");
 	__sync_synchronize();
 	if (technology->enabled == FALSE)
 		return -EALREADY;
@@ -1490,7 +1493,8 @@ void __connman_technology_set_offlinemode(connman_bool_t offlinemode)
 		if (offlinemode)
 			err = technology_disable(technology);
 
-		if (!offlinemode && technology->enable_persistent)
+		if (!offlinemode && (technology->enable_persistent || 
+			technology->type == CONNMAN_SERVICE_TYPE_CELLULAR))
 			err = technology_enable(technology);
 
 		DBG("technology %i, err %i", technology->type, err);
