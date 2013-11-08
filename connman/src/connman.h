@@ -784,6 +784,8 @@ void __connman_service_notify(struct connman_service *service,
 
 int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
+void __connman_service_counter_send_initial(const char *counter);
+void __connman_service_counter_reset_all(const char *type);
 
 #include <connman/peer.h>
 
