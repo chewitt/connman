@@ -714,6 +714,8 @@ void __connman_service_notify(struct connman_service *service,
 			unsigned int rx_dropped, unsigned int tx_dropped);
 
 int __connman_service_counter_register(const char *counter);
+void __connman_service_counter_send_initial(const char *counter);
+void __connman_service_counter_reset_all(const char *type);
 void __connman_service_counter_unregister(const char *counter);
 
 #include <connman/session.h>
