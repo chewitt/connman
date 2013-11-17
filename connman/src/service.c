@@ -5813,18 +5813,27 @@ static gboolean redo_wispr(gpointer user_data)
 	return FALSE;
 }
 
+static gboolean redo_wispr_ipv4(gpointer user_data)
+{
+	struct connman_service *service = user_data;
+
+	DBG("");
+
+	__connman_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	return FALSE;
+}
+
 int __connman_service_online_check_failed(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	DBG("service %p type %d count %d", service, type,
 						service->online_check_count);
 
-	/* currently we only retry IPv6 stuff */
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 ||
-			service->online_check_count != 1) {
-		connman_warn("Online check failed for %p %s", service,
+  if (service->online_check_count != 1) {
+      connman_warn("Online check failed for %p %s", service,
 			service->name);
-		return 0;
+      return 0;
 	}
 
 	service->online_check_count = 0;
@@ -5834,7 +5843,11 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	 * necessary IPv6 router advertisement messages that might have
 	 * DNS data etc.
 	 */
-	g_timeout_add_seconds(1, redo_wispr, service);
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+          g_timeout_add_seconds(1, redo_wispr_ipv4, service);
+      } else {
+          g_timeout_add_seconds(1, redo_wispr, service);
+      }
 
 	return EAGAIN;
 }
@@ -5885,6 +5898,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		update_nameservers(service);
 
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+			service->online_check_count = 1;
 			check_proxy_setup(service);
 			service_rp_filter(service, TRUE);
 		} else {
