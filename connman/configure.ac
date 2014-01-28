@@ -209,6 +209,13 @@ if (test -z "${stats_max_file_size}"); then
    stats_max_file_size="16 * 8 * 128"
 fi
 
+AC_ARG_ENABLE(systemd, AC_HELP_STRING([--enable-systemd],
+			[enable systemd notify on start]), [
+	if (test "${enableval}" = "yes"); then
+		CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
+	fi
+])
+
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
 
 PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,

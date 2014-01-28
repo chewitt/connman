@@ -35,6 +35,7 @@ BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
+BuildRequires:  pkgconfig(libsystemd-daemon)
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -108,6 +109,7 @@ Documentation for connman.
     --enable-client \
     --enable-test \
     --with-systemdunitdir=/%{_lib}/systemd/system
+    --enable-systemd
 
 make %{?jobs:-j%jobs}
 
