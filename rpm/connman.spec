@@ -108,7 +108,7 @@ Documentation for connman.
     --enable-pacrunner=builtin \
     --enable-client \
     --enable-test \
-    --with-systemdunitdir=/%{_lib}/systemd/system
+    --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd
 
 make %{?jobs:-j%jobs}
