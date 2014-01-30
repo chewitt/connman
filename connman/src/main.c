@@ -36,6 +36,9 @@
 #include <netdb.h>
 
 #include <gdbus.h>
+#ifdef SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
 
 #include "connman.h"
 
@@ -494,6 +497,9 @@ static gchar *option_wifi = NULL;
 static gboolean option_detach = TRUE;
 static gboolean option_dnsproxy = TRUE;
 static gboolean option_backtrace = TRUE;
+#ifdef SYSTEMD
+static gboolean option_systemd = FALSE;
+#endif
 static gboolean option_version = FALSE;
 
 static gboolean parse_debug(const char *key, const char *value,
@@ -533,6 +539,11 @@ static GOptionEntry options[] = {
 	{ "nobacktrace", 0, G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_backtrace,
 				"Don't print out backtrace information" },
+#ifdef SYSTEMD
+	{ "systemd", 0, G_OPTION_FLAG_OPTIONAL_ARG,
+				G_OPTION_ARG_NONE, &option_systemd,
+				"Notify systemd when started"},
+#endif
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
 				"Show version information and exit" },
 	{ NULL },
@@ -743,6 +754,12 @@ int main(int argc, char *argv[])
 	g_free(option_plugin);
 	g_free(option_nodevice);
 	g_free(option_noplugin);
+
+#ifdef SYSTEMD
+	/* Tell systemd that we have started up */
+	if( option_systemd )
+		sd_notify(0, "READY=1");
+#endif
 
 	g_main_loop_run(main_loop);
 

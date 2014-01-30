@@ -3,11 +3,10 @@ Description=Connection service
 After=syslog.target
 
 [Service]
-Type=dbus
-BusName=net.connman
+Type=notify
 Restart=on-failure
 EnvironmentFile=-/etc/tracing/connman
-ExecStart=@prefix@/sbin/connmand -n $TRACING
+ExecStart=@prefix@/sbin/connmand -n --systemd $TRACING
 StandardOutput=null
 Restart=always
 
