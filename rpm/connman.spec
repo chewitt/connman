@@ -115,17 +115,17 @@ ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.want
 
 %preun
 if [ "$1" -eq 0 ]; then
-systemctl stop connman.service
+systemctl stop connman.service || :
 fi
 
 %post
-systemctl daemon-reload
+systemctl daemon-reload || :
 # Do not restart connman here or network breaks.
 # We can't reload it either as connman doesn't
 # support that feature.
 
 %postun
-systemctl daemon-reload
+systemctl daemon-reload || :
 
 %files
 %defattr(-,root,root,-)
