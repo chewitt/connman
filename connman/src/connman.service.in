@@ -1,6 +1,7 @@
 [Unit]
 Description=Connection service
-After=syslog.target
+Requires=dbus.service
+After=dbus.service
 
 [Service]
 Type=notify
