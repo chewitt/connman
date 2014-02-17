@@ -75,21 +75,23 @@ static int tunnel_create(struct in_addr *addr)
 	p.iph.protocol = IPPROTO_IPV6;
 	p.iph.saddr = addr->s_addr;
 	p.iph.ttl = 64;
-	strncpy(p.name, "tun6to4", IFNAMSIZ);
+	strncpy(p.name, "tun6to4", sizeof(p.name) - 1);
 
-	strncpy(ifr.ifr_name, "sit0", IFNAMSIZ);
+	strncpy(ifr.ifr_name, "sit0", sizeof(ifr.ifr_name) - 1);
 	ifr.ifr_ifru.ifru_data = (void *)&p;
 	fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return -errno;
 	ret = ioctl(fd, SIOCADDTUNNEL, &ifr);
 	if (ret)
 		connman_error("add tunnel %s failed: %s", ifr.ifr_name,
 							strerror(errno));
 	close(fd);
 
-	return ret;
+	return -ret;
 }
 
-static void tunnel_destroy()
+static void tunnel_destroy(void)
 {
 	struct ip_tunnel_parm p;
 	struct ifreq ifr;
@@ -107,9 +109,9 @@ static void tunnel_destroy()
 	p.iph.version = 4;
 	p.iph.ihl = 5;
 	p.iph.protocol = IPPROTO_IPV6;
-	strncpy(p.name, "tun6to4", IFNAMSIZ);
+	strncpy(p.name, "tun6to4", sizeof(p.name) - 1);
 
-	strncpy(ifr.ifr_name, "tun6to4", IFNAMSIZ);
+	strncpy(ifr.ifr_name, "tun6to4", sizeof(ifr.ifr_name) - 1);
 	ifr.ifr_ifru.ifru_data = (void *)&p;
 	fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (fd < 0) {
@@ -131,7 +133,7 @@ static void tunnel_destroy()
 	tunnel_ip_address = NULL;
 }
 
-static int tunnel_add_route()
+static int tunnel_add_route(void)
 {
 	struct __connman_inet_rtnl_handle rth;
 	struct in6_addr addr6;
@@ -229,12 +231,12 @@ static gboolean unref_web(gpointer user_data)
 	return FALSE;
 }
 
-static gboolean web_result(GWebResult *result, gpointer user_data)
+static bool web_result(GWebResult *result, gpointer user_data)
 {
 	guint16 status;
 
 	if (web_request_id == 0)
-		return FALSE;
+		return false;
 
 	status = g_web_result_get_status(result);
 
@@ -249,7 +251,7 @@ static gboolean web_result(GWebResult *result, gpointer user_data)
 
 	g_timeout_add_seconds(1, unref_web, NULL);
 
-	return FALSE;
+	return false;
 }
 
 static void web_debug(const char *str, void *data)
@@ -301,7 +303,7 @@ static void tun_newlink(unsigned flags, unsigned change, void *user_data)
 		}
 
 		web = g_web_new(index);
-		if (web == NULL) {
+		if (!web) {
 			tunnel_destroy();
 			return;
 		}
@@ -384,7 +386,7 @@ static void receive_rs_reply(struct nd_router_advert *reply,
 	/* We try to create tunnel if autoconfiguration did not work i.e.,
 	 * we did not receive any reply to router solicitation message.
 	 */
-	if (reply == NULL && inet_aton(address, &ip4addr) != 0)
+	if (!reply && inet_aton(address, &ip4addr) != 0)
 		init_6to4(&ip4addr);
 
 	g_free(address);
@@ -406,15 +408,15 @@ int __connman_6to4_probe(struct connman_service *service)
 	if (tunnel_created || tunnel_pending)
 		return 0;
 
-	if (service == NULL)
+	if (!service)
 		return -1;
 
 	ip4config = __connman_service_get_ip4config(service);
-	if (ip4config == NULL)
+	if (!ip4config)
 		return -1;
 
 	ip6config = __connman_service_get_ip6config(service);
-	if (ip6config == NULL)
+	if (!ip6config)
 		return -1;
 
 	method = __connman_ipconfig_get_method(ip6config);
@@ -422,7 +424,7 @@ int __connman_6to4_probe(struct connman_service *service)
 		return -1;
 
 	address = __connman_ipconfig_get_local(ip4config);
-	if (address == NULL)
+	if (!address)
 		return -1;
 
 	if (inet_aton(address, &ip4addr) == 0)
@@ -455,11 +457,11 @@ void __connman_6to4_remove(struct connman_ipconfig *ip4config)
 
 	DBG("tunnel ip address %s", tunnel_ip_address);
 
-	if (ip4config == NULL)
+	if (!ip4config)
 		return;
 
 	address = __connman_ipconfig_get_local(ip4config);
-	if (address == NULL)
+	if (!address)
 		return;
 
 	if (g_strcmp0(address, tunnel_ip_address) != 0)
@@ -473,14 +475,14 @@ int __connman_6to4_check(struct connman_ipconfig *ip4config)
 {
 	const char *address;
 
-	if (ip4config == NULL || tunnel_created == 0 ||
+	if (!ip4config || tunnel_created == 0 ||
 					tunnel_pending == 1)
 		return -1;
 
 	DBG("tunnel ip address %s", tunnel_ip_address);
 
 	address = __connman_ipconfig_get_local(ip4config);
-	if (address == NULL)
+	if (!address)
 		return -1;
 
 	if (g_strcmp0(address, tunnel_ip_address) == 0)

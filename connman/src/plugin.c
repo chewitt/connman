@@ -33,22 +33,11 @@
 
 #include "connman.h"
 
-/*
- * Plugins that are using libraries with threads and their own mainloop
- * will crash on exit. This is a bug inside these libraries, but there is
- * nothing much that can be done about it.
- */
-#ifdef NEED_THREADS
-#define PLUGINFLAG (RTLD_NOW | RTLD_NODELETE)
-#else
-#define PLUGINFLAG (RTLD_NOW)
-#endif
-
 static GSList *plugins = NULL;
 
 struct connman_plugin {
 	void *handle;
-	gboolean active;
+	bool active;
 	struct connman_plugin_desc *desc;
 };
 
@@ -60,35 +49,35 @@ static gint compare_priority(gconstpointer a, gconstpointer b)
 	return plugin2->desc->priority - plugin1->desc->priority;
 }
 
-static gboolean add_plugin(void *handle, struct connman_plugin_desc *desc)
+static bool add_plugin(void *handle, struct connman_plugin_desc *desc)
 {
 	struct connman_plugin *plugin;
 
-	if (desc->init == NULL)
-		return FALSE;
+	if (!desc->init)
+		return false;
 
-	if (g_str_equal(desc->version, CONNMAN_VERSION) == FALSE) {
+	if (!g_str_equal(desc->version, CONNMAN_VERSION)) {
 		connman_error("Invalid version %s for %s", desc->version,
 							desc->description);
-		return FALSE;
+		return false;
 	}
 
 	plugin = g_try_new0(struct connman_plugin, 1);
-	if (plugin == NULL)
-		return FALSE;
+	if (!plugin)
+		return false;
 
 	plugin->handle = handle;
-	plugin->active = FALSE;
+	plugin->active = false;
 	plugin->desc = desc;
 
 	__connman_log_enable(desc->debug_start, desc->debug_stop);
 
 	plugins = g_slist_insert_sorted(plugins, plugin, compare_priority);
 
-	return TRUE;
+	return true;
 }
 
-static gboolean check_plugin(struct connman_plugin_desc *desc,
+static bool check_plugin(struct connman_plugin_desc *desc,
 				char **patterns, char **excludes)
 {
 	if (excludes) {
@@ -97,7 +86,7 @@ static gboolean check_plugin(struct connman_plugin_desc *desc,
 				break;
 		if (*excludes) {
 			connman_info("Excluding %s", desc->description);
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -107,11 +96,11 @@ static gboolean check_plugin(struct connman_plugin_desc *desc,
 				break;
 		if (!*patterns) {
 			connman_info("Ignoring %s", desc->description);
-			return FALSE;
+			return false;
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
 #include <builtin.h>
@@ -135,27 +124,26 @@ int __connman_plugin_init(const char *pattern, const char *exclude)
 		excludes = g_strsplit_set(exclude, ":, ", -1);
 
 	for (i = 0; __connman_builtin[i]; i++) {
-		if (check_plugin(__connman_builtin[i],
-						patterns, excludes) == FALSE)
+		if (!check_plugin(__connman_builtin[i], patterns, excludes))
 			continue;
 
 		add_plugin(NULL, __connman_builtin[i]);
 	}
 
 	dir = g_dir_open(PLUGINDIR, 0, NULL);
-	if (dir != NULL) {
-		while ((file = g_dir_read_name(dir)) != NULL) {
+	if (dir) {
+		while ((file = g_dir_read_name(dir))) {
 			void *handle;
 			struct connman_plugin_desc *desc;
 
-			if (g_str_has_prefix(file, "lib") == TRUE ||
-					g_str_has_suffix(file, ".so") == FALSE)
+			if (g_str_has_prefix(file, "lib") ||
+					!g_str_has_suffix(file, ".so"))
 				continue;
 
 			filename = g_build_filename(PLUGINDIR, file, NULL);
 
-			handle = dlopen(filename, PLUGINFLAG);
-			if (handle == NULL) {
+			handle = dlopen(filename, RTLD_NOW);
+			if (!handle) {
 				connman_error("Can't load %s: %s",
 							filename, dlerror());
 				g_free(filename);
@@ -165,19 +153,19 @@ int __connman_plugin_init(const char *pattern, const char *exclude)
 			g_free(filename);
 
 			desc = dlsym(handle, "connman_plugin_desc");
-			if (desc == NULL) {
+			if (!desc) {
 				connman_error("Can't load symbol: %s",
 								dlerror());
 				dlclose(handle);
 				continue;
 			}
 
-			if (check_plugin(desc, patterns, excludes) == FALSE) {
+			if (!check_plugin(desc, patterns, excludes)) {
 				dlclose(handle);
 				continue;
 			}
 
-			if (add_plugin(handle, desc) == FALSE)
+			if (!add_plugin(handle, desc))
 				dlclose(handle);
 		}
 
@@ -190,7 +178,7 @@ int __connman_plugin_init(const char *pattern, const char *exclude)
 		if (plugin->desc->init() < 0)
 			continue;
 
-		plugin->active = TRUE;
+		plugin->active = true;
 	}
 
 	g_strfreev(patterns);
@@ -208,10 +196,10 @@ void __connman_plugin_cleanup(void)
 	for (list = plugins; list; list = list->next) {
 		struct connman_plugin *plugin = list->data;
 
-		if (plugin->active == TRUE && plugin->desc->exit)
+		if (plugin->active && plugin->desc->exit)
 			plugin->desc->exit();
 
-		if (plugin->handle != NULL)
+		if (plugin->handle)
 			dlclose(plugin->handle);
 
 		g_free(plugin);

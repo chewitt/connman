@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dbus/dbus.h>
+#include <glib.h>
 
 #include "dbus.h"
 
@@ -51,7 +52,7 @@ void supplicant_dbus_array_foreach(DBusMessageIter *iter,
 	dbus_message_iter_recurse(iter, &entry);
 
 	while (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_INVALID) {
-		if (function != NULL)
+		if (function)
 			function(&entry, user_data);
 
 		dbus_message_iter_next(&entry);
@@ -86,11 +87,11 @@ void supplicant_dbus_property_foreach(DBusMessageIter *iter,
 
 		dbus_message_iter_recurse(&entry, &value);
 
-		if (key != NULL) {
+		if (key) {
 			if (strcmp(key, "Properties") == 0)
 				supplicant_dbus_property_foreach(&value,
 							function, user_data);
-			else if (function != NULL)
+			else if (function)
 				function(key, &value, user_data);
 		}
 
@@ -114,13 +115,13 @@ static void property_get_all_reply(DBusPendingCall *call, void *user_data)
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
 		goto done;
 
-	if (dbus_message_iter_init(reply, &iter) == FALSE)
+	if (!dbus_message_iter_init(reply, &iter))
 		goto done;
 
 	supplicant_dbus_property_foreach(&iter, data->function,
 							data->user_data);
 
-	if (data->function != NULL)
+	if (data->function)
 		data->function(NULL, NULL, data->user_data);
 
 done:
@@ -137,19 +138,19 @@ int supplicant_dbus_property_get_all(const char *path, const char *interface,
 	DBusMessage *message;
 	DBusPendingCall *call;
 
-	if (connection == NULL)
+	if (!connection)
 		return -EINVAL;
 
-	if (path == NULL || interface == NULL)
+	if (!path || !interface)
 		return -EINVAL;
 
 	data = dbus_malloc0(sizeof(*data));
-	if (data == NULL)
+	if (!data)
 		return -ENOMEM;
 
 	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
 					DBUS_INTERFACE_PROPERTIES, "GetAll");
-	if (message == NULL) {
+	if (!message) {
 		dbus_free(data);
 		return -ENOMEM;
 	}
@@ -158,14 +159,14 @@ int supplicant_dbus_property_get_all(const char *path, const char *interface,
 
 	dbus_message_append_args(message, DBUS_TYPE_STRING, &interface, NULL);
 
-	if (dbus_connection_send_with_reply(connection, message,
-						&call, TIMEOUT) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, message,
+						&call, TIMEOUT)) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
 	}
 
-	if (call == NULL) {
+	if (!call) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
@@ -193,7 +194,7 @@ static void property_get_reply(DBusPendingCall *call, void *user_data)
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
 		goto done;
 
-	if (dbus_message_iter_init(reply, &iter) == FALSE)
+	if (!dbus_message_iter_init(reply, &iter))
 		goto done;
 
 	if (dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_VARIANT) {
@@ -201,7 +202,7 @@ static void property_get_reply(DBusPendingCall *call, void *user_data)
 
 		dbus_message_iter_recurse(&iter, &variant);
 
-		if (data->function != NULL)
+		if (data->function)
 			data->function(NULL, &variant, data->user_data);
 	}
 done:
@@ -219,20 +220,20 @@ int supplicant_dbus_property_get(const char *path, const char *interface,
 	DBusMessage *message;
 	DBusPendingCall *call;
 
-	if (connection == NULL)
+	if (!connection)
 		return -EINVAL;
 
-	if (path == NULL || interface == NULL || method == NULL)
+	if (!path || !interface || !method)
 		return -EINVAL;
 
 	data = dbus_malloc0(sizeof(*data));
-	if (data == NULL)
+	if (!data)
 		return -ENOMEM;
 
 	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
 					DBUS_INTERFACE_PROPERTIES, "Get");
 
-	if (message == NULL) {
+	if (!message) {
 		dbus_free(data);
 		return -ENOMEM;
 	}
@@ -242,14 +243,14 @@ int supplicant_dbus_property_get(const char *path, const char *interface,
 	dbus_message_append_args(message, DBUS_TYPE_STRING, &interface,
 					DBUS_TYPE_STRING, &method, NULL);
 
-	if (dbus_connection_send_with_reply(connection, message,
-						&call, TIMEOUT) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, message,
+						&call, TIMEOUT)) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
 	}
 
-	if (call == NULL) {
+	if (!call) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
@@ -287,7 +288,7 @@ static void property_set_reply(DBusPendingCall *call, void *user_data)
 
 	dbus_message_iter_init(reply, &iter);
 
-	if (data->function != NULL)
+	if (data->function)
 		data->function(error, &iter, data->user_data);
 
 	dbus_message_unref(reply);
@@ -306,22 +307,22 @@ int supplicant_dbus_property_set(const char *path, const char *interface,
 	DBusMessageIter iter, value;
 	DBusPendingCall *call;
 
-	if (connection == NULL)
+	if (!connection)
 		return -EINVAL;
 
-	if (path == NULL || interface == NULL)
+	if (!path || !interface)
 		return -EINVAL;
 
-	if (key == NULL || signature == NULL || setup == NULL)
+	if (!key || !signature || !setup)
 		return -EINVAL;
 
 	data = dbus_malloc0(sizeof(*data));
-	if (data == NULL)
+	if (!data)
 		return -ENOMEM;
 
 	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
 					DBUS_INTERFACE_PROPERTIES, "Set");
-	if (message == NULL) {
+	if (!message) {
 		dbus_free(data);
 		return -ENOMEM;
 	}
@@ -337,14 +338,14 @@ int supplicant_dbus_property_set(const char *path, const char *interface,
 	setup(&value, user_data);
 	dbus_message_iter_close_container(&iter, &value);
 
-	if (dbus_connection_send_with_reply(connection, message,
-						&call, TIMEOUT) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, message,
+						&call, TIMEOUT)) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
 	}
 
-	if (call == NULL) {
+	if (!call) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
@@ -366,9 +367,22 @@ struct method_call_data {
 	void *user_data;
 };
 
+void supplicant_dbus_call_callback(DBusPendingCall *call, dbus_int32_t slot)
+{
+	struct method_call_data *data;
+
+	data = dbus_pending_call_get_data(call, slot);
+	if (data && data->function)
+		data->function("net.connman.Error.OperationAborted",
+			NULL, data->user_data);
+
+	dbus_pending_call_free_data_slot(&slot);
+	dbus_pending_call_unref(call);
+}
+
 static void method_call_reply(DBusPendingCall *call, void *user_data)
 {
-	struct method_call_data *data = user_data;
+	struct method_call_data *data;
 	DBusMessage *reply;
 	DBusMessageIter iter;
 	const char *error;
@@ -382,7 +396,8 @@ static void method_call_reply(DBusPendingCall *call, void *user_data)
 
 	dbus_message_iter_init(reply, &iter);
 
-	if (data->function != NULL)
+	data = dbus_pending_call_get_data(call, GPOINTER_TO_INT(user_data));
+	if (data && data->function)
 		data->function(error, &iter, data->user_data);
 
 	dbus_message_unref(reply);
@@ -394,26 +409,29 @@ int supplicant_dbus_method_call(const char *path,
 				const char *interface, const char *method,
 				supplicant_dbus_setup_function setup,
 				supplicant_dbus_result_function function,
-							void *user_data)
+				void *user_data,
+				DBusPendingCall **pending_call,
+				dbus_int32_t *data_slot)
 {
 	struct method_call_data *data;
 	DBusMessage *message;
 	DBusMessageIter iter;
 	DBusPendingCall *call;
+	dbus_int32_t slot = -1;
 
-	if (connection == NULL)
+	if (!connection)
 		return -EINVAL;
 
-	if (path == NULL || interface == NULL || method == NULL)
+	if (!path || !interface || !method)
 		return -EINVAL;
 
 	data = dbus_malloc0(sizeof(*data));
-	if (data == NULL)
+	if (!data)
 		return -ENOMEM;
 
 	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
 							interface, method);
-	if (message == NULL) {
+	if (!message) {
 		dbus_free(data);
 		return -ENOMEM;
 	}
@@ -421,17 +439,17 @@ int supplicant_dbus_method_call(const char *path,
 	dbus_message_set_auto_start(message, FALSE);
 
 	dbus_message_iter_init_append(message, &iter);
-	if (setup != NULL)
+	if (setup)
 		setup(&iter, user_data);
 
-	if (dbus_connection_send_with_reply(connection, message,
-						&call, TIMEOUT) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, message,
+						&call, TIMEOUT)) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
 	}
 
-	if (call == NULL) {
+	if (!call) {
 		dbus_message_unref(message);
 		dbus_free(data);
 		return -EIO;
@@ -440,10 +458,19 @@ int supplicant_dbus_method_call(const char *path,
 	data->function = function;
 	data->user_data = user_data;
 
-	dbus_pending_call_set_notify(call, method_call_reply,
-							data, dbus_free);
+	if (dbus_pending_call_allocate_data_slot(&slot)) {
+		dbus_pending_call_set_data(call, slot, data, dbus_free);
+		dbus_pending_call_set_notify(call, method_call_reply,
+					GINT_TO_POINTER(slot), NULL);
+	}
 
 	dbus_message_unref(message);
+
+	if (pending_call)
+		*pending_call = call;
+
+	if (data_slot)
+		*data_slot = slot;
 
 	return 0;
 }

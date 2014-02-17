@@ -56,7 +56,7 @@ static void pbkdf2_test(gconstpointer data)
 
 	key_len = test->key_len ? : (strlen(test->key) / 2);
 
-	if (g_test_verbose() == TRUE) {
+	if (g_test_verbose()) {
 		g_print("Password = \"%s\" (%d octects)\n",
 					test->password, password_len);
 		g_print("Salt     = \"%s\" (%d octects)\n",
@@ -74,9 +74,8 @@ static void pbkdf2_test(gconstpointer data)
 	for (i = 0; i < key_len; i++)
 		sprintf(key + (i * 2), "%02x", output[i]);
 
-	if (g_test_verbose() == TRUE) {
+	if (g_test_verbose())
 		g_print("Result   = %s\n", key);
-	}
 
 	g_assert(strcmp(test->key, key) == 0);
 }
@@ -200,7 +199,7 @@ static void psk_test(gconstpointer data)
 	unsigned int i;
 	int result;
 
-	if (test->network == NULL) {
+	if (!test->network) {
 		memcpy(ssid, test->ssid, test->ssid_len);
 		ssid_len = test->ssid_len;
 	} else {
@@ -208,7 +207,7 @@ static void psk_test(gconstpointer data)
 		memcpy(ssid, test->network, ssid_len);
 	}
 
-	if (g_test_verbose() == TRUE) {
+	if (g_test_verbose()) {
 		g_print("Passphrase  = \"%s\"\n", test->passphrase);
 		g_print("SSID        = {");
 		for (i = 0; i < ssid_len; i++)
@@ -228,9 +227,8 @@ static void psk_test(gconstpointer data)
 	for (i = 0; i < sizeof(output); i++)
 		sprintf(psk + (i * 2), "%02x", output[i]);
 
-	if (g_test_verbose() == TRUE) {
+	if (g_test_verbose())
 		g_print("Result      = %s\n", psk);
-	}
 
 	g_assert(strcmp(test->psk, psk) == 0);
 }

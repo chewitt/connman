@@ -73,7 +73,7 @@ static GSList *session_parse_allowed_bearers(DBusMessageIter *iter)
 		dbus_message_iter_get_basic(&array, &bearer);
 
 		info = g_try_new0(struct test_bearer_info, 1);
-		if (info == NULL) {
+		if (!info) {
 			g_slist_foreach(list, bearer_info_cleanup, NULL);
 			g_slist_free(list);
 
@@ -97,7 +97,7 @@ static DBusMessage *notify_release(DBusConnection *conn,
 
 	LOG("session %p", session);
 
-	if (session->notify != NULL)
+	if (session->notify)
 		session->notify(session);
 
 	return NULL;
@@ -128,7 +128,7 @@ static DBusMessage *notify_update(DBusConnection *conn,
 
 		switch (dbus_message_iter_get_arg_type(&value)) {
 		case DBUS_TYPE_ARRAY:
-			if (g_str_equal(key, "AllowedBearers") == TRUE) {
+			if (g_str_equal(key, "AllowedBearers")) {
 				allowed_bearers = session_parse_allowed_bearers(&value);
 
 				g_slist_foreach(info->allowed_bearers,
@@ -137,10 +137,10 @@ static DBusMessage *notify_update(DBusConnection *conn,
 
 				info->allowed_bearers = allowed_bearers;
 
-			} else if (g_str_equal(key, "IPv4") == TRUE) {
+			} else if (g_str_equal(key, "IPv4")) {
 				/* XXX */
 
-			} else if (g_str_equal(key, "IPv6") == TRUE) {
+			} else if (g_str_equal(key, "IPv6")) {
 				/* XXX */
 
 			} else {
@@ -149,40 +149,40 @@ static DBusMessage *notify_update(DBusConnection *conn,
 			}
 			break;
 		case DBUS_TYPE_STRING:
-			if (g_str_equal(key, "State") == TRUE) {
+			if (g_str_equal(key, "State")) {
 				const char *val;
 				dbus_message_iter_get_basic(&value, &val);
 
 				info->state = string2state(val);
-			} else if (g_str_equal(key, "Bearer") == TRUE) {
+			} else if (g_str_equal(key, "Bearer")) {
 				const char *val;
 				dbus_message_iter_get_basic(&value, &val);
 
-				if (info->bearer != NULL)
+				if (info->bearer)
 					g_free(info->bearer);
 
 				info->bearer = g_strdup(val);
 
-			} else if (g_str_equal(key, "Name") == TRUE) {
+			} else if (g_str_equal(key, "Name")) {
 				const char *val;
 				dbus_message_iter_get_basic(&value, &val);
 
-				if (info->name != NULL)
+				if (info->name)
 					g_free(info->name);
 
 				info->name = g_strdup(val);
 
-			} else if (g_str_equal(key, "Interface") == TRUE) {
+			} else if (g_str_equal(key, "Interface")) {
 				const char *val;
 				dbus_message_iter_get_basic(&value, &val);
 
-				if (info->interface != NULL)
+				if (info->interface)
 					g_free(info->interface);
 
 				info->interface = g_strdup(val);
 
 			} else if (g_str_equal(key, "ConnectionType")
-								== TRUE) {
+								) {
 				const char *val;
 				dbus_message_iter_get_basic(&value, &val);
 
@@ -199,7 +199,7 @@ static DBusMessage *notify_update(DBusConnection *conn,
 		dbus_message_iter_next(&array);
 	}
 
-	if (session->notify != NULL)
+	if (session->notify)
 		session->notify(session);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
@@ -216,10 +216,7 @@ static const GDBusMethodTable notify_methods[] = {
 int session_notify_register(struct test_session *session,
 				const char *notify_path)
 {
-	if (g_dbus_register_interface(session->connection, notify_path,
-			CONNMAN_NOTIFICATION_INTERFACE,
-			notify_methods, NULL, NULL,
-			session, NULL) == FALSE) {
+	if (!g_dbus_register_interface(session->connection, notify_path, CONNMAN_NOTIFICATION_INTERFACE, notify_methods, NULL, NULL, session, NULL)) {
 		return -EINVAL;
 	}
 
@@ -229,8 +226,7 @@ int session_notify_register(struct test_session *session,
 int session_notify_unregister(struct test_session *session,
 				const char *notify_path)
 {
-	if (g_dbus_unregister_interface(session->connection, notify_path,
-				CONNMAN_NOTIFICATION_INTERFACE) == FALSE) {
+	if (!g_dbus_unregister_interface(session->connection, notify_path, CONNMAN_NOTIFICATION_INTERFACE)) {
 		return -EINVAL;
 	}
 
@@ -243,7 +239,7 @@ static void append_allowed_bearers(DBusMessageIter *iter, void *user_data)
 	GSList *list;
 
 	for (list = info->allowed_bearers;
-			list != NULL; list = list->next) {
+			list; list = list->next) {
 		struct test_bearer_info *bearer_info = list->data;
 
 		dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING,
@@ -254,7 +250,7 @@ static void append_allowed_bearers(DBusMessageIter *iter, void *user_data)
 void session_append_settings(DBusMessageIter *dict,
 				struct test_session_info *info)
 {
-	if (info->allowed_bearers == NULL)
+	if (!info->allowed_bearers)
 		return;
 
 	connman_dbus_dict_append_array(dict, "AllowedBearers",
@@ -273,15 +269,15 @@ DBusMessage *session_connect(DBusConnection *connection,
 						session->session_path,
 						CONNMAN_SESSION_INTERFACE,
 							"Connect");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_error_init(&error);
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {
@@ -306,15 +302,15 @@ DBusMessage *session_disconnect(DBusConnection *connection,
 						session->session_path,
 						CONNMAN_SESSION_INTERFACE,
 							"Disconnect");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_error_init(&error);
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {

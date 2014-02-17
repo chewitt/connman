@@ -6,26 +6,27 @@ vpnd will be looking for its configuration files at VPN_STORAGEDIR
 which by default points to /var/lib/connman-vpn. Configuration file names
 must not include other characters than letters or numbers and must have
 a .config suffix. Those configuration files are text files with a simple
-format and we typically have one file per provisioned network.
+key-value pair format organized into sections. Values do not comprise leading
+trailing whitespace. We typically have one file per provisioned network.
 
 If the config file is removed, then vpnd tries to remove the
-provisioned service. If individual service entry inside config is removed,
-then the corresponding provisioned service is removed. If service
-entry is changed, then corresponding service is removed and then
-immediately re-provisioned.
+provisioned service. If an individual service entry inside a config is removed,
+then the corresponding provisioned service is removed. If a service
+section is changed, then the corresponding service is removed and immediately
+re-provisioned.
 
 
-Global entry [global]
-=====================
+Global section [global]
+=======================
 
-These files can have an optional global entry describing the actual file.
-The 2 allowed fields for that entry are:
+These files can have an optional global section describing the actual file.
+The two allowed fields for this section are:
 - Name: Name of the network.
 - Description: Description of the network.
 
 
-Provider entry [provider_*]
-===========================
+Provider section [provider_*]
+=============================
 
 Each provisioned provider must start with the [provider_*] tag.
 Replace * with an identifier unique to the config file.
@@ -45,14 +46,30 @@ VPN related parameters (M = mandatory, O = optional):
   For IPv6 addresses only prefix length is accepted like this 2001:db8::1/64
 
 OpenConnect VPN supports following options (see openconnect(8) for details):
- Option name            OpenConnect option   Description
- OpenConnect.ServerCert --servercert         Accept server's SSL certificate
-                                             only if its fingerprint matches
-                                             this value (SHA1) (M)
- OpenConnect.CACert     --cafile             Cert file for server
-                                             verification (M)
- VPN.MTU                --mtu                Request MTU from server as the
-                                             MTU of the tunnel (O)
+ Option name            OpenConnect option Description
+ OpenConnect.ServerCert --servercert       SHA1 certificate fingerprint of the
+                                           final VPN server after possible web
+                                           authentication login, selection and
+                                           redirection (O)
+ OpenConnect.CACert     --cafile           File containing other Certificate
+                                           Authorities in addition to the ones
+                                           in the system trust database (O)
+ OpenConnect.ClientCert --certificate      Client certificate file, if needed
+                                           by web authentication (O)
+ VPN.MTU                --mtu              Request MTU from server as the MTU
+                                           of the tunnel (O)
+ OpenConnect.Cookie     --cookie-on-stdin  Cookie received as a result of the
+                                           web authentication. As the cookie
+                                           lifetime can be very limited, it
+                                           does not usually make sense to add
+                                           it into the configuration file (O)
+ OpenConnect.VPNHost                       The final VPN server to use after
+                                           completing the web authentication.
+                                           Only usable for extremely simple VPN
+                                           configurations and should normally
+                                           be set only via the VPN Agent API.
+If OpenConnect.Cookie or OpenConnect.ServerCert are missing, the VPN Agent will
+be contacted to supply the information.
 
 OpenVPN VPN supports following options (see openvpn(8) for details):
  Option name            OpenVPN option   Description

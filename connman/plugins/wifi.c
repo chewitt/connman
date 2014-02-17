@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -71,6 +71,8 @@ struct hidden_params {
 	unsigned int ssid_len;
 	char *identity;
 	char *passphrase;
+	char *security;
+	GSupplicantScanParams *scan_params;
 	gpointer user_data;
 };
 
@@ -93,16 +95,18 @@ struct wifi_data {
 	GSList *networks;
 	GSupplicantInterface *interface;
 	GSupplicantState state;
-	connman_bool_t connected;
-	connman_bool_t disconnecting;
-	connman_bool_t tethering;
-	connman_bool_t bridged;
+	bool connected;
+	bool disconnecting;
+	bool tethering;
+	bool bridged;
+	bool interface_ready;
 	const char *bridge;
 	int index;
 	unsigned flags;
 	unsigned int watch;
 	int retries;
 	struct hidden_params *hidden;
+	bool postpone_hidden;
 	/**
 	 * autoscan "emulation".
 	 */
@@ -117,13 +121,13 @@ static void start_autoscan(struct connman_device *device);
 
 static void handle_tethering(struct wifi_data *wifi)
 {
-	if (wifi->tethering == FALSE)
+	if (!wifi->tethering)
 		return;
 
-	if (wifi->bridge == NULL)
+	if (!wifi->bridge)
 		return;
 
-	if (wifi->bridged == TRUE)
+	if (wifi->bridged)
 		return;
 
 	DBG("index %d bridge %s", wifi->index, wifi->bridge);
@@ -131,7 +135,7 @@ static void handle_tethering(struct wifi_data *wifi)
 	if (connman_inet_add_to_bridge(wifi->index, wifi->bridge) < 0)
 		return;
 
-	wifi->bridged = TRUE;
+	wifi->bridged = true;
 }
 
 static void wifi_newlink(unsigned flags, unsigned change, void *user_data)
@@ -139,7 +143,7 @@ static void wifi_newlink(unsigned flags, unsigned change, void *user_data)
 	struct connman_device *device = user_data;
 	struct wifi_data *wifi = connman_device_get_data(device);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	DBG("index %d flags %d change %d", wifi->index, flags, change);
@@ -170,14 +174,9 @@ static int wifi_probe(struct connman_device *device)
 	DBG("device %p", device);
 
 	wifi = g_try_new0(struct wifi_data, 1);
-	if (wifi == NULL)
+	if (!wifi)
 		return -ENOMEM;
 
-	wifi->connected = FALSE;
-	wifi->disconnecting = FALSE;
-	wifi->tethering = FALSE;
-	wifi->bridged = FALSE;
-	wifi->bridge = NULL;
 	wifi->state = G_SUPPLICANT_STATE_INACTIVE;
 
 	connman_device_set_data(device, wifi);
@@ -199,7 +198,7 @@ static void remove_networks(struct connman_device *device,
 {
 	GSList *list;
 
-	for (list = wifi->networks; list != NULL; list = list->next) {
+	for (list = wifi->networks; list; list = list->next) {
 		struct connman_network *network = list->data;
 
 		connman_device_remove_network(device, network);
@@ -217,7 +216,7 @@ static void reset_autoscan(struct connman_device *device)
 
 	DBG("");
 
-	if (wifi == NULL || wifi->autoscan == NULL)
+	if (!wifi || !wifi->autoscan)
 		return;
 
 	autoscan = wifi->autoscan;
@@ -237,12 +236,12 @@ static void stop_autoscan(struct connman_device *device)
 {
 	const struct wifi_data *wifi = connman_device_get_data(device);
 
-	if (wifi == NULL || wifi->autoscan == NULL)
+	if (!wifi || !wifi->autoscan)
 		return;
 
 	reset_autoscan(device);
 
-	connman_device_set_scanning(device, FALSE);
+	connman_device_set_scanning(device, false);
 }
 
 static void wifi_remove(struct connman_device *device)
@@ -251,21 +250,21 @@ static void wifi_remove(struct connman_device *device)
 
 	DBG("device %p wifi %p", device, wifi);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	iface_list = g_list_remove(iface_list, wifi);
 
 	remove_networks(device, wifi);
 
-	connman_device_set_powered(device, FALSE);
+	connman_device_set_powered(device, false);
 	connman_device_set_data(device, NULL);
 	connman_device_unref(wifi->device);
 	connman_rtnl_remove_watch(wifi->watch);
 
 	g_supplicant_interface_set_data(wifi->interface, NULL);
 
-	if (wifi->scan_params != NULL)
+	if (wifi->scan_params)
 		g_supplicant_free_scan_params(wifi->scan_params);
 
 	g_free(wifi->autoscan);
@@ -273,19 +272,19 @@ static void wifi_remove(struct connman_device *device)
 	g_free(wifi);
 }
 
-static gboolean is_duplicate(GSList *list, gchar *ssid, int ssid_len)
+static bool is_duplicate(GSList *list, gchar *ssid, int ssid_len)
 {
 	GSList *iter;
 
-	for (iter = list; iter != NULL; iter = g_slist_next(iter)) {
+	for (iter = list; iter; iter = g_slist_next(iter)) {
 		struct scan_ssid *scan_ssid = iter->data;
 
 		if (ssid_len == scan_ssid->ssid_len &&
 				memcmp(ssid, scan_ssid->ssid, ssid_len) == 0)
-			return TRUE;
+			return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
 static int add_scan_param(gchar *hex_ssid, char *raw_ssid, int ssid_len,
@@ -297,15 +296,15 @@ static int add_scan_param(gchar *hex_ssid, char *raw_ssid, int ssid_len,
 
 	if ((driver_max_scan_ssids == 0 ||
 			driver_max_scan_ssids > scan_data->num_ssids) &&
-			(hex_ssid != NULL || raw_ssid != NULL)) {
+			(hex_ssid || raw_ssid)) {
 		gchar *ssid;
 		unsigned int j = 0, hex;
 
-		if (hex_ssid != NULL) {
+		if (hex_ssid) {
 			size_t hex_ssid_len = strlen(hex_ssid);
 
 			ssid = g_try_malloc0(hex_ssid_len / 2);
-			if (ssid == NULL)
+			if (!ssid)
 				return -ENOMEM;
 
 			for (i = 0; i < hex_ssid_len; i += 2) {
@@ -323,12 +322,16 @@ static int add_scan_param(gchar *hex_ssid, char *raw_ssid, int ssid_len,
 		 * used or are using multiple wifi cards, so in that case
 		 * you might have multiple service files for same AP.
 		 */
-		if (is_duplicate(scan_data->ssids, ssid, j) == TRUE)
+		if (is_duplicate(scan_data->ssids, ssid, j)) {
+			if (hex_ssid)
+				g_free(ssid);
 			return 0;
+		}
 
 		scan_ssid = g_try_new(struct scan_ssid, 1);
-		if (scan_ssid == NULL) {
-			g_free(ssid);
+		if (!scan_ssid) {
+			if (hex_ssid)
+				g_free(ssid);
 			return -ENOMEM;
 		}
 
@@ -342,16 +345,16 @@ static int add_scan_param(gchar *hex_ssid, char *raw_ssid, int ssid_len,
 		DBG("SSID %s added to scanned list of %d entries", ssid_name,
 							scan_data->num_ssids);
 
-		if (hex_ssid != NULL)
+		if (hex_ssid)
 			g_free(ssid);
 	} else
 		return -EINVAL;
 
 	scan_data->ssids = g_slist_reverse(scan_data->ssids);
 
-	if (scan_data->freqs == NULL) {
+	if (!scan_data->freqs) {
 		scan_data->freqs = g_try_malloc0(sizeof(uint16_t));
-		if (scan_data->freqs == NULL) {
+		if (!scan_data->freqs) {
 			g_slist_free_full(scan_data->ssids, g_free);
 			return -ENOMEM;
 		}
@@ -359,21 +362,21 @@ static int add_scan_param(gchar *hex_ssid, char *raw_ssid, int ssid_len,
 		scan_data->num_freqs = 1;
 		scan_data->freqs[0] = freq;
 	} else {
-		connman_bool_t duplicate = FALSE;
+		bool duplicate = false;
 
 		/* Don't add duplicate entries */
 		for (i = 0; i < scan_data->num_freqs; i++) {
 			if (scan_data->freqs[i] == freq) {
-				duplicate = TRUE;
+				duplicate = true;
 				break;
 			}
 		}
 
-		if (duplicate == FALSE) {
+		if (!duplicate) {
 			scan_data->num_freqs++;
 			scan_data->freqs = g_try_realloc(scan_data->freqs,
 				sizeof(uint16_t) * scan_data->num_freqs);
-			if (scan_data->freqs == NULL) {
+			if (!scan_data->freqs) {
 				g_slist_free_full(scan_data->ssids, g_free);
 				return -ENOMEM;
 			}
@@ -391,7 +394,7 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 	gchar **services;
 	char *ssid, *name;
 	int i, freq, ret;
-	gboolean value;
+	bool value;
 	int num_ssids = 0, add_param_failed = 0;
 
 	services = connman_storage_get_services();
@@ -400,19 +403,19 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 			continue;
 
 		keyfile = connman_storage_load_service(services[i]);
-		if (keyfile == NULL)
+		if (!keyfile)
 			continue;
 
 		value = g_key_file_get_boolean(keyfile,
 					services[i], "Hidden", NULL);
-		if (value == FALSE) {
+		if (!value) {
 			g_key_file_free(keyfile);
 			continue;
 		}
 
 		value = g_key_file_get_boolean(keyfile,
 					services[i], "Favorite", NULL);
-		if (value == FALSE) {
+		if (!value) {
 			g_key_file_free(keyfile);
 			continue;
 		}
@@ -444,10 +447,10 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 	for (i = 0; entries && entries[i]; i++) {
 		int len;
 
-		if (entries[i]->hidden == FALSE)
+		if (!entries[i]->hidden)
 			continue;
 
-		if (entries[i]->ssid == NULL) {
+		if (!entries[i]->ssid) {
 			ssid = entries[i]->name;
 			len = strlen(ssid);
 		} else {
@@ -455,7 +458,7 @@ static int get_hidden_connections(GSupplicantScanParams *scan_data)
 			len = entries[i]->ssid_len;
 		}
 
-		if (ssid == NULL)
+		if (!ssid)
 			continue;
 
 		ret = add_scan_param(NULL, ssid, len, 0, scan_data, 0, ssid);
@@ -493,9 +496,9 @@ static int get_hidden_connections_params(struct wifi_data *wifi,
 
 	DBG("max ssids %d", driver_max_ssids);
 
-	if (wifi->scan_params == NULL) {
+	if (!wifi->scan_params) {
 		wifi->scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
-		if (wifi->scan_params == NULL)
+		if (!wifi->scan_params)
 			return 0;
 
 		if (get_hidden_connections(wifi->scan_params) == 0) {
@@ -512,7 +515,7 @@ static int get_hidden_connections_params(struct wifi_data *wifi,
 	for (i = 0; i < driver_max_ssids; i++) {
 		struct scan_ssid *ssid;
 
-		if (wifi->scan_params->ssids == NULL)
+		if (!wifi->scan_params->ssids)
 			break;
 
 		ssid = orig_params->ssids->data;
@@ -526,7 +529,7 @@ static int get_hidden_connections_params(struct wifi_data *wifi,
 
 		scan_params->freqs = g_memdup(orig_params->freqs,
 				sizeof(uint16_t) * orig_params->num_freqs);
-		if (scan_params->freqs == NULL)
+		if (!scan_params->freqs)
 			goto err;
 
 		scan_params->num_freqs = orig_params->num_freqs;
@@ -552,15 +555,15 @@ static int throw_wifi_scan(struct connman_device *device,
 	struct wifi_data *wifi = connman_device_get_data(device);
 	int ret;
 
-	if (wifi == NULL)
+	if (!wifi)
 		return -ENODEV;
 
 	DBG("device %p %p", device, wifi->interface);
 
-	if (wifi->tethering == TRUE)
+	if (wifi->tethering)
 		return -EBUSY;
 
-	if (connman_device_get_scanning(device) == TRUE)
+	if (connman_device_get_scanning(device))
 		return -EALREADY;
 
 	connman_device_ref(device);
@@ -568,7 +571,7 @@ static int throw_wifi_scan(struct connman_device *device,
 	ret = g_supplicant_interface_scan(wifi->interface, NULL,
 						callback, device);
 	if (ret == 0)
-		connman_device_set_scanning(device, TRUE);
+		connman_device_set_scanning(device, true);
 	else
 		connman_device_unref(device);
 
@@ -577,11 +580,14 @@ static int throw_wifi_scan(struct connman_device *device,
 
 static void hidden_free(struct hidden_params *hidden)
 {
-	if (hidden == NULL)
+	if (!hidden)
 		return;
 
+	if (hidden->scan_params)
+		g_supplicant_free_scan_params(hidden->scan_params);
 	g_free(hidden->identity);
 	g_free(hidden->passphrase);
+	g_free(hidden->security);
 	g_free(hidden);
 }
 
@@ -590,18 +596,18 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 {
 	struct connman_device *device = user_data;
 	struct wifi_data *wifi = connman_device_get_data(device);
-	connman_bool_t scanning;
+	bool scanning;
 
 	DBG("result %d wifi %p", result, wifi);
 
-	if (wifi != NULL) {
-		if (wifi->hidden != NULL) {
+	if (wifi) {
+		if (wifi->hidden && !wifi->postpone_hidden) {
 			connman_network_clear_hidden(wifi->hidden->user_data);
 			hidden_free(wifi->hidden);
 			wifi->hidden = NULL;
 		}
 
-		if (wifi->scan_params != NULL) {
+		if (wifi->scan_params) {
 			g_supplicant_free_scan_params(wifi->scan_params);
 			wifi->scan_params = NULL;
 		}
@@ -610,10 +616,30 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	if (result < 0)
 		connman_device_reset_scanning(device);
 
+	/* User is connecting to a hidden AP, let's wait for finished event */
+	if (wifi && wifi->hidden && wifi->postpone_hidden) {
+		GSupplicantScanParams *scan_params;
+		int ret;
+
+		wifi->postpone_hidden = false;
+		scan_params = wifi->hidden->scan_params;
+		wifi->hidden->scan_params = NULL;
+
+		reset_autoscan(device);
+
+		ret = g_supplicant_interface_scan(wifi->interface, scan_params,
+							scan_callback, device);
+		if (ret == 0)
+			return;
+
+		/* On error, let's recall scan_callback, which will cleanup */
+		return scan_callback(ret, interface, user_data);
+	}
+
 	scanning = connman_device_get_scanning(device);
 
-	if (scanning == TRUE)
-		connman_device_set_scanning(device, FALSE);
+	if (scanning)
+		connman_device_set_scanning(device, false);
 
 	if (result != -ENOLINK)
 		start_autoscan(device);
@@ -625,7 +651,7 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	 * unreferenced the device, obviating the need to do it here.
 	 */
 
-	if (scanning == TRUE)
+	if (scanning)
 		connman_device_unref(device);
 }
 
@@ -639,11 +665,15 @@ static void scan_callback_hidden(int result,
 
 	DBG("result %d wifi %p", result, wifi);
 
-	if (wifi == NULL)
+	if (!wifi)
+		goto out;
+
+	/* User is trying to connect to a hidden AP */
+	if (wifi->hidden && wifi->postpone_hidden)
 		goto out;
 
 	scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
-	if (scan_params == NULL)
+	if (!scan_params)
 		goto out;
 
 	if (get_hidden_connections_params(wifi, scan_params) > 0) {
@@ -668,7 +698,7 @@ static gboolean autoscan_timeout(gpointer data)
 	struct autoscan_params *autoscan;
 	int interval;
 
-	if (wifi == NULL)
+	if (!wifi)
 		return FALSE;
 
 	autoscan = wifi->autoscan;
@@ -702,11 +732,11 @@ static void start_autoscan(struct connman_device *device)
 
 	DBG("");
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	autoscan = wifi->autoscan;
-	if (autoscan == NULL)
+	if (!autoscan)
 		return;
 
 	if (autoscan->timeout > 0 || autoscan->interval > 0)
@@ -741,7 +771,7 @@ static struct autoscan_params *parse_autoscan_params(const char *params)
 	g_strfreev(list_params);
 
 	autoscan = g_try_malloc0(sizeof(struct autoscan_params));
-	if (autoscan == NULL) {
+	if (!autoscan) {
 		DBG("Could not allocate memory for autoscan");
 		return NULL;
 	}
@@ -755,7 +785,7 @@ static struct autoscan_params *parse_autoscan_params(const char *params)
 
 static void setup_autoscan(struct wifi_data *wifi)
 {
-	if (wifi->autoscan == NULL)
+	if (!wifi->autoscan)
 		wifi->autoscan = parse_autoscan_params(AUTOSCAN_DEFAULT);
 
 	start_autoscan(wifi->device);
@@ -773,6 +803,30 @@ static void interface_autoscan_callback(int result,
 	}
 }
 
+static void finalize_interface_creation(struct wifi_data *wifi)
+{
+	GSupplicantInterface *interface = wifi->interface;
+
+	DBG("interface is ready wifi %p tethering %d", wifi, wifi->tethering);
+
+	if (!wifi->device) {
+		connman_error("WiFi device not set");
+		return;
+	}
+
+	connman_device_set_powered(wifi->device, true);
+
+	if (!connman_setting_get_bool("BackgroundScanning"))
+		return;
+
+	/* Setting up automatic scanning */
+	if (g_supplicant_interface_autoscan(interface, AUTOSCAN_DEFAULT,
+				interface_autoscan_callback, wifi) < 0) {
+		DBG("Could not enable Autoscan, falling back...");
+		setup_autoscan(wifi);
+	}
+}
+
 static void interface_create_callback(int result,
 					GSupplicantInterface *interface,
 							void *user_data)
@@ -783,32 +837,15 @@ static void interface_create_callback(int result,
 				g_supplicant_interface_get_ifname(interface),
 				wifi);
 
-	if (result < 0 || wifi == NULL)
+	if (result < 0 || !wifi)
 		return;
 
 	wifi->interface = interface;
 	g_supplicant_interface_set_data(interface, wifi);
 
-	if (g_supplicant_interface_get_ready(interface) == FALSE)
-		return;
-
-	DBG("interface is ready wifi %p tethering %d", wifi, wifi->tethering);
-
-	if (wifi->device == NULL) {
-		connman_error("WiFi device not set");
-		return;
-	}
-
-	connman_device_set_powered(wifi->device, TRUE);
-
-	if (connman_setting_get_bool("BackgroundScanning") == FALSE)
-		return;
-
-	/* Setting up automatic scanning */
-	if (g_supplicant_interface_autoscan(interface, AUTOSCAN_DEFAULT,
-				interface_autoscan_callback, wifi) < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
+	if (g_supplicant_interface_get_ready(interface)) {
+		wifi->interface_ready = true;
+		finalize_interface_creation(wifi);
 	}
 }
 
@@ -821,7 +858,7 @@ static int wifi_enable(struct connman_device *device)
 
 	DBG("device %p %p", device, wifi);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return -ENODEV;
 
 	ret = g_supplicant_interface_create(interface, driver, NULL,
@@ -840,20 +877,20 @@ static int wifi_disable(struct connman_device *device)
 
 	DBG("device %p wifi %p", device, wifi);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return -ENODEV;
 
-	wifi->connected = FALSE;
-	wifi->disconnecting = FALSE;
+	wifi->connected = false;
+	wifi->disconnecting = false;
 
-	if (wifi->pending_network != NULL)
+	if (wifi->pending_network)
 		wifi->pending_network = NULL;
 
 	stop_autoscan(device);
 
 	/* In case of a user scan, device is still referenced */
-	if (connman_device_get_scanning(device) == TRUE) {
-		connman_device_set_scanning(device, FALSE);
+	if (connman_device_get_scanning(device)) {
+		connman_device_set_scanning(device, false);
 		connman_device_unref(wifi->device);
 	}
 
@@ -910,7 +947,7 @@ static int get_latest_connections(int max_ssids,
 	int num_ssids = 0;
 
 	latest_list = g_sequence_new(free_entry);
-	if (latest_list == NULL)
+	if (!latest_list)
 		return -ENOMEM;
 
 	services = connman_storage_get_services();
@@ -919,14 +956,13 @@ static int get_latest_connections(int max_ssids,
 			continue;
 
 		keyfile = connman_storage_load_service(services[i]);
-		if (keyfile == NULL)
+		if (!keyfile)
 			continue;
 
 		str = g_key_file_get_string(keyfile,
 					services[i], "Favorite", NULL);
-		if (str == NULL || g_strcmp0(str, "true")) {
-			if (str)
-				g_free(str);
+		if (!str || g_strcmp0(str, "true")) {
+			g_free(str);
 			g_key_file_free(keyfile);
 			continue;
 		}
@@ -934,9 +970,8 @@ static int get_latest_connections(int max_ssids,
 
 		str = g_key_file_get_string(keyfile,
 					services[i], "AutoConnect", NULL);
-		if (str == NULL || g_strcmp0(str, "true")) {
-			if (str)
-				g_free(str);
+		if (!str || g_strcmp0(str, "true")) {
+			g_free(str);
 			g_key_file_free(keyfile);
 			continue;
 		}
@@ -944,10 +979,12 @@ static int get_latest_connections(int max_ssids,
 
 		str = g_key_file_get_string(keyfile,
 					services[i], "Modified", NULL);
-		if (str != NULL) {
-			g_time_val_from_iso8601(str, &modified);
-			g_free(str);
+		if (!str) {
+			g_key_file_free(keyfile);
+			continue;
 		}
+		g_time_val_from_iso8601(str, &modified);
+		g_free(str);
 
 		ssid = g_key_file_get_string(keyfile,
 					services[i], "SSID", NULL);
@@ -956,7 +993,7 @@ static int get_latest_connections(int max_ssids,
 					"Frequency", NULL);
 		if (freq) {
 			entry = g_try_new(struct last_connected, 1);
-			if (entry == NULL) {
+			if (!entry) {
 				g_sequence_free(latest_list);
 				g_key_file_free(keyfile);
 				g_free(ssid);
@@ -1012,7 +1049,7 @@ static int wifi_scan_simple(struct connman_device *device)
 static int wifi_scan(struct connman_device *device,
 		const char *ssid, unsigned int ssid_len,
 		const char *identity, const char* passphrase,
-		gpointer user_data)
+		const char *security, void *user_data)
 {
 	struct wifi_data *wifi = connman_device_get_data(device);
 	GSupplicantScanParams *scan_params = NULL;
@@ -1020,43 +1057,44 @@ static int wifi_scan(struct connman_device *device,
 	struct hidden_params *hidden;
 	int ret;
 	int driver_max_ssids = 0;
-	connman_bool_t do_hidden;
+	bool do_hidden;
+	bool scanning;
 
-	if (wifi == NULL)
+	if (!wifi)
 		return -ENODEV;
 
 	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface, ssid);
 
-	if (wifi->tethering == TRUE)
+	if (wifi->tethering)
 		return 0;
 
-	if (connman_device_get_scanning(device) == TRUE)
-		return -EALREADY;
+	scanning = connman_device_get_scanning(device);
 
-	if (ssid == NULL || ssid_len == 0 || ssid_len > 32) {
-		do_hidden = FALSE;
-	} else {
-		if (wifi->hidden != NULL)
-			return -EBUSY;
+	if (!ssid || ssid_len == 0 || ssid_len > 32) {
+		if (scanning)
+			return -EALREADY;
 
-		do_hidden = TRUE;
-	}
-
-	if (do_hidden == FALSE) {
 		driver_max_ssids = g_supplicant_interface_get_max_scan_ssids(
 							wifi->interface);
 		DBG("max ssids %d", driver_max_ssids);
 		if (driver_max_ssids == 0)
 			return wifi_scan_simple(device);
+
+		do_hidden = false;
+	} else {
+		if (scanning && wifi->hidden && wifi->postpone_hidden)
+			return -EALREADY;
+
+		do_hidden = true;
 	}
 
 	scan_params = g_try_malloc0(sizeof(GSupplicantScanParams));
-	if (scan_params == NULL)
+	if (!scan_params)
 		return -ENOMEM;
 
-	if (do_hidden == TRUE) {
+	if (do_hidden) {
 		scan_ssid = g_try_new(struct scan_ssid, 1);
-		if (scan_ssid == NULL) {
+		if (!scan_ssid) {
 			g_free(scan_params);
 			return -ENOMEM;
 		}
@@ -1068,18 +1106,32 @@ static int wifi_scan(struct connman_device *device,
 		scan_params->num_ssids = 1;
 
 		hidden = g_try_new0(struct hidden_params, 1);
-		if (hidden == NULL) {
-			g_free(scan_params);
+		if (!hidden) {
+			g_supplicant_free_scan_params(scan_params);
 			return -ENOMEM;
+		}
+
+		if (wifi->hidden) {
+			hidden_free(wifi->hidden);
+			wifi->hidden = NULL;
 		}
 
 		memcpy(hidden->ssid, ssid, ssid_len);
 		hidden->ssid_len = ssid_len;
 		hidden->identity = g_strdup(identity);
 		hidden->passphrase = g_strdup(passphrase);
+		hidden->security = g_strdup(security);
 		hidden->user_data = user_data;
 		wifi->hidden = hidden;
 
+		if (scanning) {
+			/* Let's keep this active scan for later,
+			 * when current scan will be over. */
+			wifi->postpone_hidden = TRUE;
+			hidden->scan_params = scan_params;
+
+			return 0;
+		}
 	} else {
 		ret = get_latest_connections(driver_max_ssids, scan_params);
 		if (ret <= 0) {
@@ -1095,12 +1147,12 @@ static int wifi_scan(struct connman_device *device,
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
 						scan_callback, device);
 	if (ret == 0)
-		connman_device_set_scanning(device, TRUE);
+		connman_device_set_scanning(device, true);
 	else {
 		g_supplicant_free_scan_params(scan_params);
 		connman_device_unref(device);
 
-		if (do_hidden == TRUE) {
+		if (do_hidden) {
 			hidden_free(wifi->hidden);
 			wifi->hidden = NULL;
 		}
@@ -1125,7 +1177,7 @@ static int wifi_set_regdom(struct connman_device *device, const char *alpha2)
 	struct wifi_data *wifi = connman_device_get_data(device);
 	int ret;
 
-	if (wifi == NULL)
+	if (!wifi)
 		return -EINVAL;
 
 	connman_device_ref(device);
@@ -1181,7 +1233,7 @@ static void network_remove(struct connman_network *network)
 	DBG("network %p", network);
 
 	wifi = connman_device_get_data(device);
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	if (wifi->network != network)
@@ -1204,21 +1256,23 @@ static void connect_callback(int result, GSupplicantInterface *interface,
 		connman_network_set_error(network,
 					CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
 	}
+
+	connman_network_unref(network);
 }
 
 static GSupplicantSecurity network_security(const char *security)
 {
-	if (g_str_equal(security, "none") == TRUE)
+	if (g_str_equal(security, "none"))
 		return G_SUPPLICANT_SECURITY_NONE;
-	else if (g_str_equal(security, "wep") == TRUE)
+	else if (g_str_equal(security, "wep"))
 		return G_SUPPLICANT_SECURITY_WEP;
-	else if (g_str_equal(security, "psk") == TRUE)
+	else if (g_str_equal(security, "psk"))
 		return G_SUPPLICANT_SECURITY_PSK;
-	else if (g_str_equal(security, "wpa") == TRUE)
+	else if (g_str_equal(security, "wpa"))
 		return G_SUPPLICANT_SECURITY_PSK;
-	else if (g_str_equal(security, "rsn") == TRUE)
+	else if (g_str_equal(security, "rsn"))
 		return G_SUPPLICANT_SECURITY_PSK;
-	else if (g_str_equal(security, "ieee8021x") == TRUE)
+	else if (g_str_equal(security, "ieee8021x"))
 		return G_SUPPLICANT_SECURITY_IEEE8021X;
 
 	return G_SUPPLICANT_SECURITY_UNKNOWN;
@@ -1226,7 +1280,7 @@ static GSupplicantSecurity network_security(const char *security)
 
 static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 {
-	const char *security, *passphrase, *agent_passphrase;
+	const char *security;
 
 	memset(ssid, 0, sizeof(*ssid));
 	ssid->mode = G_SUPPLICANT_MODE_INFRA;
@@ -1235,20 +1289,8 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->scan_ssid = 1;
 	security = connman_network_get_string(network, "WiFi.Security");
 	ssid->security = network_security(security);
-	passphrase = connman_network_get_string(network,
+	ssid->passphrase = connman_network_get_string(network,
 						"WiFi.Passphrase");
-	if (passphrase == NULL || strlen(passphrase) == 0) {
-
-		/* Use agent provided passphrase as a fallback */
-		agent_passphrase = connman_network_get_string(network,
-						"WiFi.AgentPassphrase");
-
-		if (agent_passphrase == NULL || strlen(agent_passphrase) == 0)
-			ssid->passphrase = NULL;
-		else
-			ssid->passphrase = agent_passphrase;
-	} else
-		ssid->passphrase = passphrase;
 
 	ssid->eap = connman_network_get_string(network, "WiFi.EAP");
 
@@ -1258,8 +1300,7 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	 * for PEAP where 2 passphrases (identity and client
 	 * cert may have to be provided.
 	 */
-	if (connman_network_get_string(network,
-					"WiFi.PrivateKeyPassphrase") == NULL)
+	if (!connman_network_get_string(network, "WiFi.PrivateKeyPassphrase"))
 		connman_network_set_string(network,
 						"WiFi.PrivateKeyPassphrase",
 						ssid->passphrase);
@@ -1267,7 +1308,7 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->identity = connman_network_get_string(network, "WiFi.Identity");
 
 	/* Use agent provided identity as a fallback */
-	if (ssid->identity == NULL || strlen(ssid->identity) == 0)
+	if (!ssid->identity || strlen(ssid->identity) == 0)
 		ssid->identity = connman_network_get_string(network,
 							"WiFi.AgentIdentity");
 
@@ -1284,7 +1325,7 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->use_wps = connman_network_get_bool(network, "WiFi.UseWPS");
 	ssid->pin_wps = connman_network_get_string(network, "WiFi.PinWPS");
 
-	if (connman_setting_get_bool("BackgroundScanning") == TRUE)
+	if (connman_setting_get_bool("BackgroundScanning"))
 		ssid->bgscan = BGSCAN_DEFAULT;
 }
 
@@ -1297,25 +1338,26 @@ static int network_connect(struct connman_network *network)
 
 	DBG("network %p", network);
 
-	if (device == NULL)
+	if (!device)
 		return -ENODEV;
 
 	wifi = connman_device_get_data(device);
-	if (wifi == NULL)
+	if (!wifi)
 		return -ENODEV;
 
 	ssid = g_try_malloc0(sizeof(GSupplicantSSID));
-	if (ssid == NULL)
+	if (!ssid)
 		return -ENOMEM;
 
 	interface = wifi->interface;
 
 	ssid_init(ssid, network);
 
-	if (wifi->disconnecting == TRUE)
+	if (wifi->disconnecting) {
 		wifi->pending_network = network;
-	else {
-		wifi->network = network;
+		g_free(ssid);
+	} else {
+		wifi->network = connman_network_ref(network);
 		wifi->retries = 0;
 
 		return g_supplicant_interface_connect(interface, ssid,
@@ -1338,7 +1380,7 @@ static void disconnect_callback(int result, GSupplicantInterface *interface,
 		return;
 	}
 
-	if (wifi->network != NULL) {
+	if (wifi->network) {
 		/*
 		 * if result < 0 supplican return an error because
 		 * the network is not current.
@@ -1347,14 +1389,14 @@ static void disconnect_callback(int result, GSupplicantInterface *interface,
 		 * disconnect is completed.
 		 */
 		if (result < 0)
-			connman_network_set_connected(wifi->network, FALSE);
+			connman_network_set_connected(wifi->network, false);
 	}
 
 	wifi->network = NULL;
 
-	wifi->disconnecting = FALSE;
+	wifi->disconnecting = false;
 
-	if (wifi->pending_network != NULL) {
+	if (wifi->pending_network) {
 		network_connect(wifi->pending_network);
 		wifi->pending_network = NULL;
 	}
@@ -1371,20 +1413,20 @@ static int network_disconnect(struct connman_network *network)
 	DBG("network %p", network);
 
 	wifi = connman_device_get_data(device);
-	if (wifi == NULL || wifi->interface == NULL)
+	if (!wifi || !wifi->interface)
 		return -ENODEV;
 
-	connman_network_set_associating(network, FALSE);
+	connman_network_set_associating(network, false);
 
-	if (wifi->disconnecting == TRUE)
+	if (wifi->disconnecting)
 		return -EALREADY;
 
-	wifi->disconnecting = TRUE;
+	wifi->disconnecting = true;
 
 	err = g_supplicant_interface_disconnect(wifi->interface,
 						disconnect_callback, wifi);
 	if (err < 0)
-		wifi->disconnecting = FALSE;
+		wifi->disconnecting = false;
 
 	return err;
 }
@@ -1412,24 +1454,24 @@ static void interface_added(GSupplicantInterface *interface)
 	 * the interface added signal is sent before the
 	 * interface creation callback is called.
 	 */
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	DBG("ifname %s driver %s wifi %p tethering %d",
 			ifname, driver, wifi, wifi->tethering);
 
-	if (wifi->device == NULL) {
+	if (!wifi->device) {
 		connman_error("WiFi device not set");
 		return;
 	}
 
-	connman_device_set_powered(wifi->device, TRUE);
+	connman_device_set_powered(wifi->device, true);
 
-	if (wifi->tethering == TRUE)
+	if (wifi->tethering)
 		return;
 }
 
-static connman_bool_t is_idle(struct wifi_data *wifi)
+static bool is_idle(struct wifi_data *wifi)
 {
 	DBG("state %d", wifi->state);
 
@@ -1439,7 +1481,7 @@ static connman_bool_t is_idle(struct wifi_data *wifi)
 	case G_SUPPLICANT_STATE_DISCONNECTED:
 	case G_SUPPLICANT_STATE_INACTIVE:
 	case G_SUPPLICANT_STATE_SCANNING:
-		return TRUE;
+		return true;
 
 	case G_SUPPLICANT_STATE_AUTHENTICATING:
 	case G_SUPPLICANT_STATE_ASSOCIATING:
@@ -1447,19 +1489,19 @@ static connman_bool_t is_idle(struct wifi_data *wifi)
 	case G_SUPPLICANT_STATE_4WAY_HANDSHAKE:
 	case G_SUPPLICANT_STATE_GROUP_HANDSHAKE:
 	case G_SUPPLICANT_STATE_COMPLETED:
-		return FALSE;
+		return false;
 	}
 
-	return FALSE;
+	return false;
 }
 
-static connman_bool_t is_idle_wps(GSupplicantInterface *interface,
+static bool is_idle_wps(GSupplicantInterface *interface,
 						struct wifi_data *wifi)
 {
 	/* First, let's check if WPS processing did not went wrong */
 	if (g_supplicant_interface_get_wps_state(interface) ==
 		G_SUPPLICANT_WPS_STATE_FAIL)
-		return FALSE;
+		return false;
 
 	/* Unlike normal connection, being associated while processing wps
 	 * actually means that we are idling. */
@@ -1470,27 +1512,27 @@ static connman_bool_t is_idle_wps(GSupplicantInterface *interface,
 	case G_SUPPLICANT_STATE_INACTIVE:
 	case G_SUPPLICANT_STATE_SCANNING:
 	case G_SUPPLICANT_STATE_ASSOCIATED:
-		return TRUE;
+		return true;
 	case G_SUPPLICANT_STATE_AUTHENTICATING:
 	case G_SUPPLICANT_STATE_ASSOCIATING:
 	case G_SUPPLICANT_STATE_4WAY_HANDSHAKE:
 	case G_SUPPLICANT_STATE_GROUP_HANDSHAKE:
 	case G_SUPPLICANT_STATE_COMPLETED:
-		return FALSE;
+		return false;
 	}
 
-	return FALSE;
+	return false;
 }
 
-static connman_bool_t handle_wps_completion(GSupplicantInterface *interface,
+static bool handle_wps_completion(GSupplicantInterface *interface,
 					struct connman_network *network,
 					struct connman_device *device,
 					struct wifi_data *wifi)
 {
-	connman_bool_t wps;
+	bool wps;
 
 	wps = connman_network_get_bool(network, "WiFi.UseWPS");
-	if (wps == TRUE) {
+	if (wps) {
 		const unsigned char *ssid, *wps_ssid;
 		unsigned int ssid_len, wps_ssid_len;
 		const char *wps_key;
@@ -1503,12 +1545,12 @@ static connman_bool_t handle_wps_completion(GSupplicantInterface *interface,
 		wps_ssid = g_supplicant_interface_get_wps_ssid(
 			interface, &wps_ssid_len);
 
-		if (wps_ssid == NULL || wps_ssid_len != ssid_len ||
+		if (!wps_ssid || wps_ssid_len != ssid_len ||
 				memcmp(ssid, wps_ssid, ssid_len) != 0) {
-			connman_network_set_associating(network, FALSE);
+			connman_network_set_associating(network, false);
 			g_supplicant_interface_disconnect(wifi->interface,
 						disconnect_callback, wifi);
-			return FALSE;
+			return false;
 		}
 
 		wps_key = g_supplicant_interface_get_wps_key(interface);
@@ -1518,33 +1560,34 @@ static connman_bool_t handle_wps_completion(GSupplicantInterface *interface,
 		connman_network_set_string(network, "WiFi.PinWPS", NULL);
 	}
 
-	return TRUE;
+	return true;
 }
 
-static connman_bool_t handle_4way_handshake_failure(GSupplicantInterface *interface,
+static bool handle_4way_handshake_failure(GSupplicantInterface *interface,
 					struct connman_network *network,
 					struct wifi_data *wifi)
 {
 	struct connman_service *service;
 
 	if (wifi->state != G_SUPPLICANT_STATE_4WAY_HANDSHAKE)
-		return FALSE;
+		return false;
 
 	service = connman_service_lookup_from_network(network);
-	if (service == NULL)
-		return FALSE;
+	if (!service)
+		return false;
 
 	wifi->retries++;
 
-	if (connman_service_get_favorite(service) == TRUE) {
+	if (connman_service_get_favorite(service)) {
 		if (wifi->retries < FAVORITE_MAXIMUM_RETRIES)
-			return TRUE;
+			return true;
 	} else if (wifi->retries < MAXIMUM_RETRIES)
-		return TRUE;
+		return true;
 
+	wifi->retries = 0;
 	connman_network_set_error(network, CONNMAN_NETWORK_ERROR_INVALID_KEY);
 
-	return FALSE;
+	return false;
 }
 
 static void interface_state(GSupplicantInterface *interface)
@@ -1553,19 +1596,27 @@ static void interface_state(GSupplicantInterface *interface)
 	struct connman_device *device;
 	struct wifi_data *wifi;
 	GSupplicantState state = g_supplicant_interface_get_state(interface);
-	connman_bool_t wps;
+	bool wps;
 
 	wifi = g_supplicant_interface_get_data(interface);
 
 	DBG("wifi %p interface state %d", wifi, state);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
-	network = wifi->network;
 	device = wifi->device;
+	if (!device)
+		return;
 
-	if (device == NULL || network == NULL)
+	if (g_supplicant_interface_get_ready(interface) &&
+					!wifi->interface_ready) {
+		wifi->interface_ready = true;
+		finalize_interface_creation(wifi);
+	}
+
+	network = wifi->network;
+	if (!network)
 		return;
 
 	switch (state) {
@@ -1576,8 +1627,8 @@ static void interface_state(GSupplicantInterface *interface)
 	case G_SUPPLICANT_STATE_ASSOCIATING:
 		stop_autoscan(device);
 
-		if (wifi->connected == FALSE)
-			connman_network_set_associating(network, TRUE);
+		if (!wifi->connected)
+			connman_network_set_associating(network, true);
 
 		break;
 
@@ -1585,11 +1636,10 @@ static void interface_state(GSupplicantInterface *interface)
 		/* though it should be already stopped: */
 		stop_autoscan(device);
 
-		if (handle_wps_completion(interface, network, device, wifi) ==
-									FALSE)
+		if (!handle_wps_completion(interface, network, device, wifi))
 			break;
 
-		connman_network_set_connected(network, TRUE);
+		connman_network_set_connected(network, true);
 		break;
 
 	case G_SUPPLICANT_STATE_DISCONNECTED:
@@ -1600,8 +1650,8 @@ static void interface_state(GSupplicantInterface *interface)
 		 * in progress.
 		 */
 		wps = connman_network_get_bool(network, "WiFi.UseWPS");
-		if (wps == TRUE)
-			if (is_idle_wps(interface, wifi) == TRUE)
+		if (wps)
+			if (is_idle_wps(interface, wifi))
 				break;
 
 		if (is_idle(wifi))
@@ -1612,7 +1662,7 @@ static void interface_state(GSupplicantInterface *interface)
 		 * or if we reach the maximum retries we declare the
 		 * psk as wrong */
 		if (handle_4way_handshake_failure(interface,
-						network, wifi) == TRUE)
+						network, wifi))
 			break;
 
 		/* We disable the selected network, if not then
@@ -1621,16 +1671,16 @@ static void interface_state(GSupplicantInterface *interface)
 						FALSE) != 0)
 			DBG("Could not disables selected network");
 
-		connman_network_set_connected(network, FALSE);
-		connman_network_set_associating(network, FALSE);
-		wifi->disconnecting = FALSE;
+		connman_network_set_connected(network, false);
+		connman_network_set_associating(network, false);
+		wifi->disconnecting = false;
 
 		start_autoscan(device);
 
 		break;
 
 	case G_SUPPLICANT_STATE_INACTIVE:
-		connman_network_set_associating(network, FALSE);
+		connman_network_set_associating(network, false);
 		start_autoscan(device);
 
 		break;
@@ -1659,17 +1709,17 @@ static void interface_state(GSupplicantInterface *interface)
 	case G_SUPPLICANT_STATE_ASSOCIATED:
 	case G_SUPPLICANT_STATE_4WAY_HANDSHAKE:
 	case G_SUPPLICANT_STATE_GROUP_HANDSHAKE:
-		if (wifi->connected == TRUE)
+		if (wifi->connected)
 			connman_warn("Probably roaming right now!"
 						" Staying connected...");
 		else
-			wifi->connected = FALSE;
+			wifi->connected = false;
 		break;
 	case G_SUPPLICANT_STATE_COMPLETED:
-		wifi->connected = TRUE;
+		wifi->connected = true;
 		break;
 	default:
-		wifi->connected = FALSE;
+		wifi->connected = false;
 		break;
 	}
 
@@ -1685,16 +1735,16 @@ static void interface_removed(GSupplicantInterface *interface)
 
 	wifi = g_supplicant_interface_get_data(interface);
 
-	if (wifi != NULL && wifi->tethering == TRUE)
+	if (wifi && wifi->tethering)
 		return;
 
-	if (wifi == NULL || wifi->device == NULL) {
+	if (!wifi || !wifi->device) {
 		DBG("wifi interface already removed");
 		return;
 	}
 
 	wifi->interface = NULL;
-	connman_device_set_powered(wifi->device, FALSE);
+	connman_device_set_powered(wifi->device, false);
 }
 
 static void scan_started(GSupplicantInterface *interface)
@@ -1726,17 +1776,22 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	const char *name, *identifier, *security, *group, *mode;
 	const unsigned char *ssid;
 	unsigned int ssid_len;
-	connman_bool_t wps;
-	connman_bool_t wps_pbc;
-	connman_bool_t wps_ready;
-	connman_bool_t wps_advertizing;
+	bool wps;
+	bool wps_pbc;
+	bool wps_ready;
+	bool wps_advertizing;
 
-	DBG("");
+	mode = g_supplicant_network_get_mode(supplicant_network);
+	identifier = g_supplicant_network_get_identifier(supplicant_network);
+
+	DBG("%s", identifier);
+
+	if (!g_strcmp0(mode, "adhoc"))
+		return;
 
 	interface = g_supplicant_network_get_interface(supplicant_network);
 	wifi = g_supplicant_interface_get_data(interface);
 	name = g_supplicant_network_get_name(supplicant_network);
-	identifier = g_supplicant_network_get_identifier(supplicant_network);
 	security = g_supplicant_network_get_security(supplicant_network);
 	group = g_supplicant_network_get_identifier(supplicant_network);
 	wps = g_supplicant_network_get_wps(supplicant_network);
@@ -1744,19 +1799,18 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	wps_ready = g_supplicant_network_is_wps_active(supplicant_network);
 	wps_advertizing = g_supplicant_network_is_wps_advertizing(
 							supplicant_network);
-	mode = g_supplicant_network_get_mode(supplicant_network);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	ssid = g_supplicant_network_get_ssid(supplicant_network, &ssid_len);
 
 	network = connman_device_get_network(wifi->device, identifier);
 
-	if (network == NULL) {
+	if (!network) {
 		network = connman_network_create(identifier,
 						CONNMAN_NETWORK_TYPE_WIFI);
-		if (network == NULL)
+		if (!network)
 			return;
 
 		connman_network_set_index(network, wifi->index);
@@ -1769,7 +1823,7 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 		wifi->networks = g_slist_prepend(wifi->networks, network);
 	}
 
-	if (name != NULL && name[0] != '\0')
+	if (name && name[0] != '\0')
 		connman_network_set_name(network, name);
 
 	connman_network_set_blob(network, "WiFi.SSID",
@@ -1779,27 +1833,27 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 				calculate_strength(supplicant_network));
 	connman_network_set_bool(network, "WiFi.WPS", wps);
 
-	if (wps == TRUE) {
+	if (wps) {
 		/* Is AP advertizing for WPS association?
 		 * If so, we decide to use WPS by default */
-		if (wps_ready == TRUE && wps_pbc == TRUE &&
-						wps_advertizing == TRUE)
-			connman_network_set_bool(network, "WiFi.UseWPS", TRUE);
+		if (wps_ready && wps_pbc &&
+						wps_advertizing)
+			connman_network_set_bool(network, "WiFi.UseWPS", true);
 	}
 
 	connman_network_set_frequency(network,
 			g_supplicant_network_get_frequency(supplicant_network));
 
-	connman_network_set_available(network, TRUE);
+	connman_network_set_available(network, true);
 	connman_network_set_string(network, "WiFi.Mode", mode);
 
-	if (ssid != NULL)
+	if (ssid)
 		connman_network_set_group(network, group);
 
-	if (wifi->hidden != NULL && ssid != NULL) {
-		if (wifi->hidden->ssid_len == ssid_len &&
-				memcmp(wifi->hidden->ssid, ssid,
-						ssid_len) == 0) {
+	if (wifi->hidden && ssid) {
+		if (!g_strcmp0(wifi->hidden->security, security) &&
+				wifi->hidden->ssid_len == ssid_len &&
+				!memcmp(wifi->hidden->ssid, ssid, ssid_len)) {
 			connman_network_connect_hidden(network,
 					wifi->hidden->identity,
 					wifi->hidden->passphrase,
@@ -1825,11 +1879,11 @@ static void network_removed(GSupplicantNetwork *network)
 
 	DBG("name %s", name);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	connman_network = connman_device_get_network(wifi->device, identifier);
-	if (connman_network == NULL)
+	if (!connman_network)
 		return;
 
 	wifi->networks = g_slist_remove(wifi->networks, connman_network);
@@ -1852,14 +1906,14 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 
 	DBG("name %s", name);
 
-	if (wifi == NULL)
+	if (!wifi)
 		return;
 
 	connman_network = connman_device_get_network(wifi->device, identifier);
-	if (connman_network == NULL)
+	if (!connman_network)
 		return;
 
-	if (g_str_equal(property, "Signal") == TRUE) {
+	if (g_str_equal(property, "Signal")) {
 	       connman_network_set_strength(connman_network,
 					calculate_strength(network));
 	       connman_network_update(connman_network);
@@ -1911,7 +1965,7 @@ static GSupplicantSSID *ssid_ap_init(const char *ssid, const char *passphrase)
 	GSupplicantSSID *ap;
 
 	ap = g_try_malloc0(sizeof(GSupplicantSSID));
-	if (ap == NULL)
+	if (!ap)
 		return NULL;
 
 	ap->mode = G_SUPPLICANT_MODE_MASTER;
@@ -1920,7 +1974,7 @@ static GSupplicantSSID *ssid_ap_init(const char *ssid, const char *passphrase)
 	ap->scan_ssid = 0;
 	ap->freq = 2412;
 
-	if (passphrase == NULL || strlen(passphrase) == 0) {
+	if (!passphrase || strlen(passphrase) == 0) {
 		ap->security = G_SUPPLICANT_SECURITY_NONE;
 		ap->passphrase = NULL;
 	} else {
@@ -1945,7 +1999,7 @@ static void ap_start_callback(int result, GSupplicantInterface *interface,
 	if (result < 0) {
 		connman_inet_remove_from_bridge(info->wifi->index,
 							info->wifi->bridge);
-		connman_technology_tethering_notify(info->technology, FALSE);
+		connman_technology_tethering_notify(info->technology, false);
 	}
 
 	g_free(info->ifname);
@@ -1964,9 +2018,10 @@ static void ap_create_callback(int result,
 	if (result < 0) {
 		connman_inet_remove_from_bridge(info->wifi->index,
 							info->wifi->bridge);
-		connman_technology_tethering_notify(info->technology, FALSE);
+		connman_technology_tethering_notify(info->technology, false);
 
 		g_free(info->ifname);
+		g_free(info->ssid);
 		g_free(info);
 		return;
 	}
@@ -1991,16 +2046,17 @@ static void sta_remove_callback(int result,
 	DBG("ifname %s result %d ", info->ifname, result);
 
 	if (result < 0) {
-		info->wifi->tethering = TRUE;
+		info->wifi->tethering = true;
 
 		g_free(info->ifname);
+		g_free(info->ssid);
 		g_free(info);
 		return;
 	}
 
 	info->wifi->interface = NULL;
 
-	connman_technology_tethering_notify(info->technology, TRUE);
+	connman_technology_tethering_notify(info->technology, true);
 
 	g_supplicant_interface_create(info->ifname, driver, info->wifi->bridge,
 						ap_create_callback,
@@ -2009,7 +2065,7 @@ static void sta_remove_callback(int result,
 
 static int tech_set_tethering(struct connman_technology *technology,
 				const char *identifier, const char *passphrase,
-				const char *bridge, connman_bool_t enabled)
+				const char *bridge, bool enabled)
 {
 	GList *list;
 	GSupplicantInterface *interface;
@@ -2021,20 +2077,20 @@ static int tech_set_tethering(struct connman_technology *technology,
 
 	DBG("");
 
-	if (enabled == FALSE) {
+	if (!enabled) {
 		for (list = iface_list; list; list = list->next) {
 			wifi = list->data;
 
-			if (wifi->tethering == TRUE) {
-				wifi->tethering = FALSE;
+			if (wifi->tethering) {
+				wifi->tethering = false;
 
 				connman_inet_remove_from_bridge(wifi->index,
 									bridge);
-				wifi->bridged = FALSE;
+				wifi->bridged = false;
 			}
 		}
 
-		connman_technology_tethering_notify(technology, FALSE);
+		connman_technology_tethering_notify(technology, false);
 
 		return 0;
 	}
@@ -2044,7 +2100,7 @@ static int tech_set_tethering(struct connman_technology *technology,
 
 		interface = wifi->interface;
 
-		if (interface == NULL)
+		if (!interface)
 			continue;
 
 		ifname = g_supplicant_interface_get_ifname(wifi->interface);
@@ -2056,24 +2112,25 @@ static int tech_set_tethering(struct connman_technology *technology,
 		}
 
 		info = g_try_malloc0(sizeof(struct wifi_tethering_info));
-		if (info == NULL)
+		if (!info)
 			return -ENOMEM;
 
 		info->wifi = wifi;
 		info->technology = technology;
 		info->wifi->bridge = bridge;
 		info->ssid = ssid_ap_init(identifier, passphrase);
-		if (info->ssid == NULL) {
+		if (!info->ssid) {
 			g_free(info);
 			continue;
 		}
 		info->ifname = g_strdup(ifname);
-		if (info->ifname == NULL) {
+		if (!info->ifname) {
+			g_free(info->ssid);
 			g_free(info);
 			continue;
 		}
 
-		info->wifi->tethering = TRUE;
+		info->wifi->tethering = true;
 
 		err = g_supplicant_interface_remove(interface,
 						sta_remove_callback,
@@ -2089,7 +2146,7 @@ static void regdom_callback(int result, const char *alpha2, void *user_data)
 {
 	DBG("");
 
-	if (wifi_technology == NULL)
+	if (!wifi_technology)
 		return;
 
 	if (result != 0)

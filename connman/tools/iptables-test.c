@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
 	opterr = 0;
 
 	while ((c = getopt_long(argc, argv,
-                               "-A:I:D:P:N:X:F:Lt:", NULL, NULL)) != -1) {
+				"-A:I:D:P:N:X:F:Lt:", NULL, NULL)) != -1) {
 		switch (c) {
 		case 'A':
 			chain = optarg;
@@ -92,11 +92,11 @@ int main(int argc, char *argv[])
 	}
 
 out:
-	if (table == NULL)
+	if (!table)
 		table = "filter";
 
 	for (i = optind - 1; i < argc; i++) {
-		if (rule != NULL) {
+		if (rule) {
 			tmp = rule;
 			rule = g_strdup_printf("%s %s", rule,  argv[i]);
 			g_free(tmp);
@@ -129,7 +129,7 @@ out:
 		err = __connman_iptables_flush_chain(table, chain);
 		break;
 	case IPTABLES_COMMAND_DUMP:
-		__connman_log_init(argv[0], "*", FALSE, FALSE,
+		__connman_log_init(argv[0], "*", false, false,
 			"iptables-test", "1");
 		err = __connman_iptables_dump(table);
 		break;

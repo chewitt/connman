@@ -43,11 +43,9 @@ static bool save_input;
 static char *saved_line;
 static int saved_point;
 
-static connmanctl_input_func_t *readline_input_handler;
-
 void __connmanctl_quit(void)
 {
-	if (main_loop != NULL)
+	if (main_loop)
 		g_main_loop_quit(main_loop);
 }
 
@@ -87,7 +85,7 @@ static void rl_handler(char *input)
 	char **args, **trim_args;
 	int num, len, err, i;
 
-	if (input == NULL) {
+	if (!input) {
 		rl_newline(1, '\n');
 		g_main_loop_quit(main_loop);
 		return;
@@ -126,8 +124,7 @@ static gboolean input_handler(GIOChannel *channel, GIOCondition condition,
 		return FALSE;
 	}
 
-	if (readline_input_handler != NULL)
-		rl_callback_read_char();
+	rl_callback_read_char();
 	return TRUE;
 }
 
@@ -138,26 +135,86 @@ static char **complete_agent(const char *text, int start, int end)
 	return NULL;
 }
 
+/* Return how many parameters we have typed */
+static int calc_level(char *line)
+{
+	int count = 0;
+	char *ptr = line;
+
+	while (*ptr) {
+		if (*ptr == ' ') {
+			if (*(ptr + 1) == ' ') {
+				ptr++;
+				continue;
+			} else
+				count++;
+		}
+		ptr++;
+	}
+
+	return count;
+}
+
+static char *get_command_name(char *line)
+{
+	char *start, *ptr;
+
+	start = ptr = line;
+
+	while (*ptr && *ptr != ' ')
+		ptr++;
+
+	return g_strndup(start, ptr - start);
+}
+
 static char **complete_command(const char *text, int start, int end)
 {
-	char **command = NULL;
-
-	rl_attempted_completion_over = 1;
-
-	if (start == 0)
-		command = rl_completion_matches(text,
+	if (start == 0) {
+		return rl_completion_matches(text,
 				__connmanctl_lookup_command);
 
-	return command;
+	} else {
+		__connmanctl_lookup_cb cb;
+		char *current_command;
+		char **str = NULL;
+
+		if (calc_level(rl_line_buffer) > 1) {
+			rl_attempted_completion_over = 1;
+			return NULL;
+		}
+
+		current_command = get_command_name(rl_line_buffer);
+
+		cb = __connmanctl_get_lookup_func(current_command);
+		if (cb)
+			str = rl_completion_matches(text, cb);
+		else
+			rl_attempted_completion_over = 1;
+
+		g_free(current_command);
+
+		return str;
+	}
+}
+
+static struct {
+	connmanctl_input_func_t cb;
+	void *user_data;
+} agent_handler;
+
+static void rl_agent_handler(char *input)
+{
+	agent_handler.cb(input, agent_handler.user_data);
 }
 
 void __connmanctl_agent_mode(const char *prompt,
-		connmanctl_input_func_t input_handler)
+		connmanctl_input_func_t input_handler, void *user_data)
 {
-	readline_input_handler = input_handler;
+	agent_handler.cb = input_handler;
+	agent_handler.user_data = user_data;
 
-	if (input_handler != NULL)
-		rl_callback_handler_install(prompt, input_handler);
+	if (input_handler)
+		rl_callback_handler_install(prompt, rl_agent_handler);
 	else {
 		rl_set_prompt(prompt);
 		rl_callback_handler_remove();
@@ -168,10 +225,18 @@ void __connmanctl_agent_mode(const char *prompt,
 
 void __connmanctl_command_mode(void)
 {
-	readline_input_handler = rl_handler;
-
 	rl_callback_handler_install("connmanctl> ", rl_handler);
 	rl_attempted_completion_function = complete_command;
+}
+
+static void no_handler(char *input)
+{
+}
+
+static void no_handler_mode(void)
+{
+	rl_callback_handler_install("", no_handler);
+	rl_attempted_completion_function = NULL;
 }
 
 int __connmanctl_input_init(int argc, char *argv[])
@@ -202,18 +267,21 @@ int __connmanctl_input_init(int argc, char *argv[])
 	if (argc < 2) {
 		interactive = true;
 
+		__connmanctl_monitor_completions(connection);
+
 		__connmanctl_command_mode();
 		err = -EINPROGRESS;
 
 	} else {
 		interactive = false;
+		no_handler_mode();
 
 		if (strcmp(argv[1], "--help") == 0 ||
 				strcmp(argv[1], "-h") == 0)
 			err = __connmanctl_commands(connection, help, 1);
 		else
 			err = __connmanctl_commands(connection, argv + 1,
-					argc -1);
+					argc - 1);
 	}
 
 	if (err == -EINPROGRESS) {
@@ -225,13 +293,14 @@ int __connmanctl_input_init(int argc, char *argv[])
 
 	g_source_remove(source);
 
-	if (interactive == true) {
-		rl_callback_handler_remove();
-		rl_message("");
-	}
+	if (interactive)
+		__connmanctl_monitor_completions(NULL);
+
+	rl_callback_handler_remove();
+	rl_message("");
 
 	dbus_connection_unref(connection);
-	if (main_loop != NULL)
+	if (main_loop)
 		g_main_loop_unref(main_loop);
 
 	if (err < 0)

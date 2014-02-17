@@ -38,7 +38,7 @@ static DBusMessage *set_property(DBusConnection *connection,
 						CONNMAN_MANAGER_PATH,
 						CONNMAN_MANAGER_INTERFACE,
 						"SetProperty");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_message_iter_init_append(message, &iter);
@@ -48,8 +48,8 @@ static DBusMessage *set_property(DBusConnection *connection,
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {
@@ -73,15 +73,15 @@ DBusMessage *manager_get_services(DBusConnection *connection)
 						CONNMAN_MANAGER_PATH,
 						CONNMAN_MANAGER_INTERFACE,
 							"GetServices");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_error_init(&error);
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {
@@ -105,15 +105,15 @@ DBusMessage *manager_get_properties(DBusConnection *connection)
 						CONNMAN_MANAGER_PATH,
 						CONNMAN_MANAGER_INTERFACE,
 							"GetProperties");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_error_init(&error);
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {
@@ -140,7 +140,7 @@ DBusMessage *manager_create_session(DBusConnection *connection,
 						CONNMAN_MANAGER_PATH,
 						CONNMAN_MANAGER_INTERFACE,
 							"CreateSession");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_error_init(&error);
@@ -158,8 +158,8 @@ DBusMessage *manager_create_session(DBusConnection *connection,
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {
@@ -185,7 +185,7 @@ DBusMessage *manager_destroy_session(DBusConnection *connection,
 						CONNMAN_MANAGER_PATH,
 						CONNMAN_MANAGER_INTERFACE,
 							"DestroySession");
-	if (message == NULL)
+	if (!message)
 		return NULL;
 
 	dbus_error_init(&error);
@@ -197,8 +197,8 @@ DBusMessage *manager_destroy_session(DBusConnection *connection,
 
 	reply = dbus_connection_send_with_reply_and_block(connection,
 							message, -1, &error);
-	if (reply == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!reply) {
+		if (dbus_error_is_set(&error)) {
 			LOG("%s", error.message);
 			dbus_error_free(&error);
 		} else {
@@ -214,10 +214,12 @@ DBusMessage *manager_destroy_session(DBusConnection *connection,
 }
 
 DBusMessage *manager_set_session_mode(DBusConnection *connection,
-					connman_bool_t enable)
+					bool enable)
 {
+	dbus_bool_t val = enable;
+
 	return set_property(connection, "SessionMode",
-				DBUS_TYPE_BOOLEAN, &enable);
+				DBUS_TYPE_BOOLEAN, &val);
 }
 
 int manager_parse_properties(DBusMessage *msg,
@@ -240,11 +242,11 @@ int manager_parse_properties(DBusMessage *msg,
 
 		switch (dbus_message_iter_get_arg_type(&value)) {
 		case DBUS_TYPE_STRING:
-			if (g_str_equal(key, "State") == TRUE) {
+			if (g_str_equal(key, "State")) {
 				const char *val;
 				dbus_message_iter_get_basic(&value, &val);
 
-				if (manager->state != NULL)
+				if (manager->state)
 					g_free(manager->state);
 
 				LOG("State %s", val);

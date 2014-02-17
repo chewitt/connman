@@ -22,7 +22,7 @@
 #ifndef __CONNMAN_SERVICE_H
 #define __CONNMAN_SERVICE_H
 
-#include <connman/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +45,8 @@ enum connman_service_type {
 	CONNMAN_SERVICE_TYPE_VPN       = 7,
 	CONNMAN_SERVICE_TYPE_GADGET    = 8,
 };
+#define	MAX_CONNMAN_SERVICE_TYPES        9
+
 
 enum connman_service_security {
 	CONNMAN_SERVICE_SECURITY_UNKNOWN = 0,
@@ -116,7 +118,7 @@ char **connman_service_get_proxy_servers(struct connman_service *service);
 char **connman_service_get_proxy_excludes(struct connman_service *service);
 const char *connman_service_get_proxy_url(struct connman_service *service);
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service);
-connman_bool_t connman_service_get_favorite(struct connman_service *service);
+bool connman_service_get_favorite(struct connman_service *service);
 
 struct connman_service *connman_service_lookup_from_network(struct connman_network *network);
 

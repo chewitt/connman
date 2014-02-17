@@ -23,7 +23,6 @@
 #define __CONNMAN_SESSION_H
 
 #include <connman/service.h>
-#include <connman/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,30 +48,22 @@ enum connman_session_type {
 	CONNMAN_SESSION_TYPE_INTERNET = 3,
 };
 
-struct cb_data {
-	void *cb;
-	void *user_data;
-	void *data;
+enum connman_session_id_type {
+	CONNMAN_SESSION_ID_TYPE_UNKNOWN = 0,
+	CONNMAN_SESSION_ID_TYPE_UID	= 1,
+	CONNMAN_SESSION_ID_TYPE_GID	= 2,
+	CONNMAN_SESSION_ID_TYPE_LSM	= 3,
 };
-
-static inline struct cb_data *cb_data_new(void *cb, void *user_data)
-{
-	struct cb_data *ret;
-
-	ret = g_new0(struct cb_data, 1);
-	ret->cb = cb;
-	ret->user_data = user_data;
-
-	return ret;
-}
 
 struct connman_session;
 
 struct connman_session_config {
-	connman_bool_t priority;
+	enum connman_session_id_type id_type;
+	char *id;
+	bool priority;
 	enum connman_session_roaming_policy roaming_policy;
 	enum connman_session_type type;
-	connman_bool_t ecall;
+	bool ecall;
 	GSList *allowed_bearers;
 };
 

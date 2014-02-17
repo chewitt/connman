@@ -12,21 +12,6 @@ Background
 Core
 ====
 
-- Session API implementation
-
-   Priority: High
-   Complexity: C4
-   Owner: Daniel Wagner <daniel.wagner@bmw-carit.de>
-   Owner: Patrik Flykt <patrik.flykt@linux.intel.com>
-
-   The session API should provide a connection abstraction in order to
-   prioritize applications network accesses, prevent or allow network
-   and bearer roaming, or provide applications with a way to request
-   for periodic network connections. On-demand connections will be
-   implemented through this API as well.
-   See http://www.mail-archive.com/connman@connman.net/msg01653.html
-
-
 - Personal firewall
 
    Priority: Low
@@ -55,36 +40,14 @@ Core
    and get rid of the unnecessary ones.
 
 
-- Support for multiple agents
-
-  Priority: Medium
-  Complexity: C2
-
-  Allow to register multiple agents. Each unique system bus name owner
-  however is only allowed to register one agent.
-
-  The selection of which agents is used  should be matched by bus name
-  owner if possible or first come first serve. A graceful fallback to
-  the next agent should be also used in case of malfunctional agents.
-
 - Remove --nobacktrace option
-
- Priority: Medium
- Complexity: C1
- When: 2.0
-
- Remove the --nobacktrace option or change it to --backtrace depending on the
- level of systemd integration or other factors.
-
-
-- Clean up type definitions
 
    Priority: Medium
    Complexity: C1
+   When: 2.0
 
-   Go through variable types and use the following:
-   * bool from <stdbool.h> instead of connman_bool_t and gboolean, in the
-     latter case in those places it makes sense
+   Remove the --nobacktrace option or change it to --backtrace depending on
+   the level of systemd integration or other factors.
 
 
 - Clean up data structure usage
@@ -92,8 +55,7 @@ Core
    Priority: Medium
    Complexity: C4
 
-   Use hash tables, queues and lists in the code. Replace GSequences with
-   simpler structures. At the same time do a check on the currently used
+   Use hash tables, queues and lists in the code. Check on the currently used
    data structures and see if something can be simplified.
 
 
@@ -107,10 +69,12 @@ Core
    and oFono in general.
 
 
-- DHCPv6 DECLINE message support
+- Support other time sources than NTP
 
    Priority: Medium
    Complexity: C2
+
+   Support other time sources like cellular, GPS in addition to NTP.
 
 
 WiFi
@@ -199,17 +163,25 @@ VPN
    code and only allow "PPPD." prefix for PPP options.
 
 
+- Update VPNC and OpenVPN with Agent support
+
+   Priority: Medium
+   Complexity: C2
+
+   Update VPNC and OpenVPN with VPN Agent support to request possible user
+   ids and passphrases.
+
+
 Tools
 =====
 
-- Add Session mode, VPN and Clock API support to connmanctl command line tool
+- Add Clock API and MoveBefore/MoveAfter support to connmanctl
 
    Priority: Low
    Complexity: C2
 
-   The connmanctl command line tool should support Session mode and VPN
-   Agent with a set of suitable commands used in both interactive and
-   non-interactive mode. Also add support for Clock API.
+   The connmanctl command line tool should support Clock API and Service API
+   MoveBefore/MoveAfter.
 
 
 User Interface

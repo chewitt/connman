@@ -41,6 +41,14 @@ void connman_error(const char *format, ...)
 void connman_debug(const char *format, ...)
 				__attribute__((format(printf, 1, 2)));
 
+#define connman_warn_once(fmt, arg...) do {		\
+	static bool printed;				\
+	if (!printed) {					\
+		connman_warn(fmt, ## arg);		\
+		printed = true;				\
+	}						\
+} while (0)
+
 struct connman_debug_desc {
 	const char *name;
 	const char *file;
