@@ -46,7 +46,7 @@
 #define TFR
 #endif
 
-#define MAGIC 0xFA00B916
+#define MAGIC 0xFA01B916
 
 /*
  * Statistics counters are stored into a ring buffer which is stored
