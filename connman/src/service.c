@@ -2289,18 +2289,13 @@ void __connman_service_counter_send_initial(const char *counter)
     int i;
 
     services = connman_storage_get_services();
-    if (services == NULL)
+    if (!services)
         return;
 
     for (i = 0; services[i] != NULL; i++) {
-        GSequenceIter *hash_iter = g_hash_table_lookup(service_hash, services[i]);
-        if (hash_iter == NULL) {
-            __connman_service_counter_append_saved(counter, services[i]);
-            continue;
-        }
 
-        struct connman_service *service = g_sequence_get(hash_iter);
-        if (service == NULL) {
+        struct connman_service *service =  g_hash_table_lookup(service_hash, services[i]);
+        if (!service) {
             __connman_service_counter_append_saved(counter, services[i]);
             continue;
         }
@@ -2348,13 +2343,7 @@ void __connman_service_counter_reset_all(const char *type)
         if (strncmp(services[i], type, typeLength) != 0)
             continue;
 
-        GSequenceIter *hash_iter = g_hash_table_lookup(service_hash, services[i]);
-        if (hash_iter == NULL) {
-            __connman_service_counter_reset_saved(services[i]);
-            continue;
-        }
-
-        struct connman_service *service = g_sequence_get(hash_iter);
+        struct connman_service *service = g_hash_table_lookup(service_hash, services[i]);
         if (service == NULL) {
             __connman_service_counter_reset_saved(services[i]);
             continue;
@@ -2559,23 +2548,19 @@ void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_
 	gchar **services;
 	int i;
 	struct connman_service *service;
-	GSequenceIter *hash_iter;
 
 	services = connman_storage_get_services();
 	if (services == NULL)
 		return;
 
 	for (i = 0; services[i] != NULL; i++) {
-		hash_iter = g_hash_table_lookup(service_hash, services[i]);
-		if (hash_iter != NULL) {
-			service = g_sequence_get(hash_iter);
-			if (service == NULL)
-				continue;
+		service = g_hash_table_lookup(service_hash, services[i]);
 
+    if (service) {
 			connman_service_ref(service);
 		} else {
 			service = connman_service_create();
-			if (service == NULL)
+			if (!service)
 				continue;
 
 			service->identifier = g_strdup(services[i]);
@@ -2586,16 +2571,16 @@ void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_
 			service_load(service);
 		}
 
-		if (service->path == NULL)
+		if (!service->path)
 			continue;
 
 		append_struct_service(iter, function, service);
 
-		if (hash_iter != NULL) {
-			connman_service_unref(service);
-		} else {
-			service_destroy(service);
-		}
+//		if (!service) {
+        connman_service_unref(service);
+//		} else {
+//      	service_destroy(service);
+//    }
 	}
 
 	g_strfreev(services);
@@ -2617,17 +2602,15 @@ int connman_service_remove(const char *identifier)
         if (g_strcmp0(services[i], identifier) != 0)
             continue;
 
-        GSequenceIter *iter = g_hash_table_lookup(service_hash, identifier);
-        if (iter != NULL) {
-            struct connman_service *service = g_sequence_get(iter);
-            if (service != NULL) {
-                __connman_service_remove(service);
-                return TRUE;
-            }
+        struct connman_service *service = g_hash_table_lookup(service_hash, identifier);
+        if (!service) {
+            DBG("no service remove");
+            __connman_service_remove(service);
+            return true;
         }
 
-        struct connman_service *service = connman_service_create();
-        if (service == NULL)
+        service = connman_service_create();
+        if (!service) 
             return FALSE;
 
         service->identifier = g_strdup(services[i]);
