@@ -134,8 +134,9 @@ enum connman_service_type __connman_device_get_service_type(struct connman_devic
 	switch (type) {
 	case CONNMAN_DEVICE_TYPE_UNKNOWN:
 	case CONNMAN_DEVICE_TYPE_VENDOR:
-	case CONNMAN_DEVICE_TYPE_GPS:
 		break;
+	case CONNMAN_DEVICE_TYPE_GPS:
+		return CONNMAN_SERVICE_TYPE_GPS;
 	case CONNMAN_DEVICE_TYPE_ETHERNET:
 		return CONNMAN_SERVICE_TYPE_ETHERNET;
 	case CONNMAN_DEVICE_TYPE_WIFI:
