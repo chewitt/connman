@@ -67,6 +67,11 @@ AC_ARG_ENABLE(hh2serial-gps,
 AM_CONDITIONAL(HH2SERIAL_GPS, test "${enable_hh2serial_gps}" != "no")
 AM_CONDITIONAL(HH2SERIAL_GPS_BUILTIN, test "${enable_hh2serial_gps}" = "builtin")
 
+AC_ARG_ENABLE(hybris-gps,
+	AC_HELP_STRING([--enable-hybris-gps], [enable hybris GPS support]),
+			[enable_hybris_gps=${enableval}], [enable_hybris_gps="no"])
+AM_CONDITIONAL(HYBRIS_GPS, test "${enable_hybris_gps}" != "no")
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 
