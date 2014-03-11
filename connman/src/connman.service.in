@@ -6,7 +6,7 @@ After=dbus.service
 [Service]
 Type=notify
 Restart=on-failure
-EnvironmentFile=-/etc/tracing/connman
+EnvironmentFile=-/etc/tracing/connman/connman.tracing
 ExecStart=@prefix@/sbin/connmand -n --systemd $TRACING
 StandardOutput=null
 Restart=always
