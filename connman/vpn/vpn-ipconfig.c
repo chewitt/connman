@@ -362,7 +362,7 @@ void __vpn_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags,
 				const char *address,
 				unsigned short mtu,
-				struct rtnl_link_stats *stats)
+				struct rtnl_link_stats64 *stats)
 {
 	struct vpn_ipdevice *ipdevice;
 	GString *str;
@@ -418,7 +418,7 @@ update:
 	g_string_free(str, TRUE);
 }
 
-void __vpn_ipconfig_dellink(int index, struct rtnl_link_stats *stats)
+void __vpn_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats)
 {
 	struct vpn_ipdevice *ipdevice;
 

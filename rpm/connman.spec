@@ -51,6 +51,14 @@ Requires:   pygobject2
 %description test
 Scripts for testing Connman and its functionality
 
+%package tools
+Summary:    Development tools for Connection Manager
+Group:      Development/Tools
+Requires:   %{name} = %{version}-%{release}
+
+%description tools
+Programs for debugging Connman
+
 %package tracing
 Summary:    Configuration for Connection Manager to enable tracing
 Group:      Development/Tools
@@ -105,6 +113,10 @@ make %{?jobs:-j%jobs}
 %install
 rm -rf %{buildroot}
 %make_install
+
+mkdir -p %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/stats-tool %{buildroot}%{_libdir}/%{name}/tools
+
 mkdir -p %{buildroot}%{_sysconfdir}/tracing/connman/
 cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/tracing/connman/
 mkdir -p %{buildroot}%{_sysconfdir}/connman/
@@ -147,6 +159,10 @@ systemctl daemon-reload || :
 %files test
 %defattr(-,root,root,-)
 %{_libdir}/%{name}/test/*
+
+%files tools
+%defattr(-,root,root,-)
+%{_libdir}/%{name}/tools/*
 
 %files tracing
 %defattr(-,root,root,-)

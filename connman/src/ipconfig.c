@@ -66,14 +66,14 @@ struct connman_ipdevice {
 	unsigned int flags;
 	char *address;
 	uint16_t mtu;
-	uint32_t rx_packets;
-	uint32_t tx_packets;
-	uint32_t rx_bytes;
-	uint32_t tx_bytes;
-	uint32_t rx_errors;
-	uint32_t tx_errors;
-	uint32_t rx_dropped;
-	uint32_t tx_dropped;
+	uint64_t rx_packets;
+	uint64_t tx_packets;
+	uint64_t rx_bytes;
+	uint64_t tx_bytes;
+	uint64_t rx_errors;
+	uint64_t tx_errors;
+	uint64_t rx_dropped;
+	uint64_t tx_dropped;
 
 	GSList *address_list;
 	char *ipv4_gateway;
@@ -409,16 +409,16 @@ static void __connman_ipconfig_lower_down(struct connman_ipdevice *ipdevice)
 }
 
 static void update_stats(struct connman_ipdevice *ipdevice,
-						struct rtnl_link_stats *stats)
+						struct rtnl_link_stats64 *stats)
 {
 	struct connman_service *service;
 
 	if (stats->rx_packets == 0 && stats->tx_packets == 0)
 		return;
 
-	connman_info("%s {RX} %u packets %u bytes", ipdevice->ifname,
+	connman_info("%s {RX} %llu packets %llu bytes", ipdevice->ifname,
 					stats->rx_packets, stats->rx_bytes);
-	connman_info("%s {TX} %u packets %u bytes", ipdevice->ifname,
+	connman_info("%s {TX} %llu packets %llu bytes", ipdevice->ifname,
 					stats->tx_packets, stats->tx_bytes);
 
 	if (ipdevice->config_ipv4 == NULL && ipdevice->config_ipv6 == NULL)
@@ -453,7 +453,7 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 							unsigned short mtu,
-						struct rtnl_link_stats *stats)
+						struct rtnl_link_stats64 *stats)
 {
 	struct connman_ipdevice *ipdevice;
 	GList *list;
@@ -572,7 +572,7 @@ update:
 		__connman_ipconfig_lower_down(ipdevice);
 }
 
-void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats)
+void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats)
 {
 	struct connman_ipdevice *ipdevice;
 	GList *list;
