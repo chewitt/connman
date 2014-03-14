@@ -103,6 +103,7 @@ Documentation for connman.
     --enable-openvpn=builtin \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
+    --enable-hybris-gps=builtin \
     --enable-client \
     --enable-test \
     --with-systemdunitdir=/%{_lib}/systemd/system \
