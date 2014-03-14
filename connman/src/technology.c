@@ -545,7 +545,7 @@ static void connman_technology_save_offlinemode(void)
 	return;
 }
 
-static bool connman_technology_load_offlinemode(void)
+bool connman_technology_load_offlinemode(void)
 {
 	GKeyFile *keyfile;
 	GError *error = NULL;
@@ -1499,7 +1499,7 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 	int err = -EINVAL, enabled_tech_count = 0;
 
 	if (global_offlinemode == offlinemode)
-		return;
+		return 0;
 
 	DBG("offlinemode %s", offlinemode ? "On" : "Off");
 
@@ -1516,7 +1516,7 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 				continue;
 
 		if (!offlinemode && (technology->enable_persistent || 
-			technology->type == CONNMAN_SERVICE_TYPE_CELLULAR))
+			technology->type == CONNMAN_SERVICE_TYPE_CELLULAR)) {
 				err = technology_enable(technology);
 				enabled_tech_count++;
 			}

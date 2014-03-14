@@ -1796,6 +1796,16 @@ static char *lookup_service(const char *text, int state)
 	return NULL;
 }
 
+static char *lookup_service_arg(const char *text, int state)
+{
+	if (__connmanctl_input_calc_level() > 1) {
+		__connmanctl_input_lookup_end();
+		return NULL;
+	}
+
+	return lookup_service(text, state);
+}
+
 static char *lookup_technology(const char *text, int state)
 {
 	static int len = 0;
@@ -1816,11 +1826,26 @@ static char *lookup_technology(const char *text, int state)
 	return NULL;
 }
 
+static char *lookup_technology_arg(const char *text, int state)
+{
+	if (__connmanctl_input_calc_level() > 1) {
+		__connmanctl_input_lookup_end();
+		return NULL;
+	}
+
+	return lookup_technology(text, state);
+}
+
 static char *lookup_technology_offline(const char *text, int state)
 {
 	static int len = 0;
 	static bool end = false;
 	char *str;
+
+	if (__connmanctl_input_calc_level() > 1) {
+		__connmanctl_input_lookup_end();
+		return NULL;
+	}
 
 	if (state == 0) {
 		len = strlen(text);
@@ -1840,6 +1865,56 @@ static char *lookup_technology_offline(const char *text, int state)
 		return strdup("offline");
 
 	return NULL;
+}
+
+static char *lookup_on_off(const char *text, int state)
+{
+	char *onoff[] = { "on", "off", NULL };
+	static int idx = 0;
+	static int len = 0;
+
+	char *str;
+
+	if (!state) {
+		idx = 0;
+		len = strlen(text);
+	}
+
+	while (onoff[idx]) {
+		str = onoff[idx];
+		idx++;
+
+		if (!strncmp(text, str, len))
+			return strdup(str);
+	}
+
+	return NULL;
+}
+
+static char *lookup_tether(const char *text, int state)
+{
+	int level;
+
+	level = __connmanctl_input_calc_level();
+	if (level < 2)
+		return lookup_technology(text, state);
+
+	if (level == 2)
+		return lookup_on_off(text, state);
+
+	__connmanctl_input_lookup_end();
+
+	return NULL;
+}
+
+static char *lookup_agent(const char *text, int state)
+{
+	if (__connmanctl_input_calc_level() > 1) {
+		__connmanctl_input_lookup_end();
+		return NULL;
+	}
+
+	return lookup_on_off(text, state);
 }
 
 static struct connman_option service_options[] = {
@@ -1878,6 +1953,58 @@ static struct connman_option session_options[] = {
 	{ NULL, }
 };
 
+static char *lookup_options(struct connman_option *options, const char *text,
+		int state)
+{
+	static int idx = 0;
+	static int len = 0;
+	const char *str;
+
+	if (state == 0) {
+		idx = 0;
+		len = strlen(text);
+	}
+
+	while (options[idx].name) {
+		str = options[idx].name;
+		idx++;
+
+		if (str && strncmp(text, str, len) == 0)
+			return strdup(str);
+	}
+
+	return NULL;
+}
+
+static char *lookup_monitor(const char *text, int state)
+{
+	int level;
+
+	level = __connmanctl_input_calc_level();
+
+	if (level < 2)
+		return lookup_options(monitor_options, text, state);
+
+	if (level == 2)
+		return lookup_on_off(text, state);
+
+	__connmanctl_input_lookup_end();
+	return NULL;
+}
+
+static char *lookup_config(const char *text, int state)
+{
+	if (__connmanctl_input_calc_level() < 2)
+		return lookup_service(text, state);
+
+	return lookup_options(config_options, text, state);
+}
+
+static char *lookup_session(const char *text, int state)
+{
+	return lookup_options(session_options, text, state);
+}
+
 static const struct {
         const char *cmd;
 	const char *argument;
@@ -1900,27 +2027,28 @@ static const struct {
 	            "            wifi [on|off] <ssid> <passphrase> ",
 	                                  NULL,            cmd_tether,
 	  "Enable, disable tethering, set SSID and passphrase for wifi",
-	  lookup_technology },
+	  lookup_tether },
 	{ "services",     "[<service>]",  service_options, cmd_services,
-	  "Display services", lookup_service },
+	  "Display services", lookup_service_arg },
 	{ "scan",         "<technology>", NULL,            cmd_scan,
-	  "Scans for new services for given technology", lookup_technology },
+	  "Scans for new services for given technology",
+	  lookup_technology_arg },
 	{ "connect",      "<service>",    NULL,            cmd_connect,
-	  "Connect a given service", lookup_service },
+	  "Connect a given service", lookup_service_arg },
 	{ "disconnect",   "<service>",    NULL,            cmd_disconnect,
-	  "Disconnect a given service", lookup_service },
+	  "Disconnect a given service", lookup_service_arg },
 	{ "config",       "<service>",    config_options,  cmd_config,
-	  "Set service configuration options", lookup_service },
+	  "Set service configuration options", lookup_config },
 	{ "monitor",      "[off]",        monitor_options, cmd_monitor,
-	  "Monitor signals from interfaces", NULL },
+	  "Monitor signals from interfaces", lookup_monitor },
 	{ "agent", "on|off",              NULL,            cmd_agent,
-	  "Agent mode", NULL },
+	  "Agent mode", lookup_agent },
 	{"vpnconnections", "[<connection>]", NULL,         cmd_vpnconnections,
 	 "Display VPN connections", NULL },
 	{ "vpnagent",     "on|off",     NULL,            cmd_vpnagent,
-	  "VPN Agent mode", NULL },
+	  "VPN Agent mode", lookup_agent },
 	{ "session",      "on|off|connect|disconnect|config", session_options,
-	  cmd_session, "Enable or disable a session", NULL },
+	  cmd_session, "Enable or disable a session", lookup_session },
 	{ "help",         NULL,           NULL,            cmd_help,
 	  "Show help", NULL },
 	{ "exit",         NULL,           NULL,            cmd_exit,
@@ -1970,10 +2098,20 @@ static int cmd_help(char *args[], int num, struct connman_option *options)
 
 __connmanctl_lookup_cb __connmanctl_get_lookup_func(const char *text)
 {
-	int i;
+	int i, cmdlen, textlen;
+
+	if (!text)
+		return NULL;
+
+	textlen = strlen(text);
 
 	for (i = 0; cmd_table[i].cmd; i++) {
-		if (g_strcmp0(cmd_table[i].cmd, text) == 0)
+		cmdlen = strlen(cmd_table[i].cmd);
+
+		if (textlen > cmdlen && text[cmdlen] != ' ')
+			continue;
+
+		if (strncmp(cmd_table[i].cmd, text, cmdlen) == 0)
 			return cmd_table[i].cb;
 	}
 

@@ -66,7 +66,7 @@ struct connman_technology_driver {
 
 int connman_technology_driver_register(struct connman_technology_driver *driver);
 void connman_technology_driver_unregister(struct connman_technology_driver *driver);
-connman_bool_t connman_technology_load_offlinemode();
+bool connman_technology_load_offlinemode();
 
 #ifdef __cplusplus
 }

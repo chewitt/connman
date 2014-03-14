@@ -75,7 +75,6 @@ static struct {
 	bool single_tech;
 	char **tethering_technologies;
 	bool persistent_tethering_mode;
-	connman_bool_t start_session;
 	char **ipv6_status_url;
 	char **ipv4_status_url;
 } connman_settings  = {
@@ -91,7 +90,6 @@ static struct {
 	.single_tech = false,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
-	.start_session = FALSE,
 	.ipv4_status_url = NULL,
 	.ipv6_status_url = NULL,
 };
@@ -108,7 +106,6 @@ static struct {
 #define CONF_SINGLE_TECH                "SingleConnectedTechnology"
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
-#define CONF_START_SESSION              "StartSession"
 
 #define CONF_STATUS_URL_IPV6            "Ipv6StatusUrl"
 #define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
@@ -126,7 +123,6 @@ static const char *supported_options[] = {
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
-	CONF_START_SESSION,
 	CONF_STATUS_URL_IPV4,
 	CONF_STATUS_URL_IPV6,
 	NULL
@@ -355,12 +351,6 @@ static void parse_config(GKeyFile *config)
 		connman_settings.single_tech = boolean;
 	g_clear_error(&error);
 
-	boolean = g_key_file_get_boolean(config, "General",
-			CONF_START_SESSION, &error);
-	if (error == NULL)
-		connman_settings.start_session = boolean;
-	g_clear_error(&error);
-
 	tethering = __connman_config_get_string_list(config, "General",
 			CONF_TETHERING_TECHNOLOGIES, &len, &error);
 
@@ -582,8 +572,6 @@ bool connman_setting_get_bool(const char *key)
 		return connman_settings.persistent_tethering_mode;
 
 	return false;
-		return connman_settings.start_session;
-
 }
 
 char **connman_setting_get_string_list(const char *key)

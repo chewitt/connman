@@ -430,16 +430,16 @@ static void __connman_ipconfig_lower_down(struct connman_ipdevice *ipdevice)
 }
 
 static void update_stats(struct connman_ipdevice *ipdevice,
-						struct rtnl_link_stats64 *stats)
+            const char *ifname, struct rtnl_link_stats64 *stats)
 {
 	struct connman_service *service;
 
 	if (stats->rx_packets == 0 && stats->tx_packets == 0)
 		return;
 
-	connman_info("%s {RX} %llu packets %llu bytes", ipdevice->ifname,
+	connman_info("%s {RX} %llu packets %llu bytes", ifname,
 					stats->rx_packets, stats->rx_bytes);
-	connman_info("%s {TX} %llu packets %llu bytes", ipdevice->ifname,
+	connman_info("%s {TX} %llu packets %llu bytes", ifname,
 					stats->tx_packets, stats->tx_bytes);
 
 	if (!ipdevice->config_ipv4 && !ipdevice->config_ipv6)

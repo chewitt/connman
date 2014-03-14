@@ -696,8 +696,9 @@ int __connman_agent_request_connection(void *user_data)
     struct request_connect_reply_data *connect_reply_data;
     const char *agent_sender, *agent_path;
     int err;
+    void *agent;
 
-    connman_agent_get_info(&agent_sender, &agent_path);
+    agent = connman_agent_get_info(NULL,&agent_sender, &agent_path);
     if (agent_path == NULL) {
         return -ESRCH;
     }
@@ -726,7 +727,8 @@ int __connman_agent_request_connection(void *user_data)
 
     err = connman_agent_queue_message(def_service, message,
                                       connman_timeout_input_request(),
-                                      request_connect_reply, connect_reply_data);
+                                      request_connect_reply, connect_reply_data,
+                                      agent);
 
     if (err < 0 && err != -EBUSY) {
         DBG("Eerror %d sending connect request", err);

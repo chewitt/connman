@@ -238,7 +238,7 @@ int connman_agent_queue_message(void *user_context,
       } else {
 		queue_data->user_context = user_context;
       }
-  }
+
 	queue_data->msg = dbus_message_ref(msg);
 	queue_data->timeout = timeout;
 	queue_data->callback = callback;

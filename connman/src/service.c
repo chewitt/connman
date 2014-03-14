@@ -2622,8 +2622,8 @@ int connman_service_remove(const char *identifier)
         g_free(service->passphrase);
         service->passphrase = NULL;
 
-        g_free(service->agent_passphrase);
-        service->agent_passphrase = NULL;
+//        g_free(service->agent_passphrase);
+//        service->agent_passphrase = NULL;
 
         g_free(service->identity);
         service->identity = NULL;

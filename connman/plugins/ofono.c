@@ -983,7 +983,7 @@ static void create_device(struct modem_data *modem)
 
 	modem->device = device;
 	
-	connman_bool_t isOffline = connman_technology_load_offlinemode();
+	bool isOffline = connman_technology_load_offlinemode();
 	if(!isOffline) {
 		// We must set modem online in boot if flight mode is not
 		// enabled

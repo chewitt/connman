@@ -136,10 +136,12 @@ static char **complete_agent(const char *text, int start, int end)
 }
 
 /* Return how many parameters we have typed */
-static int calc_level(char *line)
+int __connmanctl_input_calc_level(void)
 {
 	int count = 0;
-	char *ptr = line;
+	char *ptr;
+
+	ptr = rl_line_buffer;
 
 	while (*ptr) {
 		if (*ptr == ' ') {
@@ -155,16 +157,9 @@ static int calc_level(char *line)
 	return count;
 }
 
-static char *get_command_name(char *line)
+void __connmanctl_input_lookup_end(void)
 {
-	char *start, *ptr;
-
-	start = ptr = line;
-
-	while (*ptr && *ptr != ' ')
-		ptr++;
-
-	return g_strndup(start, ptr - start);
+	rl_attempted_completion_over = 1;
 }
 
 static char **complete_command(const char *text, int start, int end)
@@ -175,23 +170,13 @@ static char **complete_command(const char *text, int start, int end)
 
 	} else {
 		__connmanctl_lookup_cb cb;
-		char *current_command;
 		char **str = NULL;
 
-		if (calc_level(rl_line_buffer) > 1) {
-			rl_attempted_completion_over = 1;
-			return NULL;
-		}
-
-		current_command = get_command_name(rl_line_buffer);
-
-		cb = __connmanctl_get_lookup_func(current_command);
+		cb = __connmanctl_get_lookup_func(rl_line_buffer);
 		if (cb)
 			str = rl_completion_matches(text, cb);
 		else
 			rl_attempted_completion_over = 1;
-
-		g_free(current_command);
 
 		return str;
 	}
