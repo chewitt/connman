@@ -2601,12 +2601,14 @@ int connman_service_remove(const char *identifier)
     for (i = 0; services[i] != NULL; ++i) {
         if (g_strcmp0(services[i], identifier) != 0)
             continue;
-
+DBG("remove service %s %s", services[i],identifier);
         struct connman_service *service = g_hash_table_lookup(service_hash, identifier);
-        if (!service) {
+// lookup_by_identifier(identifier);
+
+        if (service) {
             DBG("no service remove");
             __connman_service_remove(service);
-            return true;
+            return TRUE;
         }
 
         service = connman_service_create();
