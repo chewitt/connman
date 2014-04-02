@@ -367,16 +367,16 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	ipv4url = g_key_file_get_string(config, "General", CONF_STATUS_URL_IPV4, &error);
-	if (error == NULL)
+	ipv4url = __connman_config_get_string(config, "General", CONF_STATUS_URL_IPV4, &error);
+	if (!error)
 		connman_settings.ipv4_status_url = ipv4url;
 	else 
 		connman_settings.ipv4_status_url = "http://ipv4.connman.net/online/status.html";
 
         g_clear_error(&error);
 
-	ipv6url = g_key_file_get_string(config, "General", CONF_STATUS_URL_IPV6, &error);
-	if (error == NULL)
+	ipv6url = __connman_config_get_string(config, "General", CONF_STATUS_URL_IPV6, &error);
+	if (!error)
 		connman_settings.ipv6_status_url = ipv6url;
 	else
 		connman_settings.ipv6_status_url = "http://ipv6.connman.net/online/status.html";

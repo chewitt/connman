@@ -2619,7 +2619,7 @@ DBG("remove service %s %s", services[i],identifier);
         service->path = g_strdup_printf("%s/service/%s", CONNMAN_PATH, service->identifier);
         service->type = __connman_service_string2type(service->identifier);
 
-        int result = service_load(service);
+        service_load(service);
 
         g_free(service->passphrase);
         service->passphrase = NULL;
@@ -2638,7 +2638,7 @@ DBG("remove service %s %s", services[i],identifier);
 
         service->favorite = FALSE;
 
-        result = service_save(service);
+        service_save(service);
 
         connman_service_unref(service);
 

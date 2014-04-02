@@ -3133,13 +3133,12 @@ static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
     if (len > 4) {
         const char *lastFive = &query[len - 5];
         if (strcmp("arpa.", lastFive) == 0) {
-            ok == FALSE;
+            ok = FALSE;
         } else {
             ok = TRUE;
         }
     }
     if (ok && tryit == 0) {
-          //
         	g_timeout_add_seconds(10, reset_connect_request, NULL);
 
           tryit = 1;

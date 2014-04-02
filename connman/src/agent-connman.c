@@ -658,7 +658,6 @@ static void request_connect_reply(DBusMessage *reply, void *user_data)
 {
     DBusMessageIter iter;
     char *key;
-    int type;
 
     struct request_connect_reply_data *connect_reply_data = user_data;
     const char *error = NULL;

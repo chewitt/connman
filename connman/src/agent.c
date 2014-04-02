@@ -177,10 +177,6 @@ static void agent_receive_message(DBusPendingCall *call, void *user_data)
 	struct connman_agent *agent = user_data;
 	DBusMessage *reply;
 	int err;
-    DBusMessageIter iter;
-    char *key;
-    const char *error = NULL;
-    int type;
 
 	DBG("agent %p req %p", agent, agent->pending);
 

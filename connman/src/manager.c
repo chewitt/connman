@@ -218,9 +218,7 @@ static DBusMessage *get_saved_services(DBusConnection *conn,
 static DBusMessage *remove_saved_service(DBusConnection *conn, DBusMessage *msg, void *data)
 {
     gchar *identifier;
-    int i;
-    struct connman_service *service;
-
+ 
     dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &identifier, DBUS_TYPE_INVALID);
 
     if (connman_service_remove(identifier) != TRUE)
