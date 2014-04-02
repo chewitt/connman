@@ -297,7 +297,7 @@ update:
 		if (it == info)
 			continue;
 
-		if (!(it->start <= info->start || info->start <= it->end))
+		if (!(info->start >= it->start && info->start <= it->end))
 			continue;
 
 		if (it->pool != NULL && it->pool->collision_cb != NULL)
