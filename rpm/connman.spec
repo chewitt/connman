@@ -117,6 +117,11 @@ rm -rf %{buildroot}
 
 mkdir -p %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/stats-tool %{buildroot}%{_libdir}/%{name}/tools
+cp -a client/connmanctl %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/*-test %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/iptables-unit %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
+
 
 mkdir -p %{buildroot}%{_sysconfdir}/tracing/connman/
 cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/tracing/connman/
