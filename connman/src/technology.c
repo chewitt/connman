@@ -213,7 +213,6 @@ static const char *get_name(enum connman_service_type type)
 	switch (type) {
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
-	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 		break;
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -226,6 +225,8 @@ static const char *get_name(enum connman_service_type type)
 		return "Bluetooth";
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 		return "Cellular";
+	case CONNMAN_SERVICE_TYPE_GPS:
+		return "Gps";
 	}
 
 	return NULL;
