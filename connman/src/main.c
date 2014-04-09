@@ -75,8 +75,8 @@ static struct {
 	bool single_tech;
 	char **tethering_technologies;
 	bool persistent_tethering_mode;
-	char **ipv6_status_url;
-	char **ipv4_status_url;
+	char *ipv6_status_url;
+	char *ipv4_status_url;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -247,8 +247,8 @@ static void parse_config(GKeyFile *config)
 	char **interfaces;
 	char **str_list;
 	char **tethering;
-	char **ipv4url;
-	char **ipv6url;
+	char *ipv4url;
+	char *ipv6url;
 	gsize len;
 	int timeout;
 

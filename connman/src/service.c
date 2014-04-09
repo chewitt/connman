@@ -2343,9 +2343,10 @@ void __connman_service_counter_reset_all(const char *type)
         if (strncmp(services[i], type, typeLength) != 0)
             continue;
 
+
         struct connman_service *service = g_hash_table_lookup(service_hash, services[i]);
         if (service == NULL) {
-            __connman_service_counter_reset_saved(services[i]);
+	    __connman_service_counter_reset_saved(services[i]);
             continue;
         }
 
@@ -5945,13 +5946,12 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	DBG("service %p type %d count %d", service, type,
 						service->online_check_count);
 	int timeout = 0;
-
-  if (service->online_check_count < 1) {
-      connman_warn("Online check failed for %p %s", service,
-			service->name);
-      return 0;
-	}
 	
+	if (service->online_check_count < 1) {
+	  connman_warn("Online check failed for %p %s", service, service->name);
+	  return 0;
+	}
+
 	  --service->online_check_count;
 
 	/*
@@ -5960,12 +5960,12 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	 * DNS data etc.
 	 */
 	  timeout = 12 - service->online_check_count;
-
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
-          g_timeout_add_seconds(timeout * timeout, redo_wispr_ipv4,  connman_service_ref(service));
-      } else {
-          g_timeout_add_seconds(1, redo_wispr,  connman_service_ref(service));
-      }
+	  
+	  if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+	    g_timeout_add_seconds(timeout * timeout, redo_wispr_ipv4,  connman_service_ref(service));
+	  } else {
+	    g_timeout_add_seconds(1, redo_wispr,  connman_service_ref(service));
+	  }
 
 	return EAGAIN;
 }
@@ -5982,6 +5982,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		return -EINVAL;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+	  	service->online_check_count = 12;//this works out to be about 10 minutes total
 		old_state = service->state_ipv4;
 		ipconfig = service->ipconfig_ipv4;
 	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
