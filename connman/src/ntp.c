@@ -93,6 +93,9 @@ struct ntp_msg {
 #define NTP_FLAG_MD_CONTROL    6
 #define NTP_FLAG_MD_PRIVATE    7
 
+#define NTP_FLAG_VN_VER3       3
+#define NTP_FLAG_VN_VER4       4
+
 #define NTP_FLAGS_ENCODE(li, vn, md)  ((uint8_t)( \
                       (((li) & NTP_FLAG_LI_MASK) << NTP_FLAG_LI_SHIFT) | \
                       (((vn) & NTP_FLAG_VN_MASK) << NTP_FLAG_VN_SHIFT) | \
@@ -122,7 +125,7 @@ static void send_packet(int fd, const char *server);
 
 static void next_server(void)
 {
-	if (timeserver != NULL) {
+	if (timeserver) {
 		g_free(timeserver);
 		timeserver = NULL;
 	}
@@ -156,7 +159,8 @@ static void send_packet(int fd, const char *server)
 	 *   msg.precision = (int)log2(ts.tv_sec + (ts.tv_nsec * 1.0e-9));
 	 */
 	memset(&msg, 0, sizeof(msg));
-	msg.flags = NTP_FLAGS_ENCODE(NTP_FLAG_LI_NOTINSYNC, 4, NTP_FLAG_MD_CLIENT);
+	msg.flags = NTP_FLAGS_ENCODE(NTP_FLAG_LI_NOTINSYNC, NTP_FLAG_VN_VER4,
+	    NTP_FLAG_MD_CLIENT);
 	msg.poll = 4;	// min
 	msg.poll = 10;	// max
 	msg.precision = NTP_PRECISION_S;
@@ -200,7 +204,7 @@ static void send_packet(int fd, const char *server)
 
 static gboolean next_poll(gpointer user_data)
 {
-	if (timeserver == NULL || transmit_fd == 0)
+	if (!timeserver || transmit_fd == 0)
 		return FALSE;
 
 	send_packet(transmit_fd, timeserver);
@@ -229,7 +233,7 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 		return;
 	}
 
-	if (tv == NULL) {
+	if (!tv) {
 		connman_error("Invalid packet timestamp from time server");
 		return;
 	}
@@ -253,9 +257,15 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 		return;
 	}
 
-	if (NTP_FLAGS_VN_DECODE(msg->flags) != 4) {
-		DBG("unsupported version %d", NTP_FLAGS_VN_DECODE(msg->flags));
-		return;
+
+	if (NTP_FLAGS_VN_DECODE(msg->flags) != NTP_FLAG_VN_VER4) {
+		if (NTP_FLAGS_VN_DECODE(msg->flags) == NTP_FLAG_VN_VER3) {
+			DBG("requested version %d, accepting version %d",
+				NTP_FLAG_VN_VER4, NTP_FLAGS_VN_DECODE(msg->flags));
+		} else {
+			DBG("unsupported version %d", NTP_FLAGS_VN_DECODE(msg->flags));
+			return;
+		}
 	}
 
 	if (NTP_FLAGS_MD_DECODE(msg->flags) != NTP_FLAG_MD_SERVER) {
@@ -390,7 +400,7 @@ static void start_ntp(char *server)
 	struct sockaddr_in addr;
 	int tos = IPTOS_LOWDELAY, timestamp = 1;
 
-	if (server == NULL)
+	if (!server)
 		return;
 
 	DBG("server %s", server);
@@ -427,7 +437,7 @@ static void start_ntp(char *server)
 	}
 
 	channel = g_io_channel_unix_new(transmit_fd);
-	if (channel == NULL) {
+	if (!channel) {
 		close(transmit_fd);
 		return;
 	}
@@ -451,10 +461,10 @@ int __connman_ntp_start(char *server)
 {
 	DBG("%s", server);
 
-	if (server == NULL)
+	if (!server)
 		return -EINVAL;
 
-	if (timeserver != NULL)
+	if (timeserver)
 		g_free(timeserver);
 
 	timeserver = g_strdup(server);
@@ -471,7 +481,7 @@ void __connman_ntp_stop()
 	if (poll_id > 0)
 		g_source_remove(poll_id);
 
-        reset_timeout();
+	reset_timeout();
 
 	if (channel_watch > 0) {
 		g_source_remove(channel_watch);
@@ -479,7 +489,7 @@ void __connman_ntp_stop()
 		transmit_fd = 0;
 	}
 
-	if (timeserver != NULL) {
+	if (timeserver) {
 		g_free(timeserver);
 		timeserver = NULL;
 	}

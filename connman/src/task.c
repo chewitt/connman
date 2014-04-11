@@ -102,7 +102,7 @@ struct connman_task *connman_task_create(const char *program)
 	DBG("");
 
 	task = g_try_new0(struct connman_task, 1);
-	if (task == NULL)
+	if (!task)
 		return NULL;
 
 	counter = __sync_fetch_and_add(&task_counter, 1);
@@ -167,7 +167,7 @@ int connman_task_add_argument(struct connman_task *task,
 
 	DBG("task %p arg %s", task, name);
 
-	if (name == NULL)
+	if (!name)
 		return -EINVAL;
 
 	str = g_strdup(name);
@@ -175,7 +175,7 @@ int connman_task_add_argument(struct connman_task *task,
 
 	va_start(ap, format);
 
-	if (format != NULL) {
+	if (format) {
 		str = g_strdup_vprintf(format, ap);
 		g_ptr_array_add(task->argv, str);
 	}
@@ -202,7 +202,7 @@ int connman_task_add_variable(struct connman_task *task,
 
 	DBG("task %p key %s", task, key);
 
-	if (key == NULL)
+	if (!key)
 		return -EINVAL;
 
 	va_start(ap, format);
@@ -234,7 +234,7 @@ int connman_task_set_notify(struct connman_task *task, const char *member,
 	DBG("task %p", task);
 
 	notify = g_try_new0(struct notify_data, 1);
-	if (notify == NULL)
+	if (!notify)
 		return -ENOMEM;
 
 	notify->func = function;
@@ -293,7 +293,7 @@ int connman_task_run(struct connman_task *task,
 			int *stdin_fd, int *stdout_fd, int *stderr_fd)
 {
 	GSpawnFlags flags = G_SPAWN_DO_NOT_REAP_CHILD;
-	gboolean result;
+	bool result;
 	char **argv, **envp;
 
 	DBG("task %p", task);
@@ -301,20 +301,20 @@ int connman_task_run(struct connman_task *task,
 	if (task->pid > 0)
 		return -EALREADY;
 
-	if (stdout_fd == NULL)
+	if (!stdout_fd)
 		flags |= G_SPAWN_STDOUT_TO_DEV_NULL;
 
-	if (stderr_fd == NULL)
+	if (!stderr_fd)
 		flags |= G_SPAWN_STDERR_TO_DEV_NULL;
 
 	task->exit_func = function;
 	task->exit_data = user_data;
 
-	if (g_ptr_array_index(task->argv, task->argv->len - 1) != NULL)
+	if (g_ptr_array_index(task->argv, task->argv->len - 1))
 		g_ptr_array_add(task->argv, NULL);
 
-	if (task->envp->len == 0 || g_ptr_array_index(task->envp,
-					task->envp->len - 1) != NULL) {
+	if (task->envp->len == 0 ||
+			g_ptr_array_index(task->envp, task->envp->len - 1)) {
 		if (g_hash_table_size(task->notify) > 0) {
 			const char *busname;
 			char *str;
@@ -340,7 +340,7 @@ int connman_task_run(struct connman_task *task,
 	result = g_spawn_async_with_pipes(NULL, argv, envp, flags,
 					task_setup, task, &task->pid,
 					stdin_fd, stdout_fd, stderr_fd, NULL);
-	if (result == FALSE) {
+	if (!result) {
 		connman_error("Failed to spawn %s", argv[0]);
 		return -EIO;
 	}
@@ -419,39 +419,38 @@ static DBusHandlerResult task_filter(DBusConnection *conn,
 	if (dbus_message_get_type(message) != DBUS_MESSAGE_TYPE_METHOD_CALL)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
-	if (dbus_message_has_interface(message,
-					CONNMAN_TASK_INTERFACE) == FALSE)
+	if (!dbus_message_has_interface(message, CONNMAN_TASK_INTERFACE))
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 	path = dbus_message_get_path(message);
-	if (path == NULL)
+	if (!path)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 	task = g_hash_table_lookup(task_hash, path);
-	if (task == NULL)
+	if (!task)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 	member = dbus_message_get_member(message);
-	if (member == NULL)
+	if (!member)
 		goto send_reply;
 
 	notify = g_hash_table_lookup(task->notify, member);
-	if (notify == NULL)
+	if (!notify)
 		goto send_reply;
 
 	if (notify->func)
 		reply = notify->func(task, message, notify->data);
 
 send_reply:
-	if (dbus_message_get_no_reply(message) == FALSE &&
-						reply == NULL) {
+	if (!dbus_message_get_no_reply(message) &&
+						!reply) {
 
 		reply = dbus_message_new_method_return(message);
-		if (reply == NULL)
+		if (!reply)
 			return DBUS_HANDLER_RESULT_NEED_MEMORY;
 	}
 
-	if (reply != NULL) {
+	if (reply) {
 		dbus_connection_send(conn, reply, NULL);
 
 		dbus_message_unref(reply);

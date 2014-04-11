@@ -101,8 +101,8 @@ int main(int argc, char *argv[])
 	dbus_error_init(&error);
 
 	conn = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
-	if (conn == NULL) {
-		if (dbus_error_is_set(&error) == TRUE) {
+	if (!conn) {
+		if (dbus_error_is_set(&error)) {
 			print("%s", error.message);
 			dbus_error_free(&error);
 		} else
@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 
 	msg = dbus_message_new_method_call(busname, path,
 						interface, "notify");
-	if (msg == NULL) {
+	if (!msg) {
 		dbus_connection_unref(conn);
 		print("Failed to allocate method call");
 		goto out;
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
 
 	dbus_message_iter_close_container(&iter, &dict);
 
-	if (dbus_connection_send(conn, msg, NULL) == FALSE) {
+	if (!dbus_connection_send(conn, msg, NULL)) {
 		print("Failed to send message");
 		goto out;
 	}

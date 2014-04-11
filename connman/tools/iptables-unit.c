@@ -27,7 +27,7 @@
 
 #include "../src/connman.h"
 
-static connman_bool_t assert_rule(const char *table_name, const char *rule)
+static bool assert_rule(const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;
 	GError **error = NULL;
@@ -40,17 +40,17 @@ static connman_bool_t assert_rule(const char *table_name, const char *rule)
 	lines = g_strsplit(output, "\n", 0);
 	g_free(output);
 
-	for (i = 0; lines[i] != NULL; i++) {
+	for (i = 0; lines[i]; i++) {
 		DBG("lines[%02d]: %s\n", i, lines[i]);
 		if (g_strcmp0(lines[i], rule) == 0)
 			break;
 	}
 	g_strfreev(lines);
 
-	if (lines[i] == NULL)
-		return FALSE;
+	if (!lines[i])
+		return false;
 
-	return TRUE;
+	return true;
 }
 
 static void assert_rule_exists(const char *table_name, const char *rule)
@@ -408,7 +408,7 @@ static void test_firewall_basic0(void)
 	int err;
 
 	ctx = __connman_firewall_create();
-	g_assert(ctx != NULL);
+	g_assert(ctx);
 
 	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
@@ -437,7 +437,7 @@ static void test_firewall_basic1(void)
 	int err;
 
 	ctx = __connman_firewall_create();
-	g_assert(ctx != NULL);
+	g_assert(ctx);
 
 	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
@@ -462,7 +462,7 @@ static void test_firewall_basic2(void)
 	int err;
 
 	ctx = __connman_firewall_create();
-	g_assert(ctx != NULL);
+	g_assert(ctx);
 
 	err = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
@@ -483,7 +483,7 @@ static void test_firewall_basic2(void)
 
 static gchar *option_debug = NULL;
 
-static gboolean parse_debug(const char *key, const char *value,
+static bool parse_debug(const char *key, const char *value,
 					gpointer user_data, GError **error)
 {
 	if (value)
@@ -491,7 +491,7 @@ static gboolean parse_debug(const char *key, const char *value,
 	else
 		option_debug = g_strdup("*");
 
-	return TRUE;
+	return true;
 }
 
 static GOptionEntry options[] = {
@@ -512,8 +512,8 @@ int main(int argc, char *argv[])
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
 
-	if (g_option_context_parse(context, &argc, &argv, &error) == FALSE) {
-		if (error != NULL) {
+	if (!g_option_context_parse(context, &argc, &argv, &error)) {
+		if (error) {
 			g_printerr("%s\n", error->message);
 			g_error_free(error);
 		} else
@@ -523,7 +523,7 @@ int main(int argc, char *argv[])
 
 	g_option_context_free(context);
 
-	__connman_log_init(argv[0], option_debug, FALSE, FALSE,
+	__connman_log_init(argv[0], option_debug, false, false,
 			"Unit Tests Connection Manager", VERSION);
 
 	__connman_iptables_init();

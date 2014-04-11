@@ -99,12 +99,10 @@ delete/remove button.
 	|                                       |
 
 Ethernet is special here since the unplugging of the network cable will
-remove the favorite selection.
+remove the service from the list
 
 	+---------------------------------------+
 	| Ethernet with cable                   |  order=1 - favorite=yes
-	+---------------------------------------+
-	| Ethernet without cable                |  order=0 - favorite=no
 	+---------------------------------------+
 	| Guest            (strength 90, none)  |  order=0
 	+---------------------------------------+
@@ -143,14 +141,13 @@ A working connection is considered top priority.
 	+---------------------------------------+
 	|                                       |
 
-Another possible user interaction would be to unplug the Ethernet cable and
-in this case the favorite setting will be removed and the service falls back
-down in the list.
+Another possible user interaction would be to disconnect the Ethernet service
+and in this case the service falls back down in the list.
 
 	+---------------------------------------+
 	| My WiFi AP       (strength 80, rsn)   |  order=1 - connected=yes
 	+---------------------------------------+
-	| Ethernet                              |  order=0
+	| Ethernet                              |  order=1 - connected=no
 	+---------------------------------------+
 	| Guest            (strength 90, none)  |  order=0
 	+---------------------------------------+
@@ -174,14 +171,10 @@ and are sorted above all others.
 	+---------------------------------------+
 	|                                       |
 
-Unplugging the Ethernet cable will remove the favorite setting, but due to
-the basic ordering of services it will be at the top of the services with an
-order number of 0 (directly after all favorite services).
+Unplugging the Ethernet cable will remove the Ethernet service.
 
 	+---------------------------------------+
 	| My WiFi AP       (strength 80, rsn)   |  order=1 - connected=no
-	+---------------------------------------+
-	| Ethernet                              |  order=0 - connected=no
 	+---------------------------------------+
 	| Guest            (strength 90, none)  |  order=0
 	+---------------------------------------+
@@ -197,7 +190,7 @@ included in this list. They will only show up once a carrier is detected.
 
 The service interface is not meant for basic device configuration task. So
 switching a device on and off (via RFKILL for example) should be done via
-the technology interface.
+the technology interface. See "Technology interfaces" chapter in this document.
 
 Due to limited screen size of small devices and the big amount of WiFi
 access points that are deployed right now it might be sensible to not show
@@ -408,3 +401,35 @@ gives detailed information about the current progress.
 All state changes are also sent via the PropertyChanged signal on the
 service interface. This allows asynchronous monitoring without having to poll
 Connection Manager for changes.
+
+
+Technology interfaces
+=====================
+
+When ConnMan is started first time, all technologies except ethernet are
+powered off by default. The reason is that the user needs to decide which
+technologies are relevant to him and what bearers the user wants to use.
+User can use the Technology Powered property to turn on or off a given
+technology. See doc/technology-api.txt document for details.
+
+User can activate offline (flight) mode via Manager OfflineMode property.
+While in offline mode, all the technologies including ethernet are
+powered off. During the offline mode, the user can temporarily activate
+individual technologies by using the Technology Powered property or by
+using the rfkill command or Fn-Fx key combination found in some laptops.
+
+If the host supports rfkill switch, then all the radios can be turned off
+by the kernel when the switch is activated. ConnMan will notice this and
+remove corresponding technologies from D-Bus. Technologies cannot be
+activated while rfkill switch is turned on. When rfkill switch is turned
+off (radios are activated), then ConnMan restores the original Powered
+status for each activated technology.
+
+User can use the rfkill command from command line or indirectly via
+some UI component to activate/deactivate individual radios found in
+the host. ConnMan will listen these rfkill events and set the Powered
+property accordingly. ConnMan will not save the rfkill status it has
+received. This means that after restarting ConnMan, the original and
+saved technology status is used when deciding which technologies should
+be powered. If the user uses the Technology D-Bus API to set the Powered
+property, then that information is saved and used when ConnMan is restarted.

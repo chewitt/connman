@@ -55,6 +55,7 @@ tools/stats-tool
 tools/stats-ringbuffer-dump
 tools/private-network-test
 tools/session-test
+tools/netlink-test
 unit/test-ippool
 unit/test-nat
 unit/test-pbkdf2-sha1
@@ -66,10 +67,6 @@ doc/connman.*
 !doc/connman.8
 !doc/connman.conf.5
 doc/connman-*.txt
-doc/*.sgml
-doc/version.xml
-doc/xml
-doc/html
 
 vpn/builtin.h
 vpn/connman-vpnd

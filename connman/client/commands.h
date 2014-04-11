@@ -20,7 +20,24 @@
  *
  */
 
+#ifndef __CONNMANCTL_COMMANDS_H
+#define __CONNMANCTL_COMMANDS_H
+
 #include <dbus/dbus.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef char *(*__connmanctl_lookup_cb)(const char *text, int state);
 
 int __connmanctl_commands(DBusConnection *connection, char *argv[], int argc);
 char *__connmanctl_lookup_command(const char *text, int state);
+void __connmanctl_monitor_completions(DBusConnection *dbus_conn);
+__connmanctl_lookup_cb __connmanctl_get_lookup_func(const char *text);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __CONNMANCTL_COMMANDS_H */

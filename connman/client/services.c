@@ -57,7 +57,7 @@ static void print_service(char *path, DBusMessageIter *iter)
 			dbus_message_iter_recurse(&entry, &val);
 			dbus_message_iter_get_basic(&val, &str);
 
-			if (str != NULL) {
+			if (str) {
 				if (strcmp(str, "online") == 0)
 					state = 'O';
 				else if (strcmp(str, "ready") == 0)
@@ -80,18 +80,15 @@ static void print_service(char *path, DBusMessageIter *iter)
 	}
 
 	str = strrchr(path, '/');
-	if (str != NULL)
+	if (str)
 		str++;
 	else
 		str = path;
 
-	if (count > 0) {
-		if (*name == '\0')
-			name = "<hidden>";
-
+	if (count > 0)
 		fprintf(stdout, "%c%c%c %-20s %s", favorite != 0 ? '*' : ' ',
 				autoconn != 0 ? 'A' : ' ', state, name, str);
-	} else
+	else
 		fprintf(stdout, "%-24s %s", "unchanged", str);
 
 }
@@ -117,7 +114,7 @@ static void list_service_array(DBusMessageIter *iter)
 			print_service(path, &dict);
 		}
 
-		if (dbus_message_iter_has_next(iter) == TRUE)
+		if (dbus_message_iter_has_next(iter))
 			fprintf(stdout, "\n");
 
 		dbus_message_iter_next(iter);

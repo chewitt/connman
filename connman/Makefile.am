@@ -1,9 +1,11 @@
 
 AM_MAKEFLAGS = --no-print-directory
 
+noinst_LTLIBRARIES =
+
 includedir = @includedir@/connman
 
-include_HEADERS = include/types.h include/log.h include/plugin.h \
+include_HEADERS = include/log.h include/plugin.h \
 			include/notifier.h include/service.h \
 			include/resolver.h include/ipconfig.h \
 			include/device.h include/network.h include/inet.h \
@@ -23,7 +25,10 @@ local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS) \
 			$(noinst_HEADERS), include/connman/$(notdir $(file)))
 
 
-gdbus_sources = gdbus/gdbus.h gdbus/mainloop.c gdbus/watch.c \
+noinst_LTLIBRARIES += gdbus/libgdbus-internal.la
+
+gdbus_libgdbus_internal_la_SOURCES = gdbus/gdbus.h \
+				gdbus/mainloop.c gdbus/watch.c \
 				gdbus/object.c gdbus/client.c gdbus/polkit.c
 
 gdhcp_sources = gdhcp/gdhcp.h gdhcp/common.h gdhcp/common.c gdhcp/client.c \
@@ -36,6 +41,11 @@ gweb_sources += gweb/giognutls.h gweb/giognutls.c
 else
 gweb_sources += gweb/giognutls.h gweb/gionotls.c
 endif
+
+shared_sources = src/shared/util.h src/shared/util.c \
+		src/shared/netlink.h src/shared/netlink.c \
+		src/shared/nfacct.h src/shared/nfacct.c \
+		src/shared/nfnetlink_acct_copy.h
 
 if DATAFILES
 
@@ -81,8 +91,8 @@ MANUAL_PAGES =
 
 sbin_PROGRAMS = src/connmand
 
-src_connmand_SOURCES = $(gdbus_sources) $(gdhcp_sources) $(gweb_sources) \
-			$(builtin_sources) src/connman.ver \
+src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
+			$(builtin_sources) $(shared_sources) src/connman.ver \
 			src/main.c src/connman.h src/log.c \
 			src/error.c src/plugin.c src/task.c \
 			src/device.c src/network.c src/connection.c \
@@ -97,10 +107,11 @@ src_connmand_SOURCES = $(gdbus_sources) $(gdhcp_sources) $(gweb_sources) \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
 			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c
+			src/inotify.c src/firewall.c src/nfacct.c src/ipv6pd.c
 
-src_connmand_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ \
-				@XTABLES_LIBS@ @GNUTLS_LIBS@ -lresolv -ldl -lrt
+src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
+			-lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
@@ -117,7 +128,7 @@ builtin_vpn_cflags =
 
 sbin_PROGRAMS += vpn/connman-vpnd
 
-vpn_connman_vpnd_SOURCES = $(gdbus_sources) $(builtin_vpn_sources) \
+vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) \
 			$(gweb_sources) vpn/vpn.ver vpn/main.c vpn/vpn.h \
 			src/log.c src/error.c src/plugin.c src/task.c \
 			vpn/vpn-manager.c vpn/vpn-provider.c \
@@ -127,8 +138,9 @@ vpn_connman_vpnd_SOURCES = $(gdbus_sources) $(builtin_vpn_sources) \
 			vpn/vpn-agent.c vpn/vpn-agent.h src/inotify.c \
 			vpn/vpn-config.c
 
-vpn_connman_vpnd_LDADD = $(builtin_vpn_libadd) @GLIB_LIBS@ @DBUS_LIBS@ \
-				@GNUTLS_LIBS@ -lresolv -ldl
+vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
+				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ \
+				-lresolv -ldl
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/vpn/vpn.ver
@@ -228,15 +240,16 @@ noinst_PROGRAMS += client/connmanctl
 
 noinst_MANUAL_PAGES = doc/connmanctl.1
 
-client_connmanctl_SOURCES =  $(gdbus_sources) \
-			client/dbus_helpers.h client/dbus_helpers.c \
+client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/services.h client/services.c \
 			client/commands.h client/commands.c \
 			client/input.h client/input.c \
 			client/agent.h client/agent.c \
+			client/vpnconnections.h client/vpnconnections.c \
 			client/main.c
 
-client_connmanctl_LDADD = @DBUS_LIBS@ @GLIB_LIBS@ -lreadline -ldl
+client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
+				-lreadline -ldl
 endif
 
 noinst_PROGRAMS += unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool
@@ -249,9 +262,9 @@ unit_test_prf_sha1_SOURCES = unit/test-prf-sha1.c \
 				src/shared/sha1.h src/shared/sha1.c
 unit_test_prf_sha1_LDADD = @GLIB_LIBS@
 
-unit_test_ippool_SOURCES = $(gdbus_sources) src/log.c src/dbus.c \
-		 src/ippool.c unit/test-ippool.c
-unit_test_ippool_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_test_ippool_SOURCES = src/log.c src/dbus.c src/ippool.c unit/test-ippool.c
+unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
+				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 TESTS = unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool
 
@@ -270,12 +283,13 @@ noinst_PROGRAMS += tools/supplicant-test \
 			tools/iptables-test tools/tap-test tools/wpad-test \
 			tools/stats-tool tools/private-network-test \
 			tools/session-test tools/iptables-unit \
-			tools/dnsproxy-test
+			tools/dnsproxy-test tools/netlink-test
 
-tools_supplicant_test_SOURCES = $(gdbus_sources) tools/supplicant-test.c \
+tools_supplicant_test_SOURCES = tools/supplicant-test.c \
 			tools/supplicant-dbus.h tools/supplicant-dbus.c \
 			tools/supplicant.h tools/supplicant.c
-tools_supplicant_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
+tools_supplicant_test_LDADD = gdbus/libgdbus-internal.la \
+				@GLIB_LIBS@ @DBUS_LIBS@
 
 tools_web_test_SOURCES = $(gweb_sources) tools/web-test.c
 tools_web_test_LDADD = @GLIB_LIBS@ @GNUTLS_LIBS@ -lresolv
@@ -294,8 +308,8 @@ tools_dhcp_test_LDADD = @GLIB_LIBS@
 tools_dhcp_server_test_SOURCES = $(gdhcp_sources) tools/dhcp-server-test.c
 tools_dhcp_server_test_LDADD = @GLIB_LIBS@
 
-tools_dbus_test_SOURCES = $(gdbus_sources) tools/dbus-test.c
-tools_dbus_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
+tools_dbus_test_SOURCES = tools/dbus-test.c
+tools_dbus_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_polkit_test_LDADD = @DBUS_LIBS@
 
@@ -304,19 +318,24 @@ tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ -ldl
 
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
-tools_session_test_SOURCES = $(gdbus_sources) src/log.c src/dbus.c \
+tools_session_test_SOURCES = src/log.c src/dbus.c \
 		tools/session-test.c tools/session-utils.c tools/manager-api.c \
 		tools/session-api.c tools/session-test.h
-tools_session_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+tools_session_test_LDADD = gdbus/libgdbus-internal.la \
+				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\"
-tools_iptables_unit_SOURCES = $(gdbus_sources) src/log.c \
+tools_iptables_unit_SOURCES = src/log.c \
 		 src/iptables.c src/firewall.c src/nat.c tools/iptables-unit.c
-tools_iptables_unit_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ -ldl
+tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
+				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ -ldl
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
+
+tools_netlink_test_SOURCES =$(shared_sources) tools/netlink-test.c
+tools_netlink_test_LDADD = @GLIB_LIBS@
 
 endif
 
@@ -353,7 +372,8 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 				doc/session-overview.txt doc/backtrace.txt \
 				doc/advanced-configuration.txt \
 				doc/vpn-connection-api.txt \
-				doc/vpn-manager-api.txt doc/vpn-overview.txt
+				doc/vpn-manager-api.txt doc/vpn-overview.txt \
+				doc/session-policy-format.txt
 
 EXTRA_DIST += src/main.conf
 
@@ -365,8 +385,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 
 pkgconfig_DATA = connman.pc
 
-DISTCHECK_CONFIGURE_FLAGS = --disable-gtk-doc \
-				--disable-datafiles \
+DISTCHECK_CONFIGURE_FLAGS = --disable-datafiles \
 				--enable-hh2serial-gps \
 				--enable-openconnect \
 				--enable-openvpn \

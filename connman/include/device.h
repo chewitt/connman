@@ -22,7 +22,6 @@
 #ifndef __CONNMAN_DEVICE_H
 #define __CONNMAN_DEVICE_H
 
-#include <connman/types.h>
 #include <connman/network.h>
 
 #ifdef __cplusplus
@@ -78,16 +77,16 @@ void connman_device_set_ident(struct connman_device *device,
 const char *connman_device_get_ident(struct connman_device *device);
 
 int connman_device_set_powered(struct connman_device *device,
-						connman_bool_t powered);
-connman_bool_t connman_device_get_powered(struct connman_device *device);
+						bool powered);
+bool connman_device_get_powered(struct connman_device *device);
 int connman_device_set_scanning(struct connman_device *device,
-						connman_bool_t scanning);
-connman_bool_t connman_device_get_scanning(struct connman_device *device);
+						bool scanning);
+bool connman_device_get_scanning(struct connman_device *device);
 void connman_device_reset_scanning(struct connman_device *device);
 
 int connman_device_set_disconnected(struct connman_device *device,
-						connman_bool_t disconnected);
-connman_bool_t connman_device_get_disconnected(struct connman_device *device);
+						bool disconnected);
+bool connman_device_get_disconnected(struct connman_device *device);
 
 int connman_device_set_string(struct connman_device *device,
 					const char *key, const char *value);
@@ -128,7 +127,7 @@ struct connman_device_driver {
 	int (*scan)(struct connman_device *device,
 			const char *ssid, unsigned int ssid_len,
 			const char *identity, const char* passphrase,
-			void *user_data);
+			const char *security, void *user_data);
 	int (*set_regdom) (struct connman_device *device,
 						const char *alpha2);
 };

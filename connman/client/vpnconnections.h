@@ -2,11 +2,12 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License version 2 as
- *  published by the Free Software Foundation.
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,25 +20,19 @@
  *
  */
 
-#ifndef __CONNMAN_TYPES_H
-#define __CONNMAN_TYPES_H
+#ifndef __CONNMANCTL_VPNCONNECTIONS_H
+#define __CONNMANCTL_VPNCONNECTIONS_H
+
+#include <dbus/dbus.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef	FALSE
-#define	FALSE	(0)
-#endif
-
-#ifndef	TRUE
-#define	TRUE	(!FALSE)
-#endif
-
-typedef int		connman_bool_t;
+void __connmanctl_vpnconnections_list(DBusMessageIter *iter);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __CONNMAN_TYPES_H */
+#endif /* __CONNMANCTL_VPNCONNECTIONS_H */

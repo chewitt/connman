@@ -63,12 +63,12 @@ static void resolv_result(GResolvResultStatus status,
 	g_print("No result for %s\n", hostname);
 
 	ptr = strchr(hostname + 5, '.');
-	if (ptr == NULL || strlen(ptr) < 2) {
+	if (!ptr || strlen(ptr) < 2) {
 		g_print("No more names\n");
 		goto done;
 	}
 
-	if (strchr(ptr + 1, '.') == NULL) {
+	if (!strchr(ptr + 1, '.')) {
 		g_print("Not found\n");
 		goto done;
 	}
@@ -86,7 +86,7 @@ done:
 
 	g_print("elapse: %f seconds\n", elapsed);
 
-	if (results != NULL) {
+	if (results) {
 		for (i = 0; results[i]; i++)
 			g_print("result: %s\n", results[i]);
 	}
@@ -101,7 +101,7 @@ static void start_wpad(const char *search)
 	char domainname[256];
 	char *hostname;
 
-	if (search == NULL) {
+	if (!search) {
 		if (getdomainname(domainname, sizeof(domainname)) < 0) {
 			g_printerr("Failed to get domain name\n");
 			goto quit;
@@ -113,7 +113,7 @@ static void start_wpad(const char *search)
 		g_printerr("Domain name is not set\n");
 		goto quit;
 	}
-		
+
 	g_print("domainname: %s\n", domainname);
 
 	hostname = g_strdup_printf("wpad.%s", domainname);
@@ -126,7 +126,7 @@ quit:
 	g_main_loop_quit(main_loop);
 }
 
-static gboolean option_debug = FALSE;
+static bool option_debug = false;
 static gchar *option_search = NULL;
 
 static GOptionEntry options[] = {
@@ -147,8 +147,8 @@ int main(int argc, char *argv[])
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
 
-	if (g_option_context_parse(context, &argc, &argv, &error) == FALSE) {
-		if (error != NULL) {
+	if (!g_option_context_parse(context, &argc, &argv, &error)) {
+		if (error) {
 			g_printerr("%s\n", error->message);
 			g_error_free(error);
 		} else
@@ -159,12 +159,12 @@ int main(int argc, char *argv[])
 	g_option_context_free(context);
 
 	resolv = g_resolv_new(index);
-	if (resolv == NULL) {
+	if (!resolv) {
 		g_printerr("Failed to create resolver\n");
 		return 1;
 	}
 
-	if (option_debug == TRUE)
+	if (option_debug)
 		g_resolv_set_debug(resolv, resolv_debug, "RESOLV");
 
 	main_loop = g_main_loop_new(NULL, FALSE);

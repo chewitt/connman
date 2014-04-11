@@ -43,7 +43,7 @@ static void sig_term(int sig)
 	g_main_loop_quit(main_loop);
 }
 
-static gboolean web_result(GWebResult *result, gpointer user_data)
+static bool web_result(GWebResult *result, gpointer user_data)
 {
 	const guint8 *chunk;
 	gsize length;
@@ -54,7 +54,7 @@ static gboolean web_result(GWebResult *result, gpointer user_data)
 
 	if (length > 0) {
 		printf("%s\n", (char *) chunk);
-		return TRUE;
+		return true;
 	}
 
 	status = g_web_result_get_status(result);
@@ -67,10 +67,10 @@ static gboolean web_result(GWebResult *result, gpointer user_data)
 
 	g_main_loop_quit(main_loop);
 
-	return FALSE;
+	return false;
 }
 
-static gboolean option_debug = FALSE;
+static bool option_debug = false;
 static gchar *option_proxy = NULL;
 static gchar *option_nameserver = NULL;
 static gchar *option_user_agent = NULL;
@@ -101,8 +101,8 @@ int main(int argc, char *argv[])
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
 
-	if (g_option_context_parse(context, &argc, &argv, &error) == FALSE) {
-		if (error != NULL) {
+	if (!g_option_context_parse(context, &argc, &argv, &error)) {
+		if (error) {
 			g_printerr("%s\n", error->message);
 			g_error_free(error);
 		} else
@@ -118,32 +118,32 @@ int main(int argc, char *argv[])
 	}
 
 	web = g_web_new(index);
-	if (web == NULL) {
+	if (!web) {
 		fprintf(stderr, "Failed to create web service\n");
 		return 1;
 	}
 
-	if (option_debug == TRUE)
+	if (option_debug)
 		g_web_set_debug(web, web_debug, "WEB");
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 
-	if (option_proxy != NULL) {
+	if (option_proxy) {
 		g_web_set_proxy(web, option_proxy);
 		g_free(option_proxy);
 	}
 
-	if (option_nameserver != NULL) {
+	if (option_nameserver) {
 		g_web_add_nameserver(web, option_nameserver);
 		g_free(option_nameserver);
 	}
 
-	if (option_user_agent != NULL) {
+	if (option_user_agent) {
 		g_web_set_user_agent(web, "%s", option_user_agent);
 		g_free(option_user_agent);
 	}
 
-	if (option_http_version != NULL) {
+	if (option_http_version) {
 		g_web_set_http_version(web, option_http_version);
 		g_free(option_http_version);
 	}

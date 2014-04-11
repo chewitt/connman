@@ -93,8 +93,8 @@ struct server_data {
 	GIOChannel *channel;
 	guint watch;
 	guint timeout;
-	gboolean enabled;
-	gboolean connected;
+	bool enabled;
+	bool connected;
 	struct partial_reply *incoming_reply;
 };
 
@@ -120,7 +120,7 @@ struct request_data {
 	gpointer resp;
 	gsize resplen;
 	struct listener_data *ifdata;
-	gboolean append_domain;
+	bool append_domain;
 };
 
 struct listener_data {
@@ -164,7 +164,7 @@ struct cache_data {
 
 struct cache_entry {
 	char *key;
-	int want_refresh;
+	bool want_refresh;
 	int hits;
 	struct cache_data *ipv4;
 	struct cache_data *ipv6;
@@ -216,7 +216,7 @@ static GHashTable *listener_table = NULL;
 static time_t next_refresh;
 static GHashTable *partial_tcp_req_table;
 
-static guint16 get_id()
+static guint16 get_id(void)
 {
 	return random();
 }
@@ -283,16 +283,16 @@ static struct server_data *find_server(int index,
 		struct server_data *data = list->data;
 
 		if (index < 0 && data->index < 0 &&
-				g_str_equal(data->server, server) == TRUE &&
+				g_str_equal(data->server, server) &&
 				data->protocol == protocol)
 			return data;
 
 		if (index < 0 ||
-				data->index < 0 || data->server == NULL)
+				data->index < 0 || !data->server)
 			continue;
 
 		if (data->index == index &&
-				g_str_equal(data->server, server) == TRUE &&
+				g_str_equal(data->server, server) &&
 				data->protocol == protocol)
 			return data;
 	}
@@ -315,26 +315,26 @@ static void refresh_dns_entry(struct cache_entry *entry, char *name)
 {
 	int age = 1;
 
-	if (ipv4_resolve == NULL) {
+	if (!ipv4_resolve) {
 		ipv4_resolve = g_resolv_new(0);
 		g_resolv_set_address_family(ipv4_resolve, AF_INET);
 		g_resolv_add_nameserver(ipv4_resolve, "127.0.0.1", 53, 0);
 	}
 
-	if (ipv6_resolve == NULL) {
+	if (!ipv6_resolve) {
 		ipv6_resolve = g_resolv_new(0);
 		g_resolv_set_address_family(ipv6_resolve, AF_INET6);
 		g_resolv_add_nameserver(ipv6_resolve, "::1", 53, 0);
 	}
 
-	if (entry->ipv4 == NULL) {
+	if (!entry->ipv4) {
 		DBG("Refresing A record for %s", name);
 		g_resolv_lookup_hostname(ipv4_resolve, name,
 					dummy_resolve_func, NULL);
 		age = 4;
 	}
 
-	if (entry->ipv6 == NULL) {
+	if (!entry->ipv6) {
 		DBG("Refresing AAAA record for %s", name);
 		g_resolv_lookup_hostname(ipv6_resolve, name,
 					dummy_resolve_func, NULL);
@@ -505,7 +505,7 @@ static int get_req_udp_socket(struct request_data *req)
 	else
 		channel = req->ifdata->udp6_listener_channel;
 
-	if (channel == NULL)
+	if (!channel)
 		return -1;
 
 	return g_io_channel_unix_get_fd(channel);
@@ -526,7 +526,7 @@ static gboolean request_timeout(gpointer user_data)
 {
 	struct request_data *req = user_data;
 
-	if (req == NULL)
+	if (!req)
 		return FALSE;
 
 	DBG("id 0x%04x", req->srcid);
@@ -534,7 +534,7 @@ static gboolean request_timeout(gpointer user_data)
 	request_list = g_slist_remove(request_list, req);
 	req->numserv--;
 
-	if (req->resplen > 0 && req->resp != NULL) {
+	if (req->resplen > 0 && req->resp) {
 		int sk, err;
 
 		if (req->protocol == IPPROTO_UDP) {
@@ -599,11 +599,11 @@ static int append_query(unsigned char *buf, unsigned int size,
 
 	DBG("query %s domain %s", query, domain);
 
-	while (query != NULL) {
+	while (query) {
 		const char *tmp;
 
 		tmp = strchr(query, '.');
-		if (tmp == NULL) {
+		if (!tmp) {
 			len = strlen(query);
 			if (len == 0)
 				break;
@@ -620,11 +620,11 @@ static int append_query(unsigned char *buf, unsigned int size,
 		query = tmp + 1;
 	}
 
-	while (domain != NULL) {
+	while (domain) {
 		const char *tmp;
 
 		tmp = strchr(domain, '.');
-		if (tmp == NULL) {
+		if (!tmp) {
 			len = strlen(domain);
 			if (len == 0)
 				break;
@@ -646,16 +646,16 @@ static int append_query(unsigned char *buf, unsigned int size,
 	return ptr - buf;
 }
 
-static gboolean cache_check_is_valid(struct cache_data *data,
+static bool cache_check_is_valid(struct cache_data *data,
 				time_t current_time)
 {
-	if (data == NULL)
-		return FALSE;
+	if (!data)
+		return false;
 
 	if (data->cache_until < current_time)
-		return FALSE;
+		return false;
 
-	return TRUE;
+	return true;
 }
 
 /*
@@ -665,7 +665,7 @@ static void cache_enforce_validity(struct cache_entry *entry)
 {
 	time_t current_time = time(NULL);
 
-	if (cache_check_is_valid(entry->ipv4, current_time) == FALSE
+	if (!cache_check_is_valid(entry->ipv4, current_time)
 							&& entry->ipv4) {
 		DBG("cache timeout \"%s\" type A", entry->key);
 		g_free(entry->ipv4->data);
@@ -674,7 +674,7 @@ static void cache_enforce_validity(struct cache_entry *entry)
 
 	}
 
-	if (cache_check_is_valid(entry->ipv6, current_time) == FALSE
+	if (!cache_check_is_valid(entry->ipv6, current_time)
 							&& entry->ipv6) {
 		DBG("cache timeout \"%s\" type AAAA", entry->key);
 		g_free(entry->ipv6->data);
@@ -687,32 +687,31 @@ static uint16_t cache_check_validity(char *question, uint16_t type,
 				struct cache_entry *entry)
 {
 	time_t current_time = time(NULL);
-	int want_refresh = 0;
+	bool want_refresh = false;
 
 	/*
 	 * if we have a popular entry, we want a refresh instead of
 	 * total destruction of the entry.
 	 */
 	if (entry->hits > 2)
-		want_refresh = 1;
+		want_refresh = true;
 
 	cache_enforce_validity(entry);
 
 	switch (type) {
 	case 1:		/* IPv4 */
-		if (cache_check_is_valid(entry->ipv4, current_time) == FALSE) {
+		if (!cache_check_is_valid(entry->ipv4, current_time)) {
 			DBG("cache %s \"%s\" type A", entry->ipv4 ?
 					"timeout" : "entry missing", question);
 
 			if (want_refresh)
-				entry->want_refresh = 1;
+				entry->want_refresh = true;
 
 			/*
 			 * We do not remove cache entry if there is still
 			 * valid IPv6 entry found in the cache.
 			 */
-			if (cache_check_is_valid(entry->ipv6, current_time)
-					== FALSE && want_refresh == FALSE) {
+			if (!cache_check_is_valid(entry->ipv6, current_time) && !want_refresh) {
 				g_hash_table_remove(cache, question);
 				type = 0;
 			}
@@ -720,15 +719,14 @@ static uint16_t cache_check_validity(char *question, uint16_t type,
 		break;
 
 	case 28:	/* IPv6 */
-		if (cache_check_is_valid(entry->ipv6, current_time) == FALSE) {
+		if (!cache_check_is_valid(entry->ipv6, current_time)) {
 			DBG("cache %s \"%s\" type AAAA", entry->ipv6 ?
 					"timeout" : "entry missing", question);
 
 			if (want_refresh)
-				entry->want_refresh = 1;
+				entry->want_refresh = true;
 
-			if (cache_check_is_valid(entry->ipv4, current_time)
-					== FALSE && want_refresh == FALSE) {
+			if (!cache_check_is_valid(entry->ipv4, current_time) && !want_refresh) {
 				g_hash_table_remove(cache, question);
 				type = 0;
 			}
@@ -743,15 +741,15 @@ static void cache_element_destroy(gpointer value)
 {
 	struct cache_entry *entry = value;
 
-	if (entry == NULL)
+	if (!entry)
 		return;
 
-	if (entry->ipv4 != NULL) {
+	if (entry->ipv4) {
 		g_free(entry->ipv4->data);
 		g_free(entry->ipv4);
 	}
 
-	if (entry->ipv6 != NULL) {
+	if (entry->ipv6) {
 		g_free(entry->ipv6->data);
 		g_free(entry->ipv6);
 	}
@@ -775,7 +773,7 @@ static gboolean try_remove_cache(gpointer user_data)
 	return FALSE;
 }
 
-static void create_cache()
+static void create_cache(void)
 {
 	if (__sync_fetch_and_add(&cache_refcount, 1) == 0)
 		cache = g_hash_table_new_full(g_str_hash,
@@ -792,7 +790,7 @@ static struct cache_entry *cache_check(gpointer request, int *qtype, int proto)
 	uint16_t type;
 	int offset, proto_offset;
 
-	if (request == NULL)
+	if (!request)
 		return NULL;
 
 	proto_offset = protocol_offset(proto);
@@ -809,13 +807,13 @@ static struct cache_entry *cache_check(gpointer request, int *qtype, int proto)
 	if (type != 1 && type != 28)
 		return NULL;
 
-	if (cache == NULL) {
+	if (!cache) {
 		create_cache();
 		return NULL;
 	}
 
 	entry = g_hash_table_lookup(cache, question);
-	if (entry == NULL)
+	if (!entry)
 		return NULL;
 
 	type = cache_check_validity(question, type, entry);
@@ -852,7 +850,7 @@ static int get_name(int counter,
 			if (offset >= max - pkt)
 				return -ENOBUFS;
 
-			if (*end == NULL)
+			if (!*end)
 				*end = p + 2;
 
 			return get_name(counter + 1, pkt, pkt + offset, max,
@@ -882,7 +880,7 @@ static int get_name(int counter,
 
 			p += label_len + 1;
 
-			if (*end == NULL)
+			if (!*end)
 				*end = p;
 
 			if (p >= max)
@@ -916,7 +914,7 @@ static int parse_rr(unsigned char *buf, unsigned char *start,
 
 	rr = (void *) (*end);
 
-	if (rr == NULL)
+	if (!rr)
 		return -EINVAL;
 
 	*type = ntohs(rr->type);
@@ -944,19 +942,19 @@ static int parse_rr(unsigned char *buf, unsigned char *start,
 	return 0;
 }
 
-static gboolean check_alias(GSList *aliases, char *name)
+static bool check_alias(GSList *aliases, char *name)
 {
 	GSList *list;
 
-	if (aliases != NULL) {
+	if (aliases) {
 		for (list = aliases; list; list = list->next) {
 			int len = strlen((char *)list->data);
 			if (strncmp((char *)list->data, name, len) == 0)
-				return TRUE;
+				return true;
 		}
 	}
 
-	return FALSE;
+	return false;
 }
 
 static int parse_response(unsigned char *buf, int buflen,
@@ -1006,6 +1004,8 @@ static int parse_response(unsigned char *buf, int buflen,
 	err = -ENOMSG;
 	*response_len = 0;
 	*answers = 0;
+
+	memset(name, 0, sizeof(name));
 
 	/*
 	 * We have a bunch of answers (like A, AAAA, CNAME etc) to
@@ -1120,8 +1120,8 @@ static int parse_response(unsigned char *buf, int buflen,
 			/*
 			 * We found correct type (A or AAAA)
 			 */
-			if (check_alias(aliases, name) == TRUE ||
-				(aliases == NULL && strncmp(question, name,
+			if (check_alias(aliases, name) ||
+				(!aliases && strncmp(question, name,
 							qlen) == 0)) {
 				/*
 				 * We found an alias or the name of the rr
@@ -1176,7 +1176,7 @@ static gboolean cache_check_entry(gpointer key, gpointer value,
 	 * remove both from the cache.
 	 */
 
-	if (entry->ipv4 != NULL && entry->ipv4->timeout > 0) {
+	if (entry->ipv4 && entry->ipv4->timeout > 0) {
 		max_timeout = entry->ipv4->cache_until;
 		if (max_timeout > data->max_timeout)
 			data->max_timeout = max_timeout;
@@ -1185,7 +1185,7 @@ static gboolean cache_check_entry(gpointer key, gpointer value,
 			return TRUE;
 	}
 
-	if (entry->ipv6 != NULL && entry->ipv6->timeout > 0) {
+	if (entry->ipv6 && entry->ipv6->timeout > 0) {
 		max_timeout = entry->ipv6->cache_until;
 		if (max_timeout > data->max_timeout)
 			data->max_timeout = max_timeout;
@@ -1257,7 +1257,7 @@ static gboolean cache_invalidate_entry(gpointer key, gpointer value,
 
 	/* if anything is not expired, mark the entry for refresh */
 	if (entry->hits > 0 && (entry->ipv4 || entry->ipv6))
-		entry->want_refresh = 1;
+		entry->want_refresh = true;
 
 	/* delete the cached data */
 	if (entry->ipv4) {
@@ -1289,7 +1289,7 @@ static void cache_invalidate(void)
 {
 	DBG("Invalidating the DNS cache %p", cache);
 
-	if (cache == NULL)
+	if (!cache)
 		return;
 
 	g_hash_table_foreach_remove(cache, cache_invalidate_entry, NULL);
@@ -1300,15 +1300,15 @@ static void cache_refresh_entry(struct cache_entry *entry)
 
 	cache_enforce_validity(entry);
 
-	if (entry->hits > 2 && entry->ipv4 == NULL)
-		entry->want_refresh = 1;
-	if (entry->hits > 2 && entry->ipv6 == NULL)
-		entry->want_refresh = 1;
+	if (entry->hits > 2 && !entry->ipv4)
+		entry->want_refresh = true;
+	if (entry->hits > 2 && !entry->ipv6)
+		entry->want_refresh = true;
 
 	if (entry->want_refresh) {
 		char *c;
 		char dns_name[NS_MAXDNAME + 1];
-		entry->want_refresh = 0;
+		entry->want_refresh = false;
 
 		/* turn a DNS name into a hostname with dots */
 		strncpy(dns_name, entry->key, NS_MAXDNAME);
@@ -1335,7 +1335,7 @@ static void cache_refresh_iterator(gpointer key, gpointer value,
 
 static void cache_refresh(void)
 {
-	if (cache == NULL)
+	if (!cache)
 		return;
 
 	g_hash_table_foreach(cache, cache_refresh_iterator, NULL);
@@ -1378,7 +1378,7 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 	unsigned char response[NS_MAXDNAME + 1];
 	unsigned char *ptr;
 	unsigned int rsplen;
-	gboolean new_entry = TRUE;
+	bool new_entry = true;
 	time_t current_time;
 
 	if (cache_size >= MAX_CACHE_SIZE) {
@@ -1404,6 +1404,9 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 	if (hdr->rcode != 0)
 		return 0;
 
+	if (!cache)
+		create_cache();
+
 	rsplen = sizeof(response) - 1;
 	question[sizeof(question) - 1] = '\0';
 
@@ -1420,16 +1423,12 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 	if ((err == -ENOMSG || err == -ENOBUFS) &&
 			reply_query_type(msg + offset,
 					msg_len - offset) == 28) {
-		if (cache == NULL) {
-			create_cache();
-			entry = NULL;
-		} else
-			entry = g_hash_table_lookup(cache, question);
-		if (entry && entry->ipv4 && entry->ipv6 == NULL) {
+		entry = g_hash_table_lookup(cache, question);
+		if (entry && entry->ipv4 && !entry->ipv6) {
 			int cache_offset = 0;
 
 			data = g_try_new(struct cache_data, 1);
-			if (data == NULL)
+			if (!data)
 				return -ENOMEM;
 			data->inserted = entry->ipv4->inserted;
 			data->type = type;
@@ -1471,20 +1470,20 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 	 * records for the same name.
 	 */
 	entry = g_hash_table_lookup(cache, question);
-	if (entry == NULL) {
+	if (!entry) {
 		entry = g_try_new(struct cache_entry, 1);
-		if (entry == NULL)
+		if (!entry)
 			return -ENOMEM;
 
 		data = g_try_new(struct cache_data, 1);
-		if (data == NULL) {
+		if (!data) {
 			g_free(entry);
 			return -ENOMEM;
 		}
 
 		entry->key = g_strdup(question);
 		entry->ipv4 = entry->ipv6 = NULL;
-		entry->want_refresh = 0;
+		entry->want_refresh = false;
 		entry->hits = 0;
 
 		if (type == 1)
@@ -1492,14 +1491,14 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 		else
 			entry->ipv6 = data;
 	} else {
-		if (type == 1 && entry->ipv4 != NULL)
+		if (type == 1 && entry->ipv4)
 			return 0;
 
-		if (type == 28 && entry->ipv6 != NULL)
+		if (type == 28 && entry->ipv6)
 			return 0;
 
 		data = g_try_new(struct cache_data, 1);
-		if (data == NULL)
+		if (!data)
 			return -ENOMEM;
 
 		if (type == 1)
@@ -1515,7 +1514,7 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 		if (entry->hits < 0)
 			entry->hits = 0;
 
-		new_entry = FALSE;
+		new_entry = false;
 	}
 
 	if (ttl < MIN_CACHE_TTL)
@@ -1543,7 +1542,7 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 
 	data->cache_until = round_down_ttl(current_time + ttl, ttl);
 
-	if (data->data == NULL) {
+	if (!data->data) {
 		g_free(entry->key);
 		g_free(data);
 		g_free(entry);
@@ -1574,7 +1573,7 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 	memcpy(ptr + offset + 12 + qlen + 1 + sizeof(struct domain_question),
 		response, rsplen);
 
-	if (new_entry == TRUE) {
+	if (new_entry) {
 		g_hash_table_replace(cache, entry->key, entry);
 		cache_size++;
 	}
@@ -1601,7 +1600,7 @@ static int ns_resolv(struct server_data *server, struct request_data *req,
 	struct cache_entry *entry;
 
 	entry = cache_check(request, &type, req->protocol);
-	if (entry != NULL) {
+	if (entry) {
 		int ttl_left = 0;
 		struct cache_data *data;
 
@@ -1616,15 +1615,18 @@ static int ns_resolv(struct server_data *server, struct request_data *req,
 			entry->hits++;
 		}
 
-		if (data != NULL && req->protocol == IPPROTO_TCP) {
+		if (data && req->protocol == IPPROTO_TCP) {
 			send_cached_response(req->client_sk, data->data,
 					data->data_len, NULL, 0, IPPROTO_TCP,
 					req->srcid, data->answers, ttl_left);
 			return 1;
 		}
 
-		if (data != NULL && req->protocol == IPPROTO_UDP) {
+		if (data && req->protocol == IPPROTO_UDP) {
 			int udp_sk = get_req_udp_socket(req);
+
+			if (udp_sk < 0)
+				return -EIO;
 
 			send_cached_response(udp_sk, data->data,
 				data->data_len, &req->sa, req->sa_len,
@@ -1650,11 +1652,11 @@ static int ns_resolv(struct server_data *server, struct request_data *req,
 
 	/* If we have more than one dot, we don't add domains */
 	dot = strchr(lookup, '.');
-	if (dot != NULL && dot != lookup + strlen(lookup) - 1)
+	if (dot && dot != lookup + strlen(lookup) - 1)
 		return 0;
 
-	if (server->domains != NULL && server->domains->data != NULL)
-		req->append_domain = TRUE;
+	if (server->domains && server->domains->data)
+		req->append_domain = true;
 
 	for (list = server->domains; list; list = list->next) {
 		char *domain;
@@ -1664,7 +1666,7 @@ static int ns_resolv(struct server_data *server, struct request_data *req,
 
 		domain = list->data;
 
-		if (domain == NULL)
+		if (!domain)
 			continue;
 
 		offset = protocol_offset(server->protocol);
@@ -1728,7 +1730,7 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 	DBG("Received %d bytes (id 0x%04x)", reply_len, dns_id);
 
 	req = find_request(dns_id);
-	if (req == NULL)
+	if (!req)
 		return -EINVAL;
 
 	DBG("req %p dstid 0x%04x altid 0x%04x rcode %d",
@@ -1739,13 +1741,13 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 
 	req->numresp++;
 
-	if (hdr->rcode == 0 || req->resp == NULL) {
+	if (hdr->rcode == 0 || !req->resp) {
 
 		/*
 		 * If the domain name was append
 		 * remove it before forwarding the reply.
 		 */
-		if (req->append_domain == TRUE) {
+		if (req->append_domain) {
 			unsigned int domain_len = 0;
 			unsigned char *ptr;
 			uint8_t host_len;
@@ -1794,7 +1796,7 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 		req->resplen = 0;
 
 		req->resp = g_try_malloc(reply_len);
-		if (req->resp == NULL)
+		if (!req->resp)
 			return -ENOMEM;
 
 		memcpy(req->resp, reply, reply_len);
@@ -1810,8 +1812,12 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 
 	if (protocol == IPPROTO_UDP) {
 		sk = get_req_udp_socket(req);
-		err = sendto(sk, req->resp, req->resplen, 0,
-			     &req->sa, req->sa_len);
+		if (sk < 0) {
+			errno = -EIO;
+			err = -EIO;
+		} else
+			err = sendto(sk, req->resp, req->resplen, 0,
+				&req->sa, req->sa_len);
 	} else {
 		sk = req->client_sk;
 		err = send(sk, req->resp, req->resplen, MSG_NOSIGNAL);
@@ -1843,7 +1849,7 @@ static void server_destroy_socket(struct server_data *data)
 		data->timeout = 0;
 	}
 
-	if (data->channel != NULL) {
+	if (data->channel) {
 		g_io_channel_shutdown(data->channel, TRUE, NULL);
 		g_io_channel_unref(data->channel);
 		data->channel = NULL;
@@ -1858,7 +1864,7 @@ static void destroy_server(struct server_data *server)
 	GList *list;
 
 	DBG("index %d server %s sock %d", server->index, server->server,
-			server->channel != NULL ?
+			server->channel ?
 			g_io_channel_unix_get_fd(server->channel): -1);
 
 	server_list = g_slist_remove(server_list, server);
@@ -1945,7 +1951,7 @@ hangup:
 			if (req->protocol == IPPROTO_UDP)
 				continue;
 
-			if (req->request == NULL)
+			if (!req->request)
 				continue;
 
 			/*
@@ -1972,12 +1978,12 @@ hangup:
 	if ((condition & G_IO_OUT) && !server->connected) {
 		GSList *list;
 		GList *domains;
-		int no_request_sent = TRUE;
+		bool no_request_sent = true;
 		struct server_data *udp_server;
 
 		udp_server = find_server(server->index, server->server,
 								IPPROTO_UDP);
-		if (udp_server != NULL) {
+		if (udp_server) {
 			for (domains = udp_server->domains; domains;
 						domains = domains->next) {
 				char *dom = domains->data;
@@ -1990,7 +1996,7 @@ hangup:
 			}
 		}
 
-		server->connected = TRUE;
+		server->connected = true;
 		server_list = g_slist_append(server_list, server);
 
 		if (server->timeout > 0) {
@@ -2027,7 +2033,7 @@ hangup:
 				continue;
 			}
 
-			no_request_sent = FALSE;
+			no_request_sent = false;
 
 			if (req->timeout > 0)
 				g_source_remove(req->timeout);
@@ -2037,7 +2043,7 @@ hangup:
 			list = list->next;
 		}
 
-		if (no_request_sent == TRUE) {
+		if (no_request_sent) {
 			destroy_server(server);
 			return FALSE;
 		}
@@ -2115,7 +2121,7 @@ static gboolean tcp_idle_timeout(gpointer user_data)
 
 	DBG("");
 
-	if (server == NULL)
+	if (!server)
 		return FALSE;
 
 	destroy_server(server);
@@ -2145,7 +2151,7 @@ static int server_create_socket(struct server_data *data)
 	DBG("sk %d", sk);
 
 	interface = connman_inet_ifname(data->index);
-	if (interface != NULL) {
+	if (interface) {
 		if (setsockopt(sk, SOL_SOCKET, SO_BINDTODEVICE,
 					interface,
 					strlen(interface) + 1) < 0) {
@@ -2162,7 +2168,7 @@ static int server_create_socket(struct server_data *data)
 	}
 
 	data->channel = g_io_channel_unix_new(sk);
-	if (data->channel == NULL) {
+	if (!data->channel) {
 		connman_error("Failed to create server %s channel",
 							data->server);
 		close(sk);
@@ -2213,7 +2219,7 @@ static struct server_data *create_server(int index,
 	DBG("index %d server %s", index, server);
 
 	data = g_try_new0(struct server_data, 1);
-	if (data == NULL) {
+	if (!data) {
 		connman_error("Failed to allocate server %s data", server);
 		return NULL;
 	}
@@ -2269,7 +2275,7 @@ static struct server_data *create_server(int index,
 		connman_error("Wrong address family %d", rp->ai_family);
 		break;
 	}
-	if (data->server_addr == NULL) {
+	if (!data->server_addr) {
 		freeaddrinfo(rp);
 		destroy_server(data);
 		return NULL;
@@ -2284,7 +2290,7 @@ static struct server_data *create_server(int index,
 
 	if (protocol == IPPROTO_UDP) {
 		/* Enable new servers by default */
-		data->enabled = TRUE;
+		data->enabled = true;
 		DBG("Adding DNS server %s", data->server);
 
 		server_list = g_slist_append(server_list, data);
@@ -2293,7 +2299,7 @@ static struct server_data *create_server(int index,
 	return data;
 }
 
-static gboolean resolv(struct request_data *req,
+static bool resolv(struct request_data *req,
 				gpointer request, gpointer name)
 {
 	GSList *list;
@@ -2308,10 +2314,10 @@ static gboolean resolv(struct request_data *req,
 
 		DBG("server %s enabled %d", data->server, data->enabled);
 
-		if (data->enabled == FALSE)
+		if (!data->enabled)
 			continue;
 
-		if (data->channel == NULL && data->protocol == IPPROTO_UDP) {
+		if (!data->channel && data->protocol == IPPROTO_UDP) {
 			if (server_create_socket(data) < 0) {
 				DBG("socket creation failed while resolving");
 				continue;
@@ -2319,10 +2325,10 @@ static gboolean resolv(struct request_data *req,
 		}
 
 		if (ns_resolv(data, req, request, name) > 0)
-			return TRUE;
+			return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
 static void append_domain(int index, const char *domain)
@@ -2331,14 +2337,14 @@ static void append_domain(int index, const char *domain)
 
 	DBG("index %d domain %s", index, domain);
 
-	if (domain == NULL)
+	if (!domain)
 		return;
 
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 		GList *dom_list;
 		char *dom;
-		gboolean dom_found = FALSE;
+		bool dom_found = false;
 
 		if (data->index < 0)
 			continue;
@@ -2351,12 +2357,12 @@ static void append_domain(int index, const char *domain)
 			dom = dom_list->data;
 
 			if (g_str_equal(dom, domain)) {
-				dom_found = TRUE;
+				dom_found = true;
 				break;
 			}
 		}
 
-		if (dom_found == FALSE) {
+		if (!dom_found) {
 			data->domains =
 				g_list_append(data->domains, g_strdup(domain));
 		}
@@ -2370,29 +2376,29 @@ int __connman_dnsproxy_append(int index, const char *domain,
 
 	DBG("index %d server %s", index, server);
 
-	if (server == NULL && domain == NULL)
+	if (!server && !domain)
 		return -EINVAL;
 
-	if (server == NULL) {
+	if (!server) {
 		append_domain(index, domain);
 
 		return 0;
 	}
 
-	if (g_str_equal(server, "127.0.0.1") == TRUE)
+	if (g_str_equal(server, "127.0.0.1"))
 		return -ENODEV;
 
-	if (g_str_equal(server, "::1") == TRUE)
+	if (g_str_equal(server, "::1"))
 		return -ENODEV;
 
 	data = find_server(index, server, IPPROTO_UDP);
-	if (data != NULL) {
+	if (data) {
 		append_domain(index, domain);
 		return 0;
 	}
 
 	data = create_server(index, domain, server, IPPROTO_UDP);
-	if (data == NULL)
+	if (!data)
 		return -EIO;
 
 	return 0;
@@ -2404,7 +2410,7 @@ static void remove_server(int index, const char *domain,
 	struct server_data *data;
 
 	data = find_server(index, server, protocol);
-	if (data == NULL)
+	if (!data)
 		return;
 
 	destroy_server(data);
@@ -2415,13 +2421,13 @@ int __connman_dnsproxy_remove(int index, const char *domain,
 {
 	DBG("index %d server %s", index, server);
 
-	if (server == NULL)
+	if (!server)
 		return -EINVAL;
 
-	if (g_str_equal(server, "127.0.0.1") == TRUE)
+	if (g_str_equal(server, "127.0.0.1"))
 		return -ENODEV;
 
-	if (g_str_equal(server, "::1") == TRUE)
+	if (g_str_equal(server, "::1"))
 		return -ENODEV;
 
 	remove_server(index, domain, server, IPPROTO_UDP);
@@ -2440,7 +2446,7 @@ void __connman_dnsproxy_flush(void)
 
 		list = list->next;
 
-		if (resolv(req, req->request, req->name) == TRUE) {
+		if (resolv(req, req->request, req->name)) {
 			/*
 			 * A cached result was sent,
 			 * so the request can be released
@@ -2457,7 +2463,7 @@ void __connman_dnsproxy_flush(void)
 	}
 }
 
-static void dnsproxy_offline_mode(connman_bool_t enabled)
+static void dnsproxy_offline_mode(bool enabled)
 {
 	GSList *list;
 
@@ -2466,14 +2472,14 @@ static void dnsproxy_offline_mode(connman_bool_t enabled)
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 
-		if (enabled == FALSE) {
+		if (!enabled) {
 			DBG("Enabling DNS server %s", data->server);
-			data->enabled = TRUE;
+			data->enabled = true;
 			cache_invalidate();
 			cache_refresh();
 		} else {
 			DBG("Disabling DNS server %s", data->server);
-			data->enabled = FALSE;
+			data->enabled = false;
 			cache_invalidate();
 		}
 	}
@@ -2489,9 +2495,9 @@ static void dnsproxy_default_changed(struct connman_service *service)
 	/* DNS has changed, invalidate the cache */
 	cache_invalidate();
 
-	if (service == NULL) {
+	if (!service) {
 		/* When no services are active, then disable DNS proxying */
-		dnsproxy_offline_mode(TRUE);
+		dnsproxy_offline_mode(true);
 		return;
 	}
 
@@ -2504,10 +2510,10 @@ static void dnsproxy_default_changed(struct connman_service *service)
 
 		if (data->index == index) {
 			DBG("Enabling DNS server %s", data->server);
-			data->enabled = TRUE;
+			data->enabled = true;
 		} else {
 			DBG("Disabling DNS server %s", data->server);
-			data->enabled = FALSE;
+			data->enabled = false;
 		}
 	}
 
@@ -2596,10 +2602,10 @@ static int parse_request(unsigned char *buf, int len,
 
 static void client_reset(struct tcp_partial_client_data *client)
 {
-	if (client == NULL)
+	if (!client)
 		return;
 
-	if (client->channel != NULL) {
+	if (client->channel) {
 		DBG("client %d closing",
 			g_io_channel_unix_get_fd(client->channel));
 
@@ -2628,7 +2634,7 @@ static unsigned int get_msg_len(unsigned char *buf)
 	return buf[0]<<8 | buf[1];
 }
 
-static gboolean read_tcp_data(struct tcp_partial_client_data *client,
+static bool read_tcp_data(struct tcp_partial_client_data *client,
 				void *client_addr, socklen_t client_addr_len,
 				int read_len)
 {
@@ -2637,7 +2643,8 @@ static gboolean read_tcp_data(struct tcp_partial_client_data *client,
 	int client_sk, err;
 	unsigned int msg_len;
 	GSList *list;
-	int waiting_for_connect = FALSE, qtype = 0;
+	bool waiting_for_connect = false;
+	int qtype = 0;
 	struct cache_entry *entry;
 
 	client_sk = g_io_channel_unix_get_fd(client->channel);
@@ -2647,7 +2654,7 @@ static gboolean read_tcp_data(struct tcp_partial_client_data *client,
 			client_sk, client->buf_end);
 		g_hash_table_remove(partial_tcp_req_table,
 					GINT_TO_POINTER(client_sk));
-		return FALSE;
+		return false;
 	}
 
 	DBG("client %d received %d bytes", client_sk, read_len);
@@ -2655,14 +2662,14 @@ static gboolean read_tcp_data(struct tcp_partial_client_data *client,
 	client->buf_end += read_len;
 
 	if (client->buf_end < 2)
-		return TRUE;
+		return true;
 
 	msg_len = get_msg_len(client->buf);
 	if (msg_len > TCP_MAX_BUF_LEN) {
 		DBG("client %d sent too much data %d", client_sk, msg_len);
 		g_hash_table_remove(partial_tcp_req_table,
 					GINT_TO_POINTER(client_sk));
-		return FALSE;
+		return false;
 	}
 
 read_another:
@@ -2673,7 +2680,7 @@ read_another:
 		DBG("client %d still missing %d bytes",
 			client_sk,
 			msg_len + 2 - client->buf_end);
-		return TRUE;
+		return true;
 	}
 
 	DBG("client %d all data %d received", client_sk, msg_len);
@@ -2683,12 +2690,12 @@ read_another:
 	if (err < 0 || (g_slist_length(server_list) == 0)) {
 		send_response(client_sk, client->buf, msg_len + 2,
 			NULL, 0, IPPROTO_TCP);
-		return TRUE;
+		return true;
 	}
 
 	req = g_try_new0(struct request_data, 1);
-	if (req == NULL)
-		return TRUE;
+	if (!req)
+		return true;
 
 	memcpy(&req->sa, client_addr, client_addr_len);
 	req->sa_len = client_addr_len;
@@ -2706,14 +2713,14 @@ read_another:
 
 	req->numserv = 0;
 	req->ifdata = client->ifdata;
-	req->append_domain = FALSE;
+	req->append_domain = false;
 
 	/*
 	 * Check if the answer is found in the cache before
 	 * creating sockets to the server.
 	 */
 	entry = cache_check(client->buf, &qtype, IPPROTO_TCP);
-	if (entry != NULL) {
+	if (entry) {
 		int ttl_left = 0;
 		struct cache_data *data;
 
@@ -2723,7 +2730,7 @@ read_another:
 		else
 			data = entry->ipv6;
 
-		if (data != NULL) {
+		if (data) {
 			ttl_left = data->valid_until - time(NULL);
 			entry->hits++;
 
@@ -2740,22 +2747,22 @@ read_another:
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 
-		if (data->protocol != IPPROTO_UDP || data->enabled == FALSE)
+		if (data->protocol != IPPROTO_UDP || !data->enabled)
 			continue;
 
-		if(create_server(data->index, NULL,
-					data->server, IPPROTO_TCP) == NULL)
+		if (!create_server(data->index, NULL, data->server,
+					IPPROTO_TCP))
 			continue;
 
-		waiting_for_connect = TRUE;
+		waiting_for_connect = true;
 	}
 
-	if (waiting_for_connect == FALSE) {
+	if (!waiting_for_connect) {
 		/* No server is waiting for connect */
 		send_response(client_sk, client->buf,
 			req->request_len, NULL, 0, IPPROTO_TCP);
 		g_free(req);
-		return TRUE;
+		return true;
 	}
 
 	/*
@@ -2765,7 +2772,7 @@ read_another:
 	 * properly connected over TCP to the nameserver.
 	 */
 	req->request = g_try_malloc0(req->request_len);
-	if (req->request == NULL) {
+	if (!req->request) {
 		send_response(client_sk, client->buf,
 			req->request_len, NULL, 0, IPPROTO_TCP);
 		g_free(req);
@@ -2774,7 +2781,7 @@ read_another:
 	memcpy(req->request, client->buf, req->request_len);
 
 	req->name = g_try_malloc0(sizeof(query));
-	if (req->name == NULL) {
+	if (!req->name) {
 		send_response(client_sk, client->buf,
 			req->request_len, NULL, 0, IPPROTO_TCP);
 		g_free(req->request);
@@ -2824,7 +2831,7 @@ out:
 		client->timeout = 0;
 	}
 
-	return TRUE;
+	return true;
 }
 
 static gboolean tcp_client_event(GIOChannel *channel, GIOCondition condition,
@@ -2896,7 +2903,7 @@ static gboolean client_timeout(gpointer user_data)
 	return FALSE;
 }
 
-static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
+static bool tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 				struct listener_data *ifdata, int family,
 				guint *listener_watch)
 {
@@ -2922,7 +2929,7 @@ static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 
 		connman_error("Error with TCP listener channel");
 
-		return FALSE;
+		return false;
 	}
 
 	sk = g_io_channel_unix_get_fd(channel);
@@ -2945,23 +2952,25 @@ static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 		DBG("client %d accepted", client_sk);
 	} else {
 		DBG("No data to read from master %d, waiting.", sk);
-		return TRUE;
+		return true;
 	}
 
 	if (client_sk < 0) {
 		connman_error("Accept failure on TCP listener");
 		*listener_watch = 0;
-		return FALSE;
+		return false;
 	}
 
 	fcntl(client_sk, F_SETFL, O_NONBLOCK);
 
 	client = g_hash_table_lookup(partial_tcp_req_table,
 					GINT_TO_POINTER(client_sk));
-	if (client == NULL) {
+	if (!client) {
 		client = g_try_new0(struct tcp_partial_client_data, 1);
-		if (client == NULL)
-			return FALSE;
+		if (!client) {
+			close(client_sk);
+			return false;
+		}
 
 		g_hash_table_insert(partial_tcp_req_table,
 					GINT_TO_POINTER(client_sk),
@@ -2981,10 +2990,10 @@ static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 		DBG("client %d already exists %p", client_sk, client);
 	}
 
-	if (client->buf == NULL) {
+	if (!client->buf) {
 		client->buf = g_try_malloc(TCP_MAX_BUF_LEN);
-		if (client->buf == NULL)
-			return FALSE;
+		if (!client->buf)
+			return false;
 	}
 	memset(client->buf, 0, TCP_MAX_BUF_LEN);
 	client->buf_end = 0;
@@ -3003,20 +3012,20 @@ static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 	if (len < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			DBG("client %d no data to read, waiting", client_sk);
-			return TRUE;
+			return true;
 		}
 
 		DBG("client %d cannot read errno %d/%s", client_sk, -errno,
 			strerror(errno));
 		g_hash_table_remove(partial_tcp_req_table,
 					GINT_TO_POINTER(client_sk));
-		return TRUE;
+		return true;
 	}
 
 	if (len < 2) {
 		DBG("client %d not enough data to read, waiting", client_sk);
 		client->buf_end += len;
-		return TRUE;
+		return true;
 	}
 
 	msg_len = get_msg_len(client->buf);
@@ -3025,7 +3034,7 @@ static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 			client_sk, msg_len);
 		g_hash_table_remove(partial_tcp_req_table,
 					GINT_TO_POINTER(client_sk));
-		return TRUE;
+		return true;
 	}
 
 	/*
@@ -3037,7 +3046,7 @@ static gboolean tcp_listener_event(GIOChannel *channel, GIOCondition condition,
 			client_sk, len, msg_len + 2, msg_len + 2 - len);
 
 		client->buf_end += len;
-		return TRUE;
+		return true;
 	}
 
 	return read_tcp_data(client, client_addr, *client_addr_len, len);
@@ -3076,7 +3085,7 @@ static gboolean reset_connect_request(gpointer data)
     return FALSE;
 }
 
-static gboolean udp_listener_event(GIOChannel *channel, GIOCondition condition,
+static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 				struct listener_data *ifdata, int family,
 				guint *listener_watch)
 {
@@ -3094,7 +3103,7 @@ static gboolean udp_listener_event(GIOChannel *channel, GIOCondition condition,
 	if (condition & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
 		connman_error("Error with UDP listener channel");
 		*listener_watch = 0;
-		return FALSE;
+		return false;
 	}
 
 	sk = g_io_channel_unix_get_fd(channel);
@@ -3110,7 +3119,7 @@ static gboolean udp_listener_event(GIOChannel *channel, GIOCondition condition,
 	memset(client_addr, 0, *client_addr_len);
 	len = recvfrom(sk, buf, sizeof(buf), 0, client_addr, client_addr_len);
 	if (len < 2)
-		return TRUE;
+		return true;
 
 	DBG("Received %d bytes (id 0x%04x)", len, buf[0] | buf[1] << 8);
 
@@ -3124,13 +3133,12 @@ static gboolean udp_listener_event(GIOChannel *channel, GIOCondition condition,
     if (len > 4) {
         const char *lastFive = &query[len - 5];
         if (strcmp("arpa.", lastFive) == 0) {
-            ok == FALSE;
+            ok = FALSE;
         } else {
             ok = TRUE;
         }
     }
     if (ok && tryit == 0) {
-          //
         	g_timeout_add_seconds(10, reset_connect_request, NULL);
 
           tryit = 1;
@@ -3139,12 +3147,13 @@ static gboolean udp_listener_event(GIOChannel *channel, GIOCondition condition,
         if (__connman_agent_request_connection((void*)tryit) == -ESRCH) {
         }
     }
-		return TRUE;
+		return true;
+
 	}
 
 	req = g_try_new0(struct request_data, 1);
-	if (req == NULL)
-		return TRUE;
+	if (!req)
+		return true;
 
 	memcpy(&req->sa, client_addr, *client_addr_len);
 	req->sa_len = *client_addr_len;
@@ -3162,18 +3171,18 @@ static gboolean udp_listener_event(GIOChannel *channel, GIOCondition condition,
 
 	req->numserv = 0;
 	req->ifdata = ifdata;
-	req->append_domain = FALSE;
+	req->append_domain = false;
 
-	if (resolv(req, buf, query) == TRUE) {
+	if (resolv(req, buf, query)) {
 		/* a cached result was sent, so the request can be released */
 	        g_free(req);
-		return TRUE;
+		return true;
 	}
 
 	req->timeout = g_timeout_add_seconds(5, request_timeout, req);
 	request_list = g_slist_append(request_list, req);
 
-	return TRUE;
+	return true;
 }
 
 static gboolean udp4_listener_event(GIOChannel *channel, GIOCondition condition,
@@ -3236,7 +3245,7 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	}
 
 	interface = connman_inet_ifname(index);
-	if (interface == NULL || setsockopt(sk, SOL_SOCKET, SO_BINDTODEVICE,
+	if (!interface || setsockopt(sk, SOL_SOCKET, SO_BINDTODEVICE,
 					interface,
 					strlen(interface) + 1) < 0) {
 		connman_error("Failed to bind %s listener interface "
@@ -3302,7 +3311,7 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	}
 
 	channel = g_io_channel_unix_new(sk);
-	if (channel == NULL) {
+	if (!channel) {
 		connman_error("Failed to create %s listener channel", proto);
 		close(sk);
 		return NULL;
@@ -3329,7 +3338,7 @@ static int create_dns_listener(int protocol, struct listener_data *ifdata)
 	if (protocol == IPPROTO_TCP) {
 		ifdata->tcp4_listener_channel = get_listener(AF_INET, protocol,
 							ifdata->index);
-		if (ifdata->tcp4_listener_channel != NULL)
+		if (ifdata->tcp4_listener_channel)
 			ifdata->tcp4_listener_watch =
 				g_io_add_watch(ifdata->tcp4_listener_channel,
 					G_IO_IN, tcp4_listener_event,
@@ -3339,7 +3348,7 @@ static int create_dns_listener(int protocol, struct listener_data *ifdata)
 
 		ifdata->tcp6_listener_channel = get_listener(AF_INET6, protocol,
 							ifdata->index);
-		if (ifdata->tcp6_listener_channel != NULL)
+		if (ifdata->tcp6_listener_channel)
 			ifdata->tcp6_listener_watch =
 				g_io_add_watch(ifdata->tcp6_listener_channel,
 					G_IO_IN, tcp6_listener_event,
@@ -3349,7 +3358,7 @@ static int create_dns_listener(int protocol, struct listener_data *ifdata)
 	} else {
 		ifdata->udp4_listener_channel = get_listener(AF_INET, protocol,
 							ifdata->index);
-		if (ifdata->udp4_listener_channel != NULL)
+		if (ifdata->udp4_listener_channel)
 			ifdata->udp4_listener_watch =
 				g_io_add_watch(ifdata->udp4_listener_channel,
 					G_IO_IN, udp4_listener_event,
@@ -3359,7 +3368,7 @@ static int create_dns_listener(int protocol, struct listener_data *ifdata)
 
 		ifdata->udp6_listener_channel = get_listener(AF_INET6, protocol,
 							ifdata->index);
-		if (ifdata->udp6_listener_channel != NULL)
+		if (ifdata->udp6_listener_channel)
 			ifdata->udp6_listener_watch =
 				g_io_add_watch(ifdata->udp6_listener_channel,
 					G_IO_IN, udp6_listener_event,
@@ -3381,9 +3390,9 @@ static void destroy_udp_listener(struct listener_data *ifdata)
 	if (ifdata->udp6_listener_watch > 0)
 		g_source_remove(ifdata->udp6_listener_watch);
 
-	if (ifdata->udp4_listener_channel != NULL)
+	if (ifdata->udp4_listener_channel)
 		g_io_channel_unref(ifdata->udp4_listener_channel);
-	if (ifdata->udp6_listener_channel != NULL)
+	if (ifdata->udp6_listener_channel)
 		g_io_channel_unref(ifdata->udp6_listener_channel);
 }
 
@@ -3396,9 +3405,9 @@ static void destroy_tcp_listener(struct listener_data *ifdata)
 	if (ifdata->tcp6_listener_watch > 0)
 		g_source_remove(ifdata->tcp6_listener_watch);
 
-	if (ifdata->tcp4_listener_channel != NULL)
+	if (ifdata->tcp4_listener_channel)
 		g_io_channel_unref(ifdata->tcp4_listener_channel);
-	if (ifdata->tcp6_listener_channel != NULL)
+	if (ifdata->tcp6_listener_channel)
 		g_io_channel_unref(ifdata->tcp6_listener_channel);
 }
 
@@ -3465,14 +3474,14 @@ int __connman_dnsproxy_add_listener(int index)
 	if (index < 0)
 		return -EINVAL;
 
-	if (listener_table == NULL)
+	if (!listener_table)
 		return -ENOENT;
 
-	if (g_hash_table_lookup(listener_table, GINT_TO_POINTER(index)) != NULL)
+	if (g_hash_table_lookup(listener_table, GINT_TO_POINTER(index)))
 		return 0;
 
 	ifdata = g_try_new0(struct listener_data, 1);
-	if (ifdata == NULL)
+	if (!ifdata)
 		return -ENOMEM;
 
 	ifdata->index = index;
@@ -3503,11 +3512,11 @@ void __connman_dnsproxy_remove_listener(int index)
 
 	DBG("index %d", index);
 
-	if (listener_table == NULL)
+	if (!listener_table)
 		return;
 
 	ifdata = g_hash_table_lookup(listener_table, GINT_TO_POINTER(index));
-	if (ifdata == NULL)
+	if (!ifdata)
 		return;
 
 	destroy_listener(ifdata);
