@@ -1,3 +1,0 @@
-[submodule "upstream"]
-	path = upstream
-	url = git://git.kernel.org/pub/scm/network/connman/connman.git
