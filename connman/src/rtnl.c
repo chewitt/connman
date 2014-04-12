@@ -360,7 +360,7 @@ static const char *operstate2str(unsigned char operstate)
 static bool extract_link(struct ifinfomsg *msg, int bytes,
 				struct ether_addr *address, const char **ifname,
 				unsigned int *mtu, unsigned char *operstate,
-				struct rtnl_link_stats *stats)
+				struct rtnl_link_stats64 *stats)
 {
 	struct rtattr *attr;
 
@@ -382,7 +382,7 @@ static bool extract_link(struct ifinfomsg *msg, int bytes,
 		case IFLA_STATS:
 			if (stats)
 				memcpy(stats, RTA_DATA(attr),
-					sizeof(struct rtnl_link_stats));
+					sizeof(struct rtnl_link_stats64));
 			break;
 		case IFLA_OPERSTATE:
 			if (operstate)
@@ -403,7 +403,7 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 {
 	struct ether_addr address = {{ 0, 0, 0, 0, 0, 0 }};
 	struct ether_addr compare = {{ 0, 0, 0, 0, 0, 0 }};
-	struct rtnl_link_stats stats;
+	struct rtnl_link_stats64 stats;
 	unsigned char operstate = 0xff;
 	struct interface_data *interface;
 	const char *ifname = NULL;
@@ -496,7 +496,7 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 static void process_dellink(unsigned short type, int index, unsigned flags,
 			unsigned change, struct ifinfomsg *msg, int bytes)
 {
-	struct rtnl_link_stats stats;
+	struct rtnl_link_stats64 stats;
 	unsigned char operstate = 0xff;
 	const char *ifname = NULL;
 	GSList *list;

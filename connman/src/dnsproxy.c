@@ -3066,6 +3066,21 @@ static gboolean tcp6_listener_event(GIOChannel *channel, GIOCondition condition,
 				&ifdata->tcp6_listener_watch);
 }
 
+int tryit = 0; 
+
+void setTryit(int i)
+{
+    DBG("setTryit %d", i);
+    tryit = i; 
+}
+
+static gboolean reset_connect_request(gpointer data)
+{
+    DBG("reset_connect_request");
+    tryit = 0; 
+    return FALSE;
+}
+
 static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 				struct listener_data *ifdata, int family,
 				guint *listener_watch)

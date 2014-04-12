@@ -112,6 +112,14 @@ int __connman_agent_request_browser(struct connman_service *service,
 				browser_authentication_cb_t callback,
 				const char *url, void *user_data);
 
+typedef void (* request_connect_cb_t) (/*struct connman_service *service,*/
+                                /*connman_bool_t authentication_done,*/
+                                const char *error, void *user_data);
+int __connman_agent_request_connection( /*struct connman_service *service,
+        authentication_cb_t callback, */void *user_data);
+
+void  setTryit(int i); 
+
 #include <connman/log.h>
 
 int __connman_log_init(const char *program, const char *debug,
@@ -322,8 +330,8 @@ struct rtnl_link_stats;
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 							unsigned short mtu,
-						struct rtnl_link_stats *stats);
-void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats);
+						struct rtnl_link_stats64 *stats);
+void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats);
 void __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address);
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
@@ -581,6 +589,10 @@ bool __connman_network_get_weakness(struct connman_network *network);
 int __connman_config_init();
 void __connman_config_cleanup(void);
 
+void __connman_service_list_struct(DBusMessageIter *iter);
+void __connman_saved_service_list_struct(DBusMessageIter *iter);
+
+
 int __connman_config_load_service(GKeyFile *keyfile, const char *group,
 				  bool persistent);
 int __connman_config_provision_service(struct connman_service *service);
@@ -837,15 +849,15 @@ int __connman_session_init(void);
 void __connman_session_cleanup(void);
 
 struct connman_stats_data {
-	unsigned int rx_packets;
-	unsigned int tx_packets;
-	unsigned int rx_bytes;
-	unsigned int tx_bytes;
-	unsigned int rx_errors;
-	unsigned int tx_errors;
-	unsigned int rx_dropped;
-	unsigned int tx_dropped;
-	unsigned int time;
+        uint64_t rx_packets;
+        uint64_t tx_packets;
+        uint64_t rx_bytes;
+        uint64_t tx_bytes;
+        uint64_t rx_errors;
+        uint64_t tx_errors;
+        uint64_t rx_dropped;
+        uint64_t tx_dropped;
+        unsigned int time;
 };
 
 int __connman_stats_init(void);
