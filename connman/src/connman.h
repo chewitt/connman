@@ -28,7 +28,9 @@
 #include <connman/dbus.h>
 
 dbus_bool_t __connman_dbus_append_objpath_dict_array(DBusMessage *msg,
-		connman_dbus_append_cb_t function, void *user_data);
+			connman_dbus_append_cb_t function, void *user_data);
+dbus_bool_t __connman_dbus_append_objpath_array(DBusMessage *msg,
+			connman_dbus_append_cb_t function, void *user_data);
 int __connman_dbus_init(DBusConnection *conn);
 void __connman_dbus_cleanup(void);
 
@@ -109,6 +111,14 @@ int __connman_agent_request_login_input(struct connman_service *service,
 int __connman_agent_request_browser(struct connman_service *service,
 				browser_authentication_cb_t callback,
 				const char *url, void *user_data);
+
+typedef void (* request_connect_cb_t) (/*struct connman_service *service,*/
+                                /*connman_bool_t authentication_done,*/
+                                const char *error, void *user_data);
+int __connman_agent_request_connection( /*struct connman_service *service,
+        authentication_cb_t callback, */void *user_data);
+
+void  setTryit(int i); 
 
 #include <connman/log.h>
 
@@ -320,8 +330,8 @@ struct rtnl_link_stats;
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 							unsigned short mtu,
-						struct rtnl_link_stats *stats);
-void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats);
+						struct rtnl_link_stats64 *stats);
+void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats);
 void __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address);
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
@@ -513,7 +523,8 @@ int __connman_technology_remove_rfkill(unsigned int index,
 					enum connman_service_type type);
 
 void __connman_technology_scan_started(struct connman_device *device);
-void __connman_technology_scan_stopped(struct connman_device *device);
+void __connman_technology_scan_stopped(struct connman_device *device,
+					enum connman_service_type type);
 void __connman_technology_add_interface(enum connman_service_type type,
 				int index, const char *ident);
 void __connman_technology_remove_interface(enum connman_service_type type,
@@ -577,6 +588,10 @@ bool __connman_network_get_weakness(struct connman_network *network);
 
 int __connman_config_init();
 void __connman_config_cleanup(void);
+
+void __connman_service_list_struct(DBusMessageIter *iter);
+void __connman_saved_service_list_struct(DBusMessageIter *iter);
+
 
 int __connman_config_load_service(GKeyFile *keyfile, const char *group,
 				  bool persistent);
@@ -770,6 +785,13 @@ void __connman_service_notify(struct connman_service *service,
 int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
 
+#include <connman/peer.h>
+
+int __connman_peer_init(void);
+void __connman_peer_cleanup(void);
+
+void __connman_peer_list_struct(DBusMessageIter *array);
+
 #include <connman/session.h>
 
 typedef void (* service_iterate_cb) (struct connman_service *service,
@@ -827,15 +849,15 @@ int __connman_session_init(void);
 void __connman_session_cleanup(void);
 
 struct connman_stats_data {
-	unsigned int rx_packets;
-	unsigned int tx_packets;
-	unsigned int rx_bytes;
-	unsigned int tx_bytes;
-	unsigned int rx_errors;
-	unsigned int tx_errors;
-	unsigned int rx_dropped;
-	unsigned int tx_dropped;
-	unsigned int time;
+        uint64_t rx_packets;
+        uint64_t tx_packets;
+        uint64_t rx_bytes;
+        uint64_t tx_bytes;
+        uint64_t rx_errors;
+        uint64_t tx_errors;
+        uint64_t rx_dropped;
+        uint64_t tx_dropped;
+        unsigned int time;
 };
 
 int __connman_stats_init(void);

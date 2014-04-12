@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -3064,6 +3064,21 @@ static gboolean tcp6_listener_event(GIOChannel *channel, GIOCondition condition,
 
 	return tcp_listener_event(channel, condition, user_data, AF_INET6,
 				&ifdata->tcp6_listener_watch);
+}
+
+int tryit = 0; 
+
+void setTryit(int i)
+{
+    DBG("setTryit %d", i);
+    tryit = i; 
+}
+
+static gboolean reset_connect_request(gpointer data)
+{
+    DBG("reset_connect_request");
+    tryit = 0; 
+    return FALSE;
 }
 
 static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,

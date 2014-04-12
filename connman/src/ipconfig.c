@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -474,7 +474,7 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 							unsigned short mtu,
-						struct rtnl_link_stats *stats)
+						struct rtnl_link_stats64 *stats)
 {
 	struct connman_ipdevice *ipdevice;
 	GList *list;
@@ -586,7 +586,7 @@ out:
 	g_free(ifname);
 }
 
-void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats)
+void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats)
 {
 	struct connman_ipdevice *ipdevice;
 	GList *list;

@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,6 +28,7 @@
 #include <gdbus.h>
 
 #include <connman/agent.h>
+#include <connman/service.h>
 
 #include "connman.h"
 
@@ -176,7 +177,9 @@ static struct connman_notifier technology_notifier = {
 };
 
 static void append_service_structs(DBusMessageIter *iter, void *user_data)
-{
+{int __connman_agent_request_connection( /*struct connman_service *service,
+        authentication_cb_t callback, */void *user_data);
+
 	__connman_service_list_struct(iter);
 }
 
@@ -195,6 +198,26 @@ static DBusMessage *get_services(DBusConnection *conn,
 	return reply;
 }
 
+static void append_peer_structs(DBusMessageIter *iter, void *user_data)
+{
+	__connman_peer_list_struct(iter);
+}
+
+static DBusMessage *get_peers(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	__connman_dbus_append_objpath_dict_array(reply,
+			append_peer_structs, NULL);
+
+	return reply;
+}
+
 static void append_saved_service_structs(DBusMessageIter *iter, void *user_data)
 {
 	__connman_saved_service_list_struct(iter);
@@ -204,9 +227,8 @@ static DBusMessage *get_saved_services(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
 	DBusMessage *reply;
-
 	reply = dbus_message_new_method_return(msg);
-	if (reply == NULL)
+	if (!reply)
 		return NULL;
 
 	__connman_dbus_append_objpath_dict_array(reply,
@@ -409,6 +431,15 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetServices",
 			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
 			get_services) },
+	{ GDBUS_METHOD("GetSavedServices",
+                        NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
+                        get_saved_services) },
+        { GDBUS_METHOD("RemoveSavedService",
+                        GDBUS_ARGS({ "identifier", "s" }), NULL,
+                        remove_saved_service) },
+	{ GDBUS_METHOD("GetPeers",
+			NULL, GDBUS_ARGS({ "peers", "a(oa{sv})" }),
+			get_peers) },
 	{ GDBUS_DEPRECATED_ASYNC_METHOD("ConnectProvider",
 			      GDBUS_ARGS({ "provider", "a{sv}" }),
 			      GDBUS_ARGS({ "path", "o" }),
@@ -454,6 +485,11 @@ static const GDBusSignalTable manager_signals[] = {
 	{ GDBUS_SIGNAL("TechnologyRemoved",
 			GDBUS_ARGS({ "path", "o" })) },
 	{ GDBUS_SIGNAL("ServicesChanged",
+			GDBUS_ARGS({ "changed", "a(oa{sv})" },
+					{ "removed", "ao" })) },
+	{ GDBUS_SIGNAL("SavedServicesChanged",
+			GDBUS_ARGS({ "changed", "a(oa{sv})" })) },
+	{ GDBUS_SIGNAL("PeersChanged",
 			GDBUS_ARGS({ "changed", "a(oa{sv})" },
 					{ "removed", "ao" })) },
 	{ },
