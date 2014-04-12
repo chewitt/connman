@@ -640,7 +640,6 @@ int __connman_agent_request_browser(struct connman_service *service,
 	return -EINPROGRESS;
 }
 
-
 struct request_connect_reply_data {
 	struct connman_service *service;
 	request_connect_cb_t callback;

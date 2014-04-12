@@ -1861,8 +1861,6 @@ static void server_destroy_socket(struct server_data *data)
 
 static void destroy_server(struct server_data *server)
 {
-	GList *list;
-
 	DBG("index %d server %s sock %d", server->index, server->server,
 			server->channel ?
 			g_io_channel_unix_get_fd(server->channel): -1);
@@ -1874,12 +1872,7 @@ static void destroy_server(struct server_data *server)
 		DBG("Removing DNS server %s", server->server);
 
 	g_free(server->server);
-	for (list = server->domains; list; list = list->next) {
-		char *domain = list->data;
-
-		server->domains = g_list_remove(server->domains, domain);
-		g_free(domain);
-	}
+	g_list_free_full(server->domains, g_free);
 	g_free(server->server_addr);
 
 	/*
@@ -2289,9 +2282,12 @@ static struct server_data *create_server(int index,
 	}
 
 	if (protocol == IPPROTO_UDP) {
-		/* Enable new servers by default */
-		data->enabled = true;
-		DBG("Adding DNS server %s", data->server);
+		if (__connman_service_index_is_default(data->index) ||
+				__connman_service_index_is_split_routing(
+								data->index)) {
+			data->enabled = true;
+			DBG("Adding DNS server %s", data->server);
+		}
 
 		server_list = g_slist_append(server_list, data);
 	}
@@ -3070,21 +3066,6 @@ static gboolean tcp6_listener_event(GIOChannel *channel, GIOCondition condition,
 				&ifdata->tcp6_listener_watch);
 }
 
-int tryit = 0;
-
-void setTryit(int i)
-{
-    DBG("setTryit %d", i);
-    tryit = i;
-}
-
-static gboolean reset_connect_request(gpointer data)
-{
-    DBG("reset_connect_request");
-    tryit = 0;
-    return FALSE;
-}
-
 static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 				struct listener_data *ifdata, int family,
 				guint *listener_watch)
@@ -3148,7 +3129,6 @@ static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
         }
     }
 		return true;
-
 	}
 
 	req = g_try_new0(struct request_data, 1);

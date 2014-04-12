@@ -101,9 +101,6 @@ typedef void (* authentication_cb_t) (struct connman_service *service,
 typedef void (* browser_authentication_cb_t) (struct connman_service *service,
 				bool authentication_done,
 				const char *error, void *user_data);
-typedef void (* request_connect_cb_t) (/*struct connman_service *service,*/
-				/*connman_bool_t authentication_done,*/
-				const char *error, void *user_data);
 int __connman_agent_request_passphrase_input(struct connman_service *service,
 				authentication_cb_t callback,
 				const char *dbus_sender, void *user_data);
@@ -112,10 +109,6 @@ int __connman_agent_request_login_input(struct connman_service *service,
 int __connman_agent_request_browser(struct connman_service *service,
 				browser_authentication_cb_t callback,
 				const char *url, void *user_data);
-int __connman_agent_request_connection( /*struct connman_service *service,
-        authentication_cb_t callback, */void *user_data);
-
-void  setTryit(int i);
 
 #include <connman/log.h>
 
@@ -322,13 +315,13 @@ void __connman_ipconfig_enable_ipv6(struct connman_ipconfig *ipconfig);
 int __connman_ipconfig_init(void);
 void __connman_ipconfig_cleanup(void);
 
-struct rtnl_link_stats64;
+struct rtnl_link_stats;
 
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 							unsigned short mtu,
-						struct rtnl_link_stats64 *stats);
-void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats);
+						struct rtnl_link_stats *stats);
+void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats);
 void __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address);
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
@@ -640,12 +633,12 @@ int __connman_service_init(void);
 void __connman_service_cleanup(void);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
-void __connman_saved_service_list_struct(DBusMessageIter *iter);
 
 struct connman_service *__connman_service_lookup_from_index(int index);
 struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
 struct connman_service *__connman_service_create_from_network(struct connman_network *network);
 struct connman_service *__connman_service_create_from_provider(struct connman_provider *provider);
+bool __connman_service_index_is_default(int index);
 struct connman_service *__connman_service_get_default(void);
 void __connman_service_update_from_network(struct connman_network *network);
 void __connman_service_remove_from_network(struct connman_network *network);
@@ -679,8 +672,6 @@ int __connman_service_set_immutable(struct connman_service *service,
 						bool immutable);
 int __connman_service_set_ignore(struct connman_service *service,
 						bool ignore);
-void __connman_service_set_userconnect(struct connman_service *service,
-						bool userconnect);
 void __connman_service_set_search_domains(struct connman_service *service,
 					char **domains);
 void __connman_service_update_search_domains(struct connman_service *service,
@@ -702,11 +693,12 @@ int __connman_service_indicate_error(struct connman_service *service,
 int __connman_service_clear_error(struct connman_service *service);
 int __connman_service_indicate_default(struct connman_service *service);
 
-int __connman_service_connect(struct connman_service *service);
+int __connman_service_connect(struct connman_service *service,
+			enum connman_service_connect_reason reason);
 int __connman_service_disconnect(struct connman_service *service);
 int __connman_service_disconnect_all(void);
 void __connman_service_set_active_session(bool enable, GSList *list);
-void __connman_service_auto_connect(void);
+void __connman_service_auto_connect(enum connman_service_connect_reason reason);
 bool __connman_service_remove(struct connman_service *service);
 bool __connman_service_is_provider_pending(struct connman_service *service);
 void __connman_service_set_provider_pending(struct connman_service *service,
@@ -746,6 +738,7 @@ void __connman_service_set_pac(struct connman_service *service,
 					const char *pac);
 bool __connman_service_is_hidden(struct connman_service *service);
 bool __connman_service_is_split_routing(struct connman_service *service);
+bool __connman_service_index_is_split_routing(int index);
 int __connman_service_get_index(struct connman_service *service);
 void __connman_service_set_hidden(struct connman_service *service);
 void __connman_service_set_hostname(struct connman_service *service,
@@ -769,14 +762,12 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 		enum connman_service_state *new_state);
 
 void __connman_service_notify(struct connman_service *service,
-			uint64_t rx_packets, uint64_t tx_packets,
-			uint64_t rx_bytes, uint64_t tx_bytes,
-			uint64_t rx_error, uint64_t tx_error,
-			uint64_t rx_dropped, uint64_t tx_dropped);
+			unsigned int rx_packets, unsigned int tx_packets,
+			unsigned int rx_bytes, unsigned int tx_bytes,
+			unsigned int rx_error, unsigned int tx_error,
+			unsigned int rx_dropped, unsigned int tx_dropped);
 
 int __connman_service_counter_register(const char *counter);
-void __connman_service_counter_send_initial(const char *counter);
-void __connman_service_counter_reset_all(const char *type);
 void __connman_service_counter_unregister(const char *counter);
 
 #include <connman/session.h>
@@ -827,8 +818,7 @@ unsigned int __connman_rtnl_update_interval_remove(unsigned int interval);
 int __connman_rtnl_request_update(void);
 int __connman_rtnl_send(const void *buf, size_t len);
 
-bool __connman_session_mode();
-void __connman_session_set_mode(bool enable);
+bool __connman_session_policy_autoconnect(enum connman_service_connect_reason reason);
 
 int __connman_session_create(DBusMessage *msg);
 int __connman_session_destroy(DBusMessage *msg);
@@ -837,14 +827,14 @@ int __connman_session_init(void);
 void __connman_session_cleanup(void);
 
 struct connman_stats_data {
-	uint64_t rx_packets;
-	uint64_t tx_packets;
-	uint64_t rx_bytes;
-	uint64_t tx_bytes;
-	uint64_t rx_errors;
-	uint64_t tx_errors;
-	uint64_t rx_dropped;
-	uint64_t tx_dropped;
+	unsigned int rx_packets;
+	unsigned int tx_packets;
+	unsigned int rx_bytes;
+	unsigned int tx_bytes;
+	unsigned int rx_errors;
+	unsigned int tx_errors;
+	unsigned int rx_dropped;
+	unsigned int tx_dropped;
 	unsigned int time;
 };
 

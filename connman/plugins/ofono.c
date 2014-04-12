@@ -42,7 +42,6 @@
 #include <connman/technology.h>
 
 #include "mcc.h"
-#include "connman.h"
 
 #define OFONO_SERVICE			"org.ofono"
 
@@ -991,7 +990,6 @@ static void create_device(struct modem_data *modem)
 	}
 
 	connman_device_set_powered(modem->device, modem->online);
-
 out:
 	g_free(ident);
 }
@@ -2084,7 +2082,6 @@ static void modem_update_interfaces(struct modem_data *modem,
 static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 				void *user_data)
 {
-	DBG("enter");
 	const char *path = dbus_message_get_path(message);
 	struct modem_data *modem;
 	DBusMessageIter iter, value;
@@ -2110,6 +2107,7 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 
 		dbus_message_iter_get_basic(&value, &powered);
 		modem->powered = powered;
+
 		DBG("%s Powered %d", modem->path, modem->powered);
 
 		if (!modem->powered)
@@ -2119,22 +2117,14 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 
 		dbus_message_iter_get_basic(&value, &online);
 		modem->online = online;
+
 		DBG("%s Online %d", modem->path, modem->online);
 
 		if (!modem->device)
 			return TRUE;
-		
-		gboolean offlinemode = TRUE;
-		
-		if (modem->online)
-			offlinemode = FALSE;
 
 		connman_device_set_powered(modem->device, modem->online);
-		// Ensure that the flight mode status is saved to
-		// file over boot when changed by someone else
-		__connman_technology_set_offlinemode(offlinemode);
 	} else if (g_str_equal(key, "Interfaces")) {
-
 		uint8_t interfaces;
 
 		interfaces = extract_interfaces(&value);

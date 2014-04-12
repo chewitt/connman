@@ -43,9 +43,7 @@ gweb_sources += gweb/giognutls.h gweb/gionotls.c
 endif
 
 shared_sources = src/shared/util.h src/shared/util.c \
-		src/shared/netlink.h src/shared/netlink.c \
-		src/shared/nfacct.h src/shared/nfacct.c \
-		src/shared/nfnetlink_acct_copy.h
+		src/shared/netlink.h src/shared/netlink.c
 
 if DATAFILES
 
@@ -107,7 +105,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
 			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c src/nfacct.c src/ipv6pd.c
+			src/inotify.c src/firewall.c src/ipv6pd.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -347,7 +345,7 @@ test_scripts = test/get-state test/list-services \
 		test/test-counter test/set-ipv4-method test/set-ipv6-method \
 		test/get-services test/get-proxy-autoconfig test/set-proxy \
 		test/enable-tethering test/disable-tethering test/backtrace \
-		test/test-session test/test-supplicant \
+		test/test-session test/p2p-on-supplicant \
 		test/test-new-supplicant test/service-move-before \
 		test/set-global-timeservers test/get-global-timeservers \
 		test/set-nameservers test/set-domains test/set-timeservers \
@@ -375,7 +373,8 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 				doc/vpn-manager-api.txt doc/vpn-overview.txt \
 				doc/session-policy-format.txt
 
-EXTRA_DIST += src/main.conf
+EXTRA_DIST += src/main.conf \
+		src/eduroam.config
 
 MANUAL_PAGES += doc/connman.8 doc/connman.conf.5
 

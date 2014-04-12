@@ -1,15 +1,14 @@
 [Unit]
 Description=Connection service
-Requires=dbus.service
-After=dbus.service
+After=syslog.target
+Before=remote-fs.target
 
 [Service]
-Type=notify
+Type=dbus
+BusName=net.connman
 Restart=on-failure
-EnvironmentFile=-/etc/tracing/connman/connman.tracing
-ExecStart=@prefix@/sbin/connmand -n --systemd $TRACING
+ExecStart=@prefix@/sbin/connmand -n
 StandardOutput=null
-Restart=always
 
 [Install]
 WantedBy=multi-user.target

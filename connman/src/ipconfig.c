@@ -66,14 +66,14 @@ struct connman_ipdevice {
 	unsigned int flags;
 	char *address;
 	uint16_t mtu;
-	uint64_t rx_packets;
-	uint64_t tx_packets;
-	uint64_t rx_bytes;
-	uint64_t tx_bytes;
-	uint64_t rx_errors;
-	uint64_t tx_errors;
-	uint64_t rx_dropped;
-	uint64_t tx_dropped;
+	uint32_t rx_packets;
+	uint32_t tx_packets;
+	uint32_t rx_bytes;
+	uint32_t tx_bytes;
+	uint32_t rx_errors;
+	uint32_t tx_errors;
+	uint32_t rx_dropped;
+	uint32_t tx_dropped;
 
 	GSList *address_list;
 	char *ipv4_gateway;
@@ -474,7 +474,7 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 							unsigned short mtu,
-						struct rtnl_link_stats64 *stats)
+						struct rtnl_link_stats *stats)
 {
 	struct connman_ipdevice *ipdevice;
 	GList *list;
@@ -586,7 +586,7 @@ out:
 	g_free(ifname);
 }
 
-void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats)
+void __connman_ipconfig_dellink(int index, struct rtnl_link_stats *stats)
 {
 	struct connman_ipdevice *ipdevice;
 	GList *list;

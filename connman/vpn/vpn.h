@@ -60,13 +60,13 @@ void __vpn_ipconfig_unref_debug(struct vpn_ipconfig *ipconfig,
 struct vpn_ipconfig *__vpn_ipconfig_create(int index, int family);
 void __vpn_ipconfig_set_index(struct vpn_ipconfig *ipconfig,
 								int index);
-struct rtnl_link_stats64;
+struct rtnl_link_stats;
 
 void __vpn_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
 				unsigned short mtu,
-				struct rtnl_link_stats64 *stats);
-void __vpn_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats);
+				struct rtnl_link_stats *stats);
+void __vpn_ipconfig_dellink(int index, struct rtnl_link_stats *stats);
 int __vpn_ipconfig_init(void);
 void __vpn_ipconfig_cleanup(void);
 

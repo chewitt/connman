@@ -53,6 +53,8 @@ static unsigned int newlink_watch;
 static unsigned int newlink_flags;
 static int newlink_timeout_id;
 
+#define STATUS_URL "http://ipv6.connman.net/online/status.html"
+
 #ifndef IP_DF
 #define IP_DF		0x4000		/* Flag: "Don't Fragment"	*/
 #endif
@@ -315,9 +317,7 @@ static void tun_newlink(unsigned flags, unsigned change, void *user_data)
 		if (getenv("CONNMAN_WEB_DEBUG"))
 			g_web_set_debug(web, web_debug, "6to4");
 
-		const char *url = connman_option_get_string(CONF_STATUS_URL_IPV6);
-
-		web_request_id = g_web_request_get(web, url,
+		web_request_id = g_web_request_get(web, STATUS_URL,
 				web_result, NULL,  NULL);
 
 		newlink_timeout(NULL);

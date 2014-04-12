@@ -529,7 +529,6 @@ bool __connman_technology_get_offlinemode(void)
 
 static void connman_technology_save_offlinemode(void)
 {
-	DBG("enter");
 	GKeyFile *keyfile;
 
 	keyfile = __connman_storage_load_global();
@@ -566,7 +565,6 @@ bool connman_technology_load_offlinemode(void)
 
 	g_key_file_free(keyfile);
 
-	DBG("offlinemode: %i", offlinemode);
 	return offlinemode;
 }
 
@@ -716,7 +714,6 @@ static int technology_affect_devices(struct connman_technology *technology,
 			err = __connman_device_enable(device);
 		else
 			err = __connman_device_disable(device);
-		DBG("tech: %i, err: %i", technology->type, err);
 	}
 
 	return err;
@@ -1338,7 +1335,7 @@ int __connman_technology_add_device(struct connman_device *device)
 
 	__sync_synchronize();
 	if (technology->rfkill_driven) {
-		if (technology->enabled && !global_offlinemode)
+		if (technology->enabled)
 			__connman_device_enable(device);
 		else
 			__connman_device_disable(device);
@@ -1422,7 +1419,6 @@ static void powered_changed(struct connman_technology *technology)
 
 static int technology_enabled(struct connman_technology *technology)
 {
-	DBG("");
 	__sync_synchronize();
 	if (technology->enabled)
 		return -EALREADY;
@@ -1460,7 +1456,6 @@ int __connman_technology_enabled(enum connman_service_type type)
 
 static int technology_disabled(struct connman_technology *technology)
 {
-	DBG("");
 	__sync_synchronize();
 	if (!technology->enabled)
 		return -EALREADY;
@@ -1504,6 +1499,15 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 
 	DBG("offlinemode %s", offlinemode ? "On" : "Off");
 
+	/*
+	 * This is a bit tricky. When you set offlinemode, there is no
+	 * way to differentiate between attempting offline mode and
+	 * resuming offlinemode from last saved profile. We need that
+	 * information in rfkill_update, otherwise it falls back on the
+	 * technology's persistent state. Hence we set the offline mode here
+	 * but save it & call the notifier only if its successful.
+	 */
+
 	global_offlinemode = offlinemode;
 
 	/* Traverse technology list, enable/disable each technology. */
@@ -1526,8 +1530,8 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 
 	if (err == 0 || err == -EINPROGRESS || err == -EALREADY ||
 			(err == -EINVAL && enabled_tech_count == 0)) {
-	connman_technology_save_offlinemode();
-	__connman_notifier_offlinemode(offlinemode);
+		connman_technology_save_offlinemode();
+		__connman_notifier_offlinemode(offlinemode);
 	} else
 		global_offlinemode = connman_technology_load_offlinemode();
 

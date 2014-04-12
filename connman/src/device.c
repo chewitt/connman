@@ -670,7 +670,7 @@ int connman_device_reconnect_service(struct connman_device *device)
 {
 	DBG("device %p", device);
 
-	__connman_service_auto_connect();
+	__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	return 0;
 }
@@ -759,7 +759,7 @@ int connman_device_set_scanning(struct connman_device *device,
 
 	__connman_technology_scan_stopped(device);
 
-	__connman_service_auto_connect();
+	__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	return 0;
 }

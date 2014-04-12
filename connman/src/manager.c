@@ -326,18 +326,6 @@ static DBusMessage *unregister_counter(DBusConnection *conn,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
-static DBusMessage *reset_counters(DBusConnection *conn, DBusMessage *msg, void *data)
-{
-    DBG("conn %p", conn);
-
-    const char *type;
-    dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &type, DBUS_TYPE_INVALID);
-
-    __connman_service_counter_reset_all(type);
-
-    return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
-}
-
 static DBusMessage *create_session(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -421,12 +409,6 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetServices",
 			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
 			get_services) },
-	{ GDBUS_METHOD("GetSavedServices",
-			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
-			get_saved_services) },
-    { GDBUS_METHOD("RemoveSavedService",
-            GDBUS_ARGS({ "identifier", "s" }), NULL,
-            remove_saved_service) },
 	{ GDBUS_DEPRECATED_ASYNC_METHOD("ConnectProvider",
 			      GDBUS_ARGS({ "provider", "a{sv}" }),
 			      GDBUS_ARGS({ "path", "o" }),
@@ -444,9 +426,6 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("UnregisterCounter",
 			GDBUS_ARGS({ "path", "o" }), NULL,
 			unregister_counter) },
-    { GDBUS_METHOD("ResetCounters",
-            GDBUS_ARGS({ "type", "s" }), NULL,
-            reset_counters) },
 	{ GDBUS_ASYNC_METHOD("CreateSession",
 			GDBUS_ARGS({ "settings", "a{sv}" },
 						{ "notifier", "o" }),
@@ -477,8 +456,6 @@ static const GDBusSignalTable manager_signals[] = {
 	{ GDBUS_SIGNAL("ServicesChanged",
 			GDBUS_ARGS({ "changed", "a(oa{sv})" },
 					{ "removed", "ao" })) },
-	{ GDBUS_SIGNAL("SavedServicesChanged",
-			GDBUS_ARGS({ "changed", "a(oa{sv})" })) },
 	{ },
 };
 

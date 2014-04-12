@@ -46,10 +46,6 @@
 #define ARPHDR_PHONET_PIPE (821)
 #endif
 
-#ifndef ARPHRD_RAWIP
-#define ARPHRD_RAWIP (530)
-#endif
-
 #define print(arg...) do { if (0) connman_info(arg); } while (0)
 //#define print(arg...) connman_info(arg)
 
@@ -364,7 +360,7 @@ static const char *operstate2str(unsigned char operstate)
 static bool extract_link(struct ifinfomsg *msg, int bytes,
 				struct ether_addr *address, const char **ifname,
 				unsigned int *mtu, unsigned char *operstate,
-				struct rtnl_link_stats64 *stats)
+				struct rtnl_link_stats *stats)
 {
 	struct rtattr *attr;
 
@@ -383,10 +379,10 @@ static bool extract_link(struct ifinfomsg *msg, int bytes,
 			if (mtu)
 				*mtu = *((unsigned int *) RTA_DATA(attr));
 			break;
-		case IFLA_STATS64:
+		case IFLA_STATS:
 			if (stats)
 				memcpy(stats, RTA_DATA(attr),
-					sizeof(struct rtnl_link_stats64));
+					sizeof(struct rtnl_link_stats));
 			break;
 		case IFLA_OPERSTATE:
 			if (operstate)
@@ -407,7 +403,7 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 {
 	struct ether_addr address = {{ 0, 0, 0, 0, 0, 0 }};
 	struct ether_addr compare = {{ 0, 0, 0, 0, 0, 0 }};
-	struct rtnl_link_stats64 stats;
+	struct rtnl_link_stats stats;
 	unsigned char operstate = 0xff;
 	struct interface_data *interface;
 	const char *ifname = NULL;
@@ -440,7 +436,6 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	case ARPHRD_LOOPBACK:
 	case ARPHDR_PHONET_PIPE:
 	case ARPHRD_PPP:
-	case ARPHRD_RAWIP:
 	case ARPHRD_NONE:
 		__connman_ipconfig_newlink(index, type, flags,
 							str, mtu, &stats);
@@ -501,7 +496,7 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 static void process_dellink(unsigned short type, int index, unsigned flags,
 			unsigned change, struct ifinfomsg *msg, int bytes)
 {
-	struct rtnl_link_stats64 stats;
+	struct rtnl_link_stats stats;
 	unsigned char operstate = 0xff;
 	const char *ifname = NULL;
 	GSList *list;
@@ -904,8 +899,8 @@ static void rtnl_link(struct nlmsghdr *hdr)
 		case IFLA_QDISC:
 			print_attr(attr, "qdisc");
 			break;
-		case IFLA_STATS64:
-			print_attr(attr, "stats64");
+		case IFLA_STATS:
+			print_attr(attr, "stats");
 			break;
 		case IFLA_COST:
 			print_attr(attr, "cost");
