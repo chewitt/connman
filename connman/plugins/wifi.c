@@ -48,6 +48,7 @@
 #include <connman/rtnl.h>
 #include <connman/technology.h>
 #include <connman/service.h>
+#include <connman/peer.h>
 #include <connman/log.h>
 #include <connman/option.h>
 #include <connman/storage.h>
@@ -63,7 +64,10 @@
 #define BGSCAN_DEFAULT "simple:30:-45:300"
 #define AUTOSCAN_DEFAULT "exponential:3:300"
 
+#define P2P_FIND_TIMEOUT 30
+
 static struct connman_technology *wifi_technology = NULL;
+static struct connman_technology *p2p_technology = NULL;
 
 struct hidden_params {
 	char ssid[32];
@@ -112,11 +116,31 @@ struct wifi_data {
 	struct autoscan_params *autoscan;
 
 	GSupplicantScanParams *scan_params;
+	unsigned int p2p_find_timeout;
 };
 
 static GList *iface_list = NULL;
 
 static void start_autoscan(struct connman_device *device);
+
+static int p2p_tech_probe(struct connman_technology *technology)
+{
+	p2p_technology = technology;
+
+	return 0;
+}
+
+static void p2p_tech_remove(struct connman_technology *technology)
+{
+	p2p_technology = NULL;
+}
+
+static struct connman_technology_driver p2p_tech_driver = {
+	.name		= "p2p",
+	.type		= CONNMAN_SERVICE_TYPE_P2P,
+	.probe		= p2p_tech_probe,
+	.remove		= p2p_tech_remove,
+};
 
 static void handle_tethering(struct wifi_data *wifi)
 {
@@ -240,7 +264,24 @@ static void stop_autoscan(struct connman_device *device)
 
 	reset_autoscan(device);
 
-	connman_device_set_scanning(device, false);
+	connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_WIFI, false);
+}
+
+static void check_p2p_technology(void)
+{
+	bool p2p_exists = false;
+	GList *list;
+
+	for (list = iface_list; list; list = list->next) {
+		struct wifi_data *w = list->data;
+
+		if (w->interface &&
+				g_supplicant_interface_has_p2p(w->interface))
+			p2p_exists = true;
+	}
+
+	if (!p2p_exists)
+		connman_technology_driver_unregister(&p2p_tech_driver);
 }
 
 static void wifi_remove(struct connman_device *device)
@@ -253,6 +294,13 @@ static void wifi_remove(struct connman_device *device)
 		return;
 
 	iface_list = g_list_remove(iface_list, wifi);
+
+	check_p2p_technology();
+
+	if (wifi->p2p_find_timeout) {
+		g_source_remove(wifi->p2p_find_timeout);
+		connman_device_unref(wifi->device);
+	}
 
 	remove_networks(device, wifi);
 
@@ -569,9 +617,10 @@ static int throw_wifi_scan(struct connman_device *device,
 
 	ret = g_supplicant_interface_scan(wifi->interface, NULL,
 						callback, device);
-	if (ret == 0)
-		connman_device_set_scanning(device, true);
-	else
+	if (ret == 0) {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, true);
+	} else
 		connman_device_unref(device);
 
 	return ret;
@@ -637,8 +686,10 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 
 	scanning = connman_device_get_scanning(device);
 
-	if (scanning)
-		connman_device_set_scanning(device, false);
+	if (scanning) {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, false);
+	}
 
 	if (result != -ENOLINK)
 		start_autoscan(device);
@@ -887,9 +938,16 @@ static int wifi_disable(struct connman_device *device)
 
 	stop_autoscan(device);
 
+	if (wifi->p2p_find_timeout) {
+		g_source_remove(wifi->p2p_find_timeout);
+		wifi->p2p_find_timeout = 0;
+		connman_device_unref(wifi->device);
+	}
+
 	/* In case of a user scan, device is still referenced */
 	if (connman_device_get_scanning(device)) {
-		connman_device_set_scanning(device, false);
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, false);
 		connman_device_unref(wifi->device);
 	}
 
@@ -1041,14 +1099,86 @@ static int wifi_scan_simple(struct connman_device *device)
 	return throw_wifi_scan(device, scan_callback_hidden);
 }
 
+static gboolean p2p_find_stop(gpointer data)
+{
+	struct connman_device *device = data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+
+	DBG("");
+
+	wifi->p2p_find_timeout = 0;
+
+	connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_P2P, false);
+
+	g_supplicant_interface_p2p_stop_find(wifi->interface);
+
+	connman_device_unref(device);
+	reset_autoscan(device);
+
+	return FALSE;
+}
+
+static void p2p_find_callback(int result, GSupplicantInterface *interface,
+							void *user_data)
+{
+	struct connman_device *device = user_data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+
+	DBG("result %d wifi %p", result, wifi);
+
+	if (wifi->p2p_find_timeout) {
+		g_source_remove(wifi->p2p_find_timeout);
+		wifi->p2p_find_timeout = 0;
+	}
+
+	if (result)
+		goto error;
+
+	wifi->p2p_find_timeout = g_timeout_add_seconds(P2P_FIND_TIMEOUT,
+							p2p_find_stop, device);
+	if (!wifi->p2p_find_timeout)
+		goto error;
+
+	return;
+error:
+	p2p_find_stop(device);
+}
+
+static int p2p_find(struct connman_device *device)
+{
+	struct wifi_data *wifi = connman_device_get_data(device);
+	int ret;
+
+	DBG("");
+
+	if (!p2p_technology)
+		return -ENOTSUP;
+
+	reset_autoscan(device);
+	connman_device_ref(device);
+
+	ret = g_supplicant_interface_p2p_find(wifi->interface,
+						p2p_find_callback, device);
+	if (ret) {
+		connman_device_unref(device);
+		start_autoscan(device);
+	} else {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_P2P, true);
+	}
+
+	return ret;
+}
+
 /*
  * Note that the hidden scan is only used when connecting to this specific
  * hidden AP first time. It is not used when system autoconnects to hidden AP.
  */
-static int wifi_scan(struct connman_device *device,
-		const char *ssid, unsigned int ssid_len,
-		const char *identity, const char* passphrase,
-		const char *security, void *user_data)
+static int wifi_scan(enum connman_service_type type,
+			struct connman_device *device,
+			const char *ssid, unsigned int ssid_len,
+			const char *identity, const char* passphrase,
+			const char *security, void *user_data)
 {
 	struct wifi_data *wifi = connman_device_get_data(device);
 	GSupplicantScanParams *scan_params = NULL;
@@ -1061,6 +1191,9 @@ static int wifi_scan(struct connman_device *device,
 
 	if (!wifi)
 		return -ENODEV;
+
+	if (type == CONNMAN_SERVICE_TYPE_P2P)
+		return p2p_find(device);
 
 	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface, ssid);
 
@@ -1145,9 +1278,10 @@ static int wifi_scan(struct connman_device *device,
 
 	ret = g_supplicant_interface_scan(wifi->interface, scan_params,
 						scan_callback, device);
-	if (ret == 0)
-		connman_device_set_scanning(device, true);
-	else {
+	if (ret == 0) {
+		connman_device_set_scanning(device,
+				CONNMAN_SERVICE_TYPE_WIFI, true);
+	} else {
 		g_supplicant_free_scan_params(scan_params);
 		connman_device_unref(device);
 
@@ -1743,6 +1877,16 @@ static void interface_removed(GSupplicantInterface *interface)
 
 	wifi->interface = NULL;
 	connman_device_set_powered(wifi->device, false);
+
+	check_p2p_technology();
+}
+
+static void p2p_support(GSupplicantInterface *interface)
+{
+	DBG("");
+
+	if (g_supplicant_interface_has_p2p(interface))
+		connman_technology_driver_register(&p2p_tech_driver);
 }
 
 static void scan_started(GSupplicantInterface *interface)
@@ -1918,6 +2062,40 @@ static void network_changed(GSupplicantNetwork *network, const char *property)
 	}
 }
 
+static void peer_found(GSupplicantPeer *peer)
+{
+	struct connman_peer *connman_peer;
+	const char *identifier, *name;
+
+	identifier = g_supplicant_peer_get_identifier(peer);
+	name = g_supplicant_peer_get_name(peer);
+
+	DBG("ident: %s", identifier);
+
+	connman_peer = connman_peer_get(identifier);
+	if (connman_peer)
+		return;
+
+	connman_peer = connman_peer_create(identifier);
+	connman_peer_set_name(connman_peer, name);
+
+	connman_peer_register(connman_peer);
+}
+
+static void peer_lost(GSupplicantPeer *peer)
+{
+	struct connman_peer *connman_peer;
+	const char *identifier;
+
+	identifier = g_supplicant_peer_get_identifier(peer);
+
+	DBG("ident: %s", identifier);
+
+	connman_peer = connman_peer_get(identifier);
+	if (connman_peer)
+		connman_peer_unregister(connman_peer);
+}
+
 static void debug(const char *str)
 {
 	if (getenv("CONNMAN_SUPPLICANT_DEBUG"))
@@ -1930,11 +2108,14 @@ static const GSupplicantCallbacks callbacks = {
 	.interface_added	= interface_added,
 	.interface_state	= interface_state,
 	.interface_removed	= interface_removed,
+	.p2p_support		= p2p_support,
 	.scan_started		= scan_started,
 	.scan_finished		= scan_finished,
 	.network_added		= network_added,
 	.network_removed	= network_removed,
 	.network_changed	= network_changed,
+	.peer_found		= peer_found,
+	.peer_lost		= peer_lost,
 	.debug			= debug,
 };
 

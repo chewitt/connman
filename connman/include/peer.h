@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2014  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,35 +19,27 @@
  *
  */
 
-#ifndef __CONNMAN_PROVISION_H
-#define __CONNMAN_PROVISION_H
-
-#include <stdbool.h>
+#ifndef __CONNMAN_PEER_H
+#define __CONNMAN_PEER_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * SECTION:provision
- * @title: Provisioned configuration premitives
- * @short_description: Functions for provision configuration handling
- */
+struct connman_peer;
 
-struct connman_config_entry {
-	char *ident;
-	char *name;
-	void *ssid;
-	unsigned int ssid_len;
-	bool hidden;
-};
+struct connman_peer *connman_peer_create(const char *identifier);
+void connman_peer_destroy(struct connman_peer *peer);
 
-int connman_config_provision_mutable_service(GKeyFile *keyfile);
-struct connman_config_entry **connman_config_get_entries(const char *type);
-void connman_config_free_entries(struct connman_config_entry **entries);
+void connman_peer_set_name(struct connman_peer *peer, const char *name);
+
+int connman_peer_register(struct connman_peer *peer);
+void connman_peer_unregister(struct connman_peer *peer);
+
+struct connman_peer *connman_peer_get(const char *identifier);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __CONNMAN_PROVISION_H */
+#endif /* __CONNMAN_PEER_H */

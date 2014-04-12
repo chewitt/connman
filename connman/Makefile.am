@@ -11,7 +11,7 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/device.h include/network.h include/inet.h \
 			include/storage.h include/provision.h \
 			include/session.h include/ipaddress.h include/agent.h \
-			include/inotify.h
+			include/inotify.h include/peer.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -105,7 +105,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
 			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c src/ipv6pd.c
+			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -153,6 +153,7 @@ endif
 CLEANFILES = src/connman.conf $(BUILT_SOURCES)
 
 statedir = $(localstatedir)/run/connman
+vpn_statedir = $(localstatedir)/run/connman-vpn
 
 if VPN
 vpn_plugindir = $(libdir)/connman/plugins-vpn
@@ -185,6 +186,7 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
+				-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DSTORAGEDIR=\""$(storagedir)\"" \
@@ -215,7 +217,7 @@ if VPN
 vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
 				$(builtin_vpn_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
-				-DSTATEDIR=\""$(statedir)"\" \
+				-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-DPLUGINDIR=\""$(build_vpn_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DSTORAGEDIR=\""$(storagedir)\"" \
@@ -243,6 +245,7 @@ client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/commands.h client/commands.c \
 			client/input.h client/input.c \
 			client/agent.h client/agent.c \
+			client/peers.h client/peers.c \
 			client/vpnconnections.h client/vpnconnections.c \
 			client/main.c
 
