@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -520,6 +520,8 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 	switch (type) {
 	case ARPHRD_ETHER:
 	case ARPHRD_LOOPBACK:
+	case ARPHDR_PHONET_PIPE:
+	case ARPHRD_PPP:
 	case ARPHRD_NONE:
 		__connman_ipconfig_dellink(index, &stats);
 		break;

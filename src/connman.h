@@ -28,7 +28,9 @@
 #include <connman/dbus.h>
 
 dbus_bool_t __connman_dbus_append_objpath_dict_array(DBusMessage *msg,
-		connman_dbus_append_cb_t function, void *user_data);
+			connman_dbus_append_cb_t function, void *user_data);
+dbus_bool_t __connman_dbus_append_objpath_array(DBusMessage *msg,
+			connman_dbus_append_cb_t function, void *user_data);
 int __connman_dbus_init(DBusConnection *conn);
 void __connman_dbus_cleanup(void);
 
@@ -513,7 +515,8 @@ int __connman_technology_remove_rfkill(unsigned int index,
 					enum connman_service_type type);
 
 void __connman_technology_scan_started(struct connman_device *device);
-void __connman_technology_scan_stopped(struct connman_device *device);
+void __connman_technology_scan_stopped(struct connman_device *device,
+					enum connman_service_type type);
 void __connman_technology_add_interface(enum connman_service_type type,
 				int index, const char *ident);
 void __connman_technology_remove_interface(enum connman_service_type type,
@@ -769,6 +772,13 @@ void __connman_service_notify(struct connman_service *service,
 
 int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
+
+#include <connman/peer.h>
+
+int __connman_peer_init(void);
+void __connman_peer_cleanup(void);
+
+void __connman_peer_list_struct(DBusMessageIter *array);
 
 #include <connman/session.h>
 

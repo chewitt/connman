@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -152,6 +152,7 @@ void __connman_notifier_connect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	}
 
@@ -198,6 +199,7 @@ void __connman_notifier_disconnect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	}
 

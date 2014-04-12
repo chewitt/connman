@@ -2,8 +2,8 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
- *  Copyright (C) 2011  BWM CarIT GmbH. All rights reserved.
+ *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2011-2014  BWM CarIT GmbH. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -188,6 +188,7 @@ static char *service2bearer(enum connman_service_type type)
 		return "vpn";
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_P2P:
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
 		return "";
 	}
@@ -416,6 +417,17 @@ static void free_session(struct connman_session *session)
 	g_free(session);
 }
 
+static void set_active_session(struct connman_session *session, bool enable)
+{
+
+	if (policy && policy->session_changed)
+		policy->session_changed(session, enable,
+					session->info->config.allowed_bearers);
+
+	__connman_service_set_active_session(enable,
+				session->info->config.allowed_bearers);
+}
+
 static void cleanup_session(gpointer user_data)
 {
 	struct connman_session *session = user_data;
@@ -426,8 +438,7 @@ static void cleanup_session(gpointer user_data)
 	cleanup_firewall_session(session);
 
 	if (session->active)
-		__connman_service_set_active_session(false,
-				session->info->config.allowed_bearers);
+		set_active_session(session, false);
 
 	session_deactivate(session);
 	update_session_state(session);
@@ -897,8 +908,7 @@ int connman_session_config_update(struct connman_session *session)
 		&allowed_bearers);
 
 	if (session->active)
-		__connman_service_set_active_session(false,
-				session->info->config.allowed_bearers);
+		set_active_session(session, false);
 
 	session->active = false;
 	session_deactivate(session);
@@ -941,9 +951,10 @@ static DBusMessage *connect_session(DBusConnection *conn,
 
 	if (!session->active) {
 		session->active = true;
-		__connman_service_set_active_session(true,
-				session->info->config.allowed_bearers);
+		set_active_session(session, true);
 	}
+
+	session_activate(session);
 
 	__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_SESSION);
 
@@ -966,8 +977,7 @@ static DBusMessage *disconnect_session(DBusConnection *conn,
 
 	if (session->active) {
 		session->active = false;
-		__connman_service_set_active_session(false,
-				session->info->config.allowed_bearers);
+		set_active_session(session, false);
 	}
 
 	session_deactivate(session);
@@ -1010,8 +1020,7 @@ static DBusMessage *change_session(DBusConnection *conn,
 				return __connman_error_failed(msg, -err);
 
 			if (session->active)
-				__connman_service_set_active_session(false,
-					session->info->config.allowed_bearers);
+				set_active_session(session, false);
 
 			session->active = false;
 			session_deactivate(session);
@@ -1423,6 +1432,21 @@ int __connman_session_destroy(DBusMessage *msg)
 	return 0;
 }
 
+int connman_session_connect(struct connman_service *service)
+{
+	DBG("service %p name %s", service, __connman_service_get_name(service));
+
+	return __connman_service_connect(service,
+				CONNMAN_SERVICE_CONNECT_REASON_SESSION);
+}
+
+int connman_session_disconnect(struct connman_service *service)
+{
+	DBG("service %p", service);
+
+	return __connman_service_disconnect(service);
+}
+
 static enum connman_session_state service_to_session_state(
 					enum connman_service_state state)
 {
@@ -1467,6 +1491,9 @@ static bool session_match_service(struct connman_session *session,
 	enum connman_service_type bearer_type;
 	enum connman_service_type service_type;
 	GSList *list;
+
+	if (policy && policy->allowed)
+		return policy->allowed(session, service);
 
 	for (list = session->info->config.allowed_bearers; list; list = list->next) {
 		bearer_type = GPOINTER_TO_INT(list->data);

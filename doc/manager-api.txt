@@ -44,7 +44,7 @@ Methods		dict GetProperties()
 			Returns a sorted list of tuples with peer object path
 			and dictionary of peer properties
 
-			Possible Errors: [peer].Error.InvalidArguments
+			Possible Errors: [service].Error.InvalidArguments
 
 		object ConnectProvider(dict provider)	[deprecated]
 
@@ -193,7 +193,7 @@ Signals		TechnologyAdded(object path, dict properties)
 			required to watch the PropertyChanged signal of
 			the service object.
 
-		PeersChanged(array{object, dict}) [experimental]
+		PeersChanged(array{object, dict}, array{object}) [experimental]
 
 			Signals a list of peers that have been changed via the
 			first array. And a list of peer that have been removed
