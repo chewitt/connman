@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -182,12 +182,14 @@ static void unregister_service(gpointer data)
 			__connman_service_remove(service);
 
 			/*
-			 * Ethernet service cannot be removed by
+			 * Ethernet or gadget service cannot be removed by
 			 * __connman_service_remove() so reset the ipconfig
 			 * here.
 			 */
 			if (connman_service_get_type(service) ==
-						CONNMAN_SERVICE_TYPE_ETHERNET) {
+						CONNMAN_SERVICE_TYPE_ETHERNET ||
+					connman_service_get_type(service) ==
+						CONNMAN_SERVICE_TYPE_GADGET) {
 				__connman_service_disconnect(service);
 				__connman_service_reset_ipconfig(service,
 					CONNMAN_IPCONFIG_TYPE_IPV4, NULL, NULL);
@@ -1044,7 +1046,8 @@ static gboolean remove_virtual_config(gpointer user_data)
 {
 	struct connect_virtual *virtual = user_data;
 
-	__connman_service_connect(virtual->service);
+	__connman_service_connect(virtual->service,
+				CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	g_hash_table_remove(config_table, virtual->vfile);
 
 	g_free(virtual);
@@ -1070,6 +1073,10 @@ static void provision_service(gpointer key, gpointer value,
 
 	if (type == CONNMAN_SERVICE_TYPE_ETHERNET &&
 				g_strcmp0(config->type, "ethernet") != 0)
+		return;
+
+	if (type == CONNMAN_SERVICE_TYPE_GADGET &&
+				g_strcmp0(config->type, "gadget") != 0)
 		return;
 
 	DBG("service %p ident %s", service,
@@ -1241,7 +1248,8 @@ static void provision_service(gpointer key, gpointer value,
 		provision_service_wifi(key, config, service, network,
 							ssid, ssid_len);
 	} else
-		__connman_service_connect(service);
+		__connman_service_connect(service,
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	__connman_service_mark_dirty();
 
@@ -1256,7 +1264,7 @@ static void provision_service(gpointer key, gpointer value,
 
 		g_timeout_add(0, remove_virtual_config, virtual);
 	} else
-		__connman_service_auto_connect();
+		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 }
 
 int __connman_config_provision_service(struct connman_service *service)
@@ -1265,13 +1273,14 @@ int __connman_config_provision_service(struct connman_service *service)
 	GHashTableIter iter;
 	gpointer value, key;
 
-	/* For now only WiFi and Ethernet services are supported */
+	/* For now only WiFi, Gadget and Ethernet services are supported */
 	type = connman_service_get_type(service);
 
 	DBG("service %p type %d", service, type);
 
 	if (type != CONNMAN_SERVICE_TYPE_WIFI &&
-					type != CONNMAN_SERVICE_TYPE_ETHERNET)
+			type != CONNMAN_SERVICE_TYPE_ETHERNET &&
+			type != CONNMAN_SERVICE_TYPE_GADGET)
 		return -ENOSYS;
 
 	g_hash_table_iter_init(&iter, config_table);
@@ -1293,13 +1302,14 @@ int __connman_config_provision_service_ident(struct connman_service *service,
 	struct connman_config *config;
 	int ret = 0;
 
-	/* For now only WiFi and Ethernet services are supported */
+	/* For now only WiFi, Gadget and Ethernet services are supported */
 	type = connman_service_get_type(service);
 
 	DBG("service %p type %d", service, type);
 
 	if (type != CONNMAN_SERVICE_TYPE_WIFI &&
-					type != CONNMAN_SERVICE_TYPE_ETHERNET)
+			type != CONNMAN_SERVICE_TYPE_ETHERNET &&
+			type != CONNMAN_SERVICE_TYPE_GADGET)
 		return -ENOSYS;
 
 	config = g_hash_table_lookup(config_table, ident);

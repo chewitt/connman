@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -28,10 +28,10 @@
 #include <string.h>
 
 #include <gdbus.h>
-#include "connman.h"
 #include <connman/agent.h>
 #include <connman/setting.h>
 
+#include "connman.h"
 
 #define agent_ref(agent) \
 	agent_ref_debug(agent, __FILE__, __LINE__, __func__)
@@ -181,7 +181,6 @@ static void agent_receive_message(DBusPendingCall *call, void *user_data)
 	DBG("agent %p req %p", agent, agent->pending);
 
 	reply = dbus_pending_call_steal_reply(call);
-
 	dbus_pending_call_unref(call);
 	agent->pending->call = NULL;
 
@@ -218,7 +217,7 @@ int connman_agent_queue_message(void *user_context,
 	struct connman_agent *agent = agent_data;
 	int err;
 
-	if (!callback)
+	if (!user_context || !callback)
 		return -EBADMSG;
 
 	queue_data = g_new0(struct connman_agent_request, 1);
@@ -228,10 +227,10 @@ int connman_agent_queue_message(void *user_context,
 	driver = get_driver();
 	DBG("driver %p", driver);
 
-	if (user_context && driver && driver->context_ref) {
+	if (driver && driver->context_ref) {
 		queue_data->user_context = driver->context_ref(user_context);
 		queue_data->driver = driver;
-      } else {
+	} else {
 		queue_data->user_context = user_context;
       }
 
@@ -302,8 +301,6 @@ static struct connman_agent *agent_create(const char *name, const char *path)
 
 	agent->owner = g_strdup(name);
 	agent->path = g_strdup(path);
-
-//    setTryit(0);
 
 	agent->watch = g_dbus_add_disconnect_watch(connection,
 							name, agent_disconnect,

@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *  Copyright (C) 2010 Nokia Corporation and/or its subsidiary(-ies).
  *  Copyright (C) 2011  BWM Car IT GmbH. All rights reserved.
  *
@@ -42,7 +42,6 @@
 #include <connman/technology.h>
 
 #include "mcc.h"
-#include "connman.h"
 
 #define OFONO_SERVICE			"org.ofono"
 
@@ -267,7 +266,9 @@ static void set_connected(struct modem_data *modem)
 
 	index = modem->context->index;
 
-	if (index < 0 || !modem->context->ipv4_address) {
+	method = modem->context->ipv4_method;
+	if (index < 0 || (!modem->context->ipv4_address &&
+				method == CONNMAN_IPCONFIG_METHOD_FIXED)) {
 		connman_error("Invalid index and/or address");
 		return;
 	}
@@ -276,7 +277,6 @@ static void set_connected(struct modem_data *modem)
 	if (!service)
 		return;
 
-	method = modem->context->ipv4_method;
 	if (method == CONNMAN_IPCONFIG_METHOD_FIXED ||
 			method == CONNMAN_IPCONFIG_METHOD_DHCP)	{
 		connman_service_create_ip4config(service, index);
@@ -783,12 +783,11 @@ static void extract_ipv4_settings(DBusMessageIter *array,
 
 			DBG("Method %s", val);
 
-			if (g_strcmp0(val, "static") == 0) {
+			if (g_strcmp0(val, "static") == 0)
 				context->ipv4_method = CONNMAN_IPCONFIG_METHOD_FIXED;
-			} else if (g_strcmp0(val, "dhcp") == 0) {
+			else if (g_strcmp0(val, "dhcp") == 0)
 				context->ipv4_method = CONNMAN_IPCONFIG_METHOD_DHCP;
-				break;
-			}
+
 		} else if (g_str_equal(key, "Address")) {
 			dbus_message_iter_get_basic(&value, &val);
 
@@ -819,17 +818,21 @@ static void extract_ipv4_settings(DBusMessageIter *array,
 	if (index < 0)
 		goto out;
 
+	context->index = index;
+
 	if (context->ipv4_method != CONNMAN_IPCONFIG_METHOD_FIXED)
 		goto out;
 
 	context->ipv4_address = connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV4);
-	if (!context->ipv4_address)
+	if (!context->ipv4_address) {
+		context->index = -1;
 		goto out;
+	}
 
-	context->index = index;
 	connman_ipaddress_set_ipv4(context->ipv4_address, address,
 				netmask, gateway);
 
+	g_free(context->ipv4_nameservers);
 	context->ipv4_nameservers = nameservers;
 
 out:
@@ -913,6 +916,7 @@ static void extract_ipv6_settings(DBusMessageIter *array,
 	connman_ipaddress_set_ipv6(context->ipv6_address, address,
 				prefix_length, gateway);
 
+	g_free(context->ipv6_nameservers);
 	context->ipv6_nameservers = nameservers;
 
 out:
@@ -991,7 +995,6 @@ static void create_device(struct modem_data *modem)
 	}
 
 	connman_device_set_powered(modem->device, modem->online);
-
 out:
 	g_free(ident);
 }
@@ -2084,7 +2087,6 @@ static void modem_update_interfaces(struct modem_data *modem,
 static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 				void *user_data)
 {
-	DBG("enter");
 	const char *path = dbus_message_get_path(message);
 	struct modem_data *modem;
 	DBusMessageIter iter, value;
@@ -2110,6 +2112,7 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 
 		dbus_message_iter_get_basic(&value, &powered);
 		modem->powered = powered;
+
 		DBG("%s Powered %d", modem->path, modem->powered);
 
 		if (!modem->powered)
@@ -2119,22 +2122,14 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 
 		dbus_message_iter_get_basic(&value, &online);
 		modem->online = online;
+
 		DBG("%s Online %d", modem->path, modem->online);
 
 		if (!modem->device)
 			return TRUE;
-		
-		gboolean offlinemode = TRUE;
-		
-		if (modem->online)
-			offlinemode = FALSE;
 
 		connman_device_set_powered(modem->device, modem->online);
-		// Ensure that the flight mode status is saved to
-		// file over boot when changed by someone else
-		__connman_technology_set_offlinemode(offlinemode);
 	} else if (g_str_equal(key, "Interfaces")) {
-
 		uint8_t interfaces;
 
 		interfaces = extract_interfaces(&value);

@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -36,9 +36,6 @@
 #include <netdb.h>
 
 #include <gdbus.h>
-#ifdef SYSTEMD
-#include <systemd/sd-daemon.h>
-#endif
 
 #include "connman.h"
 
@@ -59,6 +56,7 @@ static char *default_blacklist[] = {
 	"vmnet",
 	"vboxnet",
 	"virbr",
+	"ifb",
 	NULL
 };
 
@@ -349,6 +347,7 @@ static void parse_config(GKeyFile *config)
 			CONF_SINGLE_TECH, &error);
 	if (!error)
 		connman_settings.single_tech = boolean;
+
 	g_clear_error(&error);
 
 	tethering = __connman_config_get_string_list(config, "General",
@@ -488,9 +487,6 @@ static gchar *option_wifi = NULL;
 static gboolean option_detach = TRUE;
 static gboolean option_dnsproxy = TRUE;
 static gboolean option_backtrace = TRUE;
-#ifdef SYSTEMD
-static gboolean option_systemd = FALSE;
-#endif
 static gboolean option_version = FALSE;
 
 static bool parse_debug(const char *key, const char *value,
@@ -530,29 +526,19 @@ static GOptionEntry options[] = {
 	{ "nobacktrace", 0, G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_backtrace,
 				"Don't print out backtrace information" },
-#ifdef SYSTEMD
-	{ "systemd", 0, G_OPTION_FLAG_OPTIONAL_ARG,
-				G_OPTION_ARG_NONE, &option_systemd,
-				"Notify systemd when started"},
-#endif
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
 				"Show version information and exit" },
 	{ NULL },
 };
 
 const char *connman_option_get_string(const char *key)
-{	
+{
 	if (g_strcmp0(key, "wifi") == 0) {
 		if (!option_wifi)
 			return "nl80211,wext";
 		else
 			return option_wifi;
 	}
-	if (g_str_equal(key, CONF_STATUS_URL_IPV4) == TRUE) {
-		return connman_settings.ipv4_status_url;
-	}
-	if (g_str_equal(key, CONF_STATUS_URL_IPV6) == TRUE)
-		return connman_settings.ipv6_status_url;
 
 	return NULL;
 }
@@ -646,12 +632,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (mkdir(STATEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
-				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
-		if (errno != EEXIST)
-			perror("Failed to create state directory");
-	}
-
 	if (mkdir(STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
 				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
 		if (errno != EEXIST)
@@ -693,6 +673,7 @@ int main(int argc, char *argv[])
 	__connman_notifier_init();
 	__connman_agent_init();
 	__connman_service_init();
+	__connman_peer_init();
 	__connman_provider_init();
 	__connman_network_init();
 	__connman_config_init();
@@ -733,12 +714,6 @@ int main(int argc, char *argv[])
 	g_free(option_nodevice);
 	g_free(option_noplugin);
 
-#ifdef SYSTEMD
-	/* Tell systemd that we have started up */
-	if( option_systemd )
-		sd_notify(0, "READY=1");
-#endif
-
 	g_main_loop_run(main_loop);
 
 	g_source_remove(signal);
@@ -747,7 +722,6 @@ int main(int argc, char *argv[])
 	__connman_wispr_cleanup();
 	__connman_wpad_cleanup();
 	__connman_dhcpv6_cleanup();
-	__connman_dhcp_cleanup();
 	__connman_session_cleanup();
 	__connman_plugin_cleanup();
 	__connman_provider_cleanup();
@@ -767,12 +741,13 @@ int main(int argc, char *argv[])
 	__connman_tethering_cleanup();
 	__connman_nat_cleanup();
 	__connman_firewall_cleanup();
-	__connman_nfacct_cleanup();
 	__connman_iptables_cleanup();
 	__connman_ippool_cleanup();
 	__connman_device_cleanup();
 	__connman_network_cleanup();
+	__connman_dhcp_cleanup();
 	__connman_service_cleanup();
+	__connman_peer_cleanup();
 	__connman_agent_cleanup();
 	__connman_ipconfig_cleanup();
 	__connman_notifier_cleanup();

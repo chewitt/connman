@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -44,10 +44,6 @@
 
 #ifndef ARPHDR_PHONET_PIPE
 #define ARPHDR_PHONET_PIPE (821)
-#endif
-
-#ifndef ARPHRD_RAWIP
-#define ARPHRD_RAWIP (530)
 #endif
 
 #define print(arg...) do { if (0) connman_info(arg); } while (0)
@@ -383,7 +379,7 @@ static bool extract_link(struct ifinfomsg *msg, int bytes,
 			if (mtu)
 				*mtu = *((unsigned int *) RTA_DATA(attr));
 			break;
-		case IFLA_STATS64:
+		case IFLA_STATS:
 			if (stats)
 				memcpy(stats, RTA_DATA(attr),
 					sizeof(struct rtnl_link_stats64));
@@ -440,7 +436,6 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	case ARPHRD_LOOPBACK:
 	case ARPHDR_PHONET_PIPE:
 	case ARPHRD_PPP:
-	case ARPHRD_RAWIP:
 	case ARPHRD_NONE:
 		__connman_ipconfig_newlink(index, type, flags,
 							str, mtu, &stats);
@@ -525,6 +520,8 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 	switch (type) {
 	case ARPHRD_ETHER:
 	case ARPHRD_LOOPBACK:
+	case ARPHDR_PHONET_PIPE:
+	case ARPHRD_PPP:
 	case ARPHRD_NONE:
 		__connman_ipconfig_dellink(index, &stats);
 		break;
@@ -904,8 +901,8 @@ static void rtnl_link(struct nlmsghdr *hdr)
 		case IFLA_QDISC:
 			print_attr(attr, "qdisc");
 			break;
-		case IFLA_STATS64:
-			print_attr(attr, "stats64");
+		case IFLA_STATS:
+			print_attr(attr, "stats");
 			break;
 		case IFLA_COST:
 			print_attr(attr, "cost");

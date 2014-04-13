@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -50,8 +50,8 @@ void connman_info(const char *format, ...)
 	va_list ap;
 
 	va_start(ap, format);
-	vprintf(format, ap);
-	//vsyslog(LOG_INFO, format, ap);
+
+	vsyslog(LOG_INFO, format, ap);
 
 	va_end(ap);
 }
