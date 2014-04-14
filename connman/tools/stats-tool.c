@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -50,14 +51,14 @@
 #define MAGIC 0xFA00B916
 
 struct connman_stats_data {
-	unsigned int rx_packets;
-	unsigned int tx_packets;
-	unsigned int rx_bytes;
-	unsigned int tx_bytes;
-	unsigned int rx_errors;
-	unsigned int tx_errors;
-	unsigned int rx_dropped;
-	unsigned int tx_dropped;
+	uint64_t rx_packets;
+	uint64_t tx_packets;
+	uint64_t rx_bytes;
+	uint64_t tx_bytes;
+	uint64_t rx_errors;
+	uint64_t tx_errors;
+	uint64_t rx_dropped;
+	uint64_t tx_dropped;
 	unsigned int time;
 };
 
@@ -220,7 +221,7 @@ static void stats_print_record(struct stats_record *rec)
 	char buffer[30];
 
 	strftime(buffer, 30, "%d-%m-%Y %T", localtime(&rec->ts));
-	printf("%p %lld %s %01d %d %d %d %d %d %d %d %d %d\n",
+	printf("%p %lld %s %01d %llu %llu %llu %llu %llu %llu %llu %llu %d\n",
 		rec, (long long int)rec->ts, buffer,
 		rec->roaming,
 		rec->data.rx_packets,
@@ -310,21 +311,21 @@ static void stats_print_entries(struct stats_file *file)
 static void stats_print_rec_diff(struct stats_record *begin,
 					struct stats_record *end)
 {
-	printf("\trx_packets: %d\n",
+	printf("\trx_packets: %llu\n",
 		end->data.rx_packets - begin->data.rx_packets);
-	printf("\ttx_packets: %d\n",
+	printf("\ttx_packets: %llu\n",
 		end->data.tx_packets - begin->data.tx_packets);
-	printf("\trx_bytes:   %d\n",
+	printf("\trx_bytes:   %llu\n",
 		end->data.rx_bytes - begin->data.rx_bytes);
-	printf("\ttx_bytes:   %d\n",
+	printf("\ttx_bytes:   %llu\n",
 		end->data.tx_bytes - begin->data.tx_bytes);
-	printf("\trx_errors:  %d\n",
+	printf("\trx_errors:  %llu\n",
 		end->data.rx_errors - begin->data.rx_errors);
-	printf("\ttx_errors:  %d\n",
+	printf("\ttx_errors:  %llu\n",
 		end->data.tx_errors - begin->data.tx_errors);
-	printf("\trx_dropped: %d\n",
+	printf("\trx_dropped: %llu\n",
 		end->data.rx_dropped - begin->data.rx_dropped);
-	printf("\ttx_dropped: %d\n",
+	printf("\ttx_dropped: %llu\n",
 		end->data.tx_dropped - begin->data.tx_dropped);
 	printf("\ttime:       %d\n",
 		end->data.time - begin->data.time);

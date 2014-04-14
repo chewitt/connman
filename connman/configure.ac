@@ -66,6 +66,13 @@ AC_ARG_ENABLE(jolla-gps,
 			[enable_jolla_gps=${enableval}], [enable_jolla_gps="no"])
 AM_CONDITIONAL(JOLLA_GPS, test "${enable_jolla_gps}" != "no")
 
+AC_ARG_ENABLE(systemd, 
+	AC_HELP_STRING([--enable-systemd],
+			[enable systemd notify on start]), [
+				if (test "${enableval}" = "yes"); then
+			CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
+fi])
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 

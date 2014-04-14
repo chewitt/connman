@@ -383,7 +383,7 @@ static bool extract_link(struct ifinfomsg *msg, int bytes,
 			if (mtu)
 				*mtu = *((unsigned int *) RTA_DATA(attr));
 			break;
-		case IFLA_STATS:
+		case IFLA_STATS64:
 			if (stats)
 				memcpy(stats, RTA_DATA(attr),
 					sizeof(struct rtnl_link_stats64));
@@ -906,7 +906,7 @@ static void rtnl_link(struct nlmsghdr *hdr)
 		case IFLA_QDISC:
 			print_attr(attr, "qdisc");
 			break;
-		case IFLA_STATS:
+		case IFLA_STATS64:
 			print_attr(attr, "stats");
 			break;
 		case IFLA_COST:

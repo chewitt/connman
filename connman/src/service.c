@@ -2003,55 +2003,55 @@ static void stats_append_counters(DBusMessageIter *dict,
 	if (counters->rx_packets != stats->rx_packets || append_all) {
 		counters->rx_packets = stats->rx_packets;
 		connman_dbus_dict_append_basic(dict, "RX.Packets",
-					DBUS_TYPE_UINT32, &stats->rx_packets);
+					DBUS_TYPE_UINT64, &stats->rx_packets);
 	}
 
 	if (counters->tx_packets != stats->tx_packets || append_all) {
 		counters->tx_packets = stats->tx_packets;
 		connman_dbus_dict_append_basic(dict, "TX.Packets",
-					DBUS_TYPE_UINT32, &stats->tx_packets);
+					DBUS_TYPE_UINT64, &stats->tx_packets);
 	}
 
 	if (counters->rx_bytes != stats->rx_bytes || append_all) {
 		counters->rx_bytes = stats->rx_bytes;
 		connman_dbus_dict_append_basic(dict, "RX.Bytes",
-					DBUS_TYPE_UINT32, &stats->rx_bytes);
+					DBUS_TYPE_UINT64, &stats->rx_bytes);
 	}
 
 	if (counters->tx_bytes != stats->tx_bytes || append_all) {
 		counters->tx_bytes = stats->tx_bytes;
 		connman_dbus_dict_append_basic(dict, "TX.Bytes",
-					DBUS_TYPE_UINT32, &stats->tx_bytes);
+					DBUS_TYPE_UINT64, &stats->tx_bytes);
 	}
 
 	if (counters->rx_errors != stats->rx_errors || append_all) {
 		counters->rx_errors = stats->rx_errors;
 		connman_dbus_dict_append_basic(dict, "RX.Errors",
-					DBUS_TYPE_UINT32, &stats->rx_errors);
+					DBUS_TYPE_UINT64, &stats->rx_errors);
 	}
 
 	if (counters->tx_errors != stats->tx_errors || append_all) {
 		counters->tx_errors = stats->tx_errors;
 		connman_dbus_dict_append_basic(dict, "TX.Errors",
-					DBUS_TYPE_UINT32, &stats->tx_errors);
+					DBUS_TYPE_UINT64, &stats->tx_errors);
 	}
 
 	if (counters->rx_dropped != stats->rx_dropped || append_all) {
 		counters->rx_dropped = stats->rx_dropped;
 		connman_dbus_dict_append_basic(dict, "RX.Dropped",
-					DBUS_TYPE_UINT32, &stats->rx_dropped);
+					DBUS_TYPE_UINT64, &stats->rx_dropped);
 	}
 
 	if (counters->tx_dropped != stats->tx_dropped || append_all) {
 		counters->tx_dropped = stats->tx_dropped;
 		connman_dbus_dict_append_basic(dict, "TX.Dropped",
-					DBUS_TYPE_UINT32, &stats->tx_dropped);
+					DBUS_TYPE_UINT64, &stats->tx_dropped);
 	}
 
 	if (counters->time != stats->time || append_all) {
 		counters->time = stats->time;
 		connman_dbus_dict_append_basic(dict, "Time",
-					DBUS_TYPE_UINT32, &stats->time);
+					DBUS_TYPE_UINT64, &stats->time);
 	}
 }
 
@@ -2094,10 +2094,10 @@ static void stats_append(struct connman_service *service,
 }
 
 static void stats_update(struct connman_service *service,
-				unsigned int rx_packets, unsigned int tx_packets,
-				unsigned int rx_bytes, unsigned int tx_bytes,
-				unsigned int rx_errors, unsigned int tx_errors,
-				unsigned int rx_dropped, unsigned int tx_dropped)
+				uint64_t rx_packets, uint64_t tx_packets,
+				uint64_t rx_bytes, uint64_t tx_bytes,
+				uint64_t rx_errors, uint64_t tx_errors,
+				uint64_t rx_dropped, uint64_t tx_dropped)
 {
 	struct connman_stats *stats = stats_get(service);
 	struct connman_stats_data *data_last = &stats->data_last;
@@ -2141,10 +2141,10 @@ static void stats_update(struct connman_service *service,
 }
 
 void __connman_service_notify(struct connman_service *service,
-			unsigned int rx_packets, unsigned int tx_packets,
-			unsigned int rx_bytes, unsigned int tx_bytes,
-			unsigned int rx_errors, unsigned int tx_errors,
-			unsigned int rx_dropped, unsigned int tx_dropped)
+			uint64_t rx_packets, uint64_t tx_packets,
+			uint64_t rx_bytes, uint64_t tx_bytes,
+			uint64_t rx_errors, uint64_t tx_errors,
+			uint64_t rx_dropped, uint64_t tx_dropped)
 {
 	GHashTableIter iter;
 	gpointer key, value;
@@ -2378,13 +2378,14 @@ void __connman_service_counter_reset_all(const char *type)
     int typeLength = strlen(type);
 
     for (i = 0; services[i] != NULL; i++) {
-        if (strncmp(services[i], type, typeLength) != 0)
+	
+	if (strncmp(services[i], type, typeLength) != 0)
             continue;
 
-
         struct connman_service *service = g_hash_table_lookup(service_hash, services[i]);
+
         if (service == NULL) {
-	    __connman_service_counter_reset_saved(services[i]);
+	__connman_service_counter_reset_saved(services[i]);
             continue;
         }
 

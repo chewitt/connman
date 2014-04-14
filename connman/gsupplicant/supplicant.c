@@ -3409,7 +3409,7 @@ static void add_network_security_wep(DBusMessageIter *dict,
 					GSupplicantSSID *ssid)
 {
 	const char *auth_alg = "OPEN SHARED";
-	const dbus_uint32_t key_index = 0;
+	dbus_uint32_t key_index = 0;
 
 	supplicant_dbus_dict_append_basic(dict, "auth_alg",
 					DBUS_TYPE_STRING, &auth_alg);

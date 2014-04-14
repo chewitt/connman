@@ -34,6 +34,7 @@
 #include <string.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <stdio.h>
 
 #include "connman.h"
 
@@ -153,25 +154,11 @@ struct stats_iter32 {
 
 static void stats_convert(struct stats_file *file);
 
-static GHashTable *stats_hash = NULL;
+GHashTable *stats_hash = NULL;
 
 static struct stats_file_header *get_hdr(struct stats_file *file)
 {
 	return (struct stats_file_header *)file->addr;
-}
-
-static struct stats_record32 *get_begin32(struct stats_file *file)
-{
-	unsigned int off = get_hdr(file)->begin;
-
-	return (struct stats_record32 *)(file->addr + off);
-}
-
-static struct stats_record32 *get_end32(struct stats_file *file)
-{
-	unsigned int off = get_hdr(file)->end;
-
-	return (struct stats_record32 *)(file->addr + off);
 }
 
 static struct stats_record *get_begin(struct stats_file *file)
@@ -181,11 +168,25 @@ static struct stats_record *get_begin(struct stats_file *file)
 	return (struct stats_record *)(file->addr + off);
 }
 
+static struct stats_record32 *get_begin32(struct stats_file *file)
+{
+	unsigned int off = get_hdr(file)->begin;
+
+	return (struct stats_record32 *)(file->addr + off);
+}
+
 static struct stats_record *get_end(struct stats_file *file)
 {
 	unsigned int off = get_hdr(file)->end;
 
 	return (struct stats_record *)(file->addr + off);
+}
+
+static struct stats_record32 *get_end32(struct stats_file *file)
+{
+	unsigned int off = get_hdr(file)->end;
+
+	return (struct stats_record32 *)(file->addr + off);
 }
 
 static struct stats_record *get_home(struct stats_file *file)

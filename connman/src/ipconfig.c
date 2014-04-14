@@ -66,14 +66,14 @@ struct connman_ipdevice {
 	unsigned int flags;
 	char *address;
 	uint16_t mtu;
-	uint32_t rx_packets;
-	uint32_t tx_packets;
-	uint32_t rx_bytes;
-	uint32_t tx_bytes;
-	uint32_t rx_errors;
-	uint32_t tx_errors;
-	uint32_t rx_dropped;
-	uint32_t tx_dropped;
+	uint64_t rx_packets;
+	uint64_t tx_packets;
+	uint64_t rx_bytes;
+	uint64_t tx_bytes;
+	uint64_t rx_errors;
+	uint64_t tx_errors;
+	uint64_t rx_dropped;
+	uint64_t tx_dropped;
 
 	GSList *address_list;
 	char *ipv4_gateway;
