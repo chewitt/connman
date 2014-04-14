@@ -48,9 +48,9 @@ plugins_hh2serial_gps_la_LDFLAGS = $(plugin_ldflags)
 endif
 endif
 
-if HYBRIS_GPS
-builtin_modules += hybris_gps
-builtin_sources += plugins/hybris-gps.c
+if JOLLA_GPS
+builtin_modules += jolla_gps
+builtin_sources += plugins/jolla-gps.c
 endif
 
 if OFONO
