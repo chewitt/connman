@@ -2,7 +2,7 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,12 +19,13 @@
  *
  */
 
+#include <stdbool.h>
+
 #include <glib.h>
 
 #define VPN_API_SUBJECT_TO_CHANGE
 
 #include <connman/dbus.h>
-#include <connman/types.h>
 
 int __vpn_manager_init(void);
 void __vpn_manager_cleanup(void);
@@ -72,7 +73,7 @@ void __vpn_ipconfig_cleanup(void);
 #include "vpn-provider.h"
 
 char *__vpn_provider_create_identifier(const char *host, const char *domain);
-connman_bool_t __vpn_provider_check_routes(struct vpn_provider *provider);
+bool __vpn_provider_check_routes(struct vpn_provider *provider);
 int __vpn_provider_append_user_route(struct vpn_provider *provider,
 				int family, const char *network,
 				const char *netmask, const char *gateway);
@@ -96,7 +97,7 @@ int __vpn_provider_disconnect(struct vpn_provider *provider);
 int __vpn_provider_remove(const char *path);
 int __vpn_provider_delete(struct vpn_provider *provider);
 void __vpn_provider_cleanup(void);
-int __vpn_provider_init(gboolean handle_routes);
+int __vpn_provider_init(bool handle_routes);
 
 #include "vpn-rtnl.h"
 
@@ -111,3 +112,7 @@ int __vpn_rtnl_send(const void *buf, size_t len);
 
 int __vpn_config_init(void);
 void __vpn_config_cleanup(void);
+char *__vpn_config_get_string(GKeyFile *key_file,
+        const char *group_name, const char *key, GError **error);
+char **__vpn_config_get_string_list(GKeyFile *key_file,
+        const char *group_name, const char *key, gsize *length, GError **error);

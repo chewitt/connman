@@ -37,21 +37,21 @@
 
 static DBusConnection *connection;
 
-static void send_indication(const char *path, connman_bool_t enabled)
+static void send_indication(const char *path, bool enabled)
 {
 	DBusMessage *message;
 	const char *method;
 
 	DBG("path %s enabled %d", path, enabled);
 
-	if (enabled == TRUE)
+	if (enabled)
 		method = "IndicateStart";
 	else
 		method = "IndicateStop";
 
 	message = dbus_message_new_method_call(IOSPM_SERVICE, path,
 						IOSPM_INTERFACE, method);
-	if (message == NULL)
+	if (!message)
 		return;
 
 	dbus_message_set_no_reply(message, TRUE);
@@ -62,7 +62,7 @@ static void send_indication(const char *path, connman_bool_t enabled)
 }
 
 static void iospm_service_enabled(enum connman_service_type type,
-						connman_bool_t enabled)
+						bool enabled)
 {
 	switch (type) {
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
@@ -73,6 +73,7 @@ static void iospm_service_enabled(enum connman_service_type type,
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:
+	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 		send_indication(IOSPM_BLUETOOTH, enabled);
@@ -80,7 +81,7 @@ static void iospm_service_enabled(enum connman_service_type type,
 	}
 }
 
-static void iospm_offline_mode(connman_bool_t enabled)
+static void iospm_offline_mode(bool enabled)
 {
 	send_indication(IOSPM_FLIGHT_MODE, enabled);
 }

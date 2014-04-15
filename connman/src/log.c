@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -51,7 +51,6 @@ void connman_info(const char *format, ...)
 
 	va_start(ap, format);
 	vprintf(format, ap);
-	//vsyslog(LOG_INFO, format, ap);
 
 	va_end(ap);
 }
@@ -119,7 +118,7 @@ static void print_backtrace(unsigned int offset)
 	int pathlen;
 	pid_t pid;
 
-	if (program_exec == NULL)
+	if (!program_exec)
 		return;
 
 	pathlen = strlen(program_path);
@@ -179,7 +178,7 @@ static void print_backtrace(unsigned int offset)
 		if (written < 0)
 			break;
 
-		len = read(infd[0], buf, sizeof(buf));
+		len = read(infd[0], buf, sizeof(buf) - 1);
 		if (len < 0)
 			break;
 
@@ -243,23 +242,23 @@ extern struct connman_debug_desc __stop___debug[];
 
 static gchar **enabled = NULL;
 
-static connman_bool_t is_enabled(struct connman_debug_desc *desc)
+static bool is_enabled(struct connman_debug_desc *desc)
 {
 	int i;
 
-	if (enabled == NULL)
-		return FALSE;
+	if (!enabled)
+		return false;
 
-	for (i = 0; enabled[i] != NULL; i++) {
-		if (desc->name != NULL && g_pattern_match_simple(enabled[i],
-							desc->name) == TRUE)
-			return TRUE;
-		if (desc->file != NULL && g_pattern_match_simple(enabled[i],
-							desc->file) == TRUE)
-			return TRUE;
+	for (i = 0; enabled[i]; i++) {
+		if (desc->name && g_pattern_match_simple(enabled[i],
+							desc->name))
+			return true;
+		if (desc->file && g_pattern_match_simple(enabled[i],
+							desc->file))
+			return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
 void __connman_log_enable(struct connman_debug_desc *start,
@@ -268,7 +267,7 @@ void __connman_log_enable(struct connman_debug_desc *start,
 	struct connman_debug_desc *desc;
 	const char *name = NULL, *file = NULL;
 
-	if (start == NULL || stop == NULL)
+	if (!start || !stop)
 		return;
 
 	for (desc = start; desc < stop; desc++) {
@@ -278,21 +277,21 @@ void __connman_log_enable(struct connman_debug_desc *start,
 			continue;
 		}
 
-		if (file != NULL || name != NULL) {
+		if (file || name) {
 			if (g_strcmp0(desc->file, file) == 0) {
-				if (desc->name == NULL)
+				if (!desc->name)
 					desc->name = name;
 			} else
 				file = NULL;
 		}
 
-		if (is_enabled(desc) == TRUE)
+		if (is_enabled(desc))
 			desc->flags |= CONNMAN_DEBUG_FLAG_PRINT;
 	}
 }
 
 int __connman_log_init(const char *program, const char *debug,
-		connman_bool_t detach, connman_bool_t backtrace,
+		gboolean detach, gboolean backtrace,
 		const char *program_name, const char *program_version)
 {
 	static char path[PATH_MAX];
@@ -301,15 +300,15 @@ int __connman_log_init(const char *program, const char *debug,
 	program_exec = program;
 	program_path = getcwd(path, sizeof(path));
 
-	if (debug != NULL)
+	if (debug)
 		enabled = g_strsplit_set(debug, ":, ", 0);
 
 	__connman_log_enable(__start___debug, __stop___debug);
 
-	if (detach == FALSE)
+	if (!detach)
 		option |= LOG_PERROR;
 
-	if (backtrace == TRUE)
+	if (backtrace)
 		signal_setup(signal_handler);
 
 	openlog(basename(program), option, LOG_DAEMON);
@@ -319,13 +318,13 @@ int __connman_log_init(const char *program, const char *debug,
 	return 0;
 }
 
-void __connman_log_cleanup(connman_bool_t backtrace)
+void __connman_log_cleanup(gboolean backtrace)
 {
 	syslog(LOG_INFO, "Exit");
 
 	closelog();
 
-	if (backtrace == TRUE)
+	if (backtrace)
 		signal_setup(SIG_DFL);
 
 	g_strfreev(enabled);

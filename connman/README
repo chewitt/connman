@@ -71,6 +71,14 @@ For a working system, certain configuration options need to be enabled:
 		enabled. This option can be used to build a small daemon
 		for a specific system if Ethernet support is not required.
 
+	--disable-gadget
+
+		Disable support for USB Ethernet Gadget devices
+
+		By default USB Ethernet Gadget technology support is built-in and
+		enabled. This option can be used to build a small daemon
+		for a specific system if USB Ethernet Gadget support is not required.
+
 	--disable-wifi
 
 		Disable support for WiFi devices
@@ -246,6 +254,12 @@ Following environment variables can be used:
 Example:
     CONNMAN_WEB_DEBUG=1 src/connmand -n
 
+If timing conditions are relevant then it is recommended command to
+get log traces as follows:
+    connmand -d 2>&1 | ts '[%H:%M:%.S]' | tee connman.log
+
+The 'ts' program is normaly avialable in the moreutils package.
+
 
 Kernel configuration
 ====================
@@ -262,6 +276,23 @@ to be enabled also as modules (m) or builtin (y):
 CONFIG_NETFILTER
 CONFIG_NF_CONNTRACK_IPV4
 CONFIG_NF_NAT_IPV4
+
+For routing and statistic support in Sessions, the following options
+need to be enabled as modules (m) or builtin (y):
+
+CONFIG_IP_NF_IPTABLES
+CONFIG_IP_MULTIPLE_TABLES
+CONFIG_NETFILTER_NETLINK_ACCT
+CONFIG_NETFILTER_XT_MATCH_NFACCT
+CONFIG_NETFILTER_XT_CONNMARK
+CONFIG_NETFILTER_XT_TARGET_CONNMARK
+CONFIG_NETFILTER_XT_MATCH_CONNMARK
+
+In order to support USB gadget tethering, the following kernel configuration
+options need to be enabled:
+
+CONFIG_USB_GADGET
+CONFIG_USB_ETH
 
 
 wpa_supplicant configuration
@@ -288,7 +319,13 @@ CONFIG_AUTOSCAN_EXPONENTIAL=y
 This will enable the exact same function as bgscan but while being
 disconnected.
 
-It is recommended to use wpa_supplicant 1.x or later.
+It is recommended to use wpa_supplicant 2.x or later.
+
+If wpa_supplicant is configured to D-Bus autostart, then ConnMan will
+trigger the autostart of wpa_supplicant. However please keep in mind
+that this trigger only happens once. If wpa_supplicant stops or crashes,
+ConnMan does not periodically try to autostart it. It is up to systemd or
+similar service management tool to autostart it.
 
 
 VPN
@@ -323,4 +360,7 @@ Mailing list:
 	connman@connman.net
 
 For additional information about the project visit ConnMan web site:
+	https://01.org/connman
 	http://www.connman.net
+
+You can report bugs at https://01.org/jira/browse/CM

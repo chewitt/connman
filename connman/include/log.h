@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -40,6 +40,14 @@ void connman_error(const char *format, ...)
 				__attribute__((format(printf, 1, 2)));
 void connman_debug(const char *format, ...)
 				__attribute__((format(printf, 1, 2)));
+
+#define connman_warn_once(fmt, arg...) do {		\
+	static bool printed;				\
+	if (!printed) {					\
+		connman_warn(fmt, ## arg);		\
+		printed = true;				\
+	}						\
+} while (0)
 
 struct connman_debug_desc {
 	const char *name;

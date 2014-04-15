@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2014  jolla Ltd.
+ *  Copyright (C) 2014 Jolla Ltd.
  *  Contact: Aaron McCarthy <aaron.mccarthy@jollamobile.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -37,9 +37,9 @@
 #include <connman/dbus.h>
 #include <connman/log.h>
 
-#define HYBRIS_SERVICE "com.jollamobile.gps"
-#define HYBRIS_DEVICE_PATH "/com/jollamobile/gps/Device"
-#define HYBRIS_DEVICE_INTERFACE "com.jollamobile.gps.Device"
+#define JOLLA_SERVICE "com.jollamobile.gps"
+#define JOLLA_DEVICE_PATH "/com/jollamobile/gps/Device"
+#define JOLLA_DEVICE_INTERFACE "com.jollamobile.gps.Device"
 #define FREEDESKTOP_PROPERTIES_INTERFACE "org.freedesktop.DBus.Properties"
 #define FREEDESKTOP_PROPERTIES_SET "Set"
 #define PROPERTY_CHANGED "PropertyChanged"
@@ -49,7 +49,7 @@
 
 static DBusConnection *connection;
 
-static struct connman_device *hybris_gps_device;
+static struct connman_device *jolla_gps_device;
 
 static void powered_reply(DBusPendingCall *call, void *user_data)
 {
@@ -67,7 +67,7 @@ static int change_powered(DBusConnection *conn, dbus_bool_t powered)
 {
     DBG("");
 
-    DBusMessage *message = dbus_message_new_method_call(HYBRIS_SERVICE, HYBRIS_DEVICE_PATH,
+    DBusMessage *message = dbus_message_new_method_call(JOLLA_SERVICE, JOLLA_DEVICE_PATH,
                                                         FREEDESKTOP_PROPERTIES_INTERFACE,
                                                         FREEDESKTOP_PROPERTIES_SET);
     if (message == NULL)
@@ -78,7 +78,7 @@ static int change_powered(DBusConnection *conn, dbus_bool_t powered)
     DBusMessageIter iter;
     dbus_message_iter_init_append(message, &iter);
 
-    const char *string = HYBRIS_DEVICE_INTERFACE;
+    const char *string = JOLLA_DEVICE_INTERFACE;
     dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &string);
     string = POWERED_NAME;
     dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &string);
@@ -108,35 +108,35 @@ static int change_powered(DBusConnection *conn, dbus_bool_t powered)
     return -EINPROGRESS;
 }
 
-static int hybris_gps_enable(struct connman_device *device)
+static int jolla_gps_enable(struct connman_device *device)
 {
     (void)device;
 
     DBG("");
 
-    if (connman_device_get_string(hybris_gps_device, "Path") == NULL) {
-        connman_device_set_powered(hybris_gps_device, TRUE);
+    if (connman_device_get_string(jolla_gps_device, "Path") == NULL) {
+        connman_device_set_powered(jolla_gps_device, TRUE);
         return 0;
     }
 
     return change_powered(connection, TRUE);
 }
 
-static int hybris_gps_disable(struct connman_device *device)
+static int jolla_gps_disable(struct connman_device *device)
 {
     (void)device;
 
     DBG("");
 
-    if (connman_device_get_string(hybris_gps_device, "Path") == NULL) {
-        connman_device_set_powered(hybris_gps_device, FALSE);
+    if (connman_device_get_string(jolla_gps_device, "Path") == NULL) {
+        connman_device_set_powered(jolla_gps_device, FALSE);
         return 0;
     }
 
     return change_powered(connection, FALSE);
 }
 
-static int hybris_gps_probe(struct connman_device *device)
+static int jolla_gps_probe(struct connman_device *device)
 {
     (void)device;
 
@@ -145,7 +145,7 @@ static int hybris_gps_probe(struct connman_device *device)
     return 0;
 }
 
-static void hybris_gps_remove(struct connman_device *device)
+static void jolla_gps_remove(struct connman_device *device)
 {
     (void)device;
 
@@ -155,13 +155,13 @@ static void hybris_gps_remove(struct connman_device *device)
 static struct connman_device_driver device_driver = {
     .name = "gps",
     .type = CONNMAN_DEVICE_TYPE_GPS,
-    .probe = hybris_gps_probe,
-    .remove = hybris_gps_remove,
-    .enable = hybris_gps_enable,
-    .disable = hybris_gps_disable
+    .probe = jolla_gps_probe,
+    .remove = jolla_gps_remove,
+    .enable = jolla_gps_enable,
+    .disable = jolla_gps_disable
 };
 
-static int hybris_gps_tech_probe(struct connman_technology *technology)
+static int jolla_gps_tech_probe(struct connman_technology *technology)
 {
     (void)technology;
 
@@ -170,7 +170,7 @@ static int hybris_gps_tech_probe(struct connman_technology *technology)
     return 0;
 }
 
-static void hybris_gps_tech_remove(struct connman_technology *technology)
+static void jolla_gps_tech_remove(struct connman_technology *technology)
 {
     (void)technology;
 
@@ -180,29 +180,29 @@ static void hybris_gps_tech_remove(struct connman_technology *technology)
 static struct connman_technology_driver tech_driver = {
     .name = "gps",
     .type = CONNMAN_SERVICE_TYPE_GPS,
-    .probe = hybris_gps_tech_probe,
-    .remove = hybris_gps_tech_remove,
+    .probe = jolla_gps_tech_probe,
+    .remove = jolla_gps_tech_remove,
 };
 
-static void hybris_gps_connect(DBusConnection *conn, void *user_data)
+static void jolla_gps_connect(DBusConnection *conn, void *user_data)
 {
     (void)user_data;
 
     DBG("");
 
-    connman_device_set_string(hybris_gps_device, "Path", HYBRIS_DEVICE_PATH);
+    connman_device_set_string(jolla_gps_device, "Path", JOLLA_DEVICE_PATH);
 
-    change_powered(conn, connman_device_get_powered(hybris_gps_device));
+    change_powered(conn, connman_device_get_powered(jolla_gps_device));
 }
 
-static void hybris_gps_disconnect(DBusConnection *conn, void *user_data)
+static void jolla_gps_disconnect(DBusConnection *conn, void *user_data)
 {
     (void)conn;
     (void)user_data;
 
     DBG("");
 
-    connman_device_set_string(hybris_gps_device, "Path", NULL);
+    connman_device_set_string(jolla_gps_device, "Path", NULL);
 }
 
 static gboolean device_changed(DBusConnection *conn, DBusMessage *message, void *user_data)
@@ -226,7 +226,7 @@ static gboolean device_changed(DBusConnection *conn, DBusMessage *message, void 
     if (g_str_equal(property, POWERED_NAME) == TRUE) {
         dbus_bool_t powered;
         dbus_message_iter_get_basic(&value, &powered);
-        connman_device_set_powered(hybris_gps_device, powered);
+        connman_device_set_powered(jolla_gps_device, powered);
     }
 
     return TRUE;
@@ -235,7 +235,7 @@ static gboolean device_changed(DBusConnection *conn, DBusMessage *message, void 
 static guint watch;
 static guint device_watch;
 
-static int hybris_gps_init()
+static int jolla_gps_init()
 {
     DBG("");
 
@@ -245,26 +245,26 @@ static int hybris_gps_init()
         return -EIO;
     }
 
-    watch = g_dbus_add_service_watch(connection, HYBRIS_SERVICE, hybris_gps_connect,
-                                     hybris_gps_disconnect, NULL, NULL);
+    watch = g_dbus_add_service_watch(connection, JOLLA_SERVICE, jolla_gps_connect,
+                                     jolla_gps_disconnect, NULL, NULL);
     if (watch == 0) {
-        connman_warn("Failed to add hybris service watcher");
+        connman_warn("Failed to add jolla service watcher");
         dbus_connection_unref(connection);
         return -EIO;
     }
 
-    device_watch = g_dbus_add_signal_watch(connection, HYBRIS_SERVICE, HYBRIS_DEVICE_PATH,
-                                           HYBRIS_DEVICE_INTERFACE, PROPERTY_CHANGED,
+    device_watch = g_dbus_add_signal_watch(connection, JOLLA_SERVICE, JOLLA_DEVICE_PATH,
+                                           JOLLA_DEVICE_INTERFACE, PROPERTY_CHANGED,
                                            device_changed, NULL, NULL);
     if (device_watch == 0) {
-        connman_warn("Failed to add hybris device property changed signal watcher");
+        connman_warn("Failed to add jolla device property changed signal watcher");
         g_dbus_remove_watch(connection, watch);
         dbus_connection_unref(connection);
         return -EIO;
     }
 
     if (connman_technology_driver_register(&tech_driver) < 0) {
-        connman_warn("Failed to initialize technology for Hybris GPS");
+        connman_warn("Failed to initialize technology for Jolla GPS");
         g_dbus_remove_watch(connection, device_watch);
         g_dbus_remove_watch(connection, watch);
         dbus_connection_unref(connection);
@@ -272,7 +272,7 @@ static int hybris_gps_init()
     }
 
     if (connman_device_driver_register(&device_driver) < 0) {
-        connman_warn("Failed to initialize device driver for " HYBRIS_SERVICE);
+        connman_warn("Failed to initialize device driver for " JOLLA_SERVICE);
         connman_technology_driver_unregister(&tech_driver);
         g_dbus_remove_watch(connection, device_watch);
         g_dbus_remove_watch(connection, watch);
@@ -280,35 +280,35 @@ static int hybris_gps_init()
         return -EIO;
     }
 
-    hybris_gps_device = connman_device_create("gps", CONNMAN_DEVICE_TYPE_GPS);
-    if (hybris_gps_device == NULL) {
+    jolla_gps_device = connman_device_create("gps", CONNMAN_DEVICE_TYPE_GPS);
+    if (jolla_gps_device == NULL) {
         connman_warn("Failed to creat GPS device");
         return -ENODEV;
     }
 
-    if (connman_device_register(hybris_gps_device) < 0) {
+    if (connman_device_register(jolla_gps_device) < 0) {
         connman_warn("Failed to register GPS device");
-        connman_device_unref(hybris_gps_device);
-        hybris_gps_device = NULL;
+        connman_device_unref(jolla_gps_device);
+        jolla_gps_device = NULL;
         return -EIO;
     }
 
     return 0;
 }
 
-static void hybris_gps_exit()
+static void jolla_gps_exit()
 {
     DBG("");
 
-    if (hybris_gps_device != NULL) {
-        connman_device_unregister(hybris_gps_device);
-        connman_device_unref(hybris_gps_device);
-        hybris_gps_device = NULL;
+    if (jolla_gps_device != NULL) {
+        connman_device_unregister(jolla_gps_device);
+        connman_device_unref(jolla_gps_device);
+        jolla_gps_device = NULL;
     }
 
     connman_device_driver_unregister(&device_driver);
     connman_technology_driver_unregister(&tech_driver);
 }
 
-CONNMAN_PLUGIN_DEFINE(hybris_gps, "Hybris GPS", VERSION, CONNMAN_PLUGIN_PRIORITY_DEFAULT,
-                      hybris_gps_init, hybris_gps_exit)
+CONNMAN_PLUGIN_DEFINE(jolla_gps, "Jolla GPS", VERSION, CONNMAN_PLUGIN_PRIORITY_DEFAULT,
+                      jolla_gps_init, jolla_gps_exit)

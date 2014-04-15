@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -41,7 +41,7 @@
 #include <connman/log.h>
 #include <connman/setting.h>
 
-static connman_bool_t eth_tethering = FALSE;
+static bool eth_tethering = false;
 
 struct ethernet_data {
 	int index;
@@ -50,43 +50,43 @@ struct ethernet_data {
 	struct connman_network *network;
 };
 
-static int cable_probe(struct connman_network *network)
+static int eth_network_probe(struct connman_network *network)
 {
 	DBG("network %p", network);
 
 	return 0;
 }
 
-static void cable_remove(struct connman_network *network)
+static void eth_network_remove(struct connman_network *network)
 {
 	DBG("network %p", network);
 }
 
-static int cable_connect(struct connman_network *network)
+static int eth_network_connect(struct connman_network *network)
 {
 	DBG("network %p", network);
 
-	connman_network_set_connected(network, TRUE);
+	connman_network_set_connected(network, true);
 
 	return 0;
 }
 
-static int cable_disconnect(struct connman_network *network)
+static int eth_network_disconnect(struct connman_network *network)
 {
 	DBG("network %p", network);
 
-	connman_network_set_connected(network, FALSE);
+	connman_network_set_connected(network, false);
 
 	return 0;
 }
 
-static struct connman_network_driver cable_driver = {
+static struct connman_network_driver eth_network_driver = {
 	.name		= "cable",
 	.type		= CONNMAN_NETWORK_TYPE_ETHERNET,
-	.probe		= cable_probe,
-	.remove		= cable_remove,
-	.connect	= cable_connect,
-	.disconnect	= cable_disconnect,
+	.probe		= eth_network_probe,
+	.remove		= eth_network_remove,
+	.connect	= eth_network_connect,
+	.disconnect	= eth_network_disconnect,
 };
 
 static void add_network(struct connman_device *device,
@@ -97,7 +97,7 @@ static void add_network(struct connman_device *device,
 
 	network = connman_network_create("carrier",
 					CONNMAN_NETWORK_TYPE_ETHERNET);
-	if (network == NULL)
+	if (!network)
 		return;
 
 	index = connman_device_get_index(device);
@@ -110,7 +110,7 @@ static void add_network(struct connman_device *device,
 		return;
 	}
 
-	if (eth_tethering == FALSE)
+	if (!eth_tethering)
 		/*
 		 * Prevent service from starting the reconnect
 		 * procedure as we do not want the DHCP client
@@ -124,7 +124,7 @@ static void add_network(struct connman_device *device,
 static void remove_network(struct connman_device *device,
 				struct ethernet_data *ethernet)
 {
-	if (ethernet->network == NULL)
+	if (!ethernet->network)
 		return;
 
 	connman_device_remove_network(device, ethernet->network);
@@ -143,10 +143,10 @@ static void ethernet_newlink(unsigned flags, unsigned change, void *user_data)
 	if ((ethernet->flags & IFF_UP) != (flags & IFF_UP)) {
 		if (flags & IFF_UP) {
 			DBG("power on");
-			connman_device_set_powered(device, TRUE);
+			connman_device_set_powered(device, true);
 		} else {
 			DBG("power off");
-			connman_device_set_powered(device, FALSE);
+			connman_device_set_powered(device, false);
 		}
 	}
 
@@ -163,14 +163,14 @@ static void ethernet_newlink(unsigned flags, unsigned change, void *user_data)
 	ethernet->flags = flags;
 }
 
-static int ethernet_probe(struct connman_device *device)
+static int eth_dev_probe(struct connman_device *device)
 {
 	struct ethernet_data *ethernet;
 
 	DBG("device %p", device);
 
 	ethernet = g_try_new0(struct ethernet_data, 1);
-	if (ethernet == NULL)
+	if (!ethernet)
 		return -ENOMEM;
 
 	connman_device_set_data(device, ethernet);
@@ -184,7 +184,7 @@ static int ethernet_probe(struct connman_device *device)
 	return 0;
 }
 
-static void ethernet_remove(struct connman_device *device)
+static void eth_dev_remove(struct connman_device *device)
 {
 	struct ethernet_data *ethernet = connman_device_get_data(device);
 
@@ -199,7 +199,7 @@ static void ethernet_remove(struct connman_device *device)
 	g_free(ethernet);
 }
 
-static int ethernet_enable(struct connman_device *device)
+static int eth_dev_enable(struct connman_device *device)
 {
 	struct ethernet_data *ethernet = connman_device_get_data(device);
 
@@ -208,7 +208,7 @@ static int ethernet_enable(struct connman_device *device)
 	return connman_inet_ifup(ethernet->index);
 }
 
-static int ethernet_disable(struct connman_device *device)
+static int eth_dev_disable(struct connman_device *device)
 {
 	struct ethernet_data *ethernet = connman_device_get_data(device);
 
@@ -217,133 +217,40 @@ static int ethernet_disable(struct connman_device *device)
 	return connman_inet_ifdown(ethernet->index);
 }
 
-static struct connman_device_driver ethernet_driver = {
+static struct connman_device_driver eth_dev_driver = {
 	.name		= "ethernet",
 	.type		= CONNMAN_DEVICE_TYPE_ETHERNET,
-	.probe		= ethernet_probe,
-	.remove		= ethernet_remove,
-	.enable		= ethernet_enable,
-	.disable	= ethernet_disable,
+	.probe		= eth_dev_probe,
+	.remove		= eth_dev_remove,
+	.enable		= eth_dev_enable,
+	.disable	= eth_dev_disable,
 };
 
-static GList *cdc_interface_list = NULL;
-
-static void tech_add_interface(struct connman_technology *technology,
-			int index, const char *name, const char *ident)
-{
-	DBG("index %d name %s ident %s", index, name, ident);
-
-	if (g_list_find(cdc_interface_list,
-			GINT_TO_POINTER((int) index)) != NULL)
-		return;
-
-	cdc_interface_list = g_list_prepend(cdc_interface_list,
-					(GINT_TO_POINTER((int) index)));
-}
-
-static void tech_remove_interface(struct connman_technology *technology,
-								int index)
-{
-	DBG("index %d", index);
-
-	cdc_interface_list = g_list_remove(cdc_interface_list,
-					GINT_TO_POINTER((int) index));
-}
-
-static void enable_tethering(struct connman_technology *technology,
-						const char *bridge)
-{
-	GList *list;
-
-	for (list = cdc_interface_list; list; list = list->next) {
-		int index = GPOINTER_TO_INT(list->data);
-
-		connman_technology_tethering_notify(technology, TRUE);
-
-		connman_inet_ifup(index);
-
-		connman_inet_add_to_bridge(index, bridge);
-	}
-}
-
-static void disable_tethering(struct connman_technology *technology,
-						const char *bridge)
-{
-	GList *list;
-
-	for (list = cdc_interface_list; list; list = list->next) {
-		int index = GPOINTER_TO_INT(list->data);
-
-		connman_inet_remove_from_bridge(index, bridge);
-
-		connman_inet_ifdown(index);
-
-		connman_technology_tethering_notify(technology, FALSE);
-	}
-}
-
-static int tech_set_tethering(struct connman_technology *technology,
-				const char *identifier, const char *passphrase,
-				const char *bridge, connman_bool_t enabled)
-{
-	DBG("bridge %s enabled %d", bridge, enabled);
-
-	if (enabled)
-		enable_tethering(technology, bridge);
-	else
-		disable_tethering(technology, bridge);
-
-	return 0;
-}
-
-static int tech_probe(struct connman_technology *technology)
+static int eth_tech_probe(struct connman_technology *technology)
 {
 	return 0;
 }
 
-static void tech_remove(struct connman_technology *technology)
-{
-	g_list_free(cdc_interface_list);
-
-	cdc_interface_list = NULL;
-}
-
-static struct connman_technology_driver tech_driver = {
-	.name			= "cdc_ethernet",
-	.type			= CONNMAN_SERVICE_TYPE_GADGET,
-	.probe			= tech_probe,
-	.remove			= tech_remove,
-	.add_interface		= tech_add_interface,
-	.remove_interface	= tech_remove_interface,
-	.set_tethering		= tech_set_tethering,
-};
-
-static int eth_probe(struct connman_technology *technology)
-{
-	return 0;
-}
-
-static void eth_remove(struct connman_technology *technology)
+static void eth_tech_remove(struct connman_technology *technology)
 {
 	DBG("");
 }
 
 static GList *eth_interface_list = NULL;
 
-static void eth_add_interface(struct connman_technology *technology,
+static void eth_tech_add_interface(struct connman_technology *technology,
 			int index, const char *name, const char *ident)
 {
 	DBG("index %d name %s ident %s", index, name, ident);
 
-	if (g_list_find(eth_interface_list,
-			GINT_TO_POINTER((int) index)) != NULL)
+	if (g_list_find(eth_interface_list, GINT_TO_POINTER((int)index)))
 		return;
 
 	eth_interface_list = g_list_prepend(eth_interface_list,
 					(GINT_TO_POINTER((int) index)));
 }
 
-static void eth_remove_interface(struct connman_technology *technology,
+static void eth_tech_remove_interface(struct connman_technology *technology,
 								int index)
 {
 	DBG("index %d", index);
@@ -352,30 +259,34 @@ static void eth_remove_interface(struct connman_technology *technology,
 					GINT_TO_POINTER((int) index));
 }
 
-static void eth_enable_tethering(struct connman_technology *technology,
+static void eth_tech_enable_tethering(struct connman_technology *technology,
 						const char *bridge)
 {
 	GList *list;
+	struct ethernet_data *ethernet;
 
 	for (list = eth_interface_list; list; list = list->next) {
 		int index = GPOINTER_TO_INT(list->data);
 		struct connman_device *device =
 			connman_device_find_by_index(index);
 
-		if (device != NULL)
-			connman_device_disconnect_service(device);
+		if (device) {
+			ethernet = connman_device_get_data(device);
+			if (ethernet)
+				remove_network(device, ethernet);
+		}
 
-		connman_technology_tethering_notify(technology, TRUE);
+		connman_technology_tethering_notify(technology, true);
 
 		connman_inet_ifup(index);
 
 		connman_inet_add_to_bridge(index, bridge);
 
-		eth_tethering = TRUE;
+		eth_tethering = true;
 	}
 }
 
-static void eth_disable_tethering(struct connman_technology *technology,
+static void eth_tech_disable_tethering(struct connman_technology *technology,
 						const char *bridge)
 {
 	GList *list;
@@ -387,67 +298,58 @@ static void eth_disable_tethering(struct connman_technology *technology,
 
 		connman_inet_remove_from_bridge(index, bridge);
 
-		connman_inet_ifdown(index);
+		connman_technology_tethering_notify(technology, false);
 
-		connman_technology_tethering_notify(technology, FALSE);
-
-		if (device != NULL)
+		if (device)
 			connman_device_reconnect_service(device);
 
-		eth_tethering = FALSE;
+		eth_tethering = false;
 	}
 }
 
-static int eth_set_tethering(struct connman_technology *technology,
+static int eth_tech_set_tethering(struct connman_technology *technology,
 				const char *identifier, const char *passphrase,
-				const char *bridge, connman_bool_t enabled)
+				const char *bridge, bool enabled)
 {
-	if (connman_technology_is_tethering_allowed(
-				CONNMAN_SERVICE_TYPE_ETHERNET) == FALSE)
+	if (!connman_technology_is_tethering_allowed(
+			CONNMAN_SERVICE_TYPE_ETHERNET))
 		return 0;
 
 	DBG("bridge %s enabled %d", bridge, enabled);
 
 	if (enabled)
-		eth_enable_tethering(technology, bridge);
+		eth_tech_enable_tethering(technology, bridge);
 	else
-		eth_disable_tethering(technology, bridge);
+		eth_tech_disable_tethering(technology, bridge);
 
 	return 0;
 }
 
-static struct connman_technology_driver eth_driver = {
+static struct connman_technology_driver eth_tech_driver = {
 	.name			= "ethernet",
 	.type			= CONNMAN_SERVICE_TYPE_ETHERNET,
-	.probe			= eth_probe,
-	.remove			= eth_remove,
-	.add_interface		= eth_add_interface,
-	.remove_interface	= eth_remove_interface,
-	.set_tethering		= eth_set_tethering,
+	.probe			= eth_tech_probe,
+	.remove			= eth_tech_remove,
+	.add_interface		= eth_tech_add_interface,
+	.remove_interface	= eth_tech_remove_interface,
+	.set_tethering		= eth_tech_set_tethering,
 };
 
 static int ethernet_init(void)
 {
 	int err;
 
-	err = connman_technology_driver_register(&eth_driver);
+	err = connman_technology_driver_register(&eth_tech_driver);
 	if (err < 0)
 		return err;
 
-	err = connman_network_driver_register(&cable_driver);
+	err = connman_network_driver_register(&eth_network_driver);
 	if (err < 0)
 		return err;
 
-	err = connman_device_driver_register(&ethernet_driver);
+	err = connman_device_driver_register(&eth_dev_driver);
 	if (err < 0) {
-		connman_network_driver_unregister(&cable_driver);
-		return err;
-	}
-
-	err = connman_technology_driver_register(&tech_driver);
-	if (err < 0) {
-		connman_device_driver_unregister(&ethernet_driver);
-		connman_network_driver_unregister(&cable_driver);
+		connman_network_driver_unregister(&eth_network_driver);
 		return err;
 	}
 
@@ -456,13 +358,11 @@ static int ethernet_init(void)
 
 static void ethernet_exit(void)
 {
-	connman_technology_driver_unregister(&eth_driver);
+	connman_technology_driver_unregister(&eth_tech_driver);
 
-	connman_technology_driver_unregister(&tech_driver);
+	connman_network_driver_unregister(&eth_network_driver);
 
-	connman_network_driver_unregister(&cable_driver);
-
-	connman_device_driver_unregister(&ethernet_driver);
+	connman_device_driver_unregister(&eth_dev_driver);
 }
 
 CONNMAN_PLUGIN_DEFINE(ethernet, "Ethernet interface plugin", VERSION,

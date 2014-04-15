@@ -57,6 +57,8 @@ struct firewall_context {
 
 static GSList *managed_tables;
 
+static bool firewall_is_up;
+
 static int chain_to_index(const char *chain_name)
 {
 	if (!g_strcmp0(builtin_chains[NF_IP_PRE_ROUTING], chain_name))
@@ -75,7 +77,7 @@ static int chain_to_index(const char *chain_name)
 
 static int managed_chain_to_index(const char *chain_name)
 {
-	if (g_str_has_prefix(chain_name, CHAIN_PREFIX) == FALSE)
+	if (!g_str_has_prefix(chain_name, CHAIN_PREFIX))
 		return -1;
 
 	return chain_to_index(chain_name + strlen(CHAIN_PREFIX));
@@ -146,7 +148,7 @@ static int insert_managed_rule(const char *table_name,
 		goto out;
 	}
 
-	for (list = managed_tables; list != NULL; list = list->next) {
+	for (list = managed_tables; list; list = list->next) {
 		mtable = list->data;
 
 		if (g_strcmp0(mtable->name, table_name) == 0)
@@ -155,7 +157,7 @@ static int insert_managed_rule(const char *table_name,
 		mtable = NULL;
 	}
 
-	if (mtable == NULL) {
+	if (!mtable) {
 		mtable = g_new0(struct connman_managed_table, 1);
 		mtable->name = g_strdup(table_name);
 
@@ -203,7 +205,7 @@ static int delete_managed_rule(const char *table_name,
 	err = __connman_iptables_delete(table_name, managed_chain,
 					rule_spec);
 
-	for (list = managed_tables; list != NULL; list = list->next) {
+	for (list = managed_tables; list; list = list->next) {
 		mtable = list->data;
 
 		if (g_strcmp0(mtable->name, table_name) == 0)
@@ -212,7 +214,7 @@ static int delete_managed_rule(const char *table_name,
 		mtable = NULL;
 	}
 
-	if (mtable == NULL) {
+	if (!mtable) {
 		err = -ENOENT;
 		goto out;
 	}
@@ -297,7 +299,7 @@ static int firewall_disable(GList *rules)
 	GList *list;
 	int err;
 
-	for (list = rules; list != NULL; list = g_list_previous(list)) {
+	for (list = rules; list; list = g_list_previous(list)) {
 		rule = list->data;
 
 		err = delete_managed_rule(rule->table,
@@ -325,7 +327,7 @@ int __connman_firewall_enable(struct firewall_context *ctx)
 	GList *list;
 	int err;
 
-	for (list = g_list_first(ctx->rules); list != NULL;
+	for (list = g_list_first(ctx->rules); list;
 			list = g_list_next(list)) {
 		rule = list->data;
 
@@ -341,6 +343,8 @@ int __connman_firewall_enable(struct firewall_context *ctx)
 			goto err;
 	}
 
+	firewall_is_up = true;
+
 	return 0;
 
 err:
@@ -354,6 +358,11 @@ err:
 int __connman_firewall_disable(struct firewall_context *ctx)
 {
 	return firewall_disable(g_list_last(ctx->rules));
+}
+
+bool __connman_firewall_is_up(void)
+{
+	return firewall_is_up;
 }
 
 static void iterate_chains_cb(const char *chain_name, void *user_data)
@@ -377,7 +386,7 @@ static void flush_table(const char *table_name)
 	__connman_iptables_iterate_chains(table_name, iterate_chains_cb,
 						&chains);
 
-	for (list = chains; list != NULL; list = list->next) {
+	for (list = chains; list; list = list->next) {
 		id = GPOINTER_TO_INT(list->data);
 
 		managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX,
@@ -417,7 +426,17 @@ static void flush_table(const char *table_name)
 
 static void flush_all_tables(void)
 {
-	/* Flush the tables ConnMan might have modified */
+	/* Flush the tables ConnMan might have modified
+	 * But do so if only ConnMan has done something with
+	 * iptables */
+
+	if (!g_file_test("/proc/net/ip_tables_names",
+			G_FILE_TEST_EXISTS | G_FILE_TEST_IS_REGULAR)) {
+		firewall_is_up = false;
+		return;
+	}
+
+	firewall_is_up = true;
 
 	flush_table("filter");
 	flush_table("mangle");

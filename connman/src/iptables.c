@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -35,6 +35,7 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 
 #include "connman.h"
+#include "src/shared/util.h"
 
 /*
  * Some comments on how the iptables API works (some of them from the
@@ -175,10 +176,10 @@ struct connman_iptables {
 };
 
 static GHashTable *table_hash = NULL;
-static gboolean debug_enabled = FALSE;
+static bool debug_enabled = false;
 
 typedef int (*iterate_entries_cb_t)(struct ipt_entry *entry, int builtin,
-					unsigned int hook,size_t size,
+					unsigned int hook, size_t size,
 					unsigned int offset, void *user_data);
 
 static unsigned int next_hook_entry_index(unsigned int *valid_hooks)
@@ -233,9 +234,8 @@ static int iterate_entries(struct ipt_entry *entries,
 		if (h == NF_INET_NUMHOOKS)
 			hook = h;
 
-		if (h < NF_INET_NUMHOOKS && underflow[h] <= offset) {
+		if (h < NF_INET_NUMHOOKS && underflow[h] <= offset)
 			h = next_hook_entry_index(&valid_hooks);
-		}
 
 		err = cb(entry, builtin, hook, size, offset, user_data);
 		if (err < 0)
@@ -274,18 +274,18 @@ static int target_to_verdict(const char *target_name)
 	return 0;
 }
 
-static gboolean is_builtin_target(const char *target_name)
+static bool is_builtin_target(const char *target_name)
 {
 	if (!g_strcmp0(target_name, LABEL_ACCEPT) ||
 		!g_strcmp0(target_name, LABEL_DROP) ||
 		!g_strcmp0(target_name, LABEL_QUEUE) ||
 		!g_strcmp0(target_name, LABEL_RETURN))
-		return TRUE;
+		return true;
 
-	return FALSE;
+	return false;
 }
 
-static gboolean is_jump(struct connman_iptables_entry *e)
+static bool is_jump(struct connman_iptables_entry *e)
 {
 	struct xt_entry_target *target;
 
@@ -312,7 +312,7 @@ static gboolean is_jump(struct connman_iptables_entry *e)
 	return false;
 }
 
-static gboolean is_fallthrough(struct connman_iptables_entry *e)
+static bool is_fallthrough(struct connman_iptables_entry *e)
 {
 	struct xt_entry_target *target;
 
@@ -327,7 +327,7 @@ static gboolean is_fallthrough(struct connman_iptables_entry *e)
 	return false;
 }
 
-static gboolean is_chain(struct connman_iptables *table,
+static bool is_chain(struct connman_iptables *table,
 				struct connman_iptables_entry *e)
 {
 	struct ipt_entry *entry;
@@ -335,13 +335,13 @@ static gboolean is_chain(struct connman_iptables *table,
 
 	entry = e->entry;
 	if (e->builtin >= 0)
-		return TRUE;
+		return true;
 
 	target = ipt_get_target(entry);
 	if (!g_strcmp0(target->u.user.name, IPT_ERROR_TARGET))
-		return TRUE;
+		return true;
 
-	return FALSE;
+	return false;
 }
 
 static GList *find_chain_head(struct connman_iptables *table,
@@ -379,7 +379,7 @@ static GList *find_chain_tail(struct connman_iptables *table,
 	GList *chain_head, *list;
 
 	chain_head = find_chain_head(table, chain_name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return NULL;
 
 	/* Then we look for the next chain */
@@ -420,7 +420,7 @@ static void update_offsets(struct connman_iptables *table)
 static void update_targets_reference(struct connman_iptables *table,
 				struct connman_iptables_entry *entry_before,
 				struct connman_iptables_entry *modified_entry,
-				gboolean is_removing)
+				bool is_removing)
 {
 	struct connman_iptables_entry *tmp;
 	struct xt_standard_target *t;
@@ -437,7 +437,7 @@ static void update_targets_reference(struct connman_iptables *table,
 
 		t = (struct xt_standard_target *)ipt_get_target(tmp->entry);
 
-		if (is_removing == TRUE) {
+		if (is_removing) {
 			if (t->verdict >= entry_before->offset)
 				t->verdict -= offset;
 		} else {
@@ -447,7 +447,8 @@ static void update_targets_reference(struct connman_iptables *table,
 	}
 
 	if (is_fallthrough(modified_entry)) {
-		t = (struct xt_standard_target *) ipt_get_target(modified_entry->entry);
+		t = (struct xt_standard_target *)
+			ipt_get_target(modified_entry->entry);
 
 		t->verdict = entry_before->offset +
 			modified_entry->entry->target_offset +
@@ -463,11 +464,11 @@ static int iptables_add_entry(struct connman_iptables *table,
 {
 	struct connman_iptables_entry *e, *entry_before;
 
-	if (table == NULL)
+	if (!table)
 		return -1;
 
 	e = g_try_malloc0(sizeof(struct connman_iptables_entry));
-	if (e == NULL)
+	if (!e)
 		return -1;
 
 	e->entry = entry;
@@ -477,7 +478,7 @@ static int iptables_add_entry(struct connman_iptables *table,
 	table->num_entries++;
 	table->size += entry->next_offset;
 
-	if (before == NULL) {
+	if (!before) {
 		e->offset = table->size - entry->next_offset;
 
 		return 0;
@@ -489,7 +490,7 @@ static int iptables_add_entry(struct connman_iptables *table,
 	 * We've just appended/insterted a new entry. All references
 	 * should be bumped accordingly.
 	 */
-	update_targets_reference(table, entry_before, e, FALSE);
+	update_targets_reference(table, entry_before, e, false);
 
 	update_offsets(table);
 
@@ -546,11 +547,11 @@ static int iptables_flush_chain(struct connman_iptables *table,
 	DBG("table %s chain %s", table->name, name);
 
 	chain_head = find_chain_head(table, name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return -EINVAL;
 
 	chain_tail = find_chain_tail(table, name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return -EINVAL;
 
 	entry = chain_head->data;
@@ -605,13 +606,13 @@ static int iptables_add_chain(struct connman_iptables *table,
 	 */
 
 	/* head entry */
-	entry_head_size = sizeof(struct ipt_entry) +
-				sizeof(struct error_target);
+	entry_head_size = ALIGN(sizeof(struct ipt_entry)) +
+			ALIGN(sizeof(struct error_target));
 	entry_head = g_try_malloc0(entry_head_size);
-	if (entry_head == NULL)
+	if (!entry_head)
 		goto err_head;
 
-	entry_head->target_offset = sizeof(struct ipt_entry);
+	entry_head->target_offset = ALIGN(sizeof(struct ipt_entry));
 	entry_head->next_offset = entry_head_size;
 
 	error = (struct error_target *) entry_head->elems;
@@ -623,13 +624,13 @@ static int iptables_add_chain(struct connman_iptables *table,
 		goto err_head;
 
 	/* tail entry */
-	entry_return_size = sizeof(struct ipt_entry) +
-				sizeof(struct ipt_standard_target);
+	entry_return_size = ALIGN(sizeof(struct ipt_entry))+
+			ALIGN(sizeof(struct ipt_standard_target));
 	entry_return = g_try_malloc0(entry_return_size);
-	if (entry_return == NULL)
+	if (!entry_return)
 		goto err;
 
-	entry_return->target_offset = sizeof(struct ipt_entry);
+	entry_return->target_offset = ALIGN(sizeof(struct ipt_entry));
 	entry_return->next_offset = entry_return_size;
 
 	standard = (struct ipt_standard_target *) entry_return->elems;
@@ -659,7 +660,7 @@ static int iptables_delete_chain(struct connman_iptables *table,
 	DBG("table %s chain %s", table->name, name);
 
 	chain_head = find_chain_head(table, name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return -EINVAL;
 
 	entry = chain_head->data;
@@ -669,7 +670,7 @@ static int iptables_delete_chain(struct connman_iptables *table,
 		return -EINVAL;
 
 	chain_tail = find_chain_tail(table, name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return -EINVAL;
 
 	/* Chain must be flushed */
@@ -695,27 +696,28 @@ static struct ipt_entry *new_rule(struct ipt_ip *ip,
 	size_t match_size, target_size;
 
 	match_size = 0;
-	for (tmp_xt_rm = xt_rm; tmp_xt_rm != NULL; tmp_xt_rm = tmp_xt_rm->next)
+	for (tmp_xt_rm = xt_rm; tmp_xt_rm; tmp_xt_rm = tmp_xt_rm->next)
 		match_size += tmp_xt_rm->match->m->u.match_size;
 
 	if (xt_t)
-		target_size = ALIGN(xt_t->t->u.target_size);
+		target_size = xt_t->t->u.target_size;
 	else
 		target_size = ALIGN(sizeof(struct xt_standard_target));
 
-	new_entry = g_try_malloc0(sizeof(struct ipt_entry) + target_size +
-								match_size);
-	if (new_entry == NULL)
+	new_entry = g_try_malloc0(ALIGN(sizeof(struct ipt_entry)) +
+				target_size + match_size);
+	if (!new_entry)
 		return NULL;
 
 	memcpy(&new_entry->ip, ip, sizeof(struct ipt_ip));
 
-	new_entry->target_offset = sizeof(struct ipt_entry) + match_size;
-	new_entry->next_offset = sizeof(struct ipt_entry) + target_size +
-								match_size;
+	new_entry->target_offset = ALIGN(sizeof(struct ipt_entry)) +
+							match_size;
+	new_entry->next_offset = ALIGN(sizeof(struct ipt_entry)) +
+					target_size + match_size;
 
 	match_size = 0;
-	for (tmp_xt_rm = xt_rm; tmp_xt_rm != NULL;
+	for (tmp_xt_rm = xt_rm; tmp_xt_rm;
 				tmp_xt_rm = tmp_xt_rm->next) {
 		memcpy(new_entry->elems + match_size, tmp_xt_rm->match->m,
 					tmp_xt_rm->match->m->u.match_size);
@@ -739,7 +741,7 @@ static void update_hooks(struct connman_iptables *table, GList *chain_head,
 	struct connman_iptables_entry *head, *e;
 	int builtin;
 
-	if (chain_head == NULL)
+	if (!chain_head)
 		return;
 
 	head = chain_head->data;
@@ -767,22 +769,22 @@ static struct ipt_entry *prepare_rule_inclusion(struct connman_iptables *table,
 				const char *target_name,
 				struct xtables_target *xt_t,
 				int *builtin, struct xtables_rule_match *xt_rm,
-				connman_bool_t insert)
+				bool insert)
 {
 	GList *chain_tail, *chain_head;
 	struct ipt_entry *new_entry;
 	struct connman_iptables_entry *head;
 
 	chain_head = find_chain_head(table, chain_name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return NULL;
 
 	chain_tail = find_chain_tail(table, chain_name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return NULL;
 
 	new_entry = new_rule(ip, target_name, xt_t, xt_rm);
-	if (new_entry == NULL)
+	if (!new_entry)
 		return NULL;
 
 	update_hooks(table, chain_head, new_entry);
@@ -795,7 +797,7 @@ static struct ipt_entry *prepare_rule_inclusion(struct connman_iptables *table,
 	head = chain_head->data;
 	if (head->builtin < 0)
 		*builtin = -1;
-	else if (insert == TRUE || chain_head == chain_tail->prev) {
+	else if (insert || chain_head == chain_tail->prev) {
 		*builtin = head->builtin;
 		head->builtin = -1;
 	}
@@ -816,12 +818,12 @@ static int iptables_append_rule(struct connman_iptables *table,
 	DBG("table %s chain %s", table->name, chain_name);
 
 	chain_tail = find_chain_tail(table, chain_name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return -EINVAL;
 
 	new_entry = prepare_rule_inclusion(table, ip, chain_name,
-				target_name, xt_t, &builtin, xt_rm, FALSE);
-	if (new_entry == NULL)
+				target_name, xt_t, &builtin, xt_rm, false);
+	if (!new_entry)
 		return -EINVAL;
 
 	ret = iptables_add_entry(table, new_entry, chain_tail->prev, builtin);
@@ -844,12 +846,12 @@ static int iptables_insert_rule(struct connman_iptables *table,
 	DBG("table %s chain %s", table->name, chain_name);
 
 	chain_head = find_chain_head(table, chain_name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return -EINVAL;
 
 	new_entry = prepare_rule_inclusion(table, ip, chain_name,
-				target_name, xt_t, &builtin, xt_rm, TRUE);
-	if (new_entry == NULL)
+				target_name, xt_t, &builtin, xt_rm, true);
+	if (!new_entry)
 		return -EINVAL;
 
 	if (builtin == -1)
@@ -862,33 +864,33 @@ static int iptables_insert_rule(struct connman_iptables *table,
 	return ret;
 }
 
-static gboolean is_same_ipt_entry(struct ipt_entry *i_e1,
+static bool is_same_ipt_entry(struct ipt_entry *i_e1,
 					struct ipt_entry *i_e2)
 {
 	if (memcmp(&i_e1->ip, &i_e2->ip, sizeof(struct ipt_ip)) != 0)
-		return FALSE;
+		return false;
 
 	if (i_e1->target_offset != i_e2->target_offset)
-		return FALSE;
+		return false;
 
 	if (i_e1->next_offset != i_e2->next_offset)
-		return FALSE;
+		return false;
 
-	return TRUE;
+	return true;
 }
 
-static gboolean is_same_target(struct xt_entry_target *xt_e_t1,
+static bool is_same_target(struct xt_entry_target *xt_e_t1,
 					struct xt_entry_target *xt_e_t2)
 {
 	unsigned int i;
 
-	if (xt_e_t1 == NULL || xt_e_t2 == NULL)
-		return FALSE;
+	if (!xt_e_t1 || !xt_e_t2)
+		return false;
 
 	if (g_strcmp0(xt_e_t1->u.user.name, "") == 0 &&
 			g_strcmp0(xt_e_t2->u.user.name, "") == 0) {
 		/* fallthrough */
-		return TRUE;
+		return true;
 	} else if (g_strcmp0(xt_e_t1->u.user.name, IPT_STANDARD_TARGET) == 0) {
 		struct xt_standard_target *xt_s_t1;
 		struct xt_standard_target *xt_s_t2;
@@ -897,55 +899,55 @@ static gboolean is_same_target(struct xt_entry_target *xt_e_t1,
 		xt_s_t2 = (struct xt_standard_target *) xt_e_t2;
 
 		if (xt_s_t1->verdict != xt_s_t2->verdict)
-			return FALSE;
+			return false;
 	} else {
 		if (xt_e_t1->u.target_size != xt_e_t2->u.target_size)
-			return FALSE;
+			return false;
 
 		if (g_strcmp0(xt_e_t1->u.user.name, xt_e_t2->u.user.name) != 0)
-			return FALSE;
+			return false;
 
 		for (i = 0; i < xt_e_t1->u.target_size -
 				sizeof(struct xt_standard_target); i++) {
 			if ((xt_e_t1->data[i] ^ xt_e_t2->data[i]) != 0)
-				return FALSE;
+				return false;
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
-static gboolean is_same_match(struct xt_entry_match *xt_e_m1,
+static bool is_same_match(struct xt_entry_match *xt_e_m1,
 				struct xt_entry_match *xt_e_m2)
 {
 	unsigned int i;
 
-	if (xt_e_m1 == NULL || xt_e_m2 == NULL)
-		return FALSE;
+	if (!xt_e_m1 || !xt_e_m2)
+		return false;
 
 	if (xt_e_m1->u.match_size != xt_e_m2->u.match_size)
-		return FALSE;
+		return false;
 
 	if (xt_e_m1->u.user.revision != xt_e_m2->u.user.revision)
-		return FALSE;
+		return false;
 
 	if (g_strcmp0(xt_e_m1->u.user.name, xt_e_m2->u.user.name) != 0)
-		return FALSE;
+		return false;
 
 	for (i = 0; i < xt_e_m1->u.match_size - sizeof(struct xt_entry_match);
 			i++) {
 		if ((xt_e_m1->data[i] ^ xt_e_m2->data[i]) != 0)
-			return FALSE;
+			return false;
 	}
 
-	return TRUE;
+	return true;
 }
 
 static GList *find_existing_rule(struct connman_iptables *table,
 				struct ipt_ip *ip, const char *chain_name,
 				const char *target_name,
 				struct xtables_target *xt_t,
-				struct xtables_match *xt_m,
+				GList *matches,
 				struct xtables_rule_match *xt_rm)
 {
 	GList *chain_tail, *chain_head, *list;
@@ -956,23 +958,23 @@ static GList *find_existing_rule(struct connman_iptables *table,
 	int builtin;
 
 	chain_head = find_chain_head(table, chain_name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return NULL;
 
 	chain_tail = find_chain_tail(table, chain_name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return NULL;
 
-	if (!xt_t && !xt_m)
+	if (!xt_t && !matches)
 		return NULL;
 
 	entry_test = new_rule(ip, target_name, xt_t, xt_rm);
-	if (entry_test == NULL)
+	if (!entry_test)
 		return NULL;
 
-	if (xt_t != NULL)
+	if (xt_t)
 		xt_e_t = ipt_get_target(entry_test);
-	if (xt_m != NULL)
+	if (matches)
 		xt_e_m = (struct xt_entry_match *)entry_test->elems;
 
 	entry = chain_head->data;
@@ -990,10 +992,10 @@ static GList *find_existing_rule(struct connman_iptables *table,
 		tmp = list->data;
 		tmp_e = tmp->entry;
 
-		if (is_same_ipt_entry(entry_test, tmp_e) == FALSE)
+		if (!is_same_ipt_entry(entry_test, tmp_e))
 			continue;
 
-		if (xt_t != NULL) {
+		if (xt_t) {
 			struct xt_entry_target *tmp_xt_e_t;
 
 			tmp_xt_e_t = ipt_get_target(tmp_e);
@@ -1002,7 +1004,7 @@ static GList *find_existing_rule(struct connman_iptables *table,
 				continue;
 		}
 
-		if (xt_m != NULL) {
+		if (matches) {
 			struct xt_entry_match *tmp_xt_e_m;
 
 			tmp_xt_e_m = (struct xt_entry_match *)tmp_e->elems;
@@ -1026,28 +1028,29 @@ static int iptables_delete_rule(struct connman_iptables *table,
 				struct ipt_ip *ip, const char *chain_name,
 				const char *target_name,
 				struct xtables_target *xt_t,
-				struct xtables_match *xt_m,
+				GList *matches,
 				struct xtables_rule_match *xt_rm)
 {
 	struct connman_iptables_entry *entry;
 	GList *chain_head, *chain_tail, *list;
 	int builtin, removed;
 
+
 	DBG("table %s chain %s", table->name, chain_name);
 
 	removed = 0;
 
 	chain_head = find_chain_head(table, chain_name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return -EINVAL;
 
 	chain_tail = find_chain_tail(table, chain_name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return -EINVAL;
 
 	list = find_existing_rule(table, ip, chain_name, target_name,
-							xt_t, xt_m, xt_rm);
-	if (list == NULL)
+							xt_t, matches, xt_rm);
+	if (!list)
 		return -EINVAL;
 
 	entry = chain_head->data;
@@ -1070,14 +1073,14 @@ static int iptables_delete_rule(struct connman_iptables *table,
 	}
 
 	entry = list->data;
-	if (entry == NULL)
+	if (!entry)
 		return -EINVAL;
 
 	/* We have deleted a rule,
 	 * all references should be bumped accordingly */
-	if (list->next != NULL)
+	if (list->next)
 		update_targets_reference(table, list->next->data,
-						list->data, TRUE);
+						list->data, true);
 
 	removed += remove_table_entry(table, entry);
 
@@ -1110,7 +1113,7 @@ static int iptables_change_policy(struct connman_iptables *table,
 	}
 
 	chain_head = find_chain_head(table, chain_name);
-	if (chain_head == NULL)
+	if (!chain_head)
 		return -EINVAL;
 
 	entry = chain_head->data;
@@ -1118,7 +1121,7 @@ static int iptables_change_policy(struct connman_iptables *table,
 		return -EINVAL;
 
 	chain_tail = find_chain_tail(table, chain_name);
-	if (chain_tail == NULL)
+	if (!chain_tail)
 		return -EINVAL;
 
 	entry = chain_tail->prev->data;
@@ -1138,14 +1141,14 @@ static struct ipt_replace *iptables_blob(struct connman_iptables *table)
 	unsigned char *entry_index;
 
 	r = g_try_malloc0(sizeof(struct ipt_replace) + table->size);
-	if (r == NULL)
+	if (!r)
 		return NULL;
 
 	memset(r, 0, sizeof(*r) + table->size);
 
 	r->counters = g_try_malloc0(sizeof(struct xt_counters)
 				* table->old_entries);
-	if (r->counters == NULL) {
+	if (!r->counters) {
 		g_free(r);
 		return NULL;
 	}
@@ -1183,14 +1186,14 @@ static void dump_ip(struct ipt_entry *entry)
 	if (strlen(ip->outiface))
 		DBG("\tout %s", ip->outiface);
 
-	if (inet_ntop(AF_INET, &ip->src, ip_string, INET6_ADDRSTRLEN) != NULL &&
-			inet_ntop(AF_INET, &ip->smsk,
-					ip_mask, INET6_ADDRSTRLEN) != NULL)
+	if (inet_ntop(AF_INET, &ip->src, ip_string, INET6_ADDRSTRLEN) &&
+			inet_ntop(AF_INET, &ip->smsk, ip_mask,
+				INET6_ADDRSTRLEN))
 		DBG("\tsrc %s/%s", ip_string, ip_mask);
 
-	if (inet_ntop(AF_INET, &ip->dst, ip_string, INET6_ADDRSTRLEN) != NULL &&
-			inet_ntop(AF_INET, &ip->dmsk,
-					ip_mask, INET6_ADDRSTRLEN) != NULL)
+	if (inet_ntop(AF_INET, &ip->dst, ip_string, INET6_ADDRSTRLEN) &&
+			inet_ntop(AF_INET, &ip->dmsk, ip_mask,
+				INET6_ADDRSTRLEN))
 		DBG("\tdst %s/%s", ip_string, ip_mask);
 }
 
@@ -1236,20 +1239,23 @@ static void dump_target(struct ipt_entry *entry)
 		xt_t = xtables_find_target(IPT_STANDARD_TARGET,
 						XTF_LOAD_MUST_SUCCEED);
 
-		if(xt_t->print != NULL)
+		if (xt_t->print)
 			xt_t->print(NULL, target, 1);
 	} else {
 		xt_t = xtables_find_target(target->u.user.name, XTF_TRY_LOAD);
-		if (xt_t == NULL) {
+		if (!xt_t) {
 			DBG("\ttarget %s", target->u.user.name);
 			return;
 		}
 
-		if(xt_t->print != NULL) {
+		if (xt_t->print) {
 			DBG("\ttarget ");
 			xt_t->print(NULL, target, 1);
 		}
 	}
+
+	if (xt_t == xt_t->next)
+		free(xt_t);
 }
 
 static void dump_match(struct ipt_entry *entry)
@@ -1266,15 +1272,17 @@ static void dump_match(struct ipt_entry *entry)
 		return;
 
 	xt_m = xtables_find_match(match->u.user.name, XTF_TRY_LOAD, NULL);
-	if (xt_m == NULL)
+	if (!xt_m)
 		goto out;
 
-	if(xt_m->print != NULL) {
+	if (xt_m->print) {
 		DBG("\tmatch ");
 		xt_m->print(NULL, match, 1);
 
 		return;
 	}
+	if (xt_m == xt_m->next)
+		free(xt_m);
 
 out:
 	DBG("\tmatch %s", match->u.user.name);
@@ -1372,18 +1380,29 @@ static void dump_ipt_replace(struct ipt_replace *repl)
 static int iptables_get_entries(struct connman_iptables *table)
 {
 	socklen_t entry_size;
+	int err;
 
 	entry_size = sizeof(struct ipt_get_entries) + table->info->size;
 
-	return getsockopt(table->ipt_sock, IPPROTO_IP, IPT_SO_GET_ENTRIES,
+	err = getsockopt(table->ipt_sock, IPPROTO_IP, IPT_SO_GET_ENTRIES,
 				table->blob_entries, &entry_size);
+	if (err < 0)
+		return -errno;
+
+	return 0;
 }
 
 static int iptables_replace(struct connman_iptables *table,
 					struct ipt_replace *r)
 {
-	return setsockopt(table->ipt_sock, IPPROTO_IP, IPT_SO_SET_REPLACE, r,
-			 sizeof(*r) + r->size);
+	int err;
+
+	err = setsockopt(table->ipt_sock, IPPROTO_IP, IPT_SO_SET_REPLACE, r,
+			sizeof(*r) + r->size);
+	if (err < 0)
+		return -errno;
+
+	return 0;
 }
 
 static int add_entry(struct ipt_entry *entry, int builtin, unsigned int hook,
@@ -1393,7 +1412,7 @@ static int add_entry(struct ipt_entry *entry, int builtin, unsigned int hook,
 	struct ipt_entry *new_entry;
 
 	new_entry = g_try_malloc0(entry->next_offset);
-	if (new_entry == NULL)
+	if (!new_entry)
 		return -ENOMEM;
 
 	memcpy(new_entry, entry, entry->next_offset);
@@ -1406,7 +1425,7 @@ static void table_cleanup(struct connman_iptables *table)
 	GList *list;
 	struct connman_iptables_entry *entry;
 
-	if (table == NULL)
+	if (!table)
 		return;
 
 	if (table->ipt_sock >= 0)
@@ -1438,7 +1457,7 @@ static struct connman_iptables *iptables_init(const char *table_name)
 		DBG("ip_tables module loading gives error but trying anyway");
 
 	module = g_strconcat("iptable_", table_name, NULL);
-	if (module == NULL)
+	if (!module)
 		return NULL;
 
 	if (xtables_insmod(module, NULL, TRUE) != 0)
@@ -1447,11 +1466,11 @@ static struct connman_iptables *iptables_init(const char *table_name)
 	g_free(module);
 
 	table = g_try_new0(struct connman_iptables, 1);
-	if (table == NULL)
+	if (!table)
 		return NULL;
 
 	table->info = g_try_new0(struct ipt_getinfo, 1);
-	if (table->info == NULL)
+	if (!table->info)
 		goto err;
 
 	table->ipt_sock = socket(AF_INET, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_RAW);
@@ -1469,7 +1488,7 @@ static struct connman_iptables *iptables_init(const char *table_name)
 
 	table->blob_entries = g_try_malloc0(sizeof(struct ipt_get_entries) +
 						table->info->size);
-	if (table->blob_entries == NULL)
+	if (!table->blob_entries)
 		goto err;
 
 	g_stpcpy(table->blob_entries->name, table_name);
@@ -1492,7 +1511,7 @@ static struct connman_iptables *iptables_init(const char *table_name)
 			table->info->underflow, table->blob_entries->size,
 			add_entry, table);
 
-	if (debug_enabled == TRUE)
+	if (debug_enabled)
 		dump_table(table);
 
 	return table;
@@ -1533,19 +1552,19 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 							const char *target_name)
 {
 	struct xtables_target *xt_t = NULL;
-	gboolean is_builtin, is_user_defined;
+	bool is_builtin, is_user_defined;
 	GList *chain_head = NULL;
 	size_t target_size;
 
-	is_builtin = FALSE;
-	is_user_defined = FALSE;
+	is_builtin = false;
+	is_user_defined = false;
 
 	if (is_builtin_target(target_name))
-		is_builtin = TRUE;
+		is_builtin = true;
 	else {
 		chain_head = find_chain_head(table, target_name);
-		if (chain_head != NULL && chain_head->next != NULL)
-			is_user_defined = TRUE;
+		if (chain_head && chain_head->next)
+			is_user_defined = true;
 	}
 
 	if (is_builtin || is_user_defined)
@@ -1554,13 +1573,13 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 	else
 		xt_t = xtables_find_target(target_name, XTF_TRY_LOAD);
 
-	if (xt_t == NULL)
+	if (!xt_t)
 		return NULL;
 
 	target_size = ALIGN(sizeof(struct ipt_entry_target)) + xt_t->size;
 
 	xt_t->t = g_try_malloc0(target_size);
-	if (xt_t->t == NULL)
+	if (!xt_t->t)
 		return NULL;
 
 	xt_t->t->u.target_size = target_size;
@@ -1571,15 +1590,10 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 		target = (struct xt_standard_target *)(xt_t->t);
 		g_stpcpy(target->target.u.user.name, IPT_STANDARD_TARGET);
 
-		if (is_builtin == TRUE)
+		if (is_builtin)
 			target->verdict = target_to_verdict(target_name);
-		else if (is_user_defined == TRUE) {
+		else if (is_user_defined) {
 			struct connman_iptables_entry *target_rule;
-
-			if (chain_head == NULL) {
-				g_free(xt_t->t);
-				return NULL;
-			}
 
 			target_rule = chain_head->next->data;
 			target->verdict = target_rule->offset;
@@ -1587,11 +1601,11 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 	} else {
 		g_stpcpy(xt_t->t->u.user.name, target_name);
 		xt_t->t->u.user.revision = xt_t->revision;
-		if (xt_t->init != NULL)
+		if (xt_t->init)
 			xt_t->init(xt_t->t);
 	}
 
-	if (xt_t->x6_options != NULL)
+	if (xt_t->x6_options)
 		iptables_globals.opts =
 			xtables_options_xfrm(
 				iptables_globals.orig_opts,
@@ -1606,7 +1620,7 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 				xt_t->extra_opts,
 				&xt_t->option_offset);
 
-	if (iptables_globals.opts == NULL) {
+	if (!iptables_globals.opts) {
 		g_free(xt_t->t);
 		xt_t = NULL;
 	}
@@ -1621,24 +1635,24 @@ static struct xtables_match *prepare_matches(struct connman_iptables *table,
 	struct xtables_match *xt_m;
 	size_t match_size;
 
-	if (match_name == NULL)
+	if (!match_name)
 		return NULL;
 
 	xt_m = xtables_find_match(match_name, XTF_LOAD_MUST_SUCCEED, xt_rm);
 	match_size = ALIGN(sizeof(struct ipt_entry_match)) + xt_m->size;
 
 	xt_m->m = g_try_malloc0(match_size);
-	if (xt_m->m == NULL)
+	if (!xt_m->m)
 		return NULL;
 
 	xt_m->m->u.match_size = match_size;
 	g_stpcpy(xt_m->m->u.user.name, xt_m->name);
 	xt_m->m->u.user.revision = xt_m->revision;
 
-	if (xt_m->init != NULL)
+	if (xt_m->init)
 		xt_m->init(xt_m->m);
 
-	if (xt_m->x6_options != NULL)
+	if (xt_m->x6_options)
 		iptables_globals.opts =
 			xtables_options_xfrm(
 				iptables_globals.orig_opts,
@@ -1653,15 +1667,20 @@ static struct xtables_match *prepare_matches(struct connman_iptables *table,
 				xt_m->extra_opts,
 				&xt_m->option_offset);
 
-	if (iptables_globals.opts == NULL) {
+	if (!iptables_globals.opts) {
 		g_free(xt_m->m);
+
+		if (xt_m == xt_m->next)
+			free(xt_m);
+
 		xt_m = NULL;
 	}
 
 	return xt_m;
 }
 
-static int parse_ip_and_mask(const char *str, struct in_addr *ip, struct in_addr *mask)
+static int parse_ip_and_mask(const char *str, struct in_addr *ip,
+				struct in_addr *mask)
 {
 	char **tokens;
 	uint32_t prefixlength;
@@ -1669,7 +1688,7 @@ static int parse_ip_and_mask(const char *str, struct in_addr *ip, struct in_addr
 	int err;
 
 	tokens = g_strsplit(str, "/", 2);
-	if (tokens == NULL)
+	if (!tokens)
 		return -1;
 
 	if (!inet_pton(AF_INET, tokens[0], ip)) {
@@ -1677,7 +1696,7 @@ static int parse_ip_and_mask(const char *str, struct in_addr *ip, struct in_addr
 		goto out;
 	}
 
-	if (tokens[1] != NULL) {
+	if (tokens[1]) {
 		prefixlength = strtol(tokens[1], NULL, 10);
 		if (prefixlength > 31) {
 			err = -1;
@@ -1702,15 +1721,15 @@ static struct connman_iptables *get_table(const char *table_name)
 {
 	struct connman_iptables *table;
 
-	if (table_name == NULL)
+	if (!table_name)
 		table_name = "filter";
 
 	table = g_hash_table_lookup(table_hash, table_name);
-	if (table != NULL)
+	if (table)
 		return table;
 
 	table = iptables_init(table_name);
-	if (table == NULL)
+	if (!table)
 		return NULL;
 
 	table->name = g_strdup(table_name);
@@ -1724,7 +1743,7 @@ struct parse_context {
 	char **argv;
 	struct ipt_ip *ip;
 	struct xtables_target *xt_t;
-	struct xtables_match *xt_m;
+	GList *xt_m;
 	struct xtables_rule_match *xt_rm;
 };
 
@@ -1742,7 +1761,7 @@ static int prepare_getopt_args(const char *str, struct parse_context *ctx)
 
 	/* Don't forget the last NULL entry */
 	ctx->argv = g_try_malloc0((ctx->argc + 1) * sizeof(char *));
-	if (ctx->argv == NULL) {
+	if (!ctx->argv) {
 		g_strfreev(tokens);
 		return -ENOMEM;
 	}
@@ -1760,19 +1779,19 @@ static int prepare_getopt_args(const char *str, struct parse_context *ctx)
 	return 0;
 }
 
-static int parse_xt_modules(int c, connman_bool_t invert,
+static int parse_xt_modules(int c, bool invert,
 				struct parse_context *ctx)
 {
 	struct xtables_match *m;
 	struct xtables_rule_match *rm;
 
-	for (rm = ctx->xt_rm; rm != NULL; rm = rm->next) {
+	for (rm = ctx->xt_rm; rm; rm = rm->next) {
 		if (rm->completed != 0)
 			continue;
 
 		m = rm->match;
 
-		if (m->x6_parse == NULL && m->parse == NULL)
+		if (!m->x6_parse && !m->parse)
 			continue;
 
 		if (c < (int) m->option_offset ||
@@ -1783,10 +1802,10 @@ static int parse_xt_modules(int c, connman_bool_t invert,
 		xtables_option_mpcall(c, ctx->argv, invert, m, NULL);
 	}
 
-	if (ctx->xt_t == NULL)
+	if (!ctx->xt_t)
 		return 0;
 
-	if (ctx->xt_t->x6_parse == NULL && ctx->xt_t->parse == NULL)
+	if (!ctx->xt_t->x6_parse && !ctx->xt_t->parse)
 		return 0;
 
 	if (c < (int) ctx->xt_t->option_offset ||
@@ -1803,10 +1822,10 @@ static int final_check_xt_modules(struct parse_context *ctx)
 {
 	struct xtables_rule_match *rm;
 
-	for (rm = ctx->xt_rm; rm != NULL; rm = rm->next)
+	for (rm = ctx->xt_rm; rm; rm = rm->next)
 		xtables_option_mfcall(rm->match);
 
-	if (ctx->xt_t != NULL)
+	if (ctx->xt_t)
 		xtables_option_tfcall(ctx->xt_t);
 
 	return 0;
@@ -1891,11 +1910,12 @@ static int parse_rule_spec(struct connman_iptables *table,
 	 *    xtables_option_mpcall() depending on which version
 	 *    of libxtables is found.
 	 */
-	connman_bool_t invert = FALSE;
+	struct xtables_match *xt_m;
+	bool invert = false;
 	int len, c, err;
 
 	ctx->ip = g_try_new0(struct ipt_ip, 1);
-	if (ctx->ip == NULL)
+	if (!ctx->ip)
 		return -ENOMEM;
 
 	/*
@@ -1960,17 +1980,18 @@ static int parse_rule_spec(struct connman_iptables *table,
 			break;
 		case 'm':
 			/* Matches */
-			ctx->xt_m = prepare_matches(table, &ctx->xt_rm, optarg);
-			if (ctx->xt_m == NULL) {
+			xt_m = prepare_matches(table, &ctx->xt_rm, optarg);
+			if (!xt_m) {
 				err = -EINVAL;
 				goto out;
 			}
+			ctx->xt_m = g_list_append(ctx->xt_m, xt_m);
 
 			break;
 		case 'j':
 			/* Target */
 			ctx->xt_t = prepare_target(table, optarg);
-			if (ctx->xt_t == NULL) {
+			if (!ctx->xt_t) {
 				err = -EINVAL;
 				goto out;
 			}
@@ -1978,7 +1999,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 			break;
 		case 1:
 			if (optarg[0] == '!' && optarg[1] == '\0') {
-				invert = TRUE;
+				invert = true;
 
 				/* Remove the '!' from the optarg */
 				optarg[0] = '\0';
@@ -1999,7 +2020,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 			break;
 		}
 
-		invert = FALSE;
+		invert = false;
 	}
 
 	err = final_check_xt_modules(ctx);
@@ -2021,10 +2042,10 @@ static void reset_xtables(void)
 	 * Clear all flags because the flags are only valid
 	 * for one rule.
 	 */
-	for (xt_m = xtables_matches; xt_m != NULL; xt_m = xt_m->next)
+	for (xt_m = xtables_matches; xt_m; xt_m = xt_m->next)
 		xt_m->mflags = 0;
 
-	for (xt_t = xtables_targets; xt_t != NULL; xt_t = xt_t->next) {
+	for (xt_t = xtables_targets; xt_t; xt_t = xt_t->next) {
 		xt_t->tflags = 0;
 		xt_t->used = 0;
 	}
@@ -2044,19 +2065,29 @@ static void reset_xtables(void)
 static void cleanup_parse_context(struct parse_context *ctx)
 {
 	struct xtables_rule_match *rm, *tmp;
+	GList *list;
 
 	g_strfreev(ctx->argv);
 	g_free(ctx->ip);
-	if (ctx->xt_t != NULL) {
+	if (ctx->xt_t) {
 		g_free(ctx->xt_t->t);
 		ctx->xt_t->t = NULL;
 	}
-	if (ctx->xt_m != NULL) {
-		g_free(ctx->xt_m->m);
-		ctx->xt_m->m = NULL;
+
+	for (list = ctx->xt_m; list; list = list->next) {
+		struct xtables_match *xt_m = list->data;
+
+		g_free(xt_m->m);
+
+		if (xt_m != xt_m->next)
+			continue;
+
+		g_free(xt_m);
 	}
-	for (tmp = NULL, rm = ctx->xt_rm; rm != NULL; rm = rm->next) {
-		if (tmp != NULL)
+	g_list_free(ctx->xt_m);
+
+	for (tmp = NULL, rm = ctx->xt_rm; rm; rm = rm->next) {
+		if (tmp)
 			g_free(tmp);
 		tmp = rm;
 	}
@@ -2072,7 +2103,7 @@ int __connman_iptables_dump(const char *table_name)
 	DBG("-t %s -L", table_name);
 
 	table = get_table(table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	dump_table(table);
@@ -2088,7 +2119,7 @@ int __connman_iptables_new_chain(const char *table_name,
 	DBG("-t %s -N %s", table_name, chain);
 
 	table = get_table(table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	return iptables_add_chain(table, chain);
@@ -2102,7 +2133,7 @@ int __connman_iptables_delete_chain(const char *table_name,
 	DBG("-t %s -X %s", table_name, chain);
 
 	table = get_table(table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	return iptables_delete_chain(table, chain);
@@ -2116,7 +2147,7 @@ int __connman_iptables_flush_chain(const char *table_name,
 	DBG("-t %s -F %s", table_name, chain);
 
 	table = get_table(table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	return iptables_flush_chain(table, chain);
@@ -2131,7 +2162,7 @@ int __connman_iptables_change_policy(const char *table_name,
 	DBG("-t %s -F %s", table_name, chain);
 
 	table = get_table(table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	return iptables_change_policy(table, chain, policy);
@@ -2147,7 +2178,7 @@ int __connman_iptables_append(const char *table_name,
 	int err;
 
 	ctx = g_try_new0(struct parse_context, 1);
-	if (ctx == NULL)
+	if (!ctx)
 		return -ENOMEM;
 
 	DBG("-t %s -A %s %s", table_name, chain, rule_spec);
@@ -2157,7 +2188,7 @@ int __connman_iptables_append(const char *table_name,
 		goto out;
 
 	table = get_table(table_name);
-	if (table == NULL) {
+	if (!table) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -2166,7 +2197,7 @@ int __connman_iptables_append(const char *table_name,
 	if (err < 0)
 		goto out;
 
-	if (ctx->xt_t == NULL)
+	if (!ctx->xt_t)
 		target_name = NULL;
 	else
 		target_name = ctx->xt_t->name;
@@ -2190,7 +2221,7 @@ int __connman_iptables_insert(const char *table_name,
 	int err;
 
 	ctx = g_try_new0(struct parse_context, 1);
-	if (ctx == NULL)
+	if (!ctx)
 		return -ENOMEM;
 
 	DBG("-t %s -I %s %s", table_name, chain, rule_spec);
@@ -2200,7 +2231,7 @@ int __connman_iptables_insert(const char *table_name,
 		goto out;
 
 	table = get_table(table_name);
-	if (table == NULL) {
+	if (!table) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -2209,7 +2240,7 @@ int __connman_iptables_insert(const char *table_name,
 	if (err < 0)
 		goto out;
 
-	if (ctx->xt_t == NULL)
+	if (!ctx->xt_t)
 		target_name = NULL;
 	else
 		target_name = ctx->xt_t->name;
@@ -2233,7 +2264,7 @@ int __connman_iptables_delete(const char *table_name,
 	int err;
 
 	ctx = g_try_new0(struct parse_context, 1);
-	if (ctx == NULL)
+	if (!ctx)
 		return -ENOMEM;
 
 	DBG("-t %s -D %s %s", table_name, chain, rule_spec);
@@ -2243,7 +2274,7 @@ int __connman_iptables_delete(const char *table_name,
 		goto out;
 
 	table = get_table(table_name);
-	if (table == NULL) {
+	if (!table) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -2252,7 +2283,7 @@ int __connman_iptables_delete(const char *table_name,
 	if (err < 0)
 		goto out;
 
-	if (ctx->xt_t == NULL)
+	if (!ctx->xt_t)
 		target_name = NULL;
 	else
 		target_name = ctx->xt_t->name;
@@ -2276,12 +2307,12 @@ int __connman_iptables_commit(const char *table_name)
 	DBG("%s", table_name);
 
 	table = g_hash_table_lookup(table_hash, table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	repl = iptables_blob(table);
 
-	if (debug_enabled == TRUE)
+	if (debug_enabled)
 		dump_ipt_replace(repl);
 
 	err = iptables_replace(table, repl);
@@ -2290,7 +2321,7 @@ int __connman_iptables_commit(const char *table_name)
 	g_free(repl);
 
 	if (err < 0)
-	    return err;
+		return err;
 
 	g_hash_table_remove(table_hash, table_name);
 
@@ -2318,7 +2349,7 @@ static int iterate_chains_cb(struct ipt_entry *entry, int builtin,
 	target = ipt_get_target(entry);
 
 	if (!g_strcmp0(target->u.user.name, IPT_ERROR_TARGET))
-		(*cb)((const char*)target->data, cbd->user_data);
+		(*cb)((const char *)target->data, cbd->user_data);
 	else if (builtin >= 0)
 		(*cb)(hooknames[builtin], cbd->user_data);
 
@@ -2333,7 +2364,7 @@ int __connman_iptables_iterate_chains(const char *table_name,
 	struct connman_iptables *table;
 
 	table = get_table(table_name);
-	if (table == NULL)
+	if (!table)
 		return -EINVAL;
 
 	iterate_entries(table->blob_entries->entrytable,
@@ -2353,7 +2384,7 @@ int __connman_iptables_init(void)
 	DBG("");
 
 	if (getenv("CONNMAN_IPTABLES_DEBUG"))
-		debug_enabled = TRUE;
+		debug_enabled = true;
 
 	table_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						NULL, remove_table);

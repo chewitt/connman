@@ -1,6 +1,6 @@
 Name:       connman
 Summary:    Connection Manager
-Version:    1.15
+Version:    1.23
 Release:    1
 Group:      Communications/ConnMan
 License:    GPLv2
@@ -92,7 +92,6 @@ Documentation for connman.
 %setup -q -n %{name}-%{version}/connman
 
 %build
-
 %reconfigure --disable-static \
     --enable-threads \
     --enable-ethernet=builtin \
@@ -103,7 +102,7 @@ Documentation for connman.
     --enable-openvpn=builtin \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
-    --enable-hybris-gps=builtin \
+    --enable-jolla-gps=builtin \
     --enable-client \
     --enable-test \
     --with-systemdunitdir=/%{_lib}/systemd/system \
@@ -117,6 +116,11 @@ rm -rf %{buildroot}
 
 mkdir -p %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/stats-tool %{buildroot}%{_libdir}/%{name}/tools
+cp -a client/connmanctl %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/*-test %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/iptables-unit %{buildroot}%{_libdir}/%{name}/tools
+cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
+
 
 mkdir -p %{buildroot}%{_sysconfdir}/tracing/connman/
 cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/tracing/connman/

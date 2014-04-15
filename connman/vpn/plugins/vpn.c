@@ -2,7 +2,7 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -75,16 +75,16 @@ static int stop_vpn(struct vpn_provider *provider)
 	struct ifreq ifr;
 	int fd, err;
 
-	if (data == NULL)
+	if (!data)
 		return -EINVAL;
 
 	name = vpn_provider_get_driver_name(provider);
-	if (name == NULL)
+	if (!name)
 		return -EINVAL;
 
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
 
-	if (vpn_driver_data != NULL && vpn_driver_data->vpn_driver != NULL &&
+	if (vpn_driver_data && vpn_driver_data->vpn_driver &&
 			vpn_driver_data->vpn_driver->flags == VPN_FLAG_NO_TUN)
 		return 0;
 
@@ -129,7 +129,7 @@ void vpn_died(struct connman_task *task, int exit_code, void *user_data)
 
 	DBG("provider %p data %p", provider, data);
 
-	if (data == NULL)
+	if (!data)
 		goto vpn_exit;
 
 	state = data->state;
@@ -149,12 +149,13 @@ vpn_exit:
 		struct vpn_driver_data *vpn_data = NULL;
 
 		name = vpn_provider_get_driver_name(provider);
-		if (name != NULL)
+		if (name)
 			vpn_data = g_hash_table_lookup(driver_hash, name);
 
-		if (vpn_data != NULL &&
-				vpn_data->vpn_driver->error_code != NULL)
-			ret = vpn_data->vpn_driver->error_code(exit_code);
+		if (vpn_data &&
+				vpn_data->vpn_driver->error_code)
+			ret = vpn_data->vpn_driver->error_code(provider,
+					exit_code);
 		else
 			ret = VPN_PROVIDER_ERROR_UNKNOWN;
 
@@ -166,7 +167,7 @@ vpn_exit:
 
 	vpn_provider_set_index(provider, -1);
 
-	if (data != NULL) {
+	if (data) {
 		vpn_provider_unref(data->provider);
 		g_free(data->if_name);
 		g_free(data);
@@ -180,14 +181,14 @@ int vpn_set_ifname(struct vpn_provider *provider, const char *ifname)
 	struct vpn_data *data = vpn_provider_get_data(provider);
 	int index;
 
-	if (ifname == NULL || data == NULL)
+	if (!ifname || !data)
 		return  -EIO;
 
 	index = connman_inet_ifindex(ifname);
 	if (index < 0)
 		return  -EIO;
 
-	if (data->if_name != NULL)
+	if (data->if_name)
 		g_free(data->if_name);
 
 	data->if_name = (char *)g_strdup(ifname);
@@ -224,14 +225,14 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 
 	name = vpn_provider_get_driver_name(provider);
 
-	if (name == NULL) {
+	if (!name) {
 		DBG("Cannot find VPN driver for provider %p", provider);
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
 		return NULL;
 	}
 
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
-	if (vpn_driver_data == NULL) {
+	if (!vpn_driver_data) {
 		DBG("Cannot find VPN driver data for name %s", name);
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
 		return NULL;
@@ -290,7 +291,7 @@ static int vpn_create_tun(struct vpn_provider *provider)
 	int i, fd, index;
 	int ret = 0;
 
-	if (data == NULL)
+	if (!data)
 		return -EISCONN;
 
 	fd = open("/dev/net/tun", O_RDWR | O_CLOEXEC);
@@ -320,7 +321,7 @@ static int vpn_create_tun(struct vpn_provider *provider)
 	}
 
 	data->if_name = (char *)g_strdup(ifr.ifr_name);
-	if (data->if_name == NULL) {
+	if (!data->if_name) {
 		connman_error("Failed to allocate memory");
 		close(fd);
 		ret = -ENOMEM;
@@ -354,7 +355,8 @@ exist_err:
 }
 
 static int vpn_connect(struct vpn_provider *provider,
-			vpn_provider_connect_cb_t cb, void *user_data)
+			vpn_provider_connect_cb_t cb,
+			const char *dbus_sender, void *user_data)
 {
 	struct vpn_data *data = vpn_provider_get_data(provider);
 	struct vpn_driver_data *vpn_driver_data;
@@ -362,7 +364,7 @@ static int vpn_connect(struct vpn_provider *provider,
 	int ret = 0;
 	enum vpn_state state = VPN_STATE_UNKNOWN;
 
-	if (data != NULL)
+	if (data)
 		state = data->state;
 
 	DBG("data %p state %d", data, state);
@@ -370,7 +372,7 @@ static int vpn_connect(struct vpn_provider *provider,
 	switch (state) {
 	case VPN_STATE_UNKNOWN:
 		data = g_try_new0(struct vpn_data, 1);
-		if (data == NULL)
+		if (!data)
 			return -ENOMEM;
 
 		data->provider = vpn_provider_ref(provider);
@@ -396,12 +398,12 @@ static int vpn_connect(struct vpn_provider *provider,
 	}
 
 	name = vpn_provider_get_driver_name(provider);
-	if (name == NULL)
+	if (!name)
 		return -EINVAL;
 
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
 
-	if (vpn_driver_data == NULL || vpn_driver_data->vpn_driver == NULL) {
+	if (!vpn_driver_data || !vpn_driver_data->vpn_driver) {
 		ret = -EINVAL;
 		goto exist_err;
 	}
@@ -414,7 +416,7 @@ static int vpn_connect(struct vpn_provider *provider,
 
 	data->task = connman_task_create(vpn_driver_data->program);
 
-	if (data->task == NULL) {
+	if (!data->task) {
 		ret = -ENOMEM;
 		stop_vpn(provider);
 		goto exist_err;
@@ -430,7 +432,8 @@ static int vpn_connect(struct vpn_provider *provider,
 	}
 
 	ret = vpn_driver_data->vpn_driver->connect(provider, data->task,
-						data->if_name, cb, user_data);
+						data->if_name, cb, dbus_sender,
+						user_data);
 	if (ret < 0 && ret != -EINPROGRESS) {
 		stop_vpn(provider);
 		connman_task_destroy(data->task);
@@ -468,11 +471,11 @@ static int vpn_disconnect(struct vpn_provider *provider)
 
 	DBG("disconnect provider %p:", provider);
 
-	if (data == NULL)
+	if (!data)
 		return 0;
 
 	name = vpn_provider_get_driver_name(provider);
-	if (name == NULL)
+	if (!name)
 		return 0;
 
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
@@ -496,7 +499,7 @@ static int vpn_remove(struct vpn_provider *provider)
 	struct vpn_data *data;
 
 	data = vpn_provider_get_data(provider);
-	if (data == NULL)
+	if (!data)
 		return 0;
 
 	if (data->watch != 0) {
@@ -519,8 +522,8 @@ static int vpn_save(struct vpn_provider *provider, GKeyFile *keyfile)
 
 	name = vpn_provider_get_driver_name(provider);
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
-	if (vpn_driver_data != NULL &&
-			vpn_driver_data->vpn_driver->save != NULL)
+	if (vpn_driver_data &&
+			vpn_driver_data->vpn_driver->save)
 		return vpn_driver_data->vpn_driver->save(provider, keyfile);
 
 	return 0;
@@ -532,7 +535,7 @@ int vpn_register(const char *name, struct vpn_driver *vpn_driver,
 	struct vpn_driver_data *data;
 
 	data = g_try_new0(struct vpn_driver_data, 1);
-	if (data == NULL)
+	if (!data)
 		return -ENOMEM;
 
 	data->name = name;
@@ -547,12 +550,12 @@ int vpn_register(const char *name, struct vpn_driver *vpn_driver,
 	data->provider_driver.remove = vpn_remove;
 	data->provider_driver.save = vpn_save;
 
-	if (driver_hash == NULL)
+	if (!driver_hash)
 		driver_hash = g_hash_table_new_full(g_str_hash,
 							g_str_equal,
 							NULL, g_free);
 
-	if (driver_hash == NULL) {
+	if (!driver_hash) {
 		connman_error("driver_hash not initialized for %s", name);
 		g_free(data);
 		return -ENOMEM;
@@ -570,7 +573,7 @@ void vpn_unregister(const char *name)
 	struct vpn_driver_data *data;
 
 	data = g_hash_table_lookup(driver_hash, name);
-	if (data == NULL)
+	if (!data)
 		return;
 
 	vpn_provider_driver_unregister(&data->provider_driver);

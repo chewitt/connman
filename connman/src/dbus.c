@@ -33,7 +33,7 @@ dbus_bool_t connman_dbus_validate_ident(const char *ident)
 {
 	unsigned int i;
 
-	if (ident == NULL)
+	if (!ident)
 		return FALSE;
 
 	for (i = 0; i < strlen(ident); i++) {
@@ -54,13 +54,13 @@ char *connman_dbus_encode_string(const char *value)
 	GString *str;
 	unsigned int i, size;
 
-	if (value == NULL)
+	if (!value)
 		return NULL;
 
 	size = strlen(value);
 
 	str = g_string_new(NULL);
-	if (str == NULL)
+	if (!str)
 		return NULL;
 
 	for (i = 0; i < size; i++) {
@@ -183,11 +183,13 @@ void connman_dbus_property_append_array(DBusMessageIter *iter,
 
 	switch (type) {
 	case DBUS_TYPE_STRING:
-		variant_sig = DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING;
+		variant_sig = DBUS_TYPE_ARRAY_AS_STRING
+				DBUS_TYPE_STRING_AS_STRING;
 		array_sig = DBUS_TYPE_STRING_AS_STRING;
 		break;
 	case DBUS_TYPE_OBJECT_PATH:
-		variant_sig = DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_OBJECT_PATH_AS_STRING;
+		variant_sig = DBUS_TYPE_ARRAY_AS_STRING
+				DBUS_TYPE_OBJECT_PATH_AS_STRING;
 		array_sig = DBUS_TYPE_OBJECT_PATH_AS_STRING;
 		break;
 	case DBUS_TYPE_DICT_ENTRY:
@@ -234,11 +236,11 @@ dbus_bool_t connman_dbus_property_changed_basic(const char *path,
 	DBusMessage *signal;
 	DBusMessageIter iter;
 
-	if (path == NULL)
+	if (!path)
 		return FALSE;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-	if (signal == NULL)
+	if (!signal)
 		return FALSE;
 
 	dbus_message_iter_init_append(signal, &iter);
@@ -256,11 +258,11 @@ dbus_bool_t connman_dbus_property_changed_dict(const char *path,
 	DBusMessage *signal;
 	DBusMessageIter iter;
 
-	if (path == NULL)
+	if (!path)
 		return FALSE;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-	if (signal == NULL)
+	if (!signal)
 		return FALSE;
 
 	dbus_message_iter_init_append(signal, &iter);
@@ -278,11 +280,11 @@ dbus_bool_t connman_dbus_property_changed_array(const char *path,
 	DBusMessage *signal;
 	DBusMessageIter iter;
 
-	if (path == NULL)
+	if (!path)
 		return FALSE;
 
 	signal = dbus_message_new_signal(path, interface, "PropertyChanged");
-	if (signal == NULL)
+	if (!signal)
 		return FALSE;
 
 	dbus_message_iter_init_append(signal, &iter);
@@ -301,13 +303,13 @@ dbus_bool_t connman_dbus_setting_changed_basic(const char *owner,
 	DBusMessage *msg;
 	DBusMessageIter array, dict;
 
-	if (owner == NULL || path == NULL)
+	if (!owner || !path)
 		return FALSE;
 
 	msg = dbus_message_new_method_call(owner, path,
 						CONNMAN_NOTIFICATION_INTERFACE,
 						"Update");
-	if (msg == NULL)
+	if (!msg)
 		return FALSE;
 
 	dbus_message_iter_init_append(msg, &array);
@@ -330,13 +332,13 @@ dbus_bool_t connman_dbus_setting_changed_dict(const char *owner,
 	DBusMessage *msg;
 	DBusMessageIter array, dict;
 
-	if (owner == NULL || path == NULL)
+	if (!owner || !path)
 		return FALSE;
 
 	msg = dbus_message_new_method_call(owner, path,
 						CONNMAN_NOTIFICATION_INTERFACE,
 						"Update");
-	if (msg == NULL)
+	if (!msg)
 		return FALSE;
 
 	dbus_message_iter_init_append(msg, &array);
@@ -359,13 +361,13 @@ dbus_bool_t connman_dbus_setting_changed_array(const char *owner,
 	DBusMessage *msg;
 	DBusMessageIter array, dict;
 
-	if (owner == NULL || path == NULL)
+	if (!owner || !path)
 		return FALSE;
 
 	msg = dbus_message_new_method_call(owner, path,
 						CONNMAN_NOTIFICATION_INTERFACE,
 						"Update");
-	if (msg == NULL)
+	if (!msg)
 		return FALSE;
 
 	dbus_message_iter_init_append(msg, &array);
@@ -385,7 +387,7 @@ dbus_bool_t __connman_dbus_append_objpath_dict_array(DBusMessage *msg,
 {
 	DBusMessageIter iter, array;
 
-	if (msg == NULL || function == NULL)
+	if (!msg || !function)
 		return FALSE;
 
 	dbus_message_iter_init_append(msg, &iter);
@@ -398,6 +400,25 @@ dbus_bool_t __connman_dbus_append_objpath_dict_array(DBusMessage *msg,
 					DBUS_TYPE_VARIANT_AS_STRING
 				DBUS_DICT_ENTRY_END_CHAR_AS_STRING
 			DBUS_STRUCT_END_CHAR_AS_STRING, &array);
+
+	function(&array, user_data);
+
+	dbus_message_iter_close_container(&iter, &array);
+
+	return TRUE;
+}
+
+dbus_bool_t __connman_dbus_append_objpath_array(DBusMessage *msg,
+			connman_dbus_append_cb_t function, void *user_data)
+{
+	DBusMessageIter iter, array;
+
+	if (!msg || !function)
+		return FALSE;
+
+	dbus_message_iter_init_append(msg, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+				DBUS_TYPE_OBJECT_PATH_AS_STRING, &array);
 
 	function(&array, user_data);
 
@@ -419,7 +440,7 @@ static void get_connection_unix_user_reply(DBusPendingCall *call,
 	DBusMessageIter iter;
 	DBusMessage *reply;
 	int err = 0;
-	unsigned int uid;
+	unsigned int uid = 0;
 
 	reply = dbus_pending_call_steal_reply(call);
 
@@ -429,7 +450,7 @@ static void get_connection_unix_user_reply(DBusPendingCall *call,
 		goto done;
 	}
 
-	if (dbus_message_has_signature(reply, "u") == FALSE) {
+	if (!dbus_message_has_signature(reply, "u")) {
 		DBG("Message signature is wrong");
 		err = -EINVAL;
 		goto done;
@@ -457,7 +478,7 @@ int connman_dbus_get_connection_unix_user(DBusConnection *connection,
 	int err;
 
 	data = g_try_new0(struct callback_data, 1);
-	if (data == NULL) {
+	if (!data) {
 		DBG("Can't allocate data structure");
 		return -ENOMEM;
 	}
@@ -465,7 +486,7 @@ int connman_dbus_get_connection_unix_user(DBusConnection *connection,
 	msg = dbus_message_new_method_call(DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
 					DBUS_INTERFACE_DBUS,
 					"GetConnectionUnixUser");
-	if (msg == NULL) {
+	if (!msg) {
 		DBG("Can't allocate new message");
 		err = -ENOMEM;
 		goto err;
@@ -474,14 +495,13 @@ int connman_dbus_get_connection_unix_user(DBusConnection *connection,
 	dbus_message_append_args(msg, DBUS_TYPE_STRING, &bus_name,
 					DBUS_TYPE_INVALID);
 
-	if (dbus_connection_send_with_reply(connection, msg,
-						&call, -1) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, msg, &call, -1)) {
 		DBG("Failed to execute method call");
 		err = -EINVAL;
 		goto err;
 	}
 
-	if (call == NULL) {
+	if (!call) {
 		DBG("D-Bus connection not available");
 		err = -EINVAL;
 		goto err;
@@ -522,7 +542,7 @@ static unsigned char *parse_context(DBusMessage *msg)
 		return NULL;
 
 	ctx = g_try_malloc0(size + 1);
-	if (ctx == NULL)
+	if (!ctx)
 		return NULL;
 
 	p = ctx;
@@ -555,7 +575,7 @@ static void selinux_get_context_reply(DBusPendingCall *call, void *user_data)
 		goto done;
 	}
 
-	if (dbus_message_has_signature(reply, "ay") == FALSE) {
+	if (!dbus_message_has_signature(reply, "ay")) {
 		DBG("Message signature is wrong");
 		err = -EINVAL;
 		goto done;
@@ -583,11 +603,11 @@ int connman_dbus_get_selinux_context(DBusConnection *connection,
 	DBusMessage *msg = NULL;
 	int err;
 
-	if (func == NULL)
+	if (!func)
 		return -EINVAL;
 
 	data = g_try_new0(struct callback_data, 1);
-	if (data == NULL) {
+	if (!data) {
 		DBG("Can't allocate data structure");
 		return -ENOMEM;
 	}
@@ -595,7 +615,7 @@ int connman_dbus_get_selinux_context(DBusConnection *connection,
 	msg = dbus_message_new_method_call(DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
 					DBUS_INTERFACE_DBUS,
 					"GetConnectionSELinuxSecurityContext");
-	if (msg == NULL) {
+	if (!msg) {
 		DBG("Can't allocate new message");
 		err = -ENOMEM;
 		goto err;
@@ -604,14 +624,13 @@ int connman_dbus_get_selinux_context(DBusConnection *connection,
 	dbus_message_append_args(msg, DBUS_TYPE_STRING, &service,
 					DBUS_TYPE_INVALID);
 
-	if (dbus_connection_send_with_reply(connection, msg,
-						&call, -1) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, msg, &call, -1)) {
 		DBG("Failed to execute method call");
 		err = -EINVAL;
 		goto err;
 	}
 
-	if (call == NULL) {
+	if (!call) {
 		DBG("D-Bus connection not available");
 		err = -EINVAL;
 		goto err;
@@ -636,7 +655,7 @@ err:
 
 DBusConnection *connman_dbus_get_connection(void)
 {
-	if (connection == NULL)
+	if (!connection)
 		return NULL;
 
 	return dbus_connection_ref(connection);

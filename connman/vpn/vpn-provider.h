@@ -2,7 +2,7 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,8 +22,9 @@
 #ifndef __VPN_PROVIDER_H
 #define __VPN_PROVIDER_H
 
+#include <stdbool.h>
+
 #include <glib.h>
-#include <connman/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -125,7 +126,8 @@ struct vpn_provider_driver {
 	int (*probe) (struct vpn_provider *provider);
 	int (*remove) (struct vpn_provider *provider);
 	int (*connect) (struct vpn_provider *provider,
-			vpn_provider_connect_cb_t cb, void *user_data);
+			vpn_provider_connect_cb_t cb, const char *dbus_sender,
+			void *user_data);
 	int (*disconnect) (struct vpn_provider *provider);
 	int (*save) (struct vpn_provider *provider, GKeyFile *keyfile);
 };

@@ -25,6 +25,7 @@
 
 #define _GNU_SOURCE
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -105,7 +106,7 @@ static int read_baud_rate(unsigned long *baud)
 	DBG("");
 
 	f = fopen(TIST_SYSFS_BAUD, "r");
-	if (f == NULL)
+	if (!f)
 		return -EIO;
 
 	err = fscanf(f, "%lu", baud);
@@ -126,7 +127,7 @@ static int read_uart_name(char uart_name[], size_t uart_name_len)
 	memset(uart_name, 0, uart_name_len);
 
 	f = fopen(TIST_SYSFS_UART, "r");
-	if (f == NULL)
+	if (!f)
 		return -EIO;
 
         err = fscanf(f, "%s", uart_name);
@@ -342,7 +343,7 @@ err:
 	return FALSE;
 }
 
-static int install_ldisc(GIOChannel *channel, gboolean install)
+static int install_ldisc(GIOChannel *channel, bool install)
 {
 	int uart_fd, err;
 	struct speed_change_cmd cmd;
@@ -350,11 +351,11 @@ static int install_ldisc(GIOChannel *channel, gboolean install)
 
 	DBG("%d %p", install, uart_channel);
 
-	if (install == FALSE) {
+	if (!install) {
 		install_count = 0;
 		__sync_synchronize();
 
-		if (uart_channel == NULL) {
+		if (!uart_channel) {
 			DBG("UART channel is NULL");
 			return 0;
 		}
@@ -367,19 +368,19 @@ static int install_ldisc(GIOChannel *channel, gboolean install)
 		return 0;
 	}
 
-	if (uart_channel != NULL) {
+	if (uart_channel) {
 		g_io_channel_shutdown(uart_channel, TRUE, NULL);
 		g_io_channel_unref(uart_channel);
 		uart_channel = NULL;
 	}
 
 	DBG("opening %s custom baud %lu", uart_dev_name, baud_rate);
-	
+
 	uart_fd = open(uart_dev_name, O_RDWR | O_CLOEXEC);
 	if (uart_fd < 0)
 		return -EIO;
 
-	uart_channel = g_io_channel_unix_new(uart_fd);	
+	uart_channel = g_io_channel_unix_new(uart_fd);
 	g_io_channel_set_close_on_unref(uart_channel, TRUE);
 
 	g_io_channel_set_encoding(uart_channel, NULL, NULL);
@@ -441,7 +442,7 @@ static gboolean install_event(GIOChannel *channel,
 {
 	GIOStatus status = G_IO_STATUS_NORMAL;
 	unsigned int install_state;
-	gboolean install;
+	bool install;
 	char buf[8];
 	gsize len;
 
@@ -462,7 +463,8 @@ static gboolean install_event(GIOChannel *channel,
 		}
 
 		/* Read the install value */
-		status = g_io_channel_read_chars(channel, (gchar *) buf, 8, &len, NULL);
+		status = g_io_channel_read_chars(channel, (gchar *) buf,
+						8, &len, NULL);
 		if (status != G_IO_STATUS_NORMAL) {
 			g_io_channel_shutdown(channel, TRUE, NULL);
 			g_io_channel_unref(channel);
@@ -575,7 +577,7 @@ static int tist_init(void)
 		install_count = 1;
 		__sync_synchronize();
 
-		err = install_ldisc(install_channel, TRUE);
+		err = install_ldisc(install_channel, true);
 		if (err < 0) {
 			connman_error("ldisc installtion failed");
 			return err;
@@ -597,7 +599,7 @@ static void tist_exit(void)
 	g_io_channel_shutdown(install_channel, TRUE, NULL);
 	g_io_channel_unref(install_channel);
 
-	if (uart_channel != NULL) {
+	if (uart_channel) {
 		g_io_channel_shutdown(uart_channel, TRUE, NULL);
 		g_io_channel_unref(uart_channel);
 		uart_channel = NULL;

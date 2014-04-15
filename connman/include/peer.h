@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2014  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,25 +19,27 @@
  *
  */
 
-#ifndef __CONNMAN_TYPES_H
-#define __CONNMAN_TYPES_H
+#ifndef __CONNMAN_PEER_H
+#define __CONNMAN_PEER_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifndef	FALSE
-#define	FALSE	(0)
-#endif
+struct connman_peer;
 
-#ifndef	TRUE
-#define	TRUE	(!FALSE)
-#endif
+struct connman_peer *connman_peer_create(const char *identifier);
+void connman_peer_destroy(struct connman_peer *peer);
 
-typedef int		connman_bool_t;
+void connman_peer_set_name(struct connman_peer *peer, const char *name);
+
+int connman_peer_register(struct connman_peer *peer);
+void connman_peer_unregister(struct connman_peer *peer);
+
+struct connman_peer *connman_peer_get(const char *identifier);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __CONNMAN_TYPES_H */
+#endif /* __CONNMAN_PEER_H */

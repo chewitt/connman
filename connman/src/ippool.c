@@ -2,8 +2,8 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
- *  Copyright (C) 2012  BMW Car IT GmbH. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  BMW Car IT GmbH. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -24,7 +24,6 @@
 #include <config.h>
 #endif
 
-#include <getopt.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -82,7 +81,7 @@ __connman_ippool_ref_debug(struct connman_ippool *pool,
 void __connman_ippool_unref_debug(struct connman_ippool *pool,
 				const char *file, int line, const char *caller)
 {
-	if (pool == NULL)
+	if (!pool)
 		return;
 
 	DBG("%p ref %d by %s:%d:%s()", pool, pool->refcount - 1,
@@ -170,7 +169,7 @@ static uint32_t get_free_block(unsigned int size)
 	struct address_info *info;
 	uint32_t block;
 	GSList *list;
-	connman_bool_t collision;
+	bool collision;
 
 	/*
 	 * Instead starting always from the 16 bit block, we start
@@ -188,17 +187,17 @@ static uint32_t get_free_block(unsigned int size)
 		block = next_block(last_block);
 
 	do {
-		collision = FALSE;
-		for (list = allocated_blocks; list != NULL; list = list->next) {
+		collision = false;
+		for (list = allocated_blocks; list; list = list->next) {
 			info = list->data;
 
 			if (info->start <= block && block <= info->end) {
-				collision = TRUE;
+				collision = true;
 				break;
 			}
 		}
 
-		if (collision == FALSE)
+		if (!collision)
 			return block;
 
 		block = next_block(block);
@@ -211,7 +210,7 @@ static struct address_info *lookup_info(int index, uint32_t start)
 {
 	GSList *list;
 
-	for (list = allocated_blocks; list != NULL; list = list->next) {
+	for (list = allocated_blocks; list; list = list->next) {
 		struct address_info *info = list->data;
 
 		if (info->index == index && info->start == start)
@@ -221,26 +220,18 @@ static struct address_info *lookup_info(int index, uint32_t start)
 	return NULL;
 }
 
-static connman_bool_t is_private_address(uint32_t address)
+static bool is_private_address(uint32_t address)
 {
-	uint32_t val;
+	unsigned int a, b;
 
-	if ((address & 0xff000000) == block_24_bits)
-		return TRUE;
+	a = (address & 0xff000000) >> 24;
+	b = (address & 0x00ff0000) >> 16;
 
-	if ((address & 0xffff0000) == block_20_bits) {
-		val = (address & 0x00ff0000) >> 16;
+	if (a == 10 || (a == 192 && b == 168) ||
+					(a == 172 && (b >= 16 && b <= 31)))
+		return true;
 
-		if (val < 16 || val > 31)
-			return FALSE;
-
-		return TRUE;
-	}
-
-	if ((address & 0xffffff00) == block_16_bits)
-		return TRUE;
-
-	return FALSE;
+	return false;
 }
 
 void __connman_ippool_newaddr(int index, const char *address,
@@ -255,7 +246,7 @@ void __connman_ippool_newaddr(int index, const char *address,
 		return;
 
 	start = ntohl(inp.s_addr);
-	if (is_private_address(start) == FALSE)
+	if (!is_private_address(start))
 		return;
 
 	if (prefixlen >= 32)
@@ -267,11 +258,11 @@ void __connman_ippool_newaddr(int index, const char *address,
 	end = start | ~mask;
 
 	info = lookup_info(index, start);
-	if (info != NULL)
+	if (info)
 		goto update;
 
 	info = g_try_new0(struct address_info, 1);
-	if (info == NULL)
+	if (!info)
 		return;
 
 	info->index = index;
@@ -283,7 +274,7 @@ void __connman_ippool_newaddr(int index, const char *address,
 update:
 	info->use_count = info->use_count + 1;
 
-	if (info->use_count > 1 || info->pool != NULL) {
+	if (info->use_count > 1 || info->pool) {
 		/*
 		 * We need only to check for the first IP in a block for
 		 * collisions.
@@ -291,16 +282,16 @@ update:
 		return;
 	}
 
-	for (list = allocated_blocks; list != NULL; list = list->next) {
+	for (list = allocated_blocks; list; list = list->next) {
 		it = list->data;
 
 		if (it == info)
 			continue;
 
-		if (!(it->start <= info->start || info->start <= it->end))
+		if (!(info->start >= it->start && info->start <= it->end))
 			continue;
 
-		if (it->pool != NULL && it->pool->collision_cb != NULL)
+		if (it->pool && it->pool->collision_cb)
 			it->pool->collision_cb(it->pool, it->pool->user_data);
 
 		return;
@@ -318,27 +309,28 @@ void __connman_ippool_deladdr(int index, const char *address,
 		return;
 
 	start = ntohl(inp.s_addr);
-	if (is_private_address(start) == FALSE)
+	if (!is_private_address(start))
 		return;
 
 	mask = ~(0xffffffff >> prefixlen);
 	start = start & mask;
 
 	info = lookup_info(index, start);
-	if (info == NULL) {
+	if (!info) {
 		/* In theory this should never happen */
 		connman_error("Inconsistent IP pool management (start not found)");
 		return;
 	}
 
 	info->use_count = info->use_count - 1;
-	if (info->pool != NULL)
+	if (info->pool)
 		return;
 
 	if (info->use_count > 0)
 		return;
 
 	allocated_blocks = g_slist_remove(allocated_blocks, info);
+	g_free(info);
 }
 
 struct connman_ippool *__connman_ippool_create(int index,
@@ -369,11 +361,11 @@ struct connman_ippool *__connman_ippool_create(int index,
 	}
 
 	pool = g_try_new0(struct connman_ippool, 1);
-	if (pool == NULL)
+	if (!pool)
 		return NULL;
 
 	info = g_try_new0(struct address_info, 1);
-	if (info == NULL) {
+	if (!info) {
 		g_free(pool);
 		return NULL;
 	}
@@ -435,7 +427,7 @@ static void pool_free(gpointer data)
 {
 	struct connman_ippool *pool = data;
 
-	if (pool->info != NULL) {
+	if (pool->info) {
 		allocated_blocks = g_slist_remove(allocated_blocks, pool->info);
 		g_free(pool->info);
 	}
@@ -471,6 +463,7 @@ void __connman_ippool_cleanup(void)
 	g_hash_table_destroy(pool_hash);
 	pool_hash = NULL;
 
-	g_slist_free(allocated_blocks);
+	g_slist_free_full(allocated_blocks, g_free);
 	last_block = 0;
+	allocated_blocks = NULL;
 }

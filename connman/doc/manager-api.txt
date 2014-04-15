@@ -39,6 +39,13 @@ Methods		dict GetProperties()
 
 			Possible Errors: [service].Error.InvalidArguments
 
+		array{object,dict} GetPeers() [experimental]
+
+			Returns a sorted list of tuples with peer object path
+			and dictionary of peer properties
+
+			Possible Errors: [service].Error.InvalidArguments
+
 		object ConnectProvider(dict provider)	[deprecated]
 
 			Connect to a VPN specified by the given provider
@@ -186,6 +193,28 @@ Signals		TechnologyAdded(object path, dict properties)
 			required to watch the PropertyChanged signal of
 			the service object.
 
+		PeersChanged(array{object, dict}, array{object}) [experimental]
+
+			Signals a list of peers that have been changed via the
+			first array. And a list of peer that have been removed
+			via the second array.
+
+			The list of changed peers is sorted. The dictionary
+			with the properties might be empty in case none of the
+			properties have changed. Or only contains the
+			properties that have changed.
+
+			For newly added peers the whole set of properties will
+			be present.
+
+			The list of removed peers can be empty.
+
+			This signal will only be triggered when the sort order
+			of the peer list or the number of peers changes. It
+			will not be emitted if only a property of the peer
+			object changes. For that it is required to watch the
+			PropertyChanged signal of the peer object.
+
 		PropertyChanged(string name, variant value)
 
 			This signal indicates a changed value of the given
@@ -232,11 +261,9 @@ Properties	string State [readonly]
 			the limited usage of WiFi or Bluetooth devices might
 			be allowed in some situations.
 
-		boolean SessionMode [readwrite]  [experminental]
+		boolean SessionMode [readwrite]  [experminental][deprecated]
 
-			This disables the auto connect feature. It should be
-			enabled when the Session API is used. When SessionMode
-			is enabled, 'ConnectService' and 'ConnectProvider'
-			method calls are disallowed.
+			This property exists only for compatibility reasons
+			and does not affect ConnMan in any way.
 
 			The default value is false.

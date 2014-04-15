@@ -2,8 +2,8 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2010  BMW Car IT GmbH. All rights reserved.
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010,2013  BMW Car IT GmbH. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -96,17 +96,17 @@ static DBusMessage *pptp_get_sec(struct connman_task *task,
 	struct vpn_provider *provider = user_data;
 	DBusMessage *reply;
 
-	if (dbus_message_get_no_reply(msg) == TRUE)
+	if (dbus_message_get_no_reply(msg))
 		return NULL;
 
 	user = vpn_provider_get_string(provider, "PPTP.User");
 	passwd = vpn_provider_get_string(provider, "PPTP.Password");
-	if (user == NULL || strlen(user) == 0 ||
-				passwd == NULL || strlen(passwd) == 0)
+	if (!user || strlen(user) == 0 ||
+				!passwd || strlen(passwd) == 0)
 		return NULL;
 
 	reply = dbus_message_new_method_return(msg);
-	if (reply == NULL)
+	if (!reply)
 		return NULL;
 
 	dbus_message_append_args(reply, DBUS_TYPE_STRING, &user,
@@ -128,7 +128,7 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 	dbus_message_iter_get_basic(&iter, &reason);
 	dbus_message_iter_next(&iter);
 
-	if (provider == NULL) {
+	if (!provider) {
 		connman_error("No provider found");
 		return VPN_STATE_FAILURE;
 	}
@@ -157,20 +157,14 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 
 		DBG("%s = %s", key, value);
 
-		if (!strcmp(key, "INTERNAL_IP4_ADDRESS")) {
-			vpn_provider_set_string(provider, "Address", value);
+		if (!strcmp(key, "INTERNAL_IP4_ADDRESS"))
 			addressv4 = g_strdup(value);
-		}
 
-		if (!strcmp(key, "INTERNAL_IP4_NETMASK")) {
-			vpn_provider_set_string(provider, "Netmask", value);
+		if (!strcmp(key, "INTERNAL_IP4_NETMASK"))
 			netmask = g_strdup(value);
-		}
 
-		if (!strcmp(key, "INTERNAL_IP4_DNS")) {
-			vpn_provider_set_string(provider, "DNS", value);
+		if (!strcmp(key, "INTERNAL_IP4_DNS"))
 			nameservers = g_strdup(value);
-		}
 
 		if (!strcmp(key, "INTERNAL_IFNAME"))
 			ifname = g_strdup(value);
@@ -186,12 +180,12 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 		return VPN_STATE_FAILURE;
 	}
 
-	if (addressv4 != NULL)
+	if (addressv4)
 		ipaddress = connman_ipaddress_alloc(AF_INET);
 
 	g_free(ifname);
 
-	if (ipaddress == NULL) {
+	if (!ipaddress) {
 		connman_error("No IP address for provider");
 		g_free(addressv4);
 		g_free(netmask);
@@ -200,12 +194,12 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 	}
 
 	value = vpn_provider_get_string(provider, "HostIP");
-	if (value != NULL) {
+	if (value) {
 		vpn_provider_set_string(provider, "Gateway", value);
 		gateway = g_strdup(value);
 	}
 
-	if (addressv4 != NULL)
+	if (addressv4)
 		connman_ipaddress_set_ipv4(ipaddress, addressv4, netmask,
 					gateway);
 
@@ -224,29 +218,29 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 static int pptp_save(struct vpn_provider *provider, GKeyFile *keyfile)
 {
 	const char *option;
-	connman_bool_t pptp_option, pppd_option;
+	bool pptp_option, pppd_option;
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(pptp_options); i++) {
-		pptp_option = pppd_option = FALSE;
+		pptp_option = pppd_option = false;
 
 		if (strncmp(pptp_options[i].cm_opt, "PPTP.", 5) == 0)
-			pptp_option = TRUE;
+			pptp_option = true;
 
 		if (strncmp(pptp_options[i].cm_opt, "PPPD.", 5) == 0)
-			pppd_option = TRUE;
+			pppd_option = true;
 
-		if (pptp_option == TRUE || pppd_option == TRUE) {
+		if (pptp_option || pppd_option) {
 			option = vpn_provider_get_string(provider,
 							pptp_options[i].cm_opt);
-			if (option == NULL) {
+			if (!option) {
 				/*
 				 * Check if the option prefix is PPTP as the
 				 * PPPD options were using PPTP prefix earlier.
 				 */
 				char *pptp_str;
 
-				if (pppd_option == FALSE)
+				if (!pppd_option)
 					continue;
 
 				pptp_str = g_strdup_printf("PPTP.%s",
@@ -255,7 +249,7 @@ static int pptp_save(struct vpn_provider *provider, GKeyFile *keyfile)
 								pptp_str);
 				g_free(pptp_str);
 
-				if (option == NULL)
+				if (!option)
 					continue;
 			}
 
@@ -271,7 +265,7 @@ static int pptp_save(struct vpn_provider *provider, GKeyFile *keyfile)
 static void pptp_write_bool_option(struct connman_task *task,
 				const char *key, const char *value)
 {
-	if (key != NULL && value != NULL) {
+	if (key && value) {
 		if (strcasecmp(value, "yes") == 0 ||
 				strcasecmp(value, "true") == 0 ||
 				strcmp(value, "1") == 0)
@@ -300,7 +294,7 @@ static void request_input_reply(DBusMessage *reply, void *user_data)
 		goto done;
 	}
 
-	if (vpn_agent_check_reply_has_dict(reply) == FALSE)
+	if (!vpn_agent_check_reply_has_dict(reply))
 		goto done;
 
 	dbus_message_iter_init(reply, &iter);
@@ -359,7 +353,8 @@ typedef void (* request_cb_t)(struct vpn_provider *provider,
 				const char *error, void *user_data);
 
 static int request_input(struct vpn_provider *provider,
-				request_cb_t callback, void *user_data)
+			request_cb_t callback, const char *dbus_sender,
+			void *user_data)
 {
 	DBusMessage *message;
 	const char *path, *agent_sender, *agent_path;
@@ -367,16 +362,17 @@ static int request_input(struct vpn_provider *provider,
 	DBusMessageIter dict;
 	struct request_input_reply *pptp_reply;
 	int err;
+	void *agent;
 
-	connman_agent_get_info(&agent_sender, &agent_path);
-
-	if (provider == NULL || agent_path == NULL || callback == NULL)
+	agent = connman_agent_get_info(dbus_sender, &agent_sender,
+							&agent_path);
+	if (!provider || !agent || !agent_path || !callback)
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
 					VPN_AGENT_INTERFACE,
 					"RequestInput");
-	if (message == NULL)
+	if (!message)
 		return -ENOMEM;
 
 	dbus_message_iter_init_append(message, &iter);
@@ -394,7 +390,7 @@ static int request_input(struct vpn_provider *provider,
 	connman_dbus_dict_close(&iter, &dict);
 
 	pptp_reply = g_try_new0(struct request_input_reply, 1);
-	if (pptp_reply == NULL) {
+	if (!pptp_reply) {
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}
@@ -405,7 +401,7 @@ static int request_input(struct vpn_provider *provider,
 
 	err = connman_agent_queue_message(provider, message,
 			connman_timeout_input_request(),
-			request_input_reply, pptp_reply);
+			request_input_reply, pptp_reply, agent);
 	if (err < 0 && err != -EBUSY) {
 		DBG("error %d sending agent request", err);
 		dbus_message_unref(message);
@@ -428,13 +424,13 @@ static int run_connect(struct vpn_provider *provider,
 	int err, i;
 
 	host = vpn_provider_get_string(provider, "Host");
-	if (host == NULL) {
+	if (!host) {
 		connman_error("Host not set; cannot enable VPN");
 		err = -EINVAL;
 		goto done;
 	}
 
-	if (username == NULL || password == NULL) {
+	if (!username || !password) {
 		DBG("Cannot connect username %s password %p",
 						username, password);
 		err = -EINVAL;
@@ -445,7 +441,7 @@ static int run_connect(struct vpn_provider *provider,
 
 	str = g_strdup_printf("%s %s --nolaunchpppd --loglevel 2",
 				PPTP, host);
-	if (str == NULL) {
+	if (!str) {
 		connman_error("can not allocate memory");
 		err = -ENOMEM;
 		goto done;
@@ -465,10 +461,10 @@ static int run_connect(struct vpn_provider *provider,
 	for (i = 0; i < (int)ARRAY_SIZE(pptp_options); i++) {
 		opt_s = vpn_provider_get_string(provider,
 					pptp_options[i].cm_opt);
-		if (opt_s == NULL)
+		if (!opt_s)
 			opt_s = pptp_options[i].vpnc_default;
 
-		if (opt_s == NULL)
+		if (!opt_s)
 			continue;
 
 		if (pptp_options[i].type == OPT_STRING)
@@ -491,7 +487,7 @@ static int run_connect(struct vpn_provider *provider,
 	}
 
 done:
-	if (cb != NULL)
+	if (cb)
 		cb(provider, user_data, err);
 
 	return err;
@@ -510,10 +506,10 @@ static void request_input_cb(struct vpn_provider *provider,
 {
 	struct pptp_private_data *data = user_data;
 
-	if (username == NULL || password == NULL)
+	if (!username || !password)
 		DBG("Requesting username %s or password failed, error %s",
 			username, error);
-	else if (error != NULL)
+	else if (error)
 		DBG("error %s", error);
 
 	vpn_provider_set_string(provider, "PPTP.User", username);
@@ -528,7 +524,8 @@ static void request_input_cb(struct vpn_provider *provider,
 
 static int pptp_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
-			vpn_provider_connect_cb_t cb, void *user_data)
+			vpn_provider_connect_cb_t cb, const char *dbus_sender,
+			void *user_data)
 {
 	const char *username, *password;
 	int err;
@@ -546,11 +543,11 @@ static int pptp_connect(struct vpn_provider *provider,
 
 	DBG("user %s password %p", username, password);
 
-	if (username == NULL || password == NULL) {
+	if (!username || !password) {
 		struct pptp_private_data *data;
 
 		data = g_try_new0(struct pptp_private_data, 1);
-		if (data == NULL)
+		if (!data)
 			return -ENOMEM;
 
 		data->task = task;
@@ -558,7 +555,8 @@ static int pptp_connect(struct vpn_provider *provider,
 		data->cb = cb;
 		data->user_data = user_data;
 
-		err = request_input(provider, request_input_cb, data);
+		err = request_input(provider, request_input_cb, dbus_sender,
+									data);
 		if (err != -EINPROGRESS) {
 			free_private_data(data);
 			goto done;
@@ -571,13 +569,13 @@ done:
 							username, password);
 
 error:
-	if (cb != NULL)
+	if (cb)
 		cb(provider, user_data, err);
 
 	return err;
 }
 
-static int pptp_error_code(int exit_code)
+static int pptp_error_code(struct vpn_provider *provider, int exit_code)
 {
 
 	switch (exit_code) {

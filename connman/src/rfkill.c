@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -88,6 +88,7 @@ static enum rfkill_type convert_service_type(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:
+	case CONNMAN_SERVICE_TYPE_P2P:
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
 		return NUM_RFKILL_TYPES;
 	}
@@ -141,8 +142,7 @@ static GIOStatus rfkill_process(GIOChannel *chan)
 	return status;
 }
 
-static gboolean rfkill_event(GIOChannel *chan,
-				GIOCondition cond, gpointer data)
+static gboolean rfkill_event(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
 		return FALSE;
@@ -155,7 +155,7 @@ static gboolean rfkill_event(GIOChannel *chan,
 
 static GIOChannel *channel = NULL;
 
-int __connman_rfkill_block(enum connman_service_type type, connman_bool_t block)
+int __connman_rfkill_block(enum connman_service_type type, bool block)
 {
 	uint8_t rfkill_type;
 	struct rfkill_event event;
@@ -225,7 +225,7 @@ void __connman_rfkill_cleanup(void)
 {
 	DBG("");
 
-	if (channel == NULL)
+	if (!channel)
 		return;
 
 	g_io_channel_shutdown(channel, TRUE, NULL);

@@ -61,7 +61,7 @@
 struct data_elements {
 	unsigned int value;
 	unsigned int length;
-	gboolean fixed_length;
+	bool fixed_length;
 };
 
 typedef enum {
@@ -87,7 +87,7 @@ struct wifi_sc {
 
 static DBusConnection *connection = NULL;
 DBusPendingCall *register_call = NULL;
-gboolean agent_registered = FALSE;
+bool agent_registered = false;
 static guint watch_id = 0;
 
 static int set_2b_into_tlv(uint8_t *tlv_msg, uint16_t val)
@@ -117,20 +117,20 @@ static uint8_t *encode_to_tlv(const char *ssid, const char *psk, int *length)
 	uint8_t *tlv_msg;
 	int pos = 0;
 
-	if (ssid == NULL || length == NULL)
+	if (!ssid || !length)
 		return NULL;
 
 	ssid_len = strlen(ssid);
 
 	*length = 6 + 4 + ssid_len;
-	if (psk != NULL) {
+	if (psk) {
 		psk_len = strlen(psk);
 		*length += 4 + psk_len;
 	} else
 		psk_len = 0;
 
 	tlv_msg = g_try_malloc0(sizeof(uint8_t) * (*length));
-	if (tlv_msg == NULL)
+	if (!tlv_msg)
 		return NULL;
 
 	pos += set_2b_into_tlv(tlv_msg+pos, DEs[DE_SSID].value);
@@ -140,7 +140,7 @@ static uint8_t *encode_to_tlv(const char *ssid, const char *psk, int *length)
 	pos += set_2b_into_tlv(tlv_msg+pos, DEs[DE_AUTHENTICATION_TYPE].value);
 	pos += set_2b_into_tlv(tlv_msg+pos,
 					DEs[DE_AUTHENTICATION_TYPE].length);
-	if (psk != NULL) {
+	if (psk) {
 		pos += set_2b_into_tlv(tlv_msg+pos, DE_VAL_PSK);
 		pos += set_2b_into_tlv(tlv_msg+pos, DEs[DE_NETWORK_KEY].value);
 		pos += set_2b_into_tlv(tlv_msg+pos, psk_len);
@@ -172,7 +172,7 @@ static int parse_request_oob_params(DBusMessage *message,
 	const char *key;
 	int arg_type;
 
-	if (tlv_msg == NULL || length == NULL)
+	if (!tlv_msg || !length)
 		return -EINVAL;
 
 	dbus_message_iter_init(message, &iter);
@@ -225,15 +225,15 @@ static DBusMessage *create_request_oob_reply(DBusMessage *message)
 	uint8_t *tlv_msg;
 	int length;
 
-	if (connman_technology_get_wifi_tethering(&ssid, &psk) == FALSE)
+	if (!connman_technology_get_wifi_tethering(&ssid, &psk))
 		return get_reply_on_error(message, ENOTSUP);
 
 	tlv_msg = encode_to_tlv(ssid, psk, &length);
-	if (tlv_msg == NULL)
+	if (!tlv_msg)
 		return get_reply_on_error(message, ENOTSUP);
 
 	reply = dbus_message_new_method_return(message);
-	if (reply == NULL)
+	if (!reply)
 		goto out;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -268,7 +268,7 @@ static DBusMessage *request_oob_method(DBusConnection *dbus_conn,
 
 static void free_wifi_sc(struct wifi_sc *wsc)
 {
-	if (wsc == NULL)
+	if (!wsc)
 		return;
 
 	g_free(wsc->ssid);
@@ -289,7 +289,7 @@ static uint8_t *get_byte_array_from_tlv(const uint8_t *tlv_msg, int length)
 	uint8_t *array;
 
 	array = g_try_malloc0(sizeof(uint8_t) * length);
-	if (array == NULL)
+	if (!array)
 		return NULL;
 
 	memcpy((void *)array, (void *)tlv_msg, length*sizeof(uint8_t));
@@ -302,7 +302,7 @@ static char *get_string_from_tlv(const uint8_t *tlv_msg, int length)
 	char *str;
 
 	str = g_try_malloc0((sizeof(char) * length) + 1);
-	if (str == NULL)
+	if (!str)
 		return NULL;
 
 	memcpy((void *)str, (void *)tlv_msg, length*sizeof(char));
@@ -322,9 +322,9 @@ static inline DEid get_de_id(uint16_t attr)
 	return DE_MAX;
 }
 
-static inline gboolean is_de_length_fine(DEid id, uint16_t length)
+static inline bool is_de_length_fine(DEid id, uint16_t length)
 {
-	if (DEs[id].fixed_length == TRUE)
+	if (DEs[id].fixed_length)
 		return (length == DEs[id].length);
 
 	return (length <= DEs[id].length);
@@ -336,7 +336,7 @@ static char *get_hexstr_from_byte_array(const uint8_t *bt, int length)
 	int i, j;
 
 	hex_str = g_try_malloc0(((length*2)+1) * sizeof(char));
-	if (hex_str == NULL)
+	if (!hex_str)
 		return NULL;
 
 	for (i = 0, j = 0; i < length; i++, j += 2)
@@ -353,11 +353,11 @@ static struct wifi_sc *decode_from_tlv(const uint8_t *tlv_msg, int length)
 	int pos;
 	DEid id;
 
-	if (tlv_msg == NULL || length == 0)
+	if (!tlv_msg || length == 0)
 		return NULL;
 
 	wsc = g_try_malloc0(sizeof(struct wifi_sc));
-	if (wsc == NULL)
+	if (!wsc)
 		return NULL;
 
 	pos = 0;
@@ -374,7 +374,7 @@ static struct wifi_sc *decode_from_tlv(const uint8_t *tlv_msg, int length)
 			continue;
 		}
 
-		if (is_de_length_fine(id, len) == FALSE)
+		if (!is_de_length_fine(id, len))
 			goto error;
 
 		switch (id) {
@@ -413,14 +413,14 @@ static int handle_wcs_data(const uint8_t *tlv_msg, int length)
 	int ret = -EINVAL;
 
 	wsc = decode_from_tlv(tlv_msg, length);
-	if (wsc == NULL)
+	if (!wsc)
 		return -EINVAL;
 
-	if (wsc->ssid == NULL)
+	if (!wsc->ssid)
 		goto out;
 
 	keyfile = g_key_file_new();
-	if (keyfile == NULL) {
+	if (!keyfile) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -432,7 +432,7 @@ static int handle_wcs_data(const uint8_t *tlv_msg, int length)
 	g_key_file_set_boolean(keyfile, NEARD_SERVICE_GROUP,
 					SERVICE_KEY_HIDDEN, TRUE);
 
-	if (wsc->passphrase != NULL)
+	if (wsc->passphrase)
 		g_key_file_set_string(keyfile, NEARD_SERVICE_GROUP,
 				SERVICE_KEY_PASSPHRASE, wsc->passphrase);
 
@@ -468,7 +468,7 @@ static DBusMessage *release_method(DBusConnection *dbus_conn,
 {
 	DBG("");
 
-	agent_registered = FALSE;
+	agent_registered = false;
 	g_dbus_unregister_interface(connection,
 					AGENT_PATH, NEARD_AGENT_INTERFACE);
 
@@ -476,7 +476,7 @@ static DBusMessage *release_method(DBusConnection *dbus_conn,
 }
 
 static const GDBusMethodTable neard_methods[] = {
-{ GDBUS_ASYNC_METHOD("RequestOOB",
+	{ GDBUS_ASYNC_METHOD("RequestOOB",
 		GDBUS_ARGS({ "data", "a{sv}" }),
 		GDBUS_ARGS({ "data", "a{sv}" }), request_oob_method) },
 	{ GDBUS_ASYNC_METHOD("PushOOB",
@@ -487,7 +487,7 @@ static const GDBusMethodTable neard_methods[] = {
 
 static void cleanup_register_call(void)
 {
-	if (register_call != NULL) {
+	if (register_call) {
 		dbus_pending_call_cancel(register_call);
 		dbus_pending_call_unref(register_call);
 		register_call = NULL;
@@ -498,20 +498,20 @@ static void register_agent_cb(DBusPendingCall *pending, void *user_data)
 {
 	DBusMessage *reply;
 
-	if (dbus_pending_call_get_completed(pending) == FALSE)
+	if (!dbus_pending_call_get_completed(pending))
 		return;
 
 	register_call = NULL;
 
 	reply = dbus_pending_call_steal_reply(pending);
-	if (reply == NULL)
+	if (!reply)
 		goto out;
 
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		g_dbus_unregister_interface(connection,
 					AGENT_PATH, NEARD_AGENT_INTERFACE);
 	} else
-		agent_registered = TRUE;
+		agent_registered = true;
 
 	dbus_message_unref(reply);
 out:
@@ -527,20 +527,20 @@ static void register_agent(void)
 	message = dbus_message_new_method_call(NEARD_SERVICE, NEARD_PATH,
 						NEARD_MANAGER_INTERFACE,
 						"RegisterHandoverAgent");
-	if (message == NULL)
+	if (!message)
 		return;
 
 	dbus_message_append_args(message, DBUS_TYPE_OBJECT_PATH,
 			&path, DBUS_TYPE_STRING, &type, DBUS_TYPE_INVALID);
 
-	if (dbus_connection_send_with_reply(connection, message,
-					&register_call, TIMEOUT) == FALSE) {
+	if (!dbus_connection_send_with_reply(connection, message,
+						&register_call, TIMEOUT)) {
 		dbus_message_unref(message);
 		goto out;
 	}
 
-	if (dbus_pending_call_set_notify(register_call, register_agent_cb,
-							NULL, NULL) == FALSE)
+	if (!dbus_pending_call_set_notify(register_call,
+						register_agent_cb, NULL, NULL))
 		cleanup_register_call();
 
 out:
@@ -553,15 +553,15 @@ static void unregister_agent(void)
 	const char *type = AGENT_TYPE;
 	DBusMessage *message;
 
-	if (agent_registered == FALSE)
+	if (!agent_registered)
 		return cleanup_register_call();
 
-	agent_registered = FALSE;
+	agent_registered = false;
 
 	message = dbus_message_new_method_call(NEARD_SERVICE, NEARD_PATH,
 						NEARD_MANAGER_INTERFACE,
 						"UnregisterHandoverAgent");
-	if (message != NULL) {
+	if (message) {
 		dbus_message_append_args(message, DBUS_TYPE_OBJECT_PATH,
 			&path, DBUS_TYPE_STRING, &type, DBUS_TYPE_INVALID);
 		g_dbus_send_message(connection, message);
@@ -575,12 +575,12 @@ static void neard_is_present(DBusConnection *conn, void *user_data)
 {
 	DBG("");
 
-	if (agent_registered == TRUE)
+	if (agent_registered)
 		return;
 
 	if (g_dbus_register_interface(connection, AGENT_PATH,
 					NEARD_AGENT_INTERFACE, neard_methods,
-					NULL, NULL, NULL, NULL) == TRUE)
+					NULL, NULL, NULL, NULL))
 		register_agent();
 }
 
@@ -588,10 +588,10 @@ static void neard_is_out(DBusConnection *conn, void *user_data)
 {
 	DBG("");
 
-	if (agent_registered == TRUE) {
+	if (agent_registered) {
 		g_dbus_unregister_interface(connection,
 					AGENT_PATH, NEARD_AGENT_INTERFACE);
-		agent_registered = FALSE;
+		agent_registered = false;
 	}
 
 	cleanup_register_call();
@@ -600,7 +600,7 @@ static void neard_is_out(DBusConnection *conn, void *user_data)
 static int neard_init(void)
 {
 	connection = connman_dbus_get_connection();
-	if (connection == NULL)
+	if (!connection)
 		return -EIO;
 
 	watch_id = g_dbus_add_service_watch(connection, NEARD_SERVICE,
@@ -620,7 +620,7 @@ static void neard_exit(void)
 
 	if (watch_id != 0)
 		g_dbus_remove_watch(connection, watch_id);
-	if (connection != NULL)
+	if (connection)
 		dbus_connection_unref(connection);
 }
 

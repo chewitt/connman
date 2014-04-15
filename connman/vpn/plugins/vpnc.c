@@ -2,8 +2,8 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2010  BMW Car IT GmbH. All rights reserved.
- *  Copyright (C) 2010  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2010,2013  BMW Car IT GmbH. All rights reserved.
+ *  Copyright (C) 2010,2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -57,29 +57,29 @@ struct {
 	const char *vpnc_opt;
 	const char *vpnc_default;
 	int type;
-	connman_bool_t cm_save;
+	bool cm_save;
 } vpnc_options[] = {
-	{ "Host", "IPSec gateway", NULL, OPT_STRING, TRUE },
-	{ "VPNC.IPSec.ID", "IPSec ID", NULL, OPT_STRING, TRUE },
-	{ "VPNC.IPSec.Secret", "IPSec secret", NULL, OPT_STRING, FALSE },
-	{ "VPNC.Xauth.Username", "Xauth username", NULL, OPT_STRING, FALSE },
-	{ "VPNC.Xauth.Password", "Xauth password", NULL, OPT_STRING, FALSE },
-	{ "VPNC.IKE.Authmode", "IKE Authmode", NULL, OPT_STRING, TRUE },
-	{ "VPNC.IKE.DHGroup", "IKE DH Group", NULL, OPT_STRING, TRUE },
-	{ "VPNC.PFS", "Perfect Forward Secrecy", NULL, OPT_STRING, TRUE },
-	{ "VPNC.Domain", "Domain", NULL, OPT_STRING, TRUE },
-	{ "VPNC.Vendor", "Vendor", NULL, OPT_STRING, TRUE },
-	{ "VPNC.LocalPort", "Local Port", "0", OPT_STRING, TRUE, },
+	{ "Host", "IPSec gateway", NULL, OPT_STRING, true },
+	{ "VPNC.IPSec.ID", "IPSec ID", NULL, OPT_STRING, true },
+	{ "VPNC.IPSec.Secret", "IPSec secret", NULL, OPT_STRING, false },
+	{ "VPNC.Xauth.Username", "Xauth username", NULL, OPT_STRING, false },
+	{ "VPNC.Xauth.Password", "Xauth password", NULL, OPT_STRING, false },
+	{ "VPNC.IKE.Authmode", "IKE Authmode", NULL, OPT_STRING, true },
+	{ "VPNC.IKE.DHGroup", "IKE DH Group", NULL, OPT_STRING, true },
+	{ "VPNC.PFS", "Perfect Forward Secrecy", NULL, OPT_STRING, true },
+	{ "VPNC.Domain", "Domain", NULL, OPT_STRING, true },
+	{ "VPNC.Vendor", "Vendor", NULL, OPT_STRING, true },
+	{ "VPNC.LocalPort", "Local Port", "0", OPT_STRING, true, },
 	{ "VPNC.CiscoPort", "Cisco UDP Encapsulation Port", "0", OPT_STRING,
-									TRUE },
-	{ "VPNC.AppVersion", "Application Version", NULL, OPT_STRING, TRUE },
+									true },
+	{ "VPNC.AppVersion", "Application Version", NULL, OPT_STRING, true },
 	{ "VPNC.NATTMode", "NAT Traversal Mode", "cisco-udp", OPT_STRING,
-									TRUE },
+									true },
 	{ "VPNC.DPDTimeout", "DPD idle timeout (our side)", NULL, OPT_STRING,
-									TRUE },
-	{ "VPNC.SingleDES", "Enable Single DES", NULL, OPT_BOOLEAN, TRUE },
+									true },
+	{ "VPNC.SingleDES", "Enable Single DES", NULL, OPT_BOOLEAN, true },
 	{ "VPNC.NoEncryption", "Enable no encryption", NULL, OPT_BOOLEAN,
-									TRUE },
+									true },
 };
 
 static int vc_notify(DBusMessage *msg, struct vpn_provider *provider)
@@ -129,8 +129,8 @@ static int vc_notify(DBusMessage *msg, struct vpn_provider *provider)
 		if (!strcmp(key, "CISCO_DEF_DOMAIN"))
 			vpn_provider_set_domain(provider, value);
 
-		if (g_str_has_prefix(key, "CISCO_SPLIT_INC") == TRUE ||
-			g_str_has_prefix(key, "CISCO_IPV6_SPLIT_INC") == TRUE)
+		if (g_str_has_prefix(key, "CISCO_SPLIT_INC") ||
+			g_str_has_prefix(key, "CISCO_IPV6_SPLIT_INC"))
 			vpn_provider_append_route(provider, key, value);
 
 		dbus_message_iter_next(&dict);
@@ -138,7 +138,7 @@ static int vc_notify(DBusMessage *msg, struct vpn_provider *provider)
 
 
 	ipaddress = connman_ipaddress_alloc(AF_INET);
-	if (ipaddress == NULL) {
+	if (!ipaddress) {
 		g_free(address);
 		g_free(netmask);
 		g_free(gateway);
@@ -180,7 +180,7 @@ static ssize_t write_option(int fd, const char *key, const char *value)
 	gchar *buf;
 	ssize_t ret = 0;
 
-	if (key != NULL && value != NULL) {
+	if (key && value) {
 		buf = g_strdup_printf("%s %s\n", key, value);
 		ret = full_write(fd, buf, strlen(buf));
 
@@ -195,7 +195,7 @@ static ssize_t write_bool_option(int fd, const char *key, const char *value)
 	gchar *buf;
 	ssize_t ret = 0;
 
-	if (key != NULL && value != NULL) {
+	if (key && value) {
 		if (strcasecmp(value, "yes") == 0 ||
 				strcasecmp(value, "true") == 0 ||
 				strcmp(value, "1") == 0) {
@@ -217,10 +217,10 @@ static int vc_write_config_data(struct vpn_provider *provider, int fd)
 	for (i = 0; i < (int)ARRAY_SIZE(vpnc_options); i++) {
 		opt_s = vpn_provider_get_string(provider,
 					vpnc_options[i].cm_opt);
-		if (opt_s == FALSE)
+		if (!opt_s)
 			opt_s = vpnc_options[i].vpnc_default;
 
-		if (opt_s == FALSE)
+		if (!opt_s)
 			continue;
 
 		if (vpnc_options[i].type == OPT_STRING) {
@@ -246,12 +246,12 @@ static int vc_save(struct vpn_provider *provider, GKeyFile *keyfile)
 	for (i = 0; i < (int)ARRAY_SIZE(vpnc_options); i++) {
 		if (strncmp(vpnc_options[i].cm_opt, "VPNC.", 5) == 0) {
 
-			if (vpnc_options[i].cm_save == FALSE)
+			if (!vpnc_options[i].cm_save)
 				continue;
 
 			option = vpn_provider_get_string(provider,
 							vpnc_options[i].cm_opt);
-			if (option == NULL)
+			if (!option)
 				continue;
 
 			g_key_file_set_string(keyfile,
@@ -264,19 +264,20 @@ static int vc_save(struct vpn_provider *provider, GKeyFile *keyfile)
 
 static int vc_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
-			vpn_provider_connect_cb_t cb, void *user_data)
+			vpn_provider_connect_cb_t cb, const char *dbus_sender,
+			void *user_data)
 {
 	const char *option;
 	int err = 0, fd;
 
 	option = vpn_provider_get_string(provider, "Host");
-	if (option == NULL) {
+	if (!option) {
 		connman_error("Host not set; cannot enable VPN");
 		err = -EINVAL;
 		goto done;
 	}
 	option = vpn_provider_get_string(provider, "VPNC.IPSec.ID");
-	if (option == NULL) {
+	if (!option) {
 		connman_error("Group not set; cannot enable VPN");
 		err = -EINVAL;
 		goto done;
@@ -292,7 +293,7 @@ static int vc_connect(struct vpn_provider *provider,
 				SCRIPTDIR "/openconnect-script");
 
 	option = vpn_provider_get_string(provider, "VPNC.Debug");
-	if (option != NULL)
+	if (option)
 		connman_task_add_argument(task, "--debug", option);
 
 	connman_task_add_argument(task, "-", NULL);
@@ -310,13 +311,13 @@ static int vc_connect(struct vpn_provider *provider,
 	close(fd);
 
 done:
-	if (cb != NULL)
+	if (cb)
 		cb(provider, user_data, err);
 
 	return err;
 }
 
-static int vc_error_code(int exit_code)
+static int vc_error_code(struct vpn_provider *provider, int exit_code)
 {
 	switch (exit_code) {
 	case 1:

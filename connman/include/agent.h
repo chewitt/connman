@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -21,6 +21,8 @@
 
 #ifndef __CONNMAN_AGENT_H
 #define __CONNMAN_AGENT_H
+
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,11 +50,12 @@ int connman_agent_driver_register(struct connman_agent_driver *driver);
 void connman_agent_driver_unregister(struct connman_agent_driver *driver);
 
 typedef void (* report_error_cb_t) (void *user_context,
-				gboolean retry, void *user_data);
+				bool retry, void *user_data);
 
 int connman_agent_report_error(void *user_context, const char *path,
 				const char *error,
-				report_error_cb_t callback, void *user_data);
+				report_error_cb_t callback,
+				const char *dbus_sender, void *user_data);
 
 int connman_agent_register(const char *sender, const char *path);
 int connman_agent_unregister(const char *sender, const char *path);
@@ -62,9 +65,11 @@ typedef void (*agent_queue_cb)(DBusMessage *reply, void *user_data);
 
 int connman_agent_queue_message(void *user_context,
 				DBusMessage *msg, int timeout,
-				agent_queue_cb callback, void *user_data);
+				agent_queue_cb callback, void *user_data,
+				void *agent_data);
 
-void connman_agent_get_info(const char **sender, const char **path);
+void *connman_agent_get_info(const char *dbus_sender, const char **sender,
+							const char **path);
 
 #ifdef __cplusplus
 }

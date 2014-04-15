@@ -60,7 +60,7 @@ static void state_changed(dbus_uint32_t state)
 
 	signal = dbus_message_new_signal(NM_PATH, NM_INTERFACE,
 						"StateChanged");
-	if (signal == NULL)
+	if (!signal)
 		return;
 
 	dbus_message_append_args(signal, DBUS_TYPE_UINT32, &state,
@@ -79,7 +79,7 @@ static void properties_changed(dbus_uint32_t state)
 
 	signal = dbus_message_new_signal(NM_PATH, NM_INTERFACE,
 						"PropertiesChanged");
-	if (signal == NULL)
+	if (!signal)
 		return;
 
 	dbus_message_iter_init_append(signal, &iter);
@@ -112,7 +112,7 @@ static void default_changed(struct connman_service *service)
 {
 	DBG("service %p", service);
 
-	if (service == NULL)
+	if (!service)
 		nm_state = NM_STATE_DISCONNECTED;
 	else
 		nm_state = NM_STATE_CONNECTED_LOCAL;
@@ -128,7 +128,7 @@ static void service_state_changed(struct connman_service *service,
 {
 	DBG("service %p state %d", service, state);
 
-	if (current_service == NULL || current_service != service)
+	if (!current_service || current_service != service)
 		return;
 
 	switch (state) {
@@ -158,11 +158,11 @@ static void service_state_changed(struct connman_service *service,
 	properties_changed(nm_state);
 }
 
-static void offline_mode(connman_bool_t enabled)
+static void offline_mode(bool enabled)
 {
 	DBG("enabled %d", enabled);
 
-	if (enabled == TRUE)
+	if (enabled)
 		nm_state = NM_STATE_ASLEEP;
 	else
 		nm_state = NM_STATE_DISCONNECTED;
@@ -191,18 +191,18 @@ static DBusMessage *property_get(DBusConnection *conn,
 
 	DBG("interface %s property %s", interface, key);
 
-	if (g_str_equal(interface, NM_INTERFACE) == FALSE)
+	if (!g_str_equal(interface, NM_INTERFACE))
 		return dbus_message_new_error(msg, DBUS_ERROR_FAILED,
 						"Unsupported interface");
 
-	if (g_str_equal(key, "State") == TRUE) {
+	if (g_str_equal(key, "State")) {
 		DBusMessage *reply;
 		DBusMessageIter iter, value;
 
 		DBG("state %d", nm_state);
 
 		reply = dbus_message_new_method_return(msg);
-		if (reply == NULL)
+		if (!reply)
 			return NULL;
 
 		dbus_message_iter_init_append(reply, &iter);
@@ -240,10 +240,10 @@ static int nmcompat_init(void)
 	DBG("");
 
 	connection = connman_dbus_get_connection();
-	if (connection == NULL)
+	if (!connection)
 		return -1;
 
-	if (g_dbus_request_name(connection, NM_SERVICE, NULL) == FALSE) {
+	if (!g_dbus_request_name(connection, NM_SERVICE, NULL)) {
 		connman_error("nmcompat: failed to register service");
 		return -1;
 	}
@@ -253,9 +253,9 @@ static int nmcompat_init(void)
 		return -1;
 	}
 
-	if (g_dbus_register_interface(connection, NM_PATH,
-				DBUS_PROPERTIES_INTERFACE,
-				methods, signals, NULL, NULL, NULL) == FALSE) {
+	if (!g_dbus_register_interface(connection, NM_PATH,
+					DBUS_PROPERTIES_INTERFACE, methods,
+					signals, NULL, NULL, NULL)) {
 		connman_error("nmcompat: failed to register "
 						DBUS_PROPERTIES_INTERFACE);
 		return -1;
@@ -270,7 +270,7 @@ static void nmcompat_exit(void)
 
 	connman_notifier_unregister(&notifier);
 
-	if (connection == NULL)
+	if (!connection)
 		return;
 
 	g_dbus_unregister_interface(connection, NM_PATH,

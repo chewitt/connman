@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -22,7 +22,7 @@
 #ifndef __CONNMAN_PROVISION_H
 #define __CONNMAN_PROVISION_H
 
-#include <connman/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,7 +39,7 @@ struct connman_config_entry {
 	char *name;
 	void *ssid;
 	unsigned int ssid_len;
-	connman_bool_t hidden;
+	bool hidden;
 };
 
 int connman_config_provision_mutable_service(GKeyFile *keyfile);

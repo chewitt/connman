@@ -2,7 +2,7 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -82,8 +82,8 @@ static DBusMessage *get_connections(DBusConnection *conn, DBusMessage *msg,
 	DBG("conn %p", conn);
 
 	reply = __vpn_provider_get_connections(msg);
-	if (reply == NULL)
-		return __connman_error_failed(msg, -EINVAL);
+	if (!reply)
+		return __connman_error_failed(msg, EINVAL);
 
 	return reply;
 }
@@ -162,7 +162,7 @@ int __vpn_manager_init(void)
 	DBG("");
 
 	connection = connman_dbus_get_connection();
-	if (connection == NULL)
+	if (!connection)
 		return -1;
 
 	g_dbus_register_interface(connection, VPN_MANAGER_PATH,
@@ -179,7 +179,7 @@ void __vpn_manager_cleanup(void)
 {
 	DBG("");
 
-	if (connection == NULL)
+	if (!connection)
 		return;
 
 	g_dbus_unregister_interface(connection, VPN_MANAGER_PATH,

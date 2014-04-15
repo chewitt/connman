@@ -29,26 +29,37 @@
 extern "C" {
 #endif
 
+#define CONNMAN_SERVICE   "net.connman"
+#define CONNMAN_PATH      "/"
+#define VPN_SERVICE       CONNMAN_SERVICE ".vpn"
+#define VPN_PATH          "/"
+
 void __connmanctl_dbus_print(DBusMessageIter *iter, const char *pre,
 		const char *dict, const char *sep);
 
 typedef int (*connmanctl_dbus_method_return_func_t)(DBusMessageIter *iter,
 		const char *error, void *user_data);
-int __connmanctl_dbus_method_call(DBusConnection *connection, const char *path,
-		const char *interface, const char *method,
-		connmanctl_dbus_method_return_func_t cb, void * user_data,
-		int arg1, ...);
+
+typedef void (*connmanctl_dbus_append_func_t)(DBusMessageIter *iter,
+		void *user_data);
+
+int __connmanctl_dbus_method_call(DBusConnection *connection,
+		const char *service, const char *path, const char *interface,
+		const char *method, connmanctl_dbus_method_return_func_t cb,
+		void * user_data, connmanctl_dbus_append_func_t append_fn,
+		void *append_data);
 
 int __connmanctl_dbus_set_property(DBusConnection *connection,
 		const char *path, const char *interface,
 		connmanctl_dbus_method_return_func_t cb, void * user_data,
 		const char *property, int type, void *value);
 
-typedef void (*connmanctl_dbus_append_func_t)(DBusMessageIter *iter,
-		void *user_data);
+void __connmanctl_dbus_append_dict(DBusMessageIter *iter,
+		connmanctl_dbus_append_func_t append_fn, void *append_data);
 
 void __connmanctl_dbus_append_dict_entry(DBusMessageIter *iter,
 		const char *property, int type, void *value);
+
 int __connmanctl_dbus_set_property_dict(DBusConnection *connection,
 		const char *path, const char *interface,
 		connmanctl_dbus_method_return_func_t cb, void * user_data,
@@ -63,6 +74,18 @@ int __connmanctl_dbus_set_property_array(DBusConnection *connection,
 		const char *path, const char *interface,
 		connmanctl_dbus_method_return_func_t cb, void *user_data,
 		const char *property, int type,
+		connmanctl_dbus_append_func_t append_fn,
+		void *append_user_data);
+
+int __connmanctl_dbus_session_change(DBusConnection *connection,
+		const char *session_path,
+		connmanctl_dbus_method_return_func_t cb, void * user_data,
+		const char *property, int type, void *value);
+
+int __connmanctl_dbus_session_change_array(DBusConnection *connection,
+		const char *session_path,
+		connmanctl_dbus_method_return_func_t cb, void *user_data,
+		const char *property,
 		connmanctl_dbus_append_func_t append_fn,
 		void *append_user_data);
 

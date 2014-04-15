@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *  Copyright (C) 2003-2005  Go-Core Project
  *  Copyright (C) 2003-2006  Helsinki University of Technology
  *
@@ -46,8 +46,10 @@
 #include <linux/if_tun.h>
 #include <ctype.h>
 #include <ifaddrs.h>
+#include <linux/fib_rules.h>
 
 #include "connman.h"
+#include <gdhcp/gdhcp.h>
 
 #define NLMSG_TAIL(nmsg)				\
 	((struct rtattr *) (((uint8_t*) (nmsg)) +	\
@@ -96,7 +98,7 @@ int __connman_inet_modify_address(int cmd, int flags,
 		"prefixlen %hhu broadcast %s", cmd, flags, index, family,
 		address, peer, prefixlen, broadcast);
 
-	if (address == NULL)
+	if (!address)
 		return -EINVAL;
 
 	if (family != AF_INET && family != AF_INET6)
@@ -121,13 +123,13 @@ int __connman_inet_modify_address(int cmd, int flags,
 		if (inet_pton(AF_INET, address, &ipv4_addr) < 1)
 			return -1;
 
-		if (broadcast != NULL)
+		if (broadcast)
 			inet_pton(AF_INET, broadcast, &ipv4_bcast);
 		else
 			ipv4_bcast.s_addr = ipv4_addr.s_addr |
 				htonl(0xfffffffflu >> prefixlen);
 
-		if (peer != NULL) {
+		if (peer) {
 			if (inet_pton(AF_INET, peer, &ipv4_dest) < 1)
 				return -1;
 
@@ -193,7 +195,7 @@ int connman_inet_ifindex(const char *name)
 	struct ifreq ifr;
 	int sk, err;
 
-	if (name == NULL)
+	if (!name)
 		return -1;
 
 	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
@@ -201,7 +203,7 @@ int connman_inet_ifindex(const char *name)
 		return -1;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name) - 1);
 
 	err = ioctl(sk, SIOCGIFINDEX, &ifr);
 
@@ -334,7 +336,7 @@ int connman_inet_ifdown(int index)
 	}
 
 	memset(&addr_ifr, 0, sizeof(addr_ifr));
-	memcpy(&addr_ifr.ifr_name, &ifr.ifr_name, sizeof(ifr.ifr_name));
+	memcpy(&addr_ifr.ifr_name, &ifr.ifr_name, sizeof(ifr.ifr_name) - 1);
 	addr = (struct sockaddr_in *)&addr_ifr.ifr_addr;
 	addr->sin_family = AF_INET;
 	if (ioctl(sk, SIOCSIFADDR, &addr_ifr) < 0)
@@ -358,9 +360,9 @@ done:
 	return err;
 }
 
-connman_bool_t connman_inet_is_cfg80211(int index)
+bool connman_inet_is_cfg80211(int index)
 {
-	connman_bool_t result = FALSE;
+	bool result = false;
 	char phy80211_path[PATH_MAX];
 	struct stat st;
 	struct ifreq ifr;
@@ -368,7 +370,7 @@ connman_bool_t connman_inet_is_cfg80211(int index)
 
 	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (sk < 0)
-		return FALSE;
+		return false;
 
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_ifindex = index;
@@ -380,7 +382,7 @@ connman_bool_t connman_inet_is_cfg80211(int index)
 				"/sys/class/net/%s/phy80211", ifr.ifr_name);
 
 	if (stat(phy80211_path, &st) == 0 && (st.st_mode & S_IFDIR))
-		result = TRUE;
+		result = true;
 
 done:
 	close(sk);
@@ -401,7 +403,7 @@ int connman_inet_set_ipv6_address(int index,
 	unsigned char prefix_len;
 	const char *address;
 
-	if (ipaddress->local == NULL)
+	if (!ipaddress->local)
 		return 0;
 
 	prefix_len = ipaddress->prefixlen;
@@ -426,7 +428,7 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	unsigned char prefix_len;
 	const char *address, *broadcast, *peer;
 
-	if (ipaddress->local == NULL)
+	if (!ipaddress->local)
 		return -1;
 
 	prefix_len = ipaddress->prefixlen;
@@ -454,6 +456,9 @@ int connman_inet_clear_ipv6_address(int index, const char *address,
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
+	if (!address)
+		return -EINVAL;
+
 	err = __connman_inet_modify_address(RTM_DELADDR, 0, index, AF_INET6,
 				address, NULL, prefix_len, NULL);
 	if (err < 0) {
@@ -476,6 +481,9 @@ int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
 	peer = ipaddress->peer;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
+
+	if (!address)
+		return -EINVAL;
 
 	err = __connman_inet_modify_address(RTM_DELADDR, 0, index, AF_INET,
 				address, peer, prefix_len, broadcast);
@@ -529,9 +537,9 @@ int connman_inet_add_network_route(int index, const char *host,
 
 	memset(&rt, 0, sizeof(rt));
 	rt.rt_flags = RTF_UP;
-	if (gateway != NULL)
+	if (gateway)
 		rt.rt_flags |= RTF_GATEWAY;
-	if (netmask == NULL)
+	if (!netmask)
 		rt.rt_flags |= RTF_HOST;
 
 	memset(&addr, 0, sizeof(addr));
@@ -541,7 +549,7 @@ int connman_inet_add_network_route(int index, const char *host,
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	if (gateway != NULL)
+	if (gateway)
 		addr.sin_addr.s_addr = inet_addr(gateway);
 	else
 		addr.sin_addr.s_addr = INADDR_ANY;
@@ -550,7 +558,7 @@ int connman_inet_add_network_route(int index, const char *host,
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
-	if (netmask != NULL)
+	if (netmask)
 		addr.sin_addr.s_addr = inet_addr(netmask);
 	else
 		addr.sin_addr.s_addr = INADDR_ANY;
@@ -628,7 +636,7 @@ int connman_inet_del_ipv6_network_route(int index, const char *host,
 
 	DBG("index %d host %s", index, host);
 
-	if (host == NULL)
+	if (!host)
 		return -EINVAL;
 
 	memset(&rt, 0, sizeof(rt));
@@ -678,7 +686,7 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 
 	DBG("index %d host %s gateway %s", index, host, gateway);
 
-	if (host == NULL)
+	if (!host)
 		return -EINVAL;
 
 	memset(&rt, 0, sizeof(rt));
@@ -692,7 +700,7 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_flags = RTF_UP | RTF_HOST;
 
-	if (gateway != NULL) {
+	if (gateway) {
 		rt.rtmsg_flags |= RTF_GATEWAY;
 		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway);
 	}
@@ -725,47 +733,6 @@ int connman_inet_add_ipv6_host_route(int index, const char *host,
 	return connman_inet_add_ipv6_network_route(index, host, gateway, 128);
 }
 
-int connman_inet_set_ipv6_gateway_address(int index, const char *gateway)
-{
-	struct in6_rtmsg rt;
-	int sk, err = 0;
-
-	DBG("index %d gateway %s", index, gateway);
-
-	if (gateway == NULL)
-		return -EINVAL;
-
-	memset(&rt, 0, sizeof(rt));
-
-	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) < 0) {
-		err = -errno;
-		goto out;
-	}
-
-	rt.rtmsg_flags = RTF_UP | RTF_GATEWAY;
-	rt.rtmsg_metric = 1;
-	rt.rtmsg_dst_len = 0;
-	rt.rtmsg_ifindex = index;
-
-	sk = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-	if (sk < 0) {
-		err = -errno;
-		goto out;
-	}
-
-	if (ioctl(sk, SIOCADDRT, &rt) < 0 && errno != EEXIST)
-		err = -errno;
-
-	close(sk);
-
-out:
-	if (err < 0)
-		connman_error("Set default IPv6 gateway error (%s)",
-						strerror(-err));
-
-	return err;
-}
-
 int connman_inet_clear_ipv6_gateway_address(int index, const char *gateway)
 {
 	struct in6_rtmsg rt;
@@ -773,7 +740,7 @@ int connman_inet_clear_ipv6_gateway_address(int index, const char *gateway)
 
 	DBG("index %d gateway %s", index, gateway);
 
-	if (gateway == NULL)
+	if (!gateway)
 		return -EINVAL;
 
 	memset(&rt, 0, sizeof(rt));
@@ -803,63 +770,6 @@ out:
 	if (err < 0)
 		connman_error("Clear default IPv6 gateway error (%s)",
 						strerror(-err));
-
-	return err;
-}
-
-int connman_inet_set_gateway_address(int index, const char *gateway)
-{
-	struct ifreq ifr;
-	struct rtentry rt;
-	struct sockaddr_in addr;
-	int sk, err = 0;
-
-	DBG("index %d gateway %s", index, gateway);
-
-	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-	if (sk < 0) {
-		err = -errno;
-		goto out;
-	}
-
-	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_ifindex = index;
-
-	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0) {
-		err = -errno;
-		close(sk);
-		goto out;
-	}
-
-	DBG("ifname %s", ifr.ifr_name);
-
-	memset(&rt, 0, sizeof(rt));
-	rt.rt_flags = RTF_UP | RTF_GATEWAY;
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	memcpy(&rt.rt_dst, &addr, sizeof(rt.rt_dst));
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr(gateway);
-	memcpy(&rt.rt_gateway, &addr, sizeof(rt.rt_gateway));
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	memcpy(&rt.rt_genmask, &addr, sizeof(rt.rt_genmask));
-
-	if (ioctl(sk, SIOCADDRT, &rt) < 0 && errno != EEXIST)
-		err = -errno;
-
-	close(sk);
-
-out:
-	if (err < 0)
-		connman_error("Setting default gateway route failed (%s)",
-							strerror(-err));
 
 	return err;
 }
@@ -1131,7 +1041,7 @@ out:
 	return err;
 }
 
-connman_bool_t connman_inet_compare_subnet(int index, const char *host)
+bool connman_inet_compare_subnet(int index, const char *host)
 {
 	struct ifreq ifr;
 	struct in_addr _host_addr;
@@ -1141,8 +1051,8 @@ connman_bool_t connman_inet_compare_subnet(int index, const char *host)
 
 	DBG("host %s", host);
 
-	if (host == NULL)
-		return FALSE;
+	if (!host)
+		return false;
 
 	if (inet_aton(host, &_host_addr) == 0)
 		return -1;
@@ -1150,19 +1060,19 @@ connman_bool_t connman_inet_compare_subnet(int index, const char *host)
 
 	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (sk < 0)
-		return FALSE;
+		return false;
 
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_ifindex = index;
 
 	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0) {
 		close(sk);
-		return FALSE;
+		return false;
 	}
 
 	if (ioctl(sk, SIOCGIFNETMASK, &ifr) < 0) {
 		close(sk);
-		return FALSE;
+		return false;
 	}
 
 	netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
@@ -1170,7 +1080,7 @@ connman_bool_t connman_inet_compare_subnet(int index, const char *host)
 
 	if (ioctl(sk, SIOCGIFADDR, &ifr) < 0) {
 		close(sk);
-		return FALSE;
+		return false;
 	}
 
 	close(sk);
@@ -1186,7 +1096,7 @@ int connman_inet_remove_from_bridge(int index, const char *bridge)
 	struct ifreq ifr;
 	int sk, err = 0;
 
-	if (bridge == NULL)
+	if (!bridge)
 		return -EINVAL;
 
 	sk = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -1196,7 +1106,7 @@ int connman_inet_remove_from_bridge(int index, const char *bridge)
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, bridge, IFNAMSIZ - 1);
+	strncpy(ifr.ifr_name, bridge, sizeof(ifr.ifr_name) - 1);
 	ifr.ifr_ifindex = index;
 
 	if (ioctl(sk, SIOCBRDELIF, &ifr) < 0)
@@ -1217,7 +1127,7 @@ int connman_inet_add_to_bridge(int index, const char *bridge)
 	struct ifreq ifr;
 	int sk, err = 0;
 
-	if (bridge == NULL)
+	if (!bridge)
 		return -EINVAL;
 
 	sk = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -1227,7 +1137,7 @@ int connman_inet_add_to_bridge(int index, const char *bridge)
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, bridge, IFNAMSIZ - 1);
+	strncpy(ifr.ifr_name, bridge, sizeof(ifr.ifr_name) - 1);
 	ifr.ifr_ifindex = index;
 
 	if (ioctl(sk, SIOCBRADDIF, &ifr) < 0)
@@ -1272,7 +1182,7 @@ int connman_inet_setup_tunnel(char *tunnel, int mtu)
 	__u32 mask;
 	__u32 flags;
 
-	if (tunnel == NULL)
+	if (!tunnel)
 		return -EINVAL;
 
 	sk = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
@@ -1286,7 +1196,7 @@ int connman_inet_setup_tunnel(char *tunnel, int mtu)
 		goto done;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, tunnel, IFNAMSIZ);
+	strncpy(ifr.ifr_name, tunnel, sizeof(ifr.ifr_name) - 1);
 	err = ioctl(sk, SIOCGIFFLAGS, &ifr);
 	if (err)
 		goto done;
@@ -1342,11 +1252,15 @@ int connman_inet_create_tunnel(char **iface)
 	return fd;
 }
 
-struct rs_cb_data {
+/*
+ * This callback struct is used when sending router and neighbor
+ * solicitation and advertisement messages.
+ */
+struct xs_cb_data {
 	GIOChannel *channel;
-	__connman_inet_rs_cb_t callback;
+	void *callback;
 	struct sockaddr_in6 addr;
-	guint rs_timeout;
+	guint timeout;
 	guint watch_id;
 	void *user_data;
 };
@@ -1361,16 +1275,16 @@ static const struct in6_addr in6addr_all_nodes_mc = IN6ADDR_ALL_NODES_MC_INIT;
 static const struct in6_addr in6addr_all_routers_mc =
 						IN6ADDR_ALL_ROUTERS_MC_INIT;
 
-static void rs_cleanup(struct rs_cb_data *data)
+static void xs_cleanup(struct xs_cb_data *data)
 {
-	if (data->channel != NULL) {
+	if (data->channel) {
 		g_io_channel_shutdown(data->channel, TRUE, NULL);
 		g_io_channel_unref(data->channel);
 		data->channel = NULL;
 	}
 
-	if (data->rs_timeout > 0)
-		g_source_remove(data->rs_timeout);
+	if (data->timeout > 0)
+		g_source_remove(data->timeout);
 
 	if (data->watch_id > 0)
 		g_source_remove(data->watch_id);
@@ -1380,18 +1294,20 @@ static void rs_cleanup(struct rs_cb_data *data)
 
 static gboolean rs_timeout_cb(gpointer user_data)
 {
-	struct rs_cb_data *data = user_data;
+	struct xs_cb_data *data = user_data;
 
 	DBG("user data %p", user_data);
 
-	if (data == NULL)
+	if (!data)
 		return FALSE;
 
-	if (data->callback != NULL)
-		data->callback(NULL, 0, data->user_data);
+	if (data->callback) {
+		__connman_inet_rs_cb_t cb = data->callback;
+		cb(NULL, 0, data->user_data);
+	}
 
-	data->rs_timeout = 0;
-	rs_cleanup(data);
+	data->timeout = 0;
+	xs_cleanup(data);
 	return FALSE;
 }
 
@@ -1401,10 +1317,11 @@ static int icmpv6_recv(int fd, gpointer user_data)
 	struct iovec iov;
 	unsigned char chdr[CMSG_BUF_LEN];
 	unsigned char buf[1540];
-	struct rs_cb_data *data = user_data;
+	struct xs_cb_data *data = user_data;
 	struct nd_router_advert *hdr;
 	struct sockaddr_in6 saddr;
 	ssize_t len;
+	__connman_inet_rs_cb_t cb = data->callback;
 
 	DBG("");
 
@@ -1413,6 +1330,7 @@ static int icmpv6_recv(int fd, gpointer user_data)
 
 	mhdr.msg_name = (void *)&saddr;
 	mhdr.msg_namelen = sizeof(struct sockaddr_in6);
+	mhdr.msg_flags = 0;
 	mhdr.msg_iov = &iov;
 	mhdr.msg_iovlen = 1;
 	mhdr.msg_control = (void *)chdr;
@@ -1420,8 +1338,8 @@ static int icmpv6_recv(int fd, gpointer user_data)
 
 	len = recvmsg(fd, &mhdr, 0);
 	if (len < 0) {
-		data->callback(NULL, 0, data->user_data);
-		rs_cleanup(data);
+		cb(NULL, 0, data->user_data);
+		xs_cleanup(data);
 		return -errno;
 	}
 
@@ -1431,14 +1349,13 @@ static int icmpv6_recv(int fd, gpointer user_data)
 	if (hdr->nd_ra_code != 0)
 		return 0;
 
-	data->callback(hdr, len, data->user_data);
-	rs_cleanup(data);
+	cb(hdr, len, data->user_data);
+	xs_cleanup(data);
 
 	return len;
 }
 
-static gboolean icmpv6_event(GIOChannel *chan, GIOCondition cond,
-								gpointer data)
+static gboolean icmpv6_event(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
 	int fd, ret;
 
@@ -1456,7 +1373,8 @@ static gboolean icmpv6_event(GIOChannel *chan, GIOCondition cond,
 }
 
 /* Adapted from RFC 1071 "C" Implementation Example */
-static uint16_t csum(const void *phdr, const void *data, socklen_t datalen)
+static uint16_t csum(const void *phdr, const void *data, socklen_t datalen,
+		const void *extra_data, socklen_t extra_datalen)
 {
 	register unsigned long sum = 0;
 	socklen_t count;
@@ -1477,13 +1395,25 @@ static uint16_t csum(const void *phdr, const void *data, socklen_t datalen)
 		count -= 2;
 	}
 
+	if (extra_data) {
+		count = extra_datalen;
+		addr = (uint16_t *)extra_data;
+
+		while (count > 1) {
+			sum += *(addr++);
+			count -= 2;
+		}
+	}
+
 	while (sum >> 16)
 		sum = (sum & 0xffff) + (sum >> 16);
 
 	return (uint16_t)~sum;
 }
 
-static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest)
+static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest,
+			const struct in6_addr *source,
+			unsigned char *buf, size_t len, uint16_t lifetime)
 {
 	struct _phdr {
 		struct in6_addr src;
@@ -1499,16 +1429,17 @@ static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest)
 			struct icmp6_hdr icmp;
 			struct nd_neighbor_solicit ns;
 			struct nd_router_solicit rs;
+			struct nd_router_advert ra;
 		} i;
 	} frame;
 
 	struct msghdr msgh;
 	struct cmsghdr *cmsg;
 	struct in6_pktinfo *pinfo;
-	struct sockaddr_in6 dst;
+	struct sockaddr_in6 dst, src;
 	char cbuf[CMSG_SPACE(sizeof(*pinfo))];
-	struct iovec iov;
-	int fd, datalen, ret;
+	struct iovec iov[2];
+	int fd, datalen, ret, iovlen = 1;
 
 	DBG("");
 
@@ -1519,35 +1450,60 @@ static int ndisc_send_unspec(int type, int oif, const struct in6_addr *dest)
 	memset(&frame, 0, sizeof(frame));
 	memset(&dst, 0, sizeof(dst));
 
-	datalen = sizeof(frame.i.rs); /* 8, csum() safe */
+	if (type == ND_ROUTER_SOLICIT)
+		datalen = sizeof(frame.i.rs); /* 8, csum() safe */
+	else if (type == ND_ROUTER_ADVERT) {
+		datalen = sizeof(frame.i.ra); /* 16, csum() safe */
+		frame.i.ra.nd_ra_router_lifetime = htons(lifetime);
+	} else if (type == ND_NEIGHBOR_SOLICIT) {
+		datalen = sizeof(frame.i.ns); /* 24, csum() safe */
+		memcpy(&frame.i.ns.nd_ns_target, buf, sizeof(struct in6_addr));
+	} else {
+		close(fd);
+		return -EINVAL;
+	}
+
 	dst.sin6_addr = *dest;
+
+	if (source)
+		src.sin6_addr = *source;
+	else
+		src.sin6_addr = in6addr_any;
 
 	/* Fill in the IPv6 header */
 	frame.ip.ip6_vfc = 0x60;
-	frame.ip.ip6_plen = htons(datalen);
+	frame.ip.ip6_plen = htons(datalen + len);
 	frame.ip.ip6_nxt = IPPROTO_ICMPV6;
 	frame.ip.ip6_hlim = 255;
 	frame.ip.ip6_dst = dst.sin6_addr;
+	frame.ip.ip6_src = src.sin6_addr;
 	/* all other fields are already set to zero */
 
 	/* Prepare pseudo header for csum */
 	memset(&phdr, 0, sizeof(phdr));
 	phdr.dst = dst.sin6_addr;
-	phdr.plen = htonl(datalen);
+	phdr.src = src.sin6_addr;
+	phdr.plen = htonl(datalen + len);
 	phdr.nxt = IPPROTO_ICMPV6;
 
 	/* Fill in remaining ICMP header fields */
 	frame.i.icmp.icmp6_type = type;
-	frame.i.icmp.icmp6_cksum = csum(&phdr, &frame.i, datalen);
+	frame.i.icmp.icmp6_cksum = csum(&phdr, &frame.i, datalen, buf, len);
 
-	iov.iov_base = &frame;
-	iov.iov_len = sizeof(frame.ip) + datalen;
+	iov[0].iov_base = &frame;
+	iov[0].iov_len = sizeof(frame.ip) + datalen;
+
+	if (buf) {
+		iov[1].iov_base = buf;
+		iov[1].iov_len = len;
+		iovlen = 2;
+	}
 
 	dst.sin6_family = AF_INET6;
 	msgh.msg_name = &dst;
 	msgh.msg_namelen = sizeof(dst);
-	msgh.msg_iov = &iov;
-	msgh.msg_iovlen = 1;
+	msgh.msg_iov = iov;
+	msgh.msg_iovlen = iovlen;
 	msgh.msg_flags = 0;
 
 	memset(cbuf, 0, CMSG_SPACE(sizeof(*pinfo)));
@@ -1597,38 +1553,48 @@ static int if_mc_group(int sock, int ifindex, const struct in6_addr *mc_addr,
 
 	ret = setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
 			&val, sizeof(int));
-
-	if (ret < 0)
+	if (ret < 0) {
+		ret = -errno;
+		DBG("Cannot set IPV6_MULTICAST_LOOP %d/%s", ret,
+			strerror(-ret));
 		return ret;
+	}
 
-	return setsockopt(sock, IPPROTO_IPV6, cmd, &mreq, sizeof(mreq));
+	ret = setsockopt(sock, IPPROTO_IPV6, cmd, &mreq, sizeof(mreq));
+	if (ret < 0) {
+		ret = -errno;
+		DBG("Cannot set option %d %d/%s", cmd, ret, strerror(-ret));
+		return ret;
+	}
+
+	return 0;
 }
 
 int __connman_inet_ipv6_send_rs(int index, int timeout,
 			__connman_inet_rs_cb_t callback, void *user_data)
 {
-	struct rs_cb_data *data;
+	struct xs_cb_data *data;
 	struct icmp6_filter filter;
 	struct in6_addr solicit;
 	struct in6_addr dst = in6addr_all_routers_mc;
 	int sk;
 
-	DBG("");
-
 	if (timeout <= 0)
 		return -EINVAL;
 
-	data = g_try_malloc0(sizeof(struct rs_cb_data));
-	if (data == NULL)
+	data = g_try_malloc0(sizeof(struct xs_cb_data));
+	if (!data)
 		return -ENOMEM;
 
 	data->callback = callback;
 	data->user_data = user_data;
-	data->rs_timeout = g_timeout_add_seconds(timeout, rs_timeout_cb, data);
+	data->timeout = g_timeout_add_seconds(timeout, rs_timeout_cb, data);
 
 	sk = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
 	if (sk < 0)
 		return -errno;
+
+	DBG("sock %d", sk);
 
 	ICMP6_FILTER_SETBLOCKALL(&filter);
 	ICMP6_FILTER_SETPASS(ND_ROUTER_ADVERT, &filter);
@@ -1650,9 +1616,397 @@ int __connman_inet_ipv6_send_rs(int index, int timeout,
 			G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
 			icmpv6_event, data);
 
-	ndisc_send_unspec(ND_ROUTER_SOLICIT, index, &dst);
+	ndisc_send_unspec(ND_ROUTER_SOLICIT, index, &dst, NULL, NULL, 0, 0);
 
 	return 0;
+}
+
+static inline void ipv6_addr_advert_mult(const struct in6_addr *addr,
+					struct in6_addr *advert)
+{
+	ipv6_addr_set(advert, htonl(0xFF020000), 0, htonl(0x2),
+			htonl(0xFF000000) | addr->s6_addr32[3]);
+}
+
+#define MSG_SIZE_SEND 1452
+
+static int inc_len(int len, int inc)
+{
+	if (len > MSG_SIZE_SEND)
+		return -EINVAL;
+
+	len += inc;
+	return len;
+}
+
+int __connman_inet_ipv6_send_ra(int index, struct in6_addr *src_addr,
+				GSList *prefixes, int router_lifetime)
+{
+	GSList *list;
+	struct in6_addr src, *source;
+	struct in6_addr dst = in6addr_all_nodes_mc;
+	GDHCPIAPrefix *prefix;
+	unsigned char buf[MSG_SIZE_SEND];
+	char addr_str[INET6_ADDRSTRLEN];
+	int sk, err = 0;
+	int len, count = 0;
+
+	if (!prefixes)
+		return -EINVAL;
+
+	sk = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
+	if (sk < 0)
+		return -errno;
+
+	if (!src_addr) {
+		__connman_inet_get_interface_ll_address(index, AF_INET6, &src);
+		source = &src;
+	} else
+		source = src_addr;
+
+	DBG("sock %d index %d prefixes %p src %s lifetime %d", sk, index,
+		prefixes, inet_ntop(AF_INET6, source, addr_str,
+				INET6_ADDRSTRLEN),
+		router_lifetime);
+
+	memset(buf, 0, MSG_SIZE_SEND);
+	len = 0;
+
+	for (list = prefixes; list; list = list->next) {
+		struct nd_opt_prefix_info *pinfo;
+
+		prefix = list->data;
+		pinfo = (struct nd_opt_prefix_info *)(buf + len);
+
+		len = inc_len(len, sizeof(*pinfo));
+		if (len < 0) {
+			err = len;
+			goto out;
+		}
+
+		pinfo->nd_opt_pi_type = ND_OPT_PREFIX_INFORMATION;
+		pinfo->nd_opt_pi_len = 4;
+		pinfo->nd_opt_pi_prefix_len = prefix->prefixlen;
+		pinfo->nd_opt_pi_flags_reserved = ND_OPT_PI_FLAG_ONLINK;
+		pinfo->nd_opt_pi_flags_reserved	|= ND_OPT_PI_FLAG_AUTO;
+		if (router_lifetime > 0) {
+			pinfo->nd_opt_pi_valid_time = htonl(prefix->valid);
+			pinfo->nd_opt_pi_preferred_time =
+						htonl(prefix->preferred);
+		}
+		pinfo->nd_opt_pi_reserved2 = 0;
+
+		memcpy(&pinfo->nd_opt_pi_prefix, &prefix->prefix,
+						sizeof(struct in6_addr));
+
+		DBG("[%d] index %d prefix %s/%d", count, index,
+			inet_ntop(AF_INET6, &prefix->prefix, addr_str,
+				INET6_ADDRSTRLEN), prefix->prefixlen);
+
+		count++;
+	}
+
+	if (count > 0) {
+		err = ndisc_send_unspec(ND_ROUTER_ADVERT, index, &dst, source,
+					buf, len, router_lifetime);
+		if (err < 0)
+			DBG("cannot send RA %d/%s", err, strerror(-err));
+	}
+
+out:
+	close(sk);
+	return err;
+}
+
+void __connman_inet_ipv6_stop_recv_rs(void *context)
+{
+	if (!context)
+		return;
+
+	xs_cleanup(context);
+}
+
+static int icmpv6_rs_recv(int fd, gpointer user_data)
+{
+	struct msghdr mhdr;
+	struct iovec iov;
+	unsigned char chdr[CMSG_BUF_LEN];
+	unsigned char buf[1540];
+	struct xs_cb_data *data = user_data;
+	struct nd_router_solicit *hdr;
+	struct sockaddr_in6 saddr;
+	ssize_t len;
+	__connman_inet_recv_rs_cb_t cb = data->callback;
+
+	DBG("");
+
+	iov.iov_len = sizeof(buf);
+	iov.iov_base = buf;
+
+	mhdr.msg_name = (void *)&saddr;
+	mhdr.msg_namelen = sizeof(struct sockaddr_in6);
+	mhdr.msg_flags = 0;
+	mhdr.msg_iov = &iov;
+	mhdr.msg_iovlen = 1;
+	mhdr.msg_control = (void *)chdr;
+	mhdr.msg_controllen = CMSG_BUF_LEN;
+
+	len = recvmsg(fd, &mhdr, 0);
+	if (len < 0) {
+		cb(NULL, 0, data->user_data);
+		return -errno;
+	}
+
+	hdr = (struct nd_router_solicit *)buf;
+	DBG("code %d len %zd hdr %zd", hdr->nd_rs_code, len,
+				sizeof(struct nd_router_solicit));
+	if (hdr->nd_rs_code != 0)
+		return 0;
+
+	cb(hdr, len, data->user_data);
+	return len;
+}
+
+static gboolean icmpv6_rs_event(GIOChannel *chan, GIOCondition cond,
+								gpointer data)
+{
+	int fd, ret;
+
+	DBG("");
+
+	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
+		return FALSE;
+
+	fd = g_io_channel_unix_get_fd(chan);
+	ret = icmpv6_rs_recv(fd, data);
+	if (ret == 0)
+		return TRUE;
+
+	return FALSE;
+}
+
+int __connman_inet_ipv6_start_recv_rs(int index,
+					__connman_inet_recv_rs_cb_t callback,
+					void *user_data,
+					void **context)
+{
+	struct xs_cb_data *data;
+	struct icmp6_filter filter;
+	char addr_str[INET6_ADDRSTRLEN];
+	int sk, err;
+
+	data = g_try_malloc0(sizeof(struct xs_cb_data));
+	if (!data)
+		return -ENOMEM;
+
+	data->callback = callback;
+	data->user_data = user_data;
+
+	sk = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
+	if (sk < 0) {
+		g_free(data);
+		return -errno;
+	}
+
+	DBG("sock %d", sk);
+
+	ICMP6_FILTER_SETBLOCKALL(&filter);
+	ICMP6_FILTER_SETPASS(ND_ROUTER_SOLICIT, &filter);
+
+	setsockopt(sk, IPPROTO_ICMPV6, ICMP6_FILTER, &filter,
+						sizeof(struct icmp6_filter));
+
+	err = if_mc_group(sk, index, &in6addr_all_routers_mc, IPV6_JOIN_GROUP);
+	if (err < 0)
+		DBG("Cannot join mc %s %d/%s", inet_ntop(AF_INET6,
+			&in6addr_all_routers_mc, addr_str, INET6_ADDRSTRLEN),
+			err, strerror(-err));
+
+	data->channel = g_io_channel_unix_new(sk);
+	g_io_channel_set_close_on_unref(data->channel, TRUE);
+
+	g_io_channel_set_encoding(data->channel, NULL, NULL);
+	g_io_channel_set_buffered(data->channel, FALSE);
+
+	data->watch_id = g_io_add_watch(data->channel,
+			G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
+			icmpv6_rs_event, data);
+
+	*context = data;
+
+	return 0;
+}
+
+static gboolean ns_timeout_cb(gpointer user_data)
+{
+	struct xs_cb_data *data = user_data;
+
+	DBG("user data %p", user_data);
+
+	if (!data)
+		return FALSE;
+
+	if (data->callback) {
+		__connman_inet_ns_cb_t cb = data->callback;
+		cb(NULL, 0, &data->addr.sin6_addr, data->user_data);
+	}
+
+	data->timeout = 0;
+	xs_cleanup(data);
+	return FALSE;
+}
+
+static int icmpv6_nd_recv(int fd, gpointer user_data)
+{
+	struct msghdr mhdr;
+	struct iovec iov;
+	unsigned char chdr[CMSG_BUF_LEN];
+	unsigned char buf[1540];
+	struct xs_cb_data *data = user_data;
+	struct nd_neighbor_advert *hdr;
+	struct sockaddr_in6 saddr;
+	ssize_t len;
+	__connman_inet_ns_cb_t cb = data->callback;
+
+	DBG("");
+
+	iov.iov_len = sizeof(buf);
+	iov.iov_base = buf;
+
+	mhdr.msg_name = (void *)&saddr;
+	mhdr.msg_namelen = sizeof(struct sockaddr_in6);
+	mhdr.msg_flags = 0;
+	mhdr.msg_iov = &iov;
+	mhdr.msg_iovlen = 1;
+	mhdr.msg_control = (void *)chdr;
+	mhdr.msg_controllen = CMSG_BUF_LEN;
+
+	len = recvmsg(fd, &mhdr, 0);
+	if (len < 0) {
+		cb(NULL, 0, &data->addr.sin6_addr, data->user_data);
+		xs_cleanup(data);
+		return -errno;
+	}
+
+	hdr = (struct nd_neighbor_advert *)buf;
+	DBG("code %d len %zd hdr %zd", hdr->nd_na_code, len,
+				sizeof(struct nd_neighbor_advert));
+	if (hdr->nd_na_code != 0)
+		return 0;
+
+	/*
+	 * We can receive any neighbor advertisement so we need to check if the
+	 * packet was meant for us and ignore the packet otherwise.
+	 */
+	if (memcmp(&data->addr.sin6_addr, &hdr->nd_na_target,
+			sizeof(struct in6_addr)))
+		return 0;
+
+	cb(hdr, len, &data->addr.sin6_addr, data->user_data);
+	xs_cleanup(data);
+
+	return len;
+}
+
+static gboolean icmpv6_nd_event(GIOChannel *chan, GIOCondition cond,
+								gpointer data)
+{
+	int fd, ret;
+
+	DBG("");
+
+	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
+		return FALSE;
+
+	fd = g_io_channel_unix_get_fd(chan);
+	ret = icmpv6_nd_recv(fd, data);
+	if (ret == 0)
+		return TRUE;
+
+	return FALSE;
+}
+
+int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
+				struct in6_addr *addr,
+				__connman_inet_ns_cb_t callback,
+				void *user_data)
+{
+	struct xs_cb_data *data;
+	struct icmp6_filter filter;
+	struct in6_addr solicit;
+	int sk, err, val = 1;
+
+	if (timeout_ms <= 0)
+		return -EINVAL;
+
+	data = g_try_malloc0(sizeof(struct xs_cb_data));
+	if (!data)
+		return -ENOMEM;
+
+	data->callback = callback;
+	data->user_data = user_data;
+	data->timeout = g_timeout_add_full(G_PRIORITY_DEFAULT,
+					(guint)timeout_ms,
+					ns_timeout_cb,
+					data,
+                                        NULL);
+	memcpy(&data->addr.sin6_addr, addr, sizeof(struct in6_addr));
+
+	sk = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
+	if (sk < 0)
+		return -errno;
+
+	DBG("sock %d", sk);
+
+	ICMP6_FILTER_SETBLOCKALL(&filter);
+	ICMP6_FILTER_SETPASS(ND_NEIGHBOR_ADVERT, &filter);
+
+	setsockopt(sk, IPPROTO_ICMPV6, ICMP6_FILTER, &filter,
+						sizeof(struct icmp6_filter));
+
+        if (setsockopt(sk, IPPROTO_IPV6, IPV6_RECVPKTINFO,
+						&val, sizeof(val)) < 0) {
+		err = -errno;
+                DBG("Cannot set IPV6_RECVPKTINFO %d/%s", err,
+							strerror(-err));
+		close(sk);
+		return err;
+        }
+
+        if (setsockopt(sk, IPPROTO_IPV6, IPV6_RECVHOPLIMIT,
+						&val, sizeof(val)) < 0) {
+		err = -errno;
+                DBG("Cannot set IPV6_RECVHOPLIMIT %d/%s", err,
+							strerror(-err));
+		close(sk);
+		return err;
+        }
+
+	val = 0;
+	setsockopt(sk, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &val, sizeof(val));
+
+	ipv6_addr_solict_mult(addr, &solicit);
+	if_mc_group(sk, index, &in6addr_all_nodes_mc, IPV6_JOIN_GROUP);
+	if_mc_group(sk, index, &solicit, IPV6_JOIN_GROUP);
+
+	data->channel = g_io_channel_unix_new(sk);
+	g_io_channel_set_close_on_unref(data->channel, TRUE);
+
+	g_io_channel_set_encoding(data->channel, NULL, NULL);
+	g_io_channel_set_buffered(data->channel, FALSE);
+
+	data->watch_id = g_io_add_watch(data->channel,
+			G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
+			icmpv6_nd_event, data);
+
+	err = ndisc_send_unspec(ND_NEIGHBOR_SOLICIT, index, &solicit, NULL,
+			(unsigned char *)addr, 0, 0);
+	if (err < 0) {
+		DBG("Cannot send NS %d/%s", err, strerror(-err));
+		xs_cleanup(data);
+	}
+
+	return err;
 }
 
 GSList *__connman_inet_ipv6_get_prefixes(struct nd_router_advert *hdr,
@@ -1686,7 +2040,7 @@ GSList *__connman_inet_ipv6_get_prefixes(struct nd_router_advert *hdr,
 			pinfo = (struct nd_opt_prefix_info *)pos;
 			prefix = inet_ntop(AF_INET6, &pinfo->nd_opt_pi_prefix,
 					prefix_str, INET6_ADDRSTRLEN);
-			if (prefix == NULL)
+			if (!prefix)
 				break;
 
 			str = g_strdup_printf("%s/%d", prefix,
@@ -1759,7 +2113,7 @@ static int get_dest_addr(int family, int index, char *buf, int len)
 		return -errno;
 	}
 
-	if (inet_ntop(family, addr, buf, len) == NULL) {
+	if (!inet_ntop(family, addr, buf, len)) {
 		DBG("error %d/%s", errno, strerror(errno));
 		return -errno;
 	}
@@ -1854,7 +2208,7 @@ static void inet_rtnl_cleanup(struct inet_rtnl_cb_data *data)
 {
 	struct __connman_inet_rtnl_handle *rth = data->rtnl;
 
-	if (data->channel != NULL) {
+	if (data->channel) {
 		g_io_channel_shutdown(data->channel, TRUE, NULL);
 		g_io_channel_unref(data->channel);
 		data->channel = NULL;
@@ -1868,7 +2222,7 @@ static void inet_rtnl_cleanup(struct inet_rtnl_cb_data *data)
 	if (data->watch_id > 0)
 		g_source_remove(data->watch_id);
 
-	if (rth != NULL) {
+	if (rth) {
 		__connman_inet_rtnl_close(rth);
 		g_free(rth);
 	}
@@ -1882,10 +2236,10 @@ static gboolean inet_rtnl_timeout_cb(gpointer user_data)
 
 	DBG("user data %p", user_data);
 
-	if (data == NULL)
+	if (!data)
 		return FALSE;
 
-	if (data->callback != NULL)
+	if (data->callback)
 		data->callback(NULL, data->user_data);
 
 	data->rtnl_timeout = 0;
@@ -2006,9 +2360,9 @@ int __connman_inet_rtnl_talk(struct __connman_inet_rtnl_handle *rtnl,
 
 	n->nlmsg_seq = seq = ++rtnl->seq;
 
-	if (callback != NULL) {
+	if (callback) {
 		data = g_try_malloc0(sizeof(struct inet_rtnl_cb_data));
-		if (data == NULL)
+		if (!data)
 			return -ENOMEM;
 
 		data->callback = callback;
@@ -2031,9 +2385,10 @@ int __connman_inet_rtnl_talk(struct __connman_inet_rtnl_handle *rtnl,
 
 	err = sendto(rtnl->fd, &rtnl->req.n, rtnl->req.n.nlmsg_len, 0,
 		(struct sockaddr *) &nladdr, sizeof(nladdr));
-	DBG("handle %p len %d err %d", rtnl, rtnl->req.n.nlmsg_len, err);
+	DBG("handle %p len %d", rtnl, rtnl->req.n.nlmsg_len);
 	if (err < 0) {
-		connman_error("Can not talk to rtnetlink");
+		connman_error("Can not talk to rtnetlink err %d %s",
+			-errno, strerror(errno));
 		return -errno;
 	}
 
@@ -2105,7 +2460,7 @@ static void get_route_cb(struct nlmsghdr *answer, void *user_data)
 
 	DBG("answer %p data %p", answer, user_data);
 
-	if (answer == NULL)
+	if (!answer)
 		goto out;
 
 	len = answer->nlmsg_len;
@@ -2126,10 +2481,10 @@ static void get_route_cb(struct nlmsghdr *answer, void *user_data)
 
 	parse_rtattr(tb, RTA_MAX, RTM_RTA(r), len);
 
-	if (tb[RTA_OIF] != NULL)
+	if (tb[RTA_OIF])
 		index = *(int *)RTA_DATA(tb[RTA_OIF]);
 
-	if (tb[RTA_GATEWAY] != NULL)
+	if (tb[RTA_GATEWAY])
 		addr = inet_ntop(r->rtm_family,
 				RTA_DATA(tb[RTA_GATEWAY]),
 				abuf, sizeof(abuf));
@@ -2137,7 +2492,7 @@ static void get_route_cb(struct nlmsghdr *answer, void *user_data)
 	DBG("addr %s index %d user %p", addr, index, data->user_data);
 
 out:
-	if (data != NULL && data->callback != NULL)
+	if (data && data->callback)
 		data->callback(addr, index, data->user_data);
 
 	g_free(data);
@@ -2158,7 +2513,7 @@ int __connman_inet_get_route(const char *dest_address,
 
 	DBG("dest %s", dest_address);
 
-	if (dest_address == NULL)
+	if (!dest_address)
 		return -EINVAL;
 
 	memset(&hints, 0, sizeof(hints));
@@ -2170,7 +2525,7 @@ int __connman_inet_get_route(const char *dest_address,
 		return -EINVAL;
 
 	rth = g_try_malloc0(sizeof(struct __connman_inet_rtnl_handle));
-	if (rth == NULL) {
+	if (!rth) {
 		freeaddrinfo(rp);
 		return -ENOMEM;
 	}
@@ -2197,7 +2552,7 @@ int __connman_inet_get_route(const char *dest_address,
 		goto fail;
 
 	data = g_try_malloc(sizeof(struct get_route_cb_data));
-	if (data == NULL) {
+	if (!data) {
 		err = -ENOMEM;
 		goto done;
 	}
@@ -2242,7 +2597,7 @@ int connman_inet_check_ipaddress(const char *host)
 }
 
 /* Check routine modified from ics-dhcp 4.2.3-P2 */
-connman_bool_t connman_inet_check_hostname(const char *ptr, size_t len)
+bool connman_inet_check_hostname(const char *ptr, size_t len)
 {
 	const char *p;
 
@@ -2250,7 +2605,7 @@ connman_bool_t connman_inet_check_hostname(const char *ptr, size_t len)
 	 * Not empty or complete length not over 255 characters.
 	 */
 	if ((len == 0) || (len > 256))
-		return FALSE;
+		return false;
 
 	/*
 	 * Consists of [[:alnum:]-]+ labels separated by [.]
@@ -2263,7 +2618,7 @@ connman_bool_t connman_inet_check_hostname(const char *ptr, size_t len)
 			 * Not allowed at begin or end of a label.
 			 */
 			if (((p - ptr) == 0) || (len == 0) || (p[1] == '.'))
-				return FALSE;
+				return false;
 
 		} else if (*p == '.') {
 			/*
@@ -2273,7 +2628,7 @@ connman_bool_t connman_inet_check_hostname(const char *ptr, size_t len)
 			size_t d = p - ptr;
 
 			if ((d <= 0) || (d >= 64))
-				return FALSE;
+				return false;
 
 			ptr = p + 1; /* Jump to the next label */
 
@@ -2281,11 +2636,11 @@ connman_bool_t connman_inet_check_hostname(const char *ptr, size_t len)
 			/*
 			 * Also numbers at the begin are fine
 			 */
-			return FALSE;
+			return false;
 		}
 	}
 
-	return TRUE;
+	return true;
 }
 
 char **__connman_inet_get_running_interfaces(void)
@@ -2310,7 +2665,7 @@ char **__connman_inet_get_running_interfaces(void)
 	 * calls.
 	 */
 	ifr = g_try_malloc0(ifc.ifc_len * 2);
-	if (ifr == NULL)
+	if (!ifr)
 		goto error;
 
 	ifc.ifc_req = ifr;
@@ -2321,7 +2676,7 @@ char **__connman_inet_get_running_interfaces(void)
 	numif = ifc.ifc_len / sizeof(struct ifreq);
 
 	result = g_try_malloc0((numif + 1) * sizeof(char *));
-	if (result == NULL)
+	if (!result)
 		goto error;
 
 	close(sk);
@@ -2366,16 +2721,16 @@ error:
 	return NULL;
 }
 
-connman_bool_t connman_inet_is_ipv6_supported()
+bool connman_inet_is_ipv6_supported()
 {
 	int sk;
 
 	sk = socket(PF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (sk < 0)
-		return FALSE;
+		return false;
 
 	close(sk);
-	return TRUE;
+	return true;
 }
 
 int __connman_inet_get_interface_address(int index, int family, void *address)
@@ -2384,7 +2739,7 @@ int __connman_inet_get_interface_address(int index, int family, void *address)
 	int err = -ENOENT;
 	char name[IF_NAMESIZE];
 
-	if (if_indextoname(index, name) == NULL)
+	if (!if_indextoname(index, name))
 		return -EINVAL;
 
 	DBG("index %d interface %s", index, name);
@@ -2395,8 +2750,8 @@ int __connman_inet_get_interface_address(int index, int family, void *address)
 		return err;
 	}
 
-	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL)
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		if (!ifa->ifa_addr)
 			continue;
 
 		if (strncmp(ifa->ifa_name, name, IF_NAMESIZE) == 0 &&
@@ -2430,4 +2785,238 @@ int __connman_inet_get_interface_address(int index, int family, void *address)
 out:
 	freeifaddrs(ifaddr);
 	return err;
+}
+
+static int iprule_modify(int cmd, int family, uint32_t table_id,
+			uint32_t fwmark)
+{
+	struct __connman_inet_rtnl_handle rth;
+	int ret;
+
+	memset(&rth, 0, sizeof(rth));
+
+	rth.req.n.nlmsg_type = cmd;
+	rth.req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+	rth.req.n.nlmsg_flags = NLM_F_REQUEST;
+	rth.req.u.r.rt.rtm_family = family;
+	rth.req.u.r.rt.rtm_protocol = RTPROT_BOOT;
+	rth.req.u.r.rt.rtm_scope = RT_SCOPE_UNIVERSE;
+	rth.req.u.r.rt.rtm_table = table_id;
+	rth.req.u.r.rt.rtm_type = RTN_UNSPEC;
+	rth.req.u.r.rt.rtm_flags = 0;
+
+	if (cmd == RTM_NEWRULE) {
+		rth.req.n.nlmsg_flags |= NLM_F_CREATE|NLM_F_EXCL;
+		rth.req.u.r.rt.rtm_type = RTN_UNICAST;
+	}
+
+	__connman_inet_rtnl_addattr32(&rth.req.n, sizeof(rth.req),
+							FRA_FWMARK, fwmark);
+
+	if (table_id < 256) {
+		rth.req.u.r.rt.rtm_table = table_id;
+	} else {
+		rth.req.u.r.rt.rtm_table = RT_TABLE_UNSPEC;
+		__connman_inet_rtnl_addattr32(&rth.req.n, sizeof(rth.req),
+						FRA_TABLE, table_id);
+	}
+
+	if (rth.req.u.r.rt.rtm_family == AF_UNSPEC)
+		rth.req.u.r.rt.rtm_family = AF_INET;
+
+	ret = __connman_inet_rtnl_open(&rth);
+	if (ret < 0)
+		goto done;
+
+	ret = __connman_inet_rtnl_send(&rth, &rth.req.n);
+
+done:
+	__connman_inet_rtnl_close(&rth);
+
+	return ret;
+}
+
+int __connman_inet_add_fwmark_rule(uint32_t table_id, int family, uint32_t fwmark)
+{
+	/* ip rule add fwmark 9876 table 1234 */
+
+	return iprule_modify(RTM_NEWRULE, family, table_id, fwmark);
+}
+
+int __connman_inet_del_fwmark_rule(uint32_t table_id, int family, uint32_t fwmark)
+{
+	return iprule_modify(RTM_DELRULE, family, table_id, fwmark);
+}
+
+static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
+			const char *gateway)
+{
+	struct __connman_inet_rtnl_handle rth;
+	unsigned char buf[sizeof(struct in6_addr)];
+	int ret, len;
+	int family = connman_inet_check_ipaddress(gateway);
+
+	switch (family) {
+	case AF_INET:
+		len = 4;
+		break;
+	case AF_INET6:
+		len = 16;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = inet_pton(family, gateway, buf);
+	if (ret <= 0)
+		return -EINVAL;
+
+	memset(&rth, 0, sizeof(rth));
+
+	rth.req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+	rth.req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+	rth.req.n.nlmsg_type = cmd;
+	rth.req.u.r.rt.rtm_family = family;
+	rth.req.u.r.rt.rtm_table = RT_TABLE_MAIN;
+	rth.req.u.r.rt.rtm_scope = RT_SCOPE_NOWHERE;
+	rth.req.u.r.rt.rtm_protocol = RTPROT_BOOT;
+	rth.req.u.r.rt.rtm_scope = RT_SCOPE_UNIVERSE;
+	rth.req.u.r.rt.rtm_type = RTN_UNICAST;
+
+	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req), RTA_GATEWAY,
+								buf, len);
+	if (table_id < 256) {
+		rth.req.u.r.rt.rtm_table = table_id;
+	} else {
+		rth.req.u.r.rt.rtm_table = RT_TABLE_UNSPEC;
+		__connman_inet_rtnl_addattr32(&rth.req.n, sizeof(rth.req),
+							RTA_TABLE, table_id);
+	}
+
+	__connman_inet_rtnl_addattr32(&rth.req.n, sizeof(rth.req),
+							RTA_OIF, ifindex);
+
+	ret = __connman_inet_rtnl_open(&rth);
+	if (ret < 0)
+		goto done;
+
+	ret = __connman_inet_rtnl_send(&rth, &rth.req.n);
+
+done:
+	__connman_inet_rtnl_close(&rth);
+
+	return ret;
+}
+
+int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex,
+						const char *gateway)
+{
+	/* ip route add default via 1.2.3.4 dev wlan0 table 1234 */
+
+	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway);
+}
+
+int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
+						const char *gateway)
+{
+	/* ip route del default via 1.2.3.4 dev wlan0 table 1234 */
+
+	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway);
+}
+
+int __connman_inet_get_interface_ll_address(int index, int family,
+								void *address)
+{
+	struct ifaddrs *ifaddr, *ifa;
+	int err = -ENOENT;
+	char name[IF_NAMESIZE];
+
+	if (!if_indextoname(index, name))
+		return -EINVAL;
+
+	DBG("index %d interface %s", index, name);
+
+	if (getifaddrs(&ifaddr) < 0) {
+		err = -errno;
+		DBG("Cannot get addresses err %d/%s", err, strerror(-err));
+		return err;
+	}
+
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		if (!ifa->ifa_addr)
+			continue;
+
+		if (strncmp(ifa->ifa_name, name, IF_NAMESIZE) == 0 &&
+					ifa->ifa_addr->sa_family == family) {
+			if (family == AF_INET) {
+				struct sockaddr_in *in4 = (struct sockaddr_in *)
+					ifa->ifa_addr;
+				if (in4->sin_addr.s_addr == INADDR_ANY)
+					continue;
+				if ((in4->sin_addr.s_addr & IN_CLASSB_NET) !=
+						((in_addr_t) 0xa9fe0000))
+					continue;
+				memcpy(address, &in4->sin_addr,
+							sizeof(struct in_addr));
+			} else if (family == AF_INET6) {
+				struct sockaddr_in6 *in6 =
+					(struct sockaddr_in6 *)ifa->ifa_addr;
+				if (memcmp(&in6->sin6_addr, &in6addr_any,
+						sizeof(struct in6_addr)) == 0)
+					continue;
+				if (!IN6_IS_ADDR_LINKLOCAL(&in6->sin6_addr))
+					continue;
+
+				memcpy(address, &in6->sin6_addr,
+						sizeof(struct in6_addr));
+			} else {
+				err = -EINVAL;
+				goto out;
+			}
+
+			err = 0;
+			break;
+		}
+	}
+
+out:
+	freeifaddrs(ifaddr);
+	return err;
+}
+
+int __connman_inet_get_address_netmask(int ifindex,
+					struct sockaddr_in *address,
+					struct sockaddr_in *netmask)
+{
+	int sk, ret = -EINVAL;
+	struct ifreq ifr;
+
+	DBG("index %d", ifindex);
+
+	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (sk < 0)
+		return -EINVAL;
+
+	memset(&ifr, 0, sizeof(ifr));
+	ifr.ifr_ifindex = ifindex;
+
+	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0)
+		goto out;
+
+	if (ioctl(sk, SIOCGIFNETMASK, &ifr) < 0)
+		goto out;
+
+	memcpy(netmask, (struct sockaddr_in *)&ifr.ifr_netmask,
+						sizeof(struct sockaddr_in));
+
+	if (ioctl(sk, SIOCGIFADDR, &ifr) < 0)
+		goto out;
+
+	memcpy(address, (struct sockaddr_in *)&ifr.ifr_addr,
+						sizeof(struct sockaddr_in));
+	ret = 0;
+
+out:
+	close(sk);
+	return ret;
 }

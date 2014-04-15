@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -73,46 +73,44 @@ void connman_notifier_unregister(struct connman_notifier *notifier)
 	notifier_list = g_slist_remove(notifier_list, notifier);
 }
 
-#define MAX_TECHNOLOGIES 10
+static int connected[MAX_CONNMAN_SERVICE_TYPES];
+static int online[MAX_CONNMAN_SERVICE_TYPES];
 
-static int connected[MAX_TECHNOLOGIES];
-static int online[MAX_TECHNOLOGIES];
-
-static connman_bool_t notifier_is_online(void)
+static bool notifier_is_online(void)
 {
 	unsigned int i;
 
 	__sync_synchronize();
-	for (i = 0; i < MAX_TECHNOLOGIES; i++) {
+	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++) {
 		if (online[i] > 0)
-			return TRUE;
+			return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
-connman_bool_t __connman_notifier_is_connected(void)
+bool __connman_notifier_is_connected(void)
 {
 	unsigned int i;
 
 	__sync_synchronize();
-	for (i = 0; i < MAX_TECHNOLOGIES; i++) {
+	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++) {
 		if (connected[i] > 0)
-			return TRUE;
+			return true;
 	}
 
-	return FALSE;
+	return false;
 }
 
 static const char *evaluate_notifier_state(void)
 {
-	if (notifier_is_online() == TRUE)
+	if (notifier_is_online())
 		return "online";
 
-	if (__connman_notifier_is_connected() == TRUE)
+	if (__connman_notifier_is_connected())
 		return "ready";
 
-	if ( __connman_technology_get_offlinemode() == TRUE)
+	if (__connman_technology_get_offlinemode())
 		return "offline";
 
 	return "idle";
@@ -148,17 +146,18 @@ void __connman_notifier_connect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
-	case CONNMAN_SERVICE_TYPE_GADGET:
 		return;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	}
 
 	if (__sync_fetch_and_add(&connected[type], 1) == 0) {
-		__connman_technology_set_connected(type, TRUE);
+		__connman_technology_set_connected(type, true);
 		state_changed();
 	}
 }
@@ -194,19 +193,20 @@ void __connman_notifier_disconnect(enum connman_service_type type)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_GPS:
 	case CONNMAN_SERVICE_TYPE_VPN:
-	case CONNMAN_SERVICE_TYPE_GADGET:
 		return;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	}
 
 	if (__sync_fetch_and_sub(&connected[type], 1) != 1)
 		return;
 
-	__connman_technology_set_connected(type, FALSE);
+	__connman_technology_set_connected(type, false);
 	state_changed();
 }
 
@@ -239,7 +239,7 @@ void __connman_notifier_service_remove(struct connman_service *service)
 {
 	GSList *list;
 
-	if (g_hash_table_lookup(service_hash, service) != NULL) {
+	if (g_hash_table_lookup(service_hash, service)) {
 		/*
 		 * This is a tempory check for consistency. It can be
 		 * removed when there are no reports for the following
@@ -279,7 +279,7 @@ static void offlinemode_changed(dbus_bool_t enabled)
 						DBUS_TYPE_BOOLEAN, &enabled);
 }
 
-void __connman_notifier_offlinemode(connman_bool_t enabled)
+void __connman_notifier_offlinemode(bool enabled)
 {
 	GSList *list;
 
@@ -296,7 +296,7 @@ void __connman_notifier_offlinemode(connman_bool_t enabled)
 	}
 }
 
-static void notify_idle_state(connman_bool_t idle)
+static void notify_idle_state(bool idle)
 {
 	GSList *list;
 
@@ -315,7 +315,7 @@ void __connman_notifier_service_state_changed(struct connman_service *service,
 {
 	GSList *list;
 	unsigned int old_size;
-	connman_bool_t found;
+	bool found;
 
 	for (list = notifier_list; list; list = list->next) {
 		struct connman_notifier *notifier = list->data;
@@ -325,31 +325,31 @@ void __connman_notifier_service_state_changed(struct connman_service *service,
 	}
 
 	old_size = g_hash_table_size(service_hash);
-	found = g_hash_table_lookup(service_hash, service) != NULL;
+	found = g_hash_table_lookup(service_hash, service);
 
 	switch (state) {
 	case CONNMAN_SERVICE_STATE_UNKNOWN:
 	case CONNMAN_SERVICE_STATE_FAILURE:
 	case CONNMAN_SERVICE_STATE_DISCONNECT:
 	case CONNMAN_SERVICE_STATE_IDLE:
-		if (found == FALSE)
+		if (!found)
 			break;
 
 		g_hash_table_remove(service_hash, service);
 		if (old_size == 1)
-			notify_idle_state(TRUE);
+			notify_idle_state(true);
 
 		break;
 	case CONNMAN_SERVICE_STATE_ASSOCIATION:
 	case CONNMAN_SERVICE_STATE_CONFIGURATION:
 	case CONNMAN_SERVICE_STATE_READY:
 	case CONNMAN_SERVICE_STATE_ONLINE:
-		if (found == TRUE)
+		if (found)
 			break;
 
 		g_hash_table_insert(service_hash, service, service);
 		if (old_size == 0)
-			notify_idle_state(FALSE);
+			notify_idle_state(false);
 
 		break;
 	}

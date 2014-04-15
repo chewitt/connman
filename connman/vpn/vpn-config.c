@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -64,7 +64,7 @@ struct vpn_config {
 
 static GHashTable *config_table = NULL;
 
-static connman_bool_t cleanup = FALSE;
+static bool cleanup = false;
 
 /* Definition of possible strings in the .config files */
 #define CONFIG_KEY_NAME                "Name"
@@ -96,7 +96,7 @@ static void unregister_provider(gpointer data)
 	struct vpn_provider *provider;
 	char *provider_id;
 
-	if (cleanup == TRUE)
+	if (cleanup)
 		goto free_only;
 
 	provider_id = config_provider->provider_identifier;
@@ -105,10 +105,10 @@ static void unregister_provider(gpointer data)
 				config_provider->ident, provider_id);
 
 	provider = __vpn_provider_lookup(provider_id);
-	if (provider != NULL)
+	if (provider)
 		__vpn_provider_delete(provider);
 	else {
-		if (__connman_storage_remove_provider(provider_id) == FALSE)
+		if (!__connman_storage_remove_provider(provider_id))
 			DBG("Could not remove all files for provider %s",
 								provider_id);
 	}
@@ -132,19 +132,19 @@ static int set_string(struct vpn_config_provider *config_provider,
 {
 	DBG("provider %p key %s value %s", config_provider, key, value);
 
-	if (g_str_equal(key, "Type") == TRUE) {
+	if (g_str_equal(key, "Type")) {
 		g_free(config_provider->type);
 		config_provider->type = g_strdup(value);
-	} else if (g_str_equal(key, "Name") == TRUE) {
+	} else if (g_str_equal(key, "Name")) {
 		g_free(config_provider->name);
 		config_provider->name = g_strdup(value);
-	} else if (g_str_equal(key, "Host") == TRUE) {
+	} else if (g_str_equal(key, "Host")) {
 		g_free(config_provider->host);
 		config_provider->host = g_strdup(value);
-	} else if (g_str_equal(key, "Domain") == TRUE) {
+	} else if (g_str_equal(key, "Domain")) {
 		g_free(config_provider->domain);
 		config_provider->domain = g_strdup(value);
-	} else if (g_str_equal(key, "Networks") == TRUE) {
+	} else if (g_str_equal(key, "Networks")) {
 		g_free(config_provider->networks);
 		config_provider->networks = g_strdup(value);
 	}
@@ -159,15 +159,15 @@ static const char *get_string(struct vpn_config_provider *config_provider,
 {
 	DBG("provider %p key %s", config_provider, key);
 
-	if (g_str_equal(key, "Type") == TRUE)
+	if (g_str_equal(key, "Type"))
 		return config_provider->type;
-	else if (g_str_equal(key, "Name") == TRUE)
+	else if (g_str_equal(key, "Name"))
 		return config_provider->name;
-	else if (g_str_equal(key, "Host") == TRUE)
+	else if (g_str_equal(key, "Host"))
 		return config_provider->host;
-	else if (g_str_equal(key, "Domain") == TRUE)
+	else if (g_str_equal(key, "Domain"))
 		return config_provider->domain;
-	else if (g_str_equal(key, "Networks") == TRUE)
+	else if (g_str_equal(key, "Networks"))
 		return config_provider->networks;
 
 	return g_hash_table_lookup(config_provider->setting_strings, key);
@@ -180,13 +180,13 @@ static void add_keys(struct vpn_config_provider *config_provider,
 	gsize nb_avail_keys, i;
 
 	avail_keys = g_key_file_get_keys(keyfile, group, &nb_avail_keys, NULL);
-	if (avail_keys == NULL)
+	if (!avail_keys)
 		return;
 
 	for (i = 0 ; i < nb_avail_keys; i++) {
 		char *value = g_key_file_get_value(keyfile, group,
 						avail_keys[i], NULL);
-		if (value == NULL) {
+		if (!value) {
 			connman_warn("Cannot find value for %s",
 							avail_keys[i]);
 			continue;
@@ -213,11 +213,11 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 		return -EINVAL;
 
 	config_provider = g_hash_table_lookup(config->provider_table, ident);
-	if (config_provider != NULL)
+	if (config_provider)
 		return -EALREADY;
 
 	config_provider = g_try_new0(struct vpn_config_provider, 1);
-	if (config_provider == NULL)
+	if (!config_provider)
 		return -ENOMEM;
 
 	config_provider->ident = g_strdup(ident);
@@ -229,12 +229,12 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 
 	host = get_string(config_provider, "Host");
 	domain = get_string(config_provider, "Domain");
-	if (host != NULL && domain != NULL) {
+	if (host && domain) {
 		char *id = __vpn_provider_create_identifier(host, domain);
 
 		struct vpn_provider *provider;
 		provider = __vpn_provider_lookup(id);
-		if (provider != NULL) {
+		if (provider) {
 			if (action == REMOVE) {
 				__vpn_provider_delete(provider);
 				err = 0;
@@ -298,7 +298,7 @@ static void check_keys(GKeyFile *keyfile, const char *group,
 	gsize nb_avail_keys, i, j;
 
 	avail_keys = g_key_file_get_keys(keyfile, group, &nb_avail_keys, NULL);
-	if (avail_keys == NULL)
+	if (!avail_keys)
 		return;
 
 	for (i = 0 ; i < nb_avail_keys; i++) {
@@ -306,7 +306,7 @@ static void check_keys(GKeyFile *keyfile, const char *group,
 			if (g_strcmp0(avail_keys[i], possible_keys[j]) == 0)
 				break;
 
-		if (possible_keys[j] == NULL)
+		if (!possible_keys[j])
 			connman_warn("Unknown configuration key %s in [%s]",
 					avail_keys[i], group);
 	}
@@ -320,42 +320,42 @@ static int load_config(struct vpn_config *config, char *path, enum what action)
 	gsize length;
 	char **groups;
 	char *str;
-	gboolean found = FALSE;
+	bool found = false;
 	int i;
 
 	DBG("config %p", config);
 
 	keyfile = __connman_storage_load_provider_config(config->ident);
-	if (keyfile == NULL)
+	if (!keyfile)
 		return -EIO;
 
 	/* Verify keys validity of the global section */
 	check_keys(keyfile, "global", config_possible_keys);
 
-	str = g_key_file_get_string(keyfile, "global", CONFIG_KEY_NAME, NULL);
-	if (str != NULL) {
+	str = __vpn_config_get_string(keyfile, "global", CONFIG_KEY_NAME, NULL);
+	if (str) {
 		g_free(config->name);
 		config->name = str;
 	}
 
-	str = g_key_file_get_string(keyfile, "global", CONFIG_KEY_DESC, NULL);
-	if (str != NULL) {
+	str = __vpn_config_get_string(keyfile, "global", CONFIG_KEY_DESC, NULL);
+	if (str) {
 		g_free(config->description);
 		config->description = str;
 	}
 
 	groups = g_key_file_get_groups(keyfile, &length);
 
-	for (i = 0; groups[i] != NULL; i++) {
-		if (g_str_has_prefix(groups[i], "provider_") == TRUE) {
+	for (i = 0; groups[i]; i++) {
+		if (g_str_has_prefix(groups[i], "provider_")) {
 			int ret = load_provider(keyfile, groups[i], config,
 						action);
 			if (ret == 0 || ret == -EALREADY)
-				found = TRUE;
+				found = true;
 		}
 	}
 
-	if (found == FALSE)
+	if (!found)
 		connman_warn("Config file %s/%s.config does not contain any "
 			"configuration that can be provisioned!",
 			path, config->ident);
@@ -373,11 +373,11 @@ static struct vpn_config *create_config(const char *ident)
 
 	DBG("ident %s", ident);
 
-	if (g_hash_table_lookup(config_table, ident) != NULL)
+	if (g_hash_table_lookup(config_table, ident))
 		return NULL;
 
 	config = g_try_new0(struct vpn_config, 1);
-	if (config == NULL)
+	if (!config)
 		return NULL;
 
 	config->ident = g_strdup(ident);
@@ -392,21 +392,21 @@ static struct vpn_config *create_config(const char *ident)
 	return config;
 }
 
-static connman_bool_t validate_ident(const char *ident)
+static bool validate_ident(const char *ident)
 {
 	unsigned int i;
 
-	if (ident == NULL)
-		return FALSE;
+	if (!ident)
+		return false;
 
 	for (i = 0; i < strlen(ident); i++)
-		if (g_ascii_isprint(ident[i]) == FALSE)
-			return FALSE;
+		if (!g_ascii_isprint(ident[i]))
+			return false;
 
-	return TRUE;
+	return true;
 }
 
-static char *get_dir()
+static char *get_dir(void)
 {
 	return g_strdup_printf("%s", VPN_STORAGEDIR);
 }
@@ -419,31 +419,31 @@ static int read_configs(void)
 	DBG("path %s", path);
 
 	dir = g_dir_open(path, 0, NULL);
-	if (dir != NULL) {
+	if (dir) {
 		const gchar *file;
 
-		while ((file = g_dir_read_name(dir)) != NULL) {
+		while ((file = g_dir_read_name(dir))) {
 			GString *str;
 			gchar *ident;
 
-			if (g_str_has_suffix(file, ".config") == FALSE)
+			if (!g_str_has_suffix(file, ".config"))
 				continue;
 
 			ident = g_strrstr(file, ".config");
-			if (ident == NULL)
+			if (!ident)
 				continue;
 
 			str = g_string_new_len(file, ident - file);
-			if (str == NULL)
+			if (!str)
 				continue;
 
 			ident = g_string_free(str, FALSE);
 
-			if (validate_ident(ident) == TRUE) {
+			if (validate_ident(ident)) {
 				struct vpn_config *config;
 
 				config = create_config(ident);
-				if (config != NULL)
+				if (config)
 					load_config(config, path, ADD);
 			} else {
 				connman_error("Invalid config ident %s", ident);
@@ -464,19 +464,19 @@ static void config_notify_handler(struct inotify_event *event,
 {
 	char *ext;
 
-	if (ident == NULL)
+	if (!ident)
 		return;
 
-	if (g_str_has_suffix(ident, ".config") == FALSE)
+	if (!g_str_has_suffix(ident, ".config"))
 		return;
 
 	ext = g_strrstr(ident, ".config");
-	if (ext == NULL)
+	if (!ext)
 		return;
 
 	*ext = '\0';
 
-	if (validate_ident(ident) == FALSE) {
+	if (!validate_ident(ident)) {
 		connman_error("Invalid config ident %s", ident);
 		return;
 	}
@@ -494,7 +494,7 @@ static void config_notify_handler(struct inotify_event *event,
 		char *path = get_dir();
 
 		config = g_hash_table_lookup(config_table, ident);
-		if (config != NULL) {
+		if (config) {
 			g_hash_table_remove_all(config->provider_table);
 			load_config(config, path, REMOVE);
 
@@ -510,7 +510,7 @@ static void config_notify_handler(struct inotify_event *event,
 			 * one in order to avoid create/remove/create loop
 			 */
 			config = create_config(ident);
-			if (config != NULL)
+			if (config)
 				load_config(config, path, ADD);
 		}
 
@@ -540,7 +540,7 @@ void __vpn_config_cleanup(void)
 
 	DBG("");
 
-	cleanup = TRUE;
+	cleanup = true;
 
 	connman_inotify_unregister(dir, config_notify_handler);
 
@@ -549,5 +549,33 @@ void __vpn_config_cleanup(void)
 	g_hash_table_destroy(config_table);
 	config_table = NULL;
 
-	cleanup = FALSE;
+	cleanup = false;
+}
+
+char *__vpn_config_get_string(GKeyFile *key_file,
+	const char *group_name, const char *key, GError **error)
+{
+	char *str = g_key_file_get_string(key_file, group_name, key, error);
+	if (!str)
+		return NULL;
+
+	return g_strchomp(str);
+}
+
+char **__vpn_config_get_string_list(GKeyFile *key_file,
+	const char *group_name, const char *key, gsize *length, GError **error)
+{
+	char **p;
+	char **strlist = g_key_file_get_string_list(key_file, group_name, key,
+		length, error);
+	if (!strlist)
+		return NULL;
+
+	p = strlist;
+	while (*p) {
+		*p = g_strstrip(*p);
+		p++;
+	}
+
+	return strlist;
 }

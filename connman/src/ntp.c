@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -93,6 +93,9 @@ struct ntp_msg {
 #define NTP_FLAG_MD_CONTROL    6
 #define NTP_FLAG_MD_PRIVATE    7
 
+#define NTP_FLAG_VN_VER3       3
+#define NTP_FLAG_VN_VER4       4
+
 #define NTP_FLAGS_ENCODE(li, vn, md)  ((uint8_t)( \
                       (((li) & NTP_FLAG_LI_MASK) << NTP_FLAG_LI_SHIFT) | \
                       (((vn) & NTP_FLAG_VN_MASK) << NTP_FLAG_VN_SHIFT) | \
@@ -114,15 +117,16 @@ static struct timespec mtx_time;
 static int transmit_fd = 0;
 
 static char *timeserver = NULL;
+static struct sockaddr_in timeserver_addr;
 static gint poll_id = 0;
 static gint timeout_id = 0;
 static guint retries = 0;
 
-static void send_packet(int fd, const char *server);
+static void send_packet(int fd, const char *server, uint32_t timeout);
 
 static void next_server(void)
 {
-	if (timeserver != NULL) {
+	if (timeserver) {
 		g_free(timeserver);
 		timeserver = NULL;
 	}
@@ -132,17 +136,19 @@ static void next_server(void)
 
 static gboolean send_timeout(gpointer user_data)
 {
-	DBG("send timeout (retries %d)", retries);
+	uint32_t timeout = GPOINTER_TO_UINT(user_data);
+
+	DBG("send timeout %u (retries %d)", timeout, retries);
 
 	if (retries++ == NTP_SEND_RETRIES)
 		next_server();
 	else
-		send_packet(transmit_fd, timeserver);
+		send_packet(transmit_fd, timeserver, timeout << 1);
 
 	return FALSE;
 }
 
-static void send_packet(int fd, const char *server)
+static void send_packet(int fd, const char *server, uint32_t timeout)
 {
 	struct ntp_msg msg;
 	struct sockaddr_in addr;
@@ -156,7 +162,8 @@ static void send_packet(int fd, const char *server)
 	 *   msg.precision = (int)log2(ts.tv_sec + (ts.tv_nsec * 1.0e-9));
 	 */
 	memset(&msg, 0, sizeof(msg));
-	msg.flags = NTP_FLAGS_ENCODE(NTP_FLAG_LI_NOTINSYNC, 4, NTP_FLAG_MD_CLIENT);
+	msg.flags = NTP_FLAGS_ENCODE(NTP_FLAG_LI_NOTINSYNC, NTP_FLAG_VN_VER4,
+	    NTP_FLAG_MD_CLIENT);
 	msg.poll = 4;	// min
 	msg.poll = 10;	// max
 	msg.precision = NTP_PRECISION_S;
@@ -190,20 +197,21 @@ static void send_packet(int fd, const char *server)
 	}
 
 	/*
-	 * Add a retry timeout of two seconds to retry the existing
+	 * Add an exponential retry timeout to retry the existing
 	 * request. After a set number of retries, we'll fallback to
 	 * trying another server.
 	 */
 
-	timeout_id = g_timeout_add_seconds(NTP_SEND_TIMEOUT, send_timeout, NULL);
+	timeout_id = g_timeout_add_seconds(timeout, send_timeout,
+					GUINT_TO_POINTER(timeout));
 }
 
 static gboolean next_poll(gpointer user_data)
 {
-	if (timeserver == NULL || transmit_fd == 0)
+	if (!timeserver || transmit_fd == 0)
 		return FALSE;
 
-	send_packet(transmit_fd, timeserver);
+	send_packet(transmit_fd, timeserver, NTP_SEND_TIMEOUT);
 
 	return FALSE;
 }
@@ -229,7 +237,7 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 		return;
 	}
 
-	if (tv == NULL) {
+	if (!tv) {
 		connman_error("Invalid packet timestamp from time server");
 		return;
 	}
@@ -246,6 +254,17 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 			msg->rootdisp.seconds, msg->rootdisp.fraction);
 	DBG("reference  : 0x%04x", msg->refid);
 
+	if (!msg->stratum) {
+		/* RFC 4330 ch 8 Kiss-of-Death packet */
+		uint32_t code = ntohl(msg->refid);
+
+		connman_info("Skipping server %s KoD code %c%c%c%c",
+			timeserver, code >> 24, code >> 16 & 0xff,
+			code >> 8 & 0xff, code & 0xff);
+		next_server();
+		return;
+	}
+
 	transmit_delay = LOGTOD(msg->poll);
 
 	if (NTP_FLAGS_LI_DECODE(msg->flags) == NTP_FLAG_LI_NOTINSYNC) {
@@ -253,9 +272,15 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 		return;
 	}
 
-	if (NTP_FLAGS_VN_DECODE(msg->flags) != 4) {
-		DBG("unsupported version %d", NTP_FLAGS_VN_DECODE(msg->flags));
-		return;
+
+	if (NTP_FLAGS_VN_DECODE(msg->flags) != NTP_FLAG_VN_VER4) {
+		if (NTP_FLAGS_VN_DECODE(msg->flags) == NTP_FLAG_VN_VER3) {
+			DBG("requested version %d, accepting version %d",
+				NTP_FLAG_VN_VER4, NTP_FLAGS_VN_DECODE(msg->flags));
+		} else {
+			DBG("unsupported version %d", NTP_FLAGS_VN_DECODE(msg->flags));
+			return;
+		}
 	}
 
 	if (NTP_FLAGS_MD_DECODE(msg->flags) != NTP_FLAG_MD_SERVER) {
@@ -335,6 +360,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition condition,
 							gpointer user_data)
 {
 	unsigned char buf[128];
+	struct sockaddr_in sender_addr;
 	struct msghdr msg;
 	struct iovec iov;
 	struct cmsghdr *cmsg;
@@ -360,9 +386,15 @@ static gboolean received_data(GIOChannel *channel, GIOCondition condition,
 	msg.msg_iovlen = 1;
 	msg.msg_control = aux;
 	msg.msg_controllen = sizeof(aux);
+	msg.msg_name = &sender_addr;
+	msg.msg_namelen = sizeof(sender_addr);
 
 	len = recvmsg(fd, &msg, MSG_DONTWAIT);
 	if (len < 0)
+		return TRUE;
+
+	if (timeserver_addr.sin_addr.s_addr != sender_addr.sin_addr.s_addr)
+		/* only accept messages from the timeserver */
 		return TRUE;
 
 	tv = NULL;
@@ -390,7 +422,7 @@ static void start_ntp(char *server)
 	struct sockaddr_in addr;
 	int tos = IPTOS_LOWDELAY, timestamp = 1;
 
-	if (server == NULL)
+	if (!server)
 		return;
 
 	DBG("server %s", server);
@@ -427,7 +459,7 @@ static void start_ntp(char *server)
 	}
 
 	channel = g_io_channel_unix_new(transmit_fd);
-	if (channel == NULL) {
+	if (!channel) {
 		close(transmit_fd);
 		return;
 	}
@@ -444,20 +476,21 @@ static void start_ntp(char *server)
 	g_io_channel_unref(channel);
 
 send:
-	send_packet(transmit_fd, server);
+	send_packet(transmit_fd, server, NTP_SEND_TIMEOUT);
 }
 
 int __connman_ntp_start(char *server)
 {
 	DBG("%s", server);
 
-	if (server == NULL)
+	if (!server)
 		return -EINVAL;
 
-	if (timeserver != NULL)
+	if (timeserver)
 		g_free(timeserver);
 
 	timeserver = g_strdup(server);
+	timeserver_addr.sin_addr.s_addr = inet_addr(server);
 
 	start_ntp(timeserver);
 
@@ -471,7 +504,7 @@ void __connman_ntp_stop()
 	if (poll_id > 0)
 		g_source_remove(poll_id);
 
-        reset_timeout();
+	reset_timeout();
 
 	if (channel_watch > 0) {
 		g_source_remove(channel_watch);
@@ -479,7 +512,7 @@ void __connman_ntp_stop()
 		transmit_fd = 0;
 	}
 
-	if (timeserver != NULL) {
+	if (timeserver) {
 		g_free(timeserver);
 		timeserver = NULL;
 	}

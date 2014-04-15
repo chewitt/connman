@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(connman, 1.15)
+AC_INIT(connman, 1.23)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
 AC_CONFIG_HEADERS([config.h])
@@ -38,8 +38,6 @@ AC_ARG_ENABLE(optimization, AC_HELP_STRING([--disable-optimization],
 	fi
 ])
 
-GTK_DOC_CHECK
-
 AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug],
 			[enable compiling with debugging information]), [
 	if (test "${enableval}" = "yes" &&
@@ -57,20 +55,23 @@ AC_ARG_ENABLE(pie, AC_HELP_STRING([--enable-pie],
 	fi
 ])
 
-AC_ARG_ENABLE(threads,
-	AC_HELP_STRING([--enable-threads], [enable threading support]),
-			[enable_threads=${enableval}], [enable_threads="no"])
-
 AC_ARG_ENABLE(hh2serial-gps,
 	AC_HELP_STRING([--enable-hh2serial-gps], [enable hh2serial GPS support]),
 			[enable_hh2serial_gps=${enableval}], [enable_hh2serial_gps="no"])
 AM_CONDITIONAL(HH2SERIAL_GPS, test "${enable_hh2serial_gps}" != "no")
 AM_CONDITIONAL(HH2SERIAL_GPS_BUILTIN, test "${enable_hh2serial_gps}" = "builtin")
 
-AC_ARG_ENABLE(hybris-gps,
-	AC_HELP_STRING([--enable-hybris-gps], [enable hybris GPS support]),
-			[enable_hybris_gps=${enableval}], [enable_hybris_gps="no"])
-AM_CONDITIONAL(HYBRIS_GPS, test "${enable_hybris_gps}" != "no")
+AC_ARG_ENABLE(jolla-gps,
+	AC_HELP_STRING([--enable-jolla-gps], [enable jolla GPS support]),
+			[enable_jolla_gps=${enableval}], [enable_jolla_gps="no"])
+AM_CONDITIONAL(JOLLA_GPS, test "${enable_jolla_gps}" != "no")
+
+AC_ARG_ENABLE(systemd, 
+	AC_HELP_STRING([--enable-systemd],
+			[enable systemd notify on start]), [
+				if (test "${enableval}" = "yes"); then
+			CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
+fi])
 
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
@@ -214,27 +215,12 @@ if (test -z "${stats_max_file_size}"); then
    stats_max_file_size="16 * 8 * 128"
 fi
 
-AC_ARG_ENABLE(systemd, AC_HELP_STRING([--enable-systemd],
-			[enable systemd notify on start]), [
-	if (test "${enableval}" = "yes"); then
-		CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
-	fi
-])
-
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
 
 PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
 				AC_MSG_ERROR(GLib >= 2.28 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
-
-if (test "${enable_threads}" = "yes"); then
-	AC_DEFINE(NEED_THREADS, 1, [Define if threading support is required])
-	PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16, dummy=yes,
-				AC_MSG_ERROR(GThread >= 2.16 is required))
-	GLIB_CFLAGS="$GLIB_CFLAGS $GTHREAD_CFLAGS"
-	GLIB_LIBS="$GLIB_LIBS $GTHREAD_LIBS"
-fi
 
 PKG_CHECK_MODULES(DBUS, dbus-1 >= 1.4, dummy=yes,
 				AC_MSG_ERROR(D-Bus >= 1.4 is required))
@@ -311,6 +297,11 @@ AC_ARG_ENABLE(ethernet, AC_HELP_STRING([--disable-ethernet],
 				[disable Ethernet support]),
 					[enable_ethernet=${enableval}])
 AM_CONDITIONAL(ETHERNET, test "${enable_ethernet}" != "no")
+
+AC_ARG_ENABLE(gadget, AC_HELP_STRING([--disable-gadget],
+				[disable USB Gadget support]),
+					[enable_gadget=${enableval}])
+AM_CONDITIONAL(GADGET, test "${enable_gadget}" != "no")
 
 AC_ARG_ENABLE(wifi, AC_HELP_STRING([--disable-wifi],
 				[disable WiFi support]),
@@ -407,4 +398,4 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 
 AC_OUTPUT(Makefile include/version.h src/connman.service
 		vpn/connman-vpn.service	vpn/net.connman.vpn.service
-		scripts/connman	doc/version.xml connman.pc)
+		scripts/connman	connman.pc src/net.connman.service)

@@ -2,7 +2,7 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -69,7 +69,6 @@ static guint update_timeout = 0;
 
 struct interface_data {
 	int index;
-	char *name;
 	char *ident;
 };
 
@@ -80,7 +79,6 @@ static void free_interface(gpointer data)
 	struct interface_data *interface = data;
 
 	g_free(interface->ident);
-	g_free(interface->name);
 	g_free(interface);
 }
 
@@ -100,7 +98,7 @@ unsigned int vpn_rtnl_add_newlink_watch(int index,
 	struct watch_data *watch;
 
 	watch = g_try_new0(struct watch_data, 1);
-	if (watch == NULL)
+	if (!watch)
 		return 0;
 
 	watch->id = ++watch_id;
@@ -237,24 +235,24 @@ static void extract_link(struct ifinfomsg *msg, int bytes,
 					attr = RTA_NEXT(attr, bytes)) {
 		switch (attr->rta_type) {
 		case IFLA_ADDRESS:
-			if (address != NULL)
+			if (address)
 				memcpy(address, RTA_DATA(attr), ETH_ALEN);
 			break;
 		case IFLA_IFNAME:
-			if (ifname != NULL)
+			if (ifname)
 				*ifname = RTA_DATA(attr);
 			break;
 		case IFLA_MTU:
-			if (mtu != NULL)
+			if (mtu)
 				*mtu = *((unsigned int *) RTA_DATA(attr));
 			break;
 		case IFLA_STATS64:
-			if (stats != NULL)
+			if (stats)
 				memcpy(stats, RTA_DATA(attr),
 					sizeof(struct rtnl_link_stats64));
 			break;
 		case IFLA_OPERSTATE:
-			if (operstate != NULL)
+			if (operstate)
 				*operstate = *((unsigned char *) RTA_DATA(attr));
 			break;
 		case IFLA_LINKMODE:
@@ -315,10 +313,9 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 						operstate2str(operstate));
 
 	interface = g_hash_table_lookup(interface_list, GINT_TO_POINTER(index));
-	if (interface == NULL) {
+	if (!interface) {
 		interface = g_new0(struct interface_data, 1);
 		interface->index = index;
-		interface->name = g_strdup(ifname);
 		interface->ident = g_strdup(ident);
 
 		g_hash_table_insert(interface_list,
@@ -387,15 +384,15 @@ static void extract_ipv4_route(struct rtmsg *msg, int bytes, int *index,
 					attr = RTA_NEXT(attr, bytes)) {
 		switch (attr->rta_type) {
 		case RTA_DST:
-			if (dst != NULL)
+			if (dst)
 				*dst = *((struct in_addr *) RTA_DATA(attr));
 			break;
 		case RTA_GATEWAY:
-			if (gateway != NULL)
+			if (gateway)
 				*gateway = *((struct in_addr *) RTA_DATA(attr));
 			break;
 		case RTA_OIF:
-			if (index != NULL)
+			if (index)
 				*index = *((int *) RTA_DATA(attr));
 			break;
 		}
@@ -412,16 +409,16 @@ static void extract_ipv6_route(struct rtmsg *msg, int bytes, int *index,
 					attr = RTA_NEXT(attr, bytes)) {
 		switch (attr->rta_type) {
 		case RTA_DST:
-			if (dst != NULL)
+			if (dst)
 				*dst = *((struct in6_addr *) RTA_DATA(attr));
 			break;
 		case RTA_GATEWAY:
-			if (gateway != NULL)
+			if (gateway)
 				*gateway =
 					*((struct in6_addr *) RTA_DATA(attr));
 			break;
 		case RTA_OIF:
-			if (index != NULL)
+			if (index)
 				*index = *((int *) RTA_DATA(attr));
 			break;
 		}
@@ -726,20 +723,20 @@ static void rtnl_route(struct nlmsghdr *hdr)
 	}
 }
 
-static connman_bool_t is_route_rtmsg(struct rtmsg *msg)
+static bool is_route_rtmsg(struct rtmsg *msg)
 {
 
 	if (msg->rtm_table != RT_TABLE_MAIN)
-		return FALSE;
+		return false;
 
 	if (msg->rtm_protocol != RTPROT_BOOT &&
 			msg->rtm_protocol != RTPROT_KERNEL)
-		return FALSE;
+		return false;
 
 	if (msg->rtm_type != RTN_UNICAST)
-		return FALSE;
+		return false;
 
-	return TRUE;
+	return true;
 }
 
 static void rtnl_newroute(struct nlmsghdr *hdr)
@@ -859,13 +856,13 @@ static int process_response(guint32 seq)
 	debug("seq %d", seq);
 
 	req = find_request(seq);
-	if (req != NULL) {
+	if (req) {
 		request_list = g_slist_remove(request_list, req);
 		g_free(req);
 	}
 
 	req = g_slist_nth_data(request_list, 0);
-	if (req == NULL)
+	if (!req)
 		return 0;
 
 	return send_request(req);
@@ -923,8 +920,7 @@ static void rtnl_message(void *buf, size_t len)
 	}
 }
 
-static gboolean netlink_event(GIOChannel *chan,
-				GIOCondition cond, gpointer data)
+static gboolean netlink_event(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
 	unsigned char buf[4096];
 	struct sockaddr_nl nladdr;
@@ -969,7 +965,7 @@ static int send_getlink(void)
 	debug("");
 
 	req = g_try_malloc0(RTNL_REQUEST_SIZE);
-	if (req == NULL)
+	if (!req)
 		return -ENOMEM;
 
 	req->hdr.nlmsg_len = RTNL_REQUEST_SIZE;
@@ -989,7 +985,7 @@ static int send_getaddr(void)
 	debug("");
 
 	req = g_try_malloc0(RTNL_REQUEST_SIZE);
-	if (req == NULL)
+	if (!req)
 		return -ENOMEM;
 
 	req->hdr.nlmsg_len = RTNL_REQUEST_SIZE;
@@ -1009,7 +1005,7 @@ static int send_getroute(void)
 	debug("");
 
 	req = g_try_malloc0(RTNL_REQUEST_SIZE);
-	if (req == NULL)
+	if (!req)
 		return -ENOMEM;
 
 	req->hdr.nlmsg_len = RTNL_REQUEST_SIZE;
@@ -1080,7 +1076,7 @@ unsigned int __vpn_rtnl_update_interval_remove(unsigned int interval)
 
 	update_list = g_slist_remove(update_list, GINT_TO_POINTER(interval));
 
-	if (update_list != NULL)
+	if (update_list)
 		min = GPOINTER_TO_UINT(g_slist_nth_data(update_list, 0));
 
 	if (min > update_interval)

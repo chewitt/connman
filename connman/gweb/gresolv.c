@@ -2,7 +2,7 @@
  *
  *  Resolver library with GLib integration
  *
- *  Copyright (C) 2009-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2009-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -44,7 +44,7 @@ struct sort_result {
 	int dst_scope;
 	int src_label;
 	int dst_label;
-	gboolean reachable;
+	bool reachable;
 	union {
 		struct sockaddr sa;
 		struct sockaddr_in sin;
@@ -126,7 +126,7 @@ static void _debug(GResolv *resolv, const char *file, const char *caller,
 	va_list ap;
 	int len;
 
-	if (resolv->debug_func == NULL)
+	if (!resolv->debug_func)
 		return;
 
 	va_start(ap, format);
@@ -155,13 +155,13 @@ static void destroy_lookup(struct resolv_lookup *lookup)
 	debug(lookup->resolv, "lookup %p id %d ipv4 %p ipv6 %p",
 		lookup, lookup->id, lookup->ipv4_query, lookup->ipv6_query);
 
-	if (lookup->ipv4_query != NULL) {
+	if (lookup->ipv4_query) {
 		g_queue_remove(lookup->resolv->query_queue,
 						lookup->ipv4_query);
 		destroy_query(lookup->ipv4_query);
 	}
 
-	if (lookup->ipv6_query != NULL) {
+	if (lookup->ipv6_query) {
 		g_queue_remove(lookup->resolv->query_queue,
 						lookup->ipv6_query);
 		destroy_query(lookup->ipv6_query);
@@ -191,7 +191,7 @@ static void find_srcaddr(struct sort_result *res)
 		return;
 	}
 
-	res->reachable = TRUE;
+	res->reachable = true;
 	close(fd);
 }
 
@@ -280,21 +280,21 @@ static const struct gai_table gai_precedences[] = {
 static unsigned char v4mapped[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 				    0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 };
 
-static gboolean mask_compare(const unsigned char *one,
+static bool mask_compare(const unsigned char *one,
 					const unsigned char *two, int mask)
 {
 	if (mask > 8) {
 		if (memcmp(one, two, mask / 8))
-			return FALSE;
+			return false;
 		one += mask / 8;
 		two += mask / 8;
 		mask %= 8;
 	}
 
 	if (mask && ((*one ^ *two) >> (8 - mask)))
-		return FALSE;
+		return false;
 
-	return TRUE;
+	return true;
 }
 
 static int match_gai_table(struct sockaddr *sa, const struct gai_table *tbl)
@@ -485,14 +485,14 @@ static void sort_and_return_results(struct resolv_lookup *lookup)
 
 	for (i = 0; i < lookup->nr_results; i++) {
 		if (lookup->results[i].dst.sa.sa_family == AF_INET) {
-			if (inet_ntop(AF_INET,
+			if (!inet_ntop(AF_INET,
 					&lookup->results[i].dst.sin.sin_addr,
-					buf, sizeof(buf) - 1) == NULL)
+					buf, sizeof(buf) - 1))
 				continue;
 		} else if (lookup->results[i].dst.sa.sa_family == AF_INET6) {
-			if (inet_ntop(AF_INET6,
+			if (!inet_ntop(AF_INET6,
 					&lookup->results[i].dst.sin6.sin6_addr,
-					buf, sizeof(buf) - 1) == NULL)
+					buf, sizeof(buf) - 1))
 				continue;
 		} else
 			continue;
@@ -542,7 +542,7 @@ static gboolean query_timeout(gpointer user_data)
 	g_queue_remove(resolv->query_queue, query);
 	destroy_query(query);
 
-	if (lookup->ipv4_query == NULL && lookup->ipv6_query == NULL)
+	if (!lookup->ipv4_query && !lookup->ipv6_query)
 		sort_and_return_results(lookup);
 
 	return FALSE;
@@ -550,13 +550,13 @@ static gboolean query_timeout(gpointer user_data)
 
 static void free_nameserver(struct resolv_nameserver *nameserver)
 {
-	if (nameserver == NULL)
+	if (!nameserver)
 		return;
 
 	if (nameserver->udp_watch > 0)
 		g_source_remove(nameserver->udp_watch);
 
-	if (nameserver->udp_channel != NULL) {
+	if (nameserver->udp_channel) {
 		g_io_channel_shutdown(nameserver->udp_channel, TRUE, NULL);
 		g_io_channel_unref(nameserver->udp_channel);
 	}
@@ -582,7 +582,7 @@ static int send_query(GResolv *resolv, const unsigned char *buf, int len)
 	GList *list;
 	int nr_ns;
 
-	if (resolv->nameserver_list == NULL)
+	if (!resolv->nameserver_list)
 		return -ENOENT;
 
 	for (list = g_list_first(resolv->nameserver_list), nr_ns = 0;
@@ -590,7 +590,7 @@ static int send_query(GResolv *resolv, const unsigned char *buf, int len)
 		struct resolv_nameserver *nameserver = list->data;
 		int sk, sent;
 
-		if (nameserver->udp_channel == NULL)
+		if (!nameserver->udp_channel)
 			continue;
 
 		sk = g_io_channel_unix_get_fd(nameserver->udp_channel);
@@ -637,7 +637,7 @@ static void add_result(struct resolv_lookup *lookup, int family,
 	int n = lookup->nr_results++;
 	lookup->results = g_try_realloc(lookup->results,
 					sizeof(struct sort_result) * (n + 1));
-	if (lookup->results == NULL)
+	if (!lookup->results)
 		return;
 
 	memset(&lookup->results[n], 0, sizeof(struct sort_result));
@@ -665,7 +665,8 @@ static void parse_response(struct resolv_nameserver *nameserver,
 
 	debug(resolv, "response from %s", nameserver->address);
 
-	ns_initparse(buf, len, &msg);
+	if (ns_initparse(buf, len, &msg) < 0)
+		return;
 
 	list = g_queue_find_custom(resolv->query_queue,
 			GUINT_TO_POINTER(ns_msg_id(msg)), compare_query_msgid);
@@ -713,7 +714,8 @@ static void parse_response(struct resolv_nameserver *nameserver,
 		lookup->ipv4_status = status;
 
 	for (i = 0; i < count; i++) {
-		ns_parserr(&msg, ns_s_an, i, &rr);
+		if (ns_parserr(&msg, ns_s_an, i, &rr) < 0)
+			continue;
 
 		if (ns_rr_class(rr) != ns_c_in)
 			continue;
@@ -741,7 +743,7 @@ static void parse_response(struct resolv_nameserver *nameserver,
 	g_queue_remove(resolv->query_queue, query);
 	destroy_query(query);
 
-	if (lookup->ipv4_query == NULL && lookup->ipv6_query == NULL)
+	if (!lookup->ipv4_query && !lookup->ipv6_query)
 		sort_and_return_results(lookup);
 }
 
@@ -807,8 +809,7 @@ static int connect_udp_channel(struct resolv_nameserver *nameserver)
 		char interface[IF_NAMESIZE];
 
 		memset(interface, 0, IF_NAMESIZE);
-		if (if_indextoname(nameserver->resolv->index,
-						interface) != NULL) {
+		if (if_indextoname(nameserver->resolv->index, interface)) {
 			if (setsockopt(sk, SOL_SOCKET, SO_BINDTODEVICE,
 						interface, IF_NAMESIZE) < 0) {
 				close(sk);
@@ -827,7 +828,7 @@ static int connect_udp_channel(struct resolv_nameserver *nameserver)
 	freeaddrinfo(rp);
 
 	nameserver->udp_channel = g_io_channel_unix_new(sk);
-	if (nameserver->udp_channel == NULL) {
+	if (!nameserver->udp_channel) {
 		close(sk);
 		return -ENOMEM;
 	}
@@ -849,7 +850,7 @@ GResolv *g_resolv_new(int index)
 		return NULL;
 
 	resolv = g_try_new0(GResolv, 1);
-	if (resolv == NULL)
+	if (!resolv)
 		return NULL;
 
 	resolv->ref_count = 1;
@@ -859,13 +860,13 @@ GResolv *g_resolv_new(int index)
 	resolv->next_lookup_id = 1;
 
 	resolv->query_queue = g_queue_new();
-	if (resolv->query_queue == NULL) {
+	if (!resolv->query_queue) {
 		g_free(resolv);
 		return NULL;
 	}
 
 	resolv->lookup_queue = g_queue_new();
-	if (resolv->lookup_queue == NULL) {
+	if (!resolv->lookup_queue) {
 		g_queue_free(resolv->query_queue);
 		g_free(resolv);
 		return NULL;
@@ -881,7 +882,7 @@ GResolv *g_resolv_new(int index)
 
 GResolv *g_resolv_ref(GResolv *resolv)
 {
-	if (resolv == NULL)
+	if (!resolv)
 		return NULL;
 
 	__sync_fetch_and_add(&resolv->ref_count, 1);
@@ -894,7 +895,7 @@ void g_resolv_unref(GResolv *resolv)
 	struct resolv_query *query;
 	struct resolv_lookup *lookup;
 
-	if (resolv == NULL)
+	if (!resolv)
 		return;
 
 	if (__sync_fetch_and_sub(&resolv->ref_count, 1) != 1)
@@ -923,24 +924,24 @@ void g_resolv_unref(GResolv *resolv)
 void g_resolv_set_debug(GResolv *resolv, GResolvDebugFunc func,
 						gpointer user_data)
 {
-	if (resolv == NULL)
+	if (!resolv)
 		return;
 
 	resolv->debug_func = func;
 	resolv->debug_data = user_data;
 }
 
-gboolean g_resolv_add_nameserver(GResolv *resolv, const char *address,
+bool g_resolv_add_nameserver(GResolv *resolv, const char *address,
 					uint16_t port, unsigned long flags)
 {
 	struct resolv_nameserver *nameserver;
 
-	if (resolv == NULL)
-		return FALSE;
+	if (!resolv)
+		return false;
 
 	nameserver = g_try_new0(struct resolv_nameserver, 1);
-	if (nameserver == NULL)
-		return FALSE;
+	if (!nameserver)
+		return false;
 
 	nameserver->address = g_strdup(address);
 	nameserver->port = port;
@@ -949,7 +950,7 @@ gboolean g_resolv_add_nameserver(GResolv *resolv, const char *address,
 
 	if (connect_udp_channel(nameserver) < 0) {
 		free_nameserver(nameserver);
-		return FALSE;
+		return false;
 	}
 
 	resolv->nameserver_list = g_list_append(resolv->nameserver_list,
@@ -957,12 +958,12 @@ gboolean g_resolv_add_nameserver(GResolv *resolv, const char *address,
 
 	debug(resolv, "setting nameserver %s", address);
 
-	return TRUE;
+	return true;
 }
 
 void g_resolv_flush_nameservers(GResolv *resolv)
 {
-	if (resolv == NULL)
+	if (!resolv)
 		return;
 
 	flush_nameservers(resolv);
@@ -974,7 +975,7 @@ static gint add_query(struct resolv_lookup *lookup, const char *hostname, int ty
 	unsigned char buf[4096];
 	int len;
 
-	if (query == NULL)
+	if (!query)
 		return -ENOMEM;
 
 	len = res_mkquery(ns_o_query, hostname, ns_c_in, type,
@@ -1013,12 +1014,12 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 {
 	struct resolv_lookup *lookup;
 
-	if (resolv == NULL)
+	if (!resolv)
 		return 0;
 
 	debug(resolv, "hostname %s", hostname);
 
-	if (resolv->nameserver_list == NULL) {
+	if (!resolv->nameserver_list) {
 		int i;
 
 		for (i = 0; i < resolv->res.nscount; i++) {
@@ -1039,12 +1040,12 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 				g_resolv_add_nameserver(resolv, buf, 53, 0);
 		}
 
-		if (resolv->nameserver_list == NULL)
+		if (!resolv->nameserver_list)
 			g_resolv_add_nameserver(resolv, "127.0.0.1", 53, 0);
 	}
 
 	lookup = g_try_new0(struct resolv_lookup, 1);
-	if (lookup == NULL)
+	if (!lookup)
 		return 0;
 
 	lookup->resolv = resolv;
@@ -1079,7 +1080,7 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 	return lookup->id;
 }
 
-gboolean g_resolv_cancel_lookup(GResolv *resolv, guint id)
+bool g_resolv_cancel_lookup(GResolv *resolv, guint id)
 {
 	struct resolv_lookup *lookup;
 	GList *list;
@@ -1089,8 +1090,8 @@ gboolean g_resolv_cancel_lookup(GResolv *resolv, guint id)
 	list = g_queue_find_custom(resolv->lookup_queue,
 				GUINT_TO_POINTER(id), compare_lookup_id);
 
-	if (list == NULL)
-		return FALSE;
+	if (!list)
+		return false;
 
 	lookup = list->data;
 
@@ -1099,18 +1100,18 @@ gboolean g_resolv_cancel_lookup(GResolv *resolv, guint id)
 	g_queue_remove(resolv->lookup_queue, lookup);
 	destroy_lookup(lookup);
 
-	return TRUE;
+	return true;
 }
 
-gboolean g_resolv_set_address_family(GResolv *resolv, int family)
+bool g_resolv_set_address_family(GResolv *resolv, int family)
 {
-	if (resolv == NULL)
-		return FALSE;
+	if (!resolv)
+		return false;
 
 	if (family != AF_UNSPEC && family != AF_INET && family != AF_INET6)
-		return FALSE;
+		return false;
 
 	resolv->result_family = family;
 
-	return TRUE;
+	return true;
 }

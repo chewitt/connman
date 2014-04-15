@@ -2,8 +2,8 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
- *  Copyright (C) 2012  BMW Car IT GmbH. All rights reserved.
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012-2013  BMW Car IT GmbH. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -46,14 +46,14 @@ static int set_forward_delay(const char *name, unsigned int delay)
 	forward_delay_path =
 		g_strdup_printf("/sys/class/net/%s/bridge/forward_delay", name);
 
-	if (forward_delay_path == NULL)
+	if (!forward_delay_path)
 		return -ENOMEM;
 
 	f = fopen(forward_delay_path, "r+");
 
 	g_free(forward_delay_path);
 
-	if (f == NULL)
+	if (!f)
 		return -errno;
 
 	fprintf(f, "%d", delay);
@@ -111,8 +111,8 @@ int __connman_bridge_remove(const char *name)
 	return 0;
 }
 
-int __connman_bridge_enable(const char *name, const char *gateway,
-				const char *broadcast)
+int __connman_bridge_enable(const char *name, const char *ip_address,
+			int prefix_len, const char *broadcast)
 {
 	int err, index;
 
@@ -121,8 +121,8 @@ int __connman_bridge_enable(const char *name, const char *gateway,
 		return index;
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
-			NLM_F_REPLACE | NLM_F_ACK, index, AF_INET,
-					gateway, NULL, 24, broadcast);
+				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET,
+				ip_address, NULL, prefix_len, broadcast);
 	if (err < 0)
 		return err;
 

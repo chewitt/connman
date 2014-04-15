@@ -22,16 +22,13 @@
 #ifndef __CONNMAN_SETTING_H
 #define __CONNMAN_SETTING_H
 
-#include <connman/types.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define CONF_STATUS_URL_IPV6            "Ipv6StatusUrl"
-#define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
-
-connman_bool_t connman_setting_get_bool(const char *key);
+bool connman_setting_get_bool(const char *key);
 char **connman_setting_get_string_list(const char *key);
 unsigned int *connman_setting_get_uint_list(const char *key);
 

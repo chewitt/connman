@@ -1,3 +1,80 @@
+ver 1.23:
+	Fix issue with memory leak in technology handling.
+	Fix issue with not removing host route of OpenVPN.
+	Fix issue with double free in DHCP cleanup handling.
+	Fix issue with handling DHCP method from oFono.
+	Fix issue with IPv6-PD when disabling tethering.
+	Fix issue with DNS proxy when disabling tethering.
+	Fix issue with Bluetooth start and stop interaction.
+	Fix issue with Bluetooth PAN networks on adapter change.
+
+ver 1.22:
+	Fix issue with WPS state synchronization.
+	Fix issue with DNS servers and default service.
+	Fix issue with DHCP client and rebooting state.
+	Add support for NTP exponential backoff handling.
+	Add support for NTP kiss-of-death packet handling.
+	Add support for Ethernet gadget networking.
+
+ver 1.21:
+	Fix issue with WiFi networks and zero SSID length.
+	Fix issue with security details for hidden WiFi networks.
+	Fix issue with handling IPv6 proxy address resolving.
+	Fix issue with enabling Bluetooth controllers.
+
+ver 1.20:
+	Fix issue with invalid cache of DNS proxy support.
+	Fix issue with stopping DHCP for failed connections.
+	Fix issue with not stopping IPv4 Link-Local state machine.
+	Fix issue with service type handling for unknown interfaces.
+	Fix issue with using interface names instead of indexes.
+	Fix issue with resetting network retry counter on failure.
+	Fix issue with using nameservers when its type is not enabled.
+	Fix issue with fallback nameservers not being used.
+	Add support for NTP version 3 protocol.
+
+ver 1.19:
+	Fix issue with not correctly storing IPv4 method.
+	Fix issue with changing the default service too early.
+	Fix issue with service reference count and WISPr checks.
+	Fix issue with service auto-connect handling and ordering.
+	Fix issue with host and domain names when service changes.
+	Fix issue with proxy result and WISPr handling.
+	Fix issue with proxy reset when disconnecting.
+	Fix issue with handling fallback nameservers.
+	Add support for multiple agents.
+
+ver 1.18:
+	Fix issue with alignment calculation for iptables.
+	Fix issue with WEP key index parameter handling.
+	Fix issue with handling of 802.1x credentials.
+	Fix issue with command line parameter parsing.
+	Add support for completion handling in client tool.
+
+ver 1.17:
+	Fix issue with handling consecutive WiFi scanning.
+	Fix issue with WiFi handling and RFKILL soft block.
+	Fix issue with handling external RFKILL events.
+	Fix issue with handling USB gadget devices.
+	Fix issue with network reference handling.
+	Fix issue with byte order and DHCP discover options.
+	Fix issue with DHCP retry handling during IPv4-LL.
+	Fix issue with DHCPv6 rebind handling.
+	Add support for DHCPv6 decline message handling.
+	Add support for DHCPv6 duplicate address detection.
+
+ver 1.16:
+	Fix issue with missing signals during connection changes.
+	Fix issue with missing notification of proxy properties.
+	Fix issue with missing DHCPv6 domain list option.
+	Fix issue with missing DHCPv6 release message.
+	Fix issue with missing DHCPv6 error handling.
+	Fix issue with wrong IPCMv6 checksum calculation.
+	Fix issue with wrong service disconnect state.
+	Fix issue with failure to enable offline mode.
+	Add support for Netfilter Accounting (NFACCT).
+	Add support for IPv6 prefix delegation handling.
+
 ver 1.15:
 	Fix issue with missing cleanup for IPv4-LL handling.
 	Fix issue with missing property update for domain names.
