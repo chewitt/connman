@@ -372,7 +372,7 @@ static void parse_config(GKeyFile *config)
 	ipv4url = __connman_config_get_string(config, "General", CONF_STATUS_URL_IPV4, &error);
 	if (!error)
 		connman_settings.ipv4_status_url = ipv4url;
-	else 
+	else
 		connman_settings.ipv4_status_url = "http://ipv4.connman.net/online/status.html";
 
         g_clear_error(&error);
@@ -382,7 +382,6 @@ static void parse_config(GKeyFile *config)
 		connman_settings.ipv6_status_url = ipv6url;
 	else
 		connman_settings.ipv6_status_url = "http://ipv6.connman.net/online/status.html";
-	  
 
 	g_clear_error(&error);
 
@@ -550,6 +549,12 @@ const char *connman_option_get_string(const char *key)
 		else
 			return option_wifi;
 	}
+
+	if (g_str_equal(key, CONF_STATUS_URL_IPV4) == TRUE) {
+ 		return connman_settings.ipv4_status_url;
+	}
+	if (g_str_equal(key, CONF_STATUS_URL_IPV6) == TRUE)
+		return connman_settings.ipv6_status_url;
 
 	return NULL;
 }
