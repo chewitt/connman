@@ -101,6 +101,7 @@ int __connman_counter_register(const char *owner, const char *path,
 
 	counter->watch = g_dbus_add_disconnect_watch(connection, owner,
 					owner_disconnect, counter, NULL);
+    __connman_service_counter_send_initial(counter->path);
 
 	return 0;
 }

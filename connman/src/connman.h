@@ -325,7 +325,7 @@ void __connman_ipconfig_enable_ipv6(struct connman_ipconfig *ipconfig);
 int __connman_ipconfig_init(void);
 void __connman_ipconfig_cleanup(void);
 
-struct rtnl_link_stats;
+struct rtnl_link_stats64;
 
 void __connman_ipconfig_newlink(int index, unsigned short type,
 				unsigned int flags, const char *address,
@@ -777,13 +777,15 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 		enum connman_service_state *new_state);
 
 void __connman_service_notify(struct connman_service *service,
-			unsigned int rx_packets, unsigned int tx_packets,
-			unsigned int rx_bytes, unsigned int tx_bytes,
-			unsigned int rx_error, unsigned int tx_error,
-			unsigned int rx_dropped, unsigned int tx_dropped);
+			uint64_t rx_packets, uint64_t tx_packets,
+			uint64_t rx_bytes, uint64_t tx_bytes,
+			uint64_t rx_error, uint64_t tx_error,
+			uint64_t rx_dropped, uint64_t tx_dropped);
 
 int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
+void __connman_service_counter_send_initial(const char *counter);
+void __connman_service_counter_reset_all(const char *type);
 
 #include <connman/peer.h>
 
