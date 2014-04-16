@@ -6,7 +6,7 @@ Before=remote-fs.target
 
 [Service]
 Type=notify
-Restart=on-failure
+Restart=always
 EnvironmentFile=-/etc/tracing/connman/connman.tracing
 ExecStart=@prefix@/sbin/connmand -n --systemd $TRACING
 StandardOutput=null
