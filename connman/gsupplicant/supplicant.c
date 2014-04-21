@@ -3303,6 +3303,9 @@ static int parse_supplicant_error(DBusMessageIter *iter)
 	int err = -ECANCELED;
 	char *key;
 
+	if (!iter)
+		return ECONNABORTED;
+
 	/* If the given passphrase is malformed wpa_s returns
 	 * "invalid message format" but this error should be interpreted as
 	 * invalid-key.
