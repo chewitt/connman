@@ -345,7 +345,7 @@ static void report_error_reply(DBusMessage *reply, void *user_data)
 	bool retry = false;
 	const char *dbus_err;
 
-	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
+	if (reply && dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		dbus_err = dbus_message_get_error_name(reply);
 		if (dbus_err &&
 			strcmp(dbus_err,
