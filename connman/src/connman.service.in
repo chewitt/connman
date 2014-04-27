@@ -8,7 +8,7 @@ Before=remote-fs.target
 Type=notify
 Restart=always
 EnvironmentFile=-/etc/tracing/connman/connman.tracing
-ExecStart=@prefix@/sbin/connmand -n --systemd $TRACING
+ExecStart=@prefix@/sbin/connmand -n --nobacktrace --systemd $TRACING
 StandardOutput=null
 
 [Install]
