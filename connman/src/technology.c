@@ -1697,18 +1697,17 @@ done:
 				softblock, hardblock, true))
 		return 0;
 
-	if (global_offlinemode)
-		return 0;
-
 	/*
 	 * Depending on softblocked state we unblock/block according to
 	 * offlinemode and persistente state.
 	 */
 	if (technology->softblocked &&
+				!global_offlinemode &&
 				technology->enable_persistent)
 		return __connman_rfkill_block(type, false);
 	else if (!technology->softblocked &&
-				!technology->enable_persistent)
+		(global_offlinemode ||
+				!technology->enable_persistent))
 		return __connman_rfkill_block(type, true);
 
 	return 0;
