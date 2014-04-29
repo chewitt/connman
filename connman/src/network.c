@@ -2028,7 +2028,7 @@ const void *connman_network_get_blob(struct connman_network *network,
 void __connman_network_set_device(struct connman_network *network,
 					struct connman_device *device)
 {
-	if (!device || network->device == device)
+	if (network->device == device)
 		return;
 
 	if (network->device)
