@@ -1378,6 +1378,12 @@ static void reset_stats(struct connman_service *service)
 	service->stats_roaming.data_last.time = 0;
 
 	g_timer_reset(service->stats_roaming.timer);
+
+    int stats_registered = __connman_stats_service_register(service);
+    __connman_stats_update(service, false, &service->stats.data);
+    __connman_stats_update(service, true, &service->stats_roaming.data);
+    if (stats_registered == 0)
+        __connman_stats_service_unregister(service);
 }
 
 struct connman_service *__connman_service_get_default(void)
