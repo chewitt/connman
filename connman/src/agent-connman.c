@@ -564,6 +564,9 @@ struct request_browser_reply_data {
 
 static void request_browser_reply(DBusMessage *reply, void *user_data)
 {
+	if (!reply)
+		return;
+
 	struct request_browser_reply_data *browser_reply_data = user_data;
 	bool result = false;
 	const char *error = NULL;
