@@ -48,7 +48,7 @@
 #define TFR
 #endif
 
-#define MAGIC 0xFA00B916
+#define MAGIC 0xFA01B916
 
 struct connman_stats_data {
 	uint64_t rx_packets;
