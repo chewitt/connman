@@ -1364,7 +1364,8 @@ static void network_remove(struct connman_network *network)
 	struct wifi_data *wifi;
 
 	DBG("network %p", network);
-
+    if (!device)
+		return;
 	wifi = connman_device_get_data(device);
 	if (!wifi)
 		return;
