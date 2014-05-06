@@ -217,7 +217,7 @@ int connman_agent_queue_message(void *user_context,
 	struct connman_agent *agent = agent_data;
 	int err;
 
-	if (!user_context || !callback)
+	if (!callback)
 		return -EBADMSG;
 
 	queue_data = g_new0(struct connman_agent_request, 1);
@@ -227,7 +227,7 @@ int connman_agent_queue_message(void *user_context,
 	driver = get_driver();
 	DBG("driver %p", driver);
 
-	if (driver && driver->context_ref) {
+	if (user_context && driver && driver->context_ref) {
 		queue_data->user_context = driver->context_ref(user_context);
 		queue_data->driver = driver;
 	} else {
