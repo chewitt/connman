@@ -2686,9 +2686,9 @@ struct interface_data {
 };
 
 struct interface_create_data {
-	const char *ifname;
-	const char *driver;
-	const char *bridge;
+	char *ifname;
+	char *driver;
+	char *bridge;
 	GSupplicantInterface *interface;
 	GSupplicantInterfaceCallback callback;
 	void *user_data;
@@ -2718,6 +2718,14 @@ struct interface_autoscan_data {
 	void *user_data;
 };
 
+static void interface_create_data_free(struct interface_create_data *data)
+{
+	g_free(data->ifname);
+	g_free(data->driver);
+	g_free(data->bridge);
+	dbus_free(data);
+}
+
 static bool interface_exists(GSupplicantInterface *interface,
 				const char *path)
 {
@@ -2740,7 +2748,7 @@ static void interface_create_property(const char *key, DBusMessageIter *iter,
 		if (data->callback)
 			data->callback(0, data->interface, data->user_data);
 
-		dbus_free(data);
+		interface_create_data_free(data);
 	}
 
 	interface_property(key, iter, interface);
@@ -2792,7 +2800,7 @@ done:
 	if (data->callback)
 		data->callback(err, NULL, data->user_data);
 
-	dbus_free(data);
+	interface_create_data_free(data);
 }
 
 static void interface_create_params(DBusMessageIter *iter, void *user_data)
@@ -2848,7 +2856,7 @@ static void interface_get_result(const char *error,
 	if (data->callback)
 		data->callback(0, interface, data->user_data);
 
-	dbus_free(data);
+	interface_create_data_free(data);
 
 	return;
 
@@ -2873,7 +2881,7 @@ done:
 	if (data->callback)
 		data->callback(err, NULL, data->user_data);
 
-	dbus_free(data);
+	interface_create_data_free(data);
 }
 
 static void interface_get_params(DBusMessageIter *iter, void *user_data)
@@ -2905,9 +2913,9 @@ int g_supplicant_interface_create(const char *ifname, const char *driver,
 	if (!data)
 		return -ENOMEM;
 
-	data->ifname = ifname;
-	data->driver = driver;
-	data->bridge = bridge;
+	data->ifname = g_strdup(ifname);
+	data->driver = g_strdup(driver);
+	data->bridge = g_strdup(bridge);
 	data->callback = callback;
 	data->user_data = user_data;
 
@@ -2918,7 +2926,7 @@ int g_supplicant_interface_create(const char *ifname, const char *driver,
 						interface_get_result, data,
 						NULL);
 	if (ret < 0)
-		dbus_free(data);
+		interface_create_data_free(data);
 
 	return ret;
 }
