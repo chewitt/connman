@@ -2706,7 +2706,7 @@ bool __connman_service_index_is_split_routing(int index)
         struct connman_service *service;
 
 	if (index < 0)
-		return false;
+		return true;
 
 	service = __connman_service_lookup_from_index(index);
 	if (!service)
