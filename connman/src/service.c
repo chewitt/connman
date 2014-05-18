@@ -4309,7 +4309,7 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 
 	DBG("service %p", service);
 
-	service->ignore = true;
+	//service->ignore = true;
 
 	err = __connman_service_disconnect(service);
 	if (err < 0) {
