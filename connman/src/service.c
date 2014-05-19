@@ -124,6 +124,7 @@ struct connman_service {
 	bool hidden_service;
 	char *config_file;
 	char *config_entry;
+	guint online_check_timer;
 };
 
 static bool allow_property_changed(struct connman_service *service);
@@ -2607,9 +2608,7 @@ void __connman_saved_service_list_struct_fn(DBusMessageIter *iter, connman_dbus_
 			if (!service->path)
 				continue;
 
-			connman_service_ref(service);
 			append_struct_service(iter, function, service);
-			connman_service_unref(service);
 		} else {
 			service = connman_service_create();
 			if (!service)
@@ -4906,6 +4905,9 @@ static void service_free(gpointer user_data)
 	if (current_default == service)
 		current_default = NULL;
 
+	if (service->online_check_timer > 0)
+		g_source_remove(service->online_check_timer);
+
 	g_free(service);
 }
 
@@ -4952,6 +4954,8 @@ static void service_initialize(struct connman_service *service)
 	service->provider = NULL;
 
 	service->wps = false;
+
+	service->online_check_timer = 0;
 }
 
 /**
@@ -6064,13 +6068,22 @@ static gboolean redo_wispr(gpointer user_data)
 
 static gboolean redo_wispr_ipv4(gpointer user_data)
 {
-        struct connman_service *service = user_data;
+	struct connman_service *service = user_data;
+	int refcount = service->refcount - 1;
 
-        DBG("");
+	DBG("");
 
-        __connman_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+	connman_service_unref(service);
+	if (refcount == 0) {
+		DBG("Service %p already removed", service);
+		return FALSE;
+	}
 
-        return FALSE;
+	__connman_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	service->online_check_timer = 0;
+
+	return FALSE;
 }
 
 int __connman_service_online_check_failed(struct connman_service *service,
@@ -6078,27 +6091,26 @@ int __connman_service_online_check_failed(struct connman_service *service,
 {
 	DBG("service %p type %d count %d", service, type,
 						service->online_check_count);
-	int timeout = 0;
-	
+
 	if (service->online_check_count < 1) {
-	  connman_warn("Online check failed for %p %s", service, service->name);
-	  return 0;
+		connman_warn("Online check failed for %p %s", service,
+			service->name);
+		return 0;
 	}
 
-	  --service->online_check_count;
+	--service->online_check_count;
 
 	/*
 	 * We set the timeout to 1 sec so that we have a chance to get
 	 * necessary IPv6 router advertisement messages that might have
 	 * DNS data etc.
 	 */
-	  timeout = 12 - service->online_check_count;
-	  
-	  if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
-	    g_timeout_add_seconds(timeout * timeout, redo_wispr_ipv4,  connman_service_ref(service));
-	  } else {
-	    g_timeout_add_seconds(1, redo_wispr,  connman_service_ref(service));
-	  }
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+		int timeout = 12 - service->online_check_count;
+		service->online_check_timer = g_timeout_add_seconds(timeout * timeout, redo_wispr_ipv4, connman_service_ref(service));
+	} else {
+		g_timeout_add_seconds(1, redo_wispr, connman_service_ref(service));
+	}
 
 	return EAGAIN;
 }
