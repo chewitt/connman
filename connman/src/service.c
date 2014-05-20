@@ -49,6 +49,9 @@ static unsigned int vpn_autoconnect_timeout = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 
+guint failure_connect_interval = 0;
+bool connection_failure_block = false;
+
 struct connman_stats {
 	bool valid;
 	bool enabled;
@@ -3768,9 +3771,6 @@ static bool is_ignore(struct connman_service *service)
 	if (service->ignore)
 		return true;
 
-	if (service->state == CONNMAN_SERVICE_STATE_FAILURE)
-		return true;
-
 	if (!is_ipconfig_usable(service))
 		return true;
 
@@ -3901,6 +3901,13 @@ static GList *preferred_tech_list_get(void)
 	return tech_data.preferred_list;
 }
 
+
+static gboolean connect_failure_timeout(gpointer data)
+{
+	update_failure_interval();
+	return FALSE;
+}
+
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
 				bool preferred)
@@ -3945,10 +3952,26 @@ static bool auto_connect_service(GList *services,
 
 			return autoconnecting;
 		}
+		DBG("%d, state %d",is_ignore(service),service->state);
 
-		if (is_ignore(service) || service->state !=
-				CONNMAN_SERVICE_STATE_IDLE)
+		if (is_ignore(service) ||
+			(service->state != CONNMAN_SERVICE_STATE_IDLE
+			&& service->state != CONNMAN_SERVICE_STATE_FAILURE))
 			continue;
+
+		if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
+			if (failure_connect_interval > 0) {
+				continue;
+			} else if (failure_connect_interval == 0) {
+				failure_connect_interval = 5;
+				g_timeout_add_seconds(failure_connect_interval, connect_failure_timeout, NULL);
+			} else {
+				if (!connection_failure_block) {
+					connection_failure_block = true;
+					continue;
+				}
+			}
+		}
 
 		if (autoconnecting && !active_sessions[service->type]) {
 			DBG("service %p type %s has no users", service,
@@ -3991,6 +4014,25 @@ static gboolean run_auto_connect(gpointer data)
 		auto_connect_service(service_list, reason, false);
 
 	return FALSE;
+}
+
+void update_failure_interval()
+{
+	DBG("failure_connect_interval %u", failure_connect_interval);
+	if (failure_connect_interval == 0) {
+		return;
+	} else if (failure_connect_interval == 1800) {
+		failure_connect_interval = -1;//stop after 30 minutes
+		return;
+	} else {
+		failure_connect_interval = failure_connect_interval * 2;
+		if (failure_connect_interval > 1800) //clamp down to 30 minutes
+			failure_connect_interval = 1800;
+	}
+	connection_failure_block = false;
+	g_timeout_add_seconds(failure_connect_interval, connect_failure_timeout, NULL);
+
+	run_auto_connect(GUINT_TO_POINTER(CONNMAN_SERVICE_CONNECT_REASON_AUTO));
 }
 
 void __connman_service_auto_connect(enum connman_service_connect_reason reason)
@@ -4256,7 +4298,6 @@ static DBusMessage *connect_service(DBusConnection *conn,
 
 	if (service->pending || is_connecting(service) || is_connected(service))
 		return __connman_error_in_progress(msg);
-
 	for (list = service_list; list; list = list->next) {
 		struct connman_service *temp = list->data;
 
@@ -4282,6 +4323,8 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	service->ignore = false;
 
 	service->pending = dbus_message_ref(msg);
+
+	failure_connect_interval = 0;
 
 	err = __connman_service_connect(service,
 			CONNMAN_SERVICE_CONNECT_REASON_USER);
@@ -5718,6 +5761,7 @@ static int service_indicate_state(struct connman_service *service)
 	def_service = __connman_service_get_default();
 
 	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
+		failure_connect_interval = 0;
 		result = service_update_preferred_order(def_service,
 				service, new_state);
 		if (result == -EALREADY)
