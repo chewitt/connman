@@ -5132,6 +5132,14 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	return g_strcmp0(service_a->name, service_b->name);
 }
 
+static void service_list_sort(void)
+{
+	if (service_list && service_list->next) {
+		service_list = g_list_sort(service_list, service_compare);
+		service_schedule_changed();
+	}
+}
+
 /**
  * connman_service_get_type:
  * @service: service structure
@@ -5299,11 +5307,7 @@ int __connman_service_set_favorite_delayed(struct connman_service *service,
 
 	if (!delay_ordering) {
 
-		if (service_list->next) {
-			service_list = g_list_sort(service_list,
-							service_compare);
-			service_schedule_changed();
-		}
+		service_list_sort();
 
 		__connman_connection_update_gateway();
 	}
@@ -5853,10 +5857,7 @@ static int service_indicate_state(struct connman_service *service)
 	} else
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
-	if (service_list->next) {
-		service_list = g_list_sort(service_list, service_compare);
-		service_schedule_changed();
-	}
+	service_list_sort();
 
 	__connman_connection_update_gateway();
 
@@ -6587,11 +6588,7 @@ int __connman_service_provision_changed(const char *ident)
 	if (services_dirty) {
 		services_dirty = false;
 
-		if (service_list->next) {
-			service_list = g_list_sort(service_list,
-							service_compare);
-			service_schedule_changed();
-		}
+		service_list_sort();
 
 		__connman_connection_update_gateway();
 	}
@@ -6665,10 +6662,7 @@ static int service_register(struct connman_service *service)
 					service_methods, service_signals,
 							NULL, service, NULL);
 
-	if (service_list->next) {
-		service_list = g_list_sort(service_list, service_compare);
-		service_schedule_changed();
-	}
+	service_list_sort();
 
 	__connman_connection_update_gateway();
 
@@ -7097,10 +7091,7 @@ static void update_from_network(struct connman_service *service,
 	if (!service->network)
 		service->network = connman_network_ref(network);
 
-	if (service_list->next) {
-		service_list = g_list_sort(service_list, service_compare);
-		service_schedule_changed();
-	}
+	service_list_sort();
 }
 
 /**
@@ -7262,11 +7253,7 @@ roaming:
 
 sorting:
 	if (need_sort) {
-		if (service_list->next) {
-			service_list = g_list_sort(service_list,
-							service_compare);
-			service_schedule_changed();
-		}
+		service_list_sort();
 	}
 }
 
