@@ -760,6 +760,8 @@ int connman_device_set_scanning(struct connman_device *device,
 int connman_device_set_disconnected(struct connman_device *device,
 						bool disconnected)
 {
+	if (!device)
+		return 0;
 	DBG("device %p disconnected %d", device, disconnected);
 
 	if (device->disconnected == disconnected)
