@@ -2662,7 +2662,8 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 {
 	int re;
 	uint32_t addr;
-
+	if (!dhcp_client)
+		return 0;
 	if (dhcp_client->type == G_DHCP_IPV6) {
 		if (dhcp_client->information_req_cb) {
 			dhcp_client->state = INFORMATION_REQ;
