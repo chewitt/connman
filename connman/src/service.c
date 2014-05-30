@@ -3945,22 +3945,15 @@ static bool auto_connect_service(GList *services,
 
 			continue;
 		}
-
 		if (!service->favorite) {
 			if (preferred)
 			       continue;
 
 			return autoconnecting;
 		}
-		DBG("%d, state %d",is_ignore(service),service->state);
-
-		if (is_ignore(service) ||
-			(service->state != CONNMAN_SERVICE_STATE_IDLE
-			&& service->state != CONNMAN_SERVICE_STATE_FAILURE))
-			continue;
 
 		if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
-			if (failure_connect_interval > 0) {
+			if (failure_connect_interval < 0) {
 				continue;
 			} else if (failure_connect_interval == 0) {
 				failure_connect_interval = 5;
@@ -3971,8 +3964,10 @@ static bool auto_connect_service(GList *services,
 					continue;
 				}
 			}
+		} else {
+			if (is_ignore(service) || service->state != CONNMAN_SERVICE_STATE_IDLE)
+				continue;
 		}
-
 		if (autoconnecting && !active_sessions[service->type]) {
 			DBG("service %p type %s has no users", service,
 				__connman_service_type2string(service->type));
