@@ -4761,6 +4761,8 @@ static void service_saved_schedule_changed(void)
 
 static bool allow_property_changed(struct connman_service *service)
 {
+	if (!service || !service->path)
+		return false;
 	if (g_hash_table_lookup_extended(services_notify->add, service->path,
 					NULL, NULL)) {
 		DBG("no property updates for service %p", service);
