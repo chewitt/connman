@@ -1437,6 +1437,8 @@ static void cleanup_devices(void)
 	g_strfreev(interfaces);
 }
 
+extern void wifi_cleanup(void);
+
 int __connman_device_init(const char *device, const char *nodevice)
 {
 	DBG("");
@@ -1447,6 +1449,10 @@ int __connman_device_init(const char *device, const char *nodevice)
 	if (nodevice)
 		nodevice_filter = g_strsplit(nodevice, ",", -1);
 
+	/* wpa_supplicant interfaces must be removed prior to bringing wifi
+	 * interfaces down. Otherwise supplicant gets into INTERFACE_DISABLED
+	 * state and wifi won't work. */
+	wifi_cleanup();
 	cleanup_devices();
 
 	return 0;
