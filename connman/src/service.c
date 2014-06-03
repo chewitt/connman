@@ -6475,7 +6475,8 @@ int __connman_service_connect(struct connman_service *service,
 				service->provider)
 			connman_provider_disconnect(service->provider);
 
-	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
+	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER
+            || service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_AUTO) {
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
 
