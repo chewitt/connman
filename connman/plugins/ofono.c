@@ -182,7 +182,7 @@ struct modem_data {
 	bool roaming;
 
 	/* pending calls */
-	DBusPendingCall	*call_set_property;
+	GHashTable *set_property_calls;
 	DBusPendingCall	*call_get_properties;
 	DBusPendingCall *call_get_contexts;
 };
@@ -345,6 +345,12 @@ struct property_info {
 	get_properties_cb get_properties_cb;
 };
 
+static void set_property_cancel(gpointer key, gpointer value, gpointer data)
+{
+	DBG("Cancel pending SetProperty %s", (char*)key);
+	dbus_pending_call_cancel(value);
+}
+
 static void set_property_reply(DBusPendingCall *call, void *user_data)
 {
 	struct property_info *info = user_data;
@@ -354,8 +360,6 @@ static void set_property_reply(DBusPendingCall *call, void *user_data)
 
 	DBG("%s path %s %s.%s", info->modem->path,
 		info->path, info->interface, info->property);
-
-	info->modem->call_set_property = NULL;
 
 	dbus_error_init(&error);
 
@@ -373,8 +377,7 @@ static void set_property_reply(DBusPendingCall *call, void *user_data)
 		(*info->set_property_cb)(info->modem, success);
 
 	dbus_message_unref(reply);
-
-	dbus_pending_call_unref(call);
+	g_hash_table_remove(info->modem->set_property_calls, info->property);
 }
 
 static int set_property(struct modem_data *modem,
@@ -384,15 +387,17 @@ static int set_property(struct modem_data *modem,
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
+	DBusPendingCall* call;
 	struct property_info *info;
 
 	DBG("%s path %s %s.%s", modem->path, path, interface, property);
 
-	if (modem->call_set_property) {
+	call = g_hash_table_lookup(modem->set_property_calls, property);
+	if (call) {
 		DBG("Cancel pending SetProperty");
-
-		dbus_pending_call_cancel(modem->call_set_property);
-		modem->call_set_property = NULL;
+		dbus_pending_call_cancel(call);
+		g_hash_table_remove(modem->set_property_calls, property);
+		call = NULL;
 	}
 
 	message = dbus_message_new_method_call(OFONO_SERVICE, path,
@@ -404,14 +409,14 @@ static int set_property(struct modem_data *modem,
 	connman_dbus_property_append_basic(&iter, property, type, value);
 
 	if (!dbus_connection_send_with_reply(connection, message,
-					&modem->call_set_property, TIMEOUT)) {
+					&call, TIMEOUT)) {
 		connman_error("Failed to change property: %s %s.%s",
 				path, interface, property);
 		dbus_message_unref(message);
 		return -EINVAL;
 	}
 
-	if (!modem->call_set_property) {
+	if (!call) {
 		connman_error("D-Bus connection not available");
 		dbus_message_unref(message);
 		return -EINVAL;
@@ -419,6 +424,7 @@ static int set_property(struct modem_data *modem,
 
 	info = g_try_new0(struct property_info, 1);
 	if (!info) {
+		dbus_pending_call_unref(call);
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}
@@ -429,9 +435,8 @@ static int set_property(struct modem_data *modem,
 	info->property = property;
 	info->set_property_cb = notify;
 
-	dbus_pending_call_set_notify(modem->call_set_property,
-					set_property_reply, info, g_free);
-
+	g_hash_table_insert(modem->set_property_calls, (void*)property, call);
+	dbus_pending_call_set_notify(call, set_property_reply, info, g_free);
 	dbus_message_unref(message);
 
 	return -EINPROGRESS;
@@ -2186,6 +2191,8 @@ static void add_modem(const char *path, DBusMessageIter *prop)
 		return;
 
 	modem->path = g_strdup(path);
+	modem->set_property_calls = g_hash_table_new_full(g_str_hash,
+		g_str_equal, NULL, (GDestroyNotify) dbus_pending_call_unref);
 
 	g_hash_table_insert(modem_hash, g_strdup(path), modem);
 
@@ -2269,14 +2276,19 @@ static void remove_modem(gpointer data)
 
 	DBG("%s", modem->path);
 
-	if (modem->call_set_property)
-		dbus_pending_call_cancel(modem->call_set_property);
+	g_hash_table_foreach(modem->set_property_calls,
+					set_property_cancel, NULL);
+	g_hash_table_destroy(modem->set_property_calls);
 
-	if (modem->call_get_properties)
+	if (modem->call_get_properties) {
 		dbus_pending_call_cancel(modem->call_get_properties);
+		dbus_pending_call_unref(modem->call_get_properties);
+	}
 
-	if (modem->call_get_contexts)
+	if (modem->call_get_contexts) {
 		dbus_pending_call_cancel(modem->call_get_contexts);
+		dbus_pending_call_unref(modem->call_get_contexts);
+	}
 
 	if (modem->device)
 		destroy_device(modem);
