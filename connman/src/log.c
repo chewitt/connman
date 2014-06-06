@@ -245,20 +245,30 @@ static gchar **enabled = NULL;
 static bool is_enabled(struct connman_debug_desc *desc)
 {
 	int i;
+	gboolean ret = false;
 
 	if (!enabled)
 		return false;
 
 	for (i = 0; enabled[i]; i++) {
-		if (desc->name && g_pattern_match_simple(enabled[i],
+		const char* pattern = enabled[i];
+		gboolean value = true;
+
+		if (pattern[0] == '!') {
+			pattern++;
+			value = false;
+		}
+
+		if (desc->name && g_pattern_match_simple(pattern,
 							desc->name))
-			return true;
-		if (desc->file && g_pattern_match_simple(enabled[i],
+			ret = value;
+		if (desc->file && g_pattern_match_simple(pattern,
 							desc->file))
-			return true;
+			ret = value;
 	}
 
-	return false;
+	/* Return the last seen value */
+	return ret;
 }
 
 void __connman_log_enable(struct connman_debug_desc *start,
