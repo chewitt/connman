@@ -2352,6 +2352,7 @@ void __connman_service_counter_send_initial(const char *counter)
         __connman_service_counter_append(counter, service);
         connman_service_unref(service);
     }
+    g_strfreev(services);
 }
 
 static void __connman_service_counter_reset_saved(const char *identifier)
@@ -2403,6 +2404,7 @@ void __connman_service_counter_reset_all(const char *type)
         reset_stats(service);
         connman_service_unref(service);
     }
+    g_strfreev(services);
 }
 
 void __connman_service_counter_unregister(const char *counter)
@@ -2690,10 +2692,12 @@ bool connman_service_remove(const char *identifier)
         service_save(service);
 
         service_destroy(service);
+        g_strfreev(services);
 
         return true;
     }
 
+    g_strfreev(services);
     return false;
 }
 
