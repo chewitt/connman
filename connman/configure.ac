@@ -211,8 +211,8 @@ AC_ARG_WITH(stats-max-file-size, AC_HELP_STRING([--with-stats-max-file-size=SIZE
 			[stats_max_file_size=${withval}])
 
 if (test -z "${stats_max_file_size}"); then
-   # default size is 16 kByte
-   stats_max_file_size="16 * 8 * 128"
+   # default size is 32 kByte
+   stats_max_file_size="32 * 8 * 128"
 fi
 
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
