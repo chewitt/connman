@@ -1130,6 +1130,7 @@ static void remove_option_value(gpointer data)
 	GList *option_value = data;
 
 	g_list_foreach(option_value, remove_value, NULL);
+	g_list_free(option_value);
 }
 
 GDHCPClient *g_dhcp_client_new(GDHCPType type,
@@ -2662,7 +2663,8 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 {
 	int re;
 	uint32_t addr;
-
+	if (!dhcp_client)
+		return 0;
 	if (dhcp_client->type == G_DHCP_IPV6) {
 		if (dhcp_client->information_req_cb) {
 			dhcp_client->state = INFORMATION_REQ;

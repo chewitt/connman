@@ -56,6 +56,7 @@
 #include <connman/provision.h>
 
 #include <gsupplicant/gsupplicant.h>
+#include <gsupplicant/dbus.h>
 
 #define CLEANUP_TIMEOUT   8	/* in seconds */
 #define INACTIVE_TIMEOUT  12	/* in seconds */
@@ -2350,6 +2351,84 @@ static struct connman_technology_driver tech_driver = {
 	.set_tethering	= tech_set_tethering,
 	.set_regdom	= tech_set_regdom,
 };
+
+#define TIMEOUT (10000)
+
+static void wifi_remove_interface(DBusMessageIter *entry, void* data)
+{
+	DBusConnection *connection = data;
+	DBusMessage *message, *reply = NULL;
+	const char *ifname = NULL;
+
+	if (dbus_message_iter_get_arg_type(entry) != DBUS_TYPE_OBJECT_PATH)
+		return;
+
+	dbus_message_iter_get_basic(entry, &ifname);
+	if (!ifname)
+		return;
+
+	DBG("%s", ifname);
+
+	message = dbus_message_new_method_call(SUPPLICANT_SERVICE,
+		SUPPLICANT_PATH, SUPPLICANT_INTERFACE, "RemoveInterface");
+	if (!message)
+		return;
+
+	dbus_message_set_auto_start(message, FALSE);
+	dbus_message_append_args(message, DBUS_TYPE_OBJECT_PATH, &ifname,
+									NULL);
+	reply = dbus_connection_send_with_reply_and_block(connection, message,
+								TIMEOUT, NULL);
+	dbus_message_unref(message);
+
+	if (reply)
+		dbus_message_unref(reply);
+}
+
+void wifi_cleanup(void)
+{
+	DBusConnection *connection;
+	DBusMessage *message, *reply = NULL;
+	DBusMessageIter iter, variant;
+	const char* ifname = SUPPLICANT_INTERFACE;
+	const char* key = "Interfaces";
+
+	connection = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+	if (!connection)
+		return;
+
+	message = dbus_message_new_method_call(SUPPLICANT_SERVICE,
+			SUPPLICANT_PATH, DBUS_INTERFACE_PROPERTIES, "Get");
+	if (!message)
+		return;
+
+	dbus_message_set_auto_start(message, FALSE);
+	dbus_message_append_args(message, DBUS_TYPE_STRING, &ifname,
+						DBUS_TYPE_STRING, &key, NULL);
+	reply = dbus_connection_send_with_reply_and_block(connection, message,
+								TIMEOUT, NULL);
+	if (!reply)
+		goto done;
+
+	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
+		goto done;
+
+	if (!dbus_message_iter_init(reply, &iter))
+		goto done;
+
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
+		goto done;
+
+	dbus_message_iter_recurse(&iter, &variant);
+	supplicant_dbus_array_foreach(&variant, wifi_remove_interface,
+								connection);
+
+done:
+	if (message)
+		dbus_message_unref(message);
+	if (reply)
+		dbus_message_unref(reply);
+}
 
 static int wifi_init(void)
 {

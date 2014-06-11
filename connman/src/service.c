@@ -49,8 +49,7 @@ static unsigned int vpn_autoconnect_timeout = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 
-guint failure_connect_interval = 0;
-bool connection_failure_block = false;
+int failure_connect_interval = 0;
 
 struct connman_stats {
 	bool valid;
@@ -616,11 +615,11 @@ static int service_save(struct connman_service *service)
 
 		if (service->state_ipv4 == CONNMAN_SERVICE_STATE_FAILURE ||
 			service->state_ipv6 == CONNMAN_SERVICE_STATE_FAILURE) {
-			const char *failure = error2string(service->error);
-			if (failure)
-				g_key_file_set_string(keyfile,
-							service->identifier,
-							"Failure", failure);
+//			const char *failure = error2string(service->error);
+//			if (failure)
+//				g_key_file_set_string(keyfile,
+//							service->identifier,
+//							"Failure", failure);
 		} else {
 			g_key_file_remove_key(keyfile, service->identifier,
 							"Failure", NULL);
@@ -2352,6 +2351,7 @@ void __connman_service_counter_send_initial(const char *counter)
         __connman_service_counter_append(counter, service);
         connman_service_unref(service);
     }
+    g_strfreev(services);
 }
 
 static void __connman_service_counter_reset_saved(const char *identifier)
@@ -2403,6 +2403,7 @@ void __connman_service_counter_reset_all(const char *type)
         reset_stats(service);
         connman_service_unref(service);
     }
+    g_strfreev(services);
 }
 
 void __connman_service_counter_unregister(const char *counter)
@@ -2690,10 +2691,12 @@ bool connman_service_remove(const char *identifier)
         service_save(service);
 
         service_destroy(service);
+        g_strfreev(services);
 
         return true;
     }
 
+    g_strfreev(services);
     return false;
 }
 
@@ -3904,6 +3907,7 @@ static GList *preferred_tech_list_get(void)
 
 static gboolean connect_failure_timeout(gpointer data)
 {
+    DBG("");
 	update_failure_interval();
 	return FALSE;
 }
@@ -3945,34 +3949,26 @@ static bool auto_connect_service(GList *services,
 
 			continue;
 		}
-
 		if (!service->favorite) {
 			if (preferred)
 			       continue;
 
 			return autoconnecting;
 		}
-		DBG("%d, state %d",is_ignore(service),service->state);
-
-		if (is_ignore(service) ||
-			(service->state != CONNMAN_SERVICE_STATE_IDLE
-			&& service->state != CONNMAN_SERVICE_STATE_FAILURE))
-			continue;
+DBG("state %d, failure_connect_interval %d"
+    ,service->state,failure_connect_interval);
 
 		if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
-			if (failure_connect_interval > 0) {
+			if (failure_connect_interval < 0) {
 				continue;
 			} else if (failure_connect_interval == 0) {
 				failure_connect_interval = 5;
-				g_timeout_add_seconds(failure_connect_interval, connect_failure_timeout, NULL);
-			} else {
-				if (!connection_failure_block) {
-					connection_failure_block = true;
-					continue;
-				}
+				g_timeout_add_seconds((guint)failure_connect_interval, connect_failure_timeout, NULL);
 			}
+		} else {
+			if (is_ignore(service) || service->state != CONNMAN_SERVICE_STATE_IDLE)
+				continue;
 		}
-
 		if (autoconnecting && !active_sessions[service->type]) {
 			DBG("service %p type %s has no users", service,
 				__connman_service_type2string(service->type));
@@ -4018,8 +4014,8 @@ static gboolean run_auto_connect(gpointer data)
 
 void update_failure_interval()
 {
-	DBG("failure_connect_interval %u", failure_connect_interval);
-	if (failure_connect_interval == 0) {
+	DBG("failure_connect_interval %d", failure_connect_interval);
+	if (failure_connect_interval <= 0) {
 		return;
 	} else if (failure_connect_interval == 1800) {
 		failure_connect_interval = -1;//stop after 30 minutes
@@ -4029,8 +4025,7 @@ void update_failure_interval()
 		if (failure_connect_interval > 1800) //clamp down to 30 minutes
 			failure_connect_interval = 1800;
 	}
-	connection_failure_block = false;
-	g_timeout_add_seconds(failure_connect_interval, connect_failure_timeout, NULL);
+	g_timeout_add_seconds((guint)failure_connect_interval, connect_failure_timeout, NULL);
 
 	run_auto_connect(GUINT_TO_POINTER(CONNMAN_SERVICE_CONNECT_REASON_AUTO));
 }
@@ -4329,16 +4324,15 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	err = __connman_service_connect(service,
 			CONNMAN_SERVICE_CONNECT_REASON_USER);
 
-	if (err < 0 && err != -EINPROGRESS) {
-		if (service->pending) {
-			dbus_message_unref(service->pending);
-			service->pending = NULL;
-
-			return __connman_error_failed(msg, -err);
-		}
-
+    if (err == -EINPROGRESS)
 		return NULL;
-	}
+
+	if (err != -EINVAL)
+        dbus_message_unref(service->pending);
+	service->pending = NULL;
+
+	if (err > 0)
+		return __connman_error_failed(msg, -err);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
@@ -4761,6 +4755,8 @@ static void service_saved_schedule_changed(void)
 
 static bool allow_property_changed(struct connman_service *service)
 {
+	if (!service || !service->path)
+		return false;
 	if (g_hash_table_lookup_extended(services_notify->add, service->path,
 					NULL, NULL)) {
 		DBG("no property updates for service %p", service);
@@ -5581,6 +5577,10 @@ static void request_input_cb(struct connman_service *service,
 			if (service->hidden)
 				__connman_service_return_error(service,
 							ECANCELED, user_data);
+            DBG("failure_connect_interval %d", failure_connect_interval);
+            if (failure_connect_interval >= 0) {//let one through
+                failure_connect_interval  = -1;
+            }
 			goto done;
 		} else {
 			if (service->hidden)
@@ -6460,6 +6460,8 @@ int __connman_service_connect(struct connman_service *service,
 		err = service_connect(service);
 	}
 
+    DBG("service_connect error %d, service error %d",err, service->error);
+
 	service->connect_reason = reason;
 	if (err >= 0) {
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
@@ -6479,8 +6481,10 @@ int __connman_service_connect(struct connman_service *service,
 	else if (service->type == CONNMAN_SERVICE_TYPE_VPN &&
 				service->provider)
 			connman_provider_disconnect(service->provider);
-
-	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
+DBG("failure_connect_interval %d", failure_connect_interval);
+	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER
+            || failure_connect_interval >= 0) {
+        failure_connect_interval = 0;
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
 
@@ -6499,12 +6503,12 @@ int __connman_service_connect(struct connman_service *service,
 					request_input_cb,
 					get_dbus_sender(service),
 					pending);
+            DBG("request reply %d", err);
 			if (service->hidden && err != -EINPROGRESS)
 				service->pending = pending;
-
-			return err;
+                return err;
 		}
-		reply_pending(service, -err);
+            reply_pending(service, -err);
 	}
 
 	return err;
