@@ -210,7 +210,11 @@ static struct stats_record *get_roaming(struct stats_file *file)
 	if (hdr->roaming == UINT_MAX)
 		return NULL;
 
-	return (struct stats_record *)(file->addr + hdr->roaming);
+	struct stats_record *rec = (struct stats_record *)(file->addr + hdr->roaming);
+    if (rec && rec->roaming)
+        return rec;
+    else
+        return NULL;
 }
 
 static void set_end(struct stats_file *file, struct stats_record *end)
@@ -965,6 +969,14 @@ int  __connman_stats_update(struct connman_service *service,
 			connman_warn("history file update failed %s",
 					file->history_name);
 		}
+
+		/*
+		 * History file has been updated, ring buffer is now empty, invalidate home and roaming
+		 * pointers
+		 */
+		struct stats_file_header *hdr = get_hdr(file);
+		hdr->home = UINT_MAX;
+		hdr->roaming = UINT_MAX;
 	}
 
 	next->ts = time(NULL);

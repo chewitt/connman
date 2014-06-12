@@ -2347,9 +2347,7 @@ void __connman_service_counter_send_initial(const char *counter)
             continue;
         }
 
-        connman_service_ref(service);
         __connman_service_counter_append(counter, service);
-        connman_service_unref(service);
     }
     g_strfreev(services);
 }
