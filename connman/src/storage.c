@@ -38,6 +38,16 @@
 #define MODE		(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | \
 			S_IXGRP | S_IROTH | S_IXOTH)
 
+bool service_id_is_valid(const char *id)
+{
+	char *check = g_strdup_printf("%s/service/%s", CONNMAN_PATH, id);
+	bool valid = dbus_validate_path(check, NULL) == TRUE;
+	if (!valid)
+		DBG("Service ID '%s' is not valid.", id);
+	g_free(check);
+	return valid;
+}
+
 static GKeyFile *storage_load(const char *pathname)
 {
 	GKeyFile *keyfile = NULL;
@@ -168,6 +178,9 @@ GKeyFile *__connman_storage_open_service(const char *service_id)
 	gchar *pathname;
 	GKeyFile *keyfile = NULL;
 
+	if (!service_id_is_valid(service_id))
+		return NULL;
+
 	pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR, service_id, SETTINGS);
 	if (!pathname)
 		return NULL;
@@ -205,6 +218,9 @@ gchar **connman_storage_get_services(void)
 		if (strcmp(d->d_name, ".") == 0 ||
 				strcmp(d->d_name, "..") == 0 ||
 				strncmp(d->d_name, "provider_", 9) == 0)
+			continue;
+
+		if (!service_id_is_valid(d->d_name))
 			continue;
 
 		switch (d->d_type) {
@@ -247,6 +263,9 @@ GKeyFile *connman_storage_load_service(const char *service_id)
 	gchar *pathname;
 	GKeyFile *keyfile = NULL;
 
+	if (!service_id_is_valid(service_id))
+		return NULL;
+
 	pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR, service_id, SETTINGS);
 	if (!pathname)
 		return NULL;
@@ -261,6 +280,9 @@ int __connman_storage_save_service(GKeyFile *keyfile, const char *service_id)
 {
 	int ret = 0;
 	gchar *pathname, *dirname;
+
+	if (!service_id_is_valid(service_id))
+		return -EINVAL;
 
 	dirname = g_strdup_printf("%s/%s", STORAGEDIR, service_id);
 	if (!dirname)
