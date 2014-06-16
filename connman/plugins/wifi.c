@@ -1317,7 +1317,7 @@ static int wifi_set_regdom(struct connman_device *device, const char *alpha2)
 	struct wifi_data *wifi = connman_device_get_data(device);
 	int ret;
 
-	if (!wifi)
+	if (!wifi || !wifi->interface)
 		return -EINVAL;
 
 	connman_device_ref(device);
