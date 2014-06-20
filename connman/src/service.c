@@ -4504,7 +4504,7 @@ static DBusMessage *move_service(DBusConnection *conn,
 		 * routes defined for a given VPN.
 		 */
 		if (!__connman_provider_check_routes(target->provider)) {
-			connman_info("Cannot move service. "
+			DBG("Cannot move service. "
 				"No routes defined for provider %s",
 				__connman_provider_get_ident(target->provider));
 			return __connman_error_invalid_service(msg);

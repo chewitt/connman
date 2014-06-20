@@ -143,7 +143,7 @@ static void dhcp_valid(struct connman_dhcp *dhcp)
 
 static void dhcp_debug(const char *str, void *data)
 {
-	connman_info("%s: %s", (const char *) data, str);
+	DBG("%s: %s", (const char *) data, str);
 }
 
 static void ipv4ll_stop_client(struct connman_dhcp *dhcp)

@@ -1249,7 +1249,7 @@ struct connman_device *connman_device_create_from_index(int index)
 		return NULL;
 
 	if (__connman_device_isfiltered(devname)) {
-		connman_info("Ignoring interface %s (filtered)", devname);
+		DBG("Ignoring interface %s (filtered)", devname);
 		g_free(devname);
 		return NULL;
 	}
@@ -1258,7 +1258,7 @@ struct connman_device *connman_device_create_from_index(int index)
 
 	switch (type) {
 	case CONNMAN_DEVICE_TYPE_UNKNOWN:
-		connman_info("Ignoring interface %s (type unknown)", devname);
+		DBG("Ignoring interface %s (type unknown)", devname);
 		g_free(devname);
 		return NULL;
 	case CONNMAN_DEVICE_TYPE_ETHERNET:

@@ -412,7 +412,7 @@ static void xml_wispr_parser_callback(const char *str, gpointer user_data)
 
 static void web_debug(const char *str, void *data)
 {
-	connman_info("%s: %s\n", (const char *) data, str);
+	DBG("%s: %s\n", (const char *) data, str);
 }
 
 static void wispr_portal_error(struct connman_wispr_portal_context *wp_context)
@@ -434,19 +434,19 @@ static void portal_manage_status(GWebResult *result,
 	/* We currently don't do anything with this info */
 	if (g_web_result_get_header(result, "X-ConnMan-Client-IP",
 				&str))
-		connman_info("Client-IP: %s", str);
+		DBG("Client-IP: %s", str);
 
 	if (g_web_result_get_header(result, "X-ConnMan-Client-Country",
 				&str))
-		connman_info("Client-Country: %s", str);
+		DBG("Client-Country: %s", str);
 
 	if (g_web_result_get_header(result, "X-ConnMan-Client-Region",
 				&str))
-		connman_info("Client-Region: %s", str);
+		DBG("Client-Region: %s", str);
 
 	if (g_web_result_get_header(result, "X-ConnMan-Client-Timezone",
 				&str))
-		connman_info("Client-Timezone: %s", str);
+		DBG("Client-Timezone: %s", str);
 
 	free_connman_wispr_portal_context(wp_context);
 

@@ -378,7 +378,7 @@ static gboolean check_kill(gpointer user_data)
 	pid_t pid = GPOINTER_TO_INT(user_data);
 	if (pid > 0) {
 		if (kill(pid, 0) == 0) {
-			connman_info("pid %d was not killed, "
+			DBG("pid %d was not killed, "
 					"retrying after 2 sec", pid);
 			g_timeout_add_seconds(2, kill_timeout,
 					GINT_TO_POINTER(pid));

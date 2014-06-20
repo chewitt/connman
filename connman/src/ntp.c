@@ -258,7 +258,7 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 		/* RFC 4330 ch 8 Kiss-of-Death packet */
 		uint32_t code = ntohl(msg->refid);
 
-		connman_info("Skipping server %s KoD code %c%c%c%c",
+		DBG("Skipping server %s KoD code %c%c%c%c",
 			timeserver, code >> 24, code >> 16 & 0xff,
 			code >> 8 & 0xff, code & 0xff);
 		next_server();
@@ -320,7 +320,7 @@ static void decode_msg(void *base, size_t len, struct timeval *tv,
 
 	poll_id = g_timeout_add_seconds(transmit_delay, next_poll, NULL);
 
-	connman_info("ntp: time slew %+.6f s", offset);
+	DBG("ntp: time slew %+.6f s", offset);
 
 	if (offset < STEPTIME_MIN_OFFSET && offset > -STEPTIME_MIN_OFFSET) {
 		struct timeval adj;

@@ -256,7 +256,7 @@ static bool web_result(GWebResult *result, gpointer user_data)
 
 static void web_debug(const char *str, void *data)
 {
-	connman_info("%s: %s\n", (const char *) data, str);
+	DBG("%s: %s\n", (const char *) data, str);
 }
 
 static gboolean newlink_timeout(gpointer user_data)

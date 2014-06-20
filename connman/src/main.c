@@ -424,7 +424,7 @@ static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 	case SIGINT:
 	case SIGTERM:
 		if (__terminated == 0) {
-			connman_info("Terminating");
+			DBG("Terminating");
 			g_main_loop_quit(main_loop);
 		}
 

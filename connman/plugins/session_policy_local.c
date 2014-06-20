@@ -719,7 +719,7 @@ static void notify_handler(struct inotify_event *event,
 		return;
 
 	if (event->mask & (IN_MOVED_TO | IN_MODIFY)) {
-		connman_info("Policy update for '%s'", filename);
+		DBG("Policy update for '%s'", filename);
 
 		file = g_new0(struct policy_file, 1);
 		if (load_file(filename, file) < 0) {
