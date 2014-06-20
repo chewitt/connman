@@ -42,7 +42,7 @@ static GHashTable *wpad_list = NULL;
 
 static void resolv_debug(const char *str, void *data)
 {
-	connman_info("%s: %s\n", (const char *) data, str);
+	DBG("%s: %s\n", (const char *) data, str);
 }
 
 static void free_wpad(gpointer data)

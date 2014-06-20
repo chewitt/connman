@@ -1323,7 +1323,7 @@ void __connman_technology_add_interface(enum connman_service_type type,
 	}
 
 	name = connman_inet_ifname(index);
-	connman_info("Adding interface %s [ %s ]", name,
+	DBG("Adding interface %s [ %s ]", name,
 				__connman_service_type2string(type));
 
 	technology = technology_find(type);
@@ -1374,7 +1374,7 @@ void __connman_technology_remove_interface(enum connman_service_type type,
 	}
 
 	name = connman_inet_ifname(index);
-	connman_info("Remove interface %s [ %s ]", name,
+	DBG("Remove interface %s [ %s ]", name,
 				__connman_service_type2string(type));
 	g_free(name);
 

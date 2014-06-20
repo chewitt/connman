@@ -162,7 +162,7 @@ static bool compare_string_arrays(char **array_a, char **array_b)
 
 static void dhcpv6_debug(const char *str, void *data)
 {
-	connman_info("%s: %s\n", (const char *) data, str);
+	DBG("%s: %s\n", (const char *) data, str);
 }
 
 static gchar *convert_to_hex(unsigned char *buf, int len)

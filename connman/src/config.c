@@ -145,7 +145,7 @@ static void unregister_config(gpointer data)
 {
 	struct connman_config *config = data;
 
-	connman_info("Removing configuration %s", config->ident);
+	DBG("Removing configuration %s", config->ident);
 
 	g_hash_table_destroy(config->service_table);
 
@@ -165,7 +165,7 @@ static void unregister_service(gpointer data)
 	if (cleanup)
 		goto free_only;
 
-	connman_info("Removing service configuration %s",
+	DBG("Removing service configuration %s",
 						config_service->ident);
 
 	if (config_service->virtual)
@@ -674,7 +674,7 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 		g_hash_table_insert(config->service_table, service->ident,
 					service);
 
-	connman_info("Adding service configuration %s", service->ident);
+	DBG("Adding service configuration %s", service->ident);
 
 	return true;
 
@@ -769,7 +769,7 @@ static struct connman_config *create_config(const char *ident)
 
 	g_hash_table_insert(config_table, config->ident, config);
 
-	connman_info("Adding configuration %s", config->ident);
+	DBG("Adding configuration %s", config->ident);
 
 	return config;
 }

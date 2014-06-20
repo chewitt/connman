@@ -43,7 +43,7 @@ static int resolv_id = 0;
 
 static void resolv_debug(const char *str, void *data)
 {
-	connman_info("%s: %s\n", (const char *) data, str);
+	DBG("%s: %s\n", (const char *) data, str);
 }
 static void save_timeservers(char **servers)
 {

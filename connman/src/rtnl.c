@@ -41,6 +41,7 @@
 #include <glib.h>
 
 #include "connman.h"
+#include "log.h"
 
 #ifndef ARPHDR_PHONET_PIPE
 #define ARPHDR_PHONET_PIPE (821)
@@ -50,8 +51,8 @@
 #define ARPHRD_RAWIP (530)
 #endif
 
-#define print(arg...) do { if (0) connman_info(arg); } while (0)
-//#define print(arg...) connman_info(arg)
+#define print(arg...) do { if (0) DBG(arg); } while (0)
+//#define print(arg...) DBG(arg)
 
 struct watch_data {
 	unsigned int id;
@@ -448,11 +449,11 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	}
 
 	if (memcmp(&address, &compare, ETH_ALEN) != 0)
-		connman_info("%s {newlink} index %d address %s mtu %u",
+        DBG("%s {newlink} index %d address %s mtu %u",
 						ifname, index, str, mtu);
 
 	if (operstate != 0xff)
-		connman_info("%s {newlink} index %d operstate %u <%s>",
+		DBG("%s {newlink} index %d operstate %u <%s>",
 						ifname, index, operstate,
 						operstate2str(operstate));
 
@@ -511,7 +512,7 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 		return;
 
 	if (operstate != 0xff)
-		connman_info("%s {dellink} index %d operstate %u <%s>",
+		DBG("%s {dellink} index %d operstate %u <%s>",
 						ifname, index, operstate,
 						operstate2str(operstate));
 

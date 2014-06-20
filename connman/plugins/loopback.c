@@ -69,7 +69,7 @@ static int setup_hostname(void)
 
 	if (strlen(system_hostname) > 0 &&
 				strcmp(system_hostname, "(none)") != 0)
-		connman_info("System hostname is %s", system_hostname);
+		DBG("System hostname is %s", system_hostname);
 	else
 		create_hostname();
 
@@ -81,7 +81,7 @@ static int setup_hostname(void)
 	}
 
 	if (strlen(name) > 0 && strcmp(name, "(none)") != 0)
-		connman_info("System domainname is %s", name);
+		DBG("System domainname is %s", name);
 
 	return 0;
 }
@@ -147,7 +147,7 @@ static int setup_loopback(void)
 	}
 
 	if (ifr.ifr_flags & IFF_UP) {
-		connman_info("Checking loopback interface settings");
+		DBG("Checking loopback interface settings");
 		if (valid_loopback(sk, &ifr)) {
 			err = -EALREADY;
 			goto done;
@@ -227,7 +227,7 @@ static int loopback_set_hostname(const char *hostname)
 		return err;
 	}
 
-	connman_info("Setting hostname to %s", hostname);
+	DBG("Setting hostname to %s", hostname);
 
 	return 0;
 }
@@ -247,7 +247,7 @@ static int loopback_set_domainname(const char *domainname)
 		return err;
 	}
 
-	connman_info("Setting domainname to %s", domainname);
+	DBG("Setting domainname to %s", domainname);
 
 	return 0;
 }
