@@ -4322,14 +4322,15 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	err = __connman_service_connect(service,
 			CONNMAN_SERVICE_CONNECT_REASON_USER);
 
-    if (err == -EINPROGRESS)
+	if (err == -EINPROGRESS)
 		return NULL;
 
-	if (err != -EINVAL)
-        dbus_message_unref(service->pending);
-	service->pending = NULL;
+	if (service->pending) {
+		dbus_message_unref(service->pending);
+		service->pending = NULL;
+	}
 
-	if (err > 0)
+	if (err < 0)
 		return __connman_error_failed(msg, -err);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
