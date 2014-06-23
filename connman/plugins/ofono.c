@@ -2286,7 +2286,6 @@ static void remove_modem(gpointer data)
 
 	g_hash_table_foreach(modem->set_property_calls,
 					set_property_cancel, NULL);
-	g_hash_table_destroy(modem->set_property_calls);
 
 	if (modem->call_get_properties) {
 		dbus_pending_call_cancel(modem->call_get_properties);
@@ -2304,6 +2303,7 @@ static void remove_modem(gpointer data)
 	if (modem->context)
 		remove_cm_context(modem, modem->context->path);
 
+	g_hash_table_destroy(modem->set_property_calls);
 	g_free(modem->serial);
 	g_free(modem->name);
 	g_free(modem->imsi);
