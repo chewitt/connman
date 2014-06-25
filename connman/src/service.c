@@ -6522,7 +6522,7 @@ int __connman_service_disconnect(struct connman_service *service)
 	service->connect_reason = CONNMAN_SERVICE_CONNECT_REASON_NONE;
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 
-	connman_agent_cancel(service);
+	__connman_wispr_stop(service);
 
 	reply_pending(service, ECONNABORTED);
 

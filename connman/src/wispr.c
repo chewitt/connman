@@ -29,6 +29,7 @@
 #include <gweb/gweb.h>
 
 #include "connman.h"
+#include "agent.h"
 
 struct connman_wispr_message {
 	bool has_error;
@@ -974,6 +975,7 @@ void __connman_wispr_stop(struct connman_service *service)
 	if (index < 0)
 		return;
 
+	connman_agent_cancel(service);
 	g_hash_table_remove(wispr_portal_list, GINT_TO_POINTER(index));
 }
 
