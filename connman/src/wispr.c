@@ -751,8 +751,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		DBG("Status url URL: %s", wp_context->status_url);
 
 		__connman_agent_request_browser(wp_context->service,
-					wispr_portal_browser_reply_cb,
-					wp_context->status_url, wp_context);
+										wispr_portal_browser_reply_cb,
+										wp_context->status_url, wp_context);
 		break;
 	case 400:
 	case 404:
