@@ -314,6 +314,8 @@ static void wifi_remove(struct connman_device *device)
 
 	g_supplicant_interface_set_data(wifi->interface, NULL);
 
+	g_supplicant_interface_cancel(wifi->interface);
+
 	if (wifi->scan_params)
 		g_supplicant_free_scan_params(wifi->scan_params);
 
@@ -608,6 +610,10 @@ static int throw_wifi_scan(struct connman_device *device,
 	if (!wifi)
 		return -ENODEV;
 
+	struct connman_network *network = wifi->network;
+	if (network && connman_network_get_associating(network)) {
+		return -EBUSY;
+	}
 	DBG("device %p %p", device, wifi->interface);
 
 	if (wifi->tethering)
@@ -1313,7 +1319,7 @@ static int wifi_set_regdom(struct connman_device *device, const char *alpha2)
 	struct wifi_data *wifi = connman_device_get_data(device);
 	int ret;
 
-	if (!wifi)
+	if (!wifi || !wifi->interface)
 		return -EINVAL;
 
 	connman_device_ref(device);

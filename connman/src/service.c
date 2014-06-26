@@ -2347,9 +2347,7 @@ void __connman_service_counter_send_initial(const char *counter)
             continue;
         }
 
-        connman_service_ref(service);
         __connman_service_counter_append(counter, service);
-        connman_service_unref(service);
     }
     g_strfreev(services);
 }
@@ -4324,14 +4322,15 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	err = __connman_service_connect(service,
 			CONNMAN_SERVICE_CONNECT_REASON_USER);
 
-    if (err == -EINPROGRESS)
+	if (err == -EINPROGRESS)
 		return NULL;
 
-	if (err != -EINVAL)
-        dbus_message_unref(service->pending);
-	service->pending = NULL;
+	if (service->pending) {
+		dbus_message_unref(service->pending);
+		service->pending = NULL;
+	}
 
-	if (err > 0)
+	if (err < 0)
 		return __connman_error_failed(msg, -err);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
@@ -6523,7 +6522,7 @@ int __connman_service_disconnect(struct connman_service *service)
 	service->connect_reason = CONNMAN_SERVICE_CONNECT_REASON_NONE;
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 
-	connman_agent_cancel(service);
+	__connman_wispr_stop(service);
 
 	reply_pending(service, ECONNABORTED);
 
