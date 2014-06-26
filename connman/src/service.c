@@ -356,7 +356,7 @@ static int service_load(struct connman_service *service)
 	unsigned int ssid_len;
 	int err = 0;
 
-	DBG("service %p", service);
+	DBG("service %s", service->identifier);
 
 	keyfile = connman_storage_load_service(service->identifier);
 	if (!keyfile) {
@@ -3905,7 +3905,7 @@ static GList *preferred_tech_list_get(void)
 
 static gboolean connect_failure_timeout(gpointer data)
 {
-    DBG("");
+    DBG("connect_failure_timeout %d",failure_connect_interval);
 	update_failure_interval();
 	return FALSE;
 }
@@ -3927,7 +3927,7 @@ static bool auto_connect_service(GList *services,
 	for (list = services; list; list = list->next) {
 		service = list->data;
 
-		if (ignore[service->type]) {
+		if (ignore[service->type] || !service->autoconnect) {
 			DBG("service %p type %s ignore", service,
 				__connman_service_type2string(service->type));
 			continue;
@@ -4030,16 +4030,23 @@ void update_failure_interval()
 
 void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 {
-	DBG("");
+	DBG("autoconnect_timeout %u",autoconnect_timeout);
 
 	if (autoconnect_timeout != 0)
 		return;
 
 	if (!__connman_session_policy_autoconnect(reason))
 		return;
-
-	autoconnect_timeout = g_timeout_add_seconds(0, run_auto_connect,
-						GUINT_TO_POINTER(reason));
+    DBG("failure_connect_interval %d",failure_connect_interval);
+    if (failure_connect_interval >= 0) {
+        if (failure_connect_interval == 0) {
+            failure_connect_interval = 5;
+            update_failure_interval();
+            return;
+        }
+    }
+		autoconnect_timeout = g_timeout_add_seconds(0, run_auto_connect,
+								GUINT_TO_POINTER(reason));
 }
 
 static gboolean run_vpn_auto_connect(gpointer data) {
@@ -4316,8 +4323,9 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	service->ignore = false;
 
 	service->pending = dbus_message_ref(msg);
-
-	failure_connect_interval = 0;
+DBG("setting failure_connect_interval to 0 %d",failure_connect_interval);
+	if (failure_connect_interval < 0)
+        failure_connect_interval = 0;
 
 	err = __connman_service_connect(service,
 			CONNMAN_SERVICE_CONNECT_REASON_USER);
@@ -5469,9 +5477,11 @@ void __connman_service_update_search_domains(struct connman_service *service,
 
 static void service_complete(struct connman_service *service)
 {
+    DBG("");
 	reply_pending(service, EIO);
 
-	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
+	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER
+            &&  failure_connect_interval == 0)
 		__connman_service_auto_connect(service->connect_reason);
 
 	g_get_current_time(&service->modified);
@@ -5481,11 +5491,12 @@ static void service_complete(struct connman_service *service)
 static void report_error_cb(void *user_context, bool retry,
 							void *user_data)
 {
+    DBG("retry %d",retry);
 	struct connman_service *service = user_context;
 
 	if (retry)
 		__connman_service_connect(service,
-					CONNMAN_SERVICE_CONNECT_REASON_USER);
+			service->connect_reason);
 	else {
 		/* It is not relevant to stay on Failure state
 		 * when failing is due to wrong user input */
@@ -5764,6 +5775,7 @@ static int service_indicate_state(struct connman_service *service)
 	def_service = __connman_service_get_default();
 
 	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
+        DBG("setting failure_connect_interval to 0");
 		failure_connect_interval = 0;
 		result = service_update_preferred_order(def_service,
 				service, new_state);
@@ -6483,7 +6495,6 @@ int __connman_service_connect(struct connman_service *service,
 DBG("failure_connect_interval %d", failure_connect_interval);
 	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER
             || failure_connect_interval >= 0) {
-        failure_connect_interval = 0;
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
 
