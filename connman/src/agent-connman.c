@@ -593,6 +593,7 @@ int __connman_agent_request_browser(struct connman_service *service,
 				browser_authentication_cb_t callback,
 				const char *url, void *user_data)
 {
+    DBG("");
 	struct request_browser_reply_data *browser_reply_data;
 	DBusMessage *message;
 	DBusMessageIter iter;

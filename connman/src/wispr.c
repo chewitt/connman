@@ -124,7 +124,10 @@ static void connman_wispr_message_init(struct connman_wispr_message *msg)
 
 static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 {
+	DBG("wp_context %p",wp_context);
 	while (wp_context->route_list) {
+		if (!wp_context->route_list->data)
+		continue;
 		struct wispr_route *route = wp_context->route_list->data;
 
 		DBG("free route to %s if %d type %d", route->address,
@@ -553,16 +556,10 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 {
 	struct connman_wispr_portal_context *wp_context = user_data;
 
-	DBG("");
+	DBG("authentication_done %d", authentication_done);
 
 	if (!service || !wp_context)
 		return;
-
-	if (!authentication_done) {
-		wispr_portal_error(wp_context);
-		free_wispr_routes(wp_context);
-		return;
-	}
 
 	/* Restarting the test */
 	__connman_wispr_start(service, wp_context->type);
@@ -717,17 +714,18 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		if (g_web_result_get_header(result, "X-ConnMan-Status",
 						&str)) {
 			portal_manage_status(result, wp_context);
-			return false;
+			break;
 		} else
 			__connman_agent_request_browser(wp_context->service,
 					wispr_portal_browser_reply_cb,
 					wp_context->redirect_url, wp_context);
-
 		break;
 	case 204:
 		portal_manage_status(result, wp_context);
 		return false;
 	case 302:
+	DBG("tls %d, Location header %d",(!g_web_supports_tls() ), (!g_web_result_get_header(result, "Location",
+										&redirect)));
 		if (!g_web_supports_tls() ||
 			!g_web_result_get_header(result, "Location",
 							&redirect)) {
@@ -739,26 +737,34 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		}
 
 		DBG("Redirect URL: %s", redirect);
+		DBG("Status url URL: %s", wp_context->status_url);
 
 		wp_context->redirect_url = g_strdup(redirect);
-
 		wp_context->request_id = g_web_request_get(wp_context->web,
 				redirect, wispr_portal_web_result,
 				wispr_route_request, wp_context);
 
-		goto done;
+		break;
+	case 000:
+		DBG("Redirect URL: %s", redirect);
+		DBG("Status url URL: %s", wp_context->status_url);
+
+		__connman_agent_request_browser(wp_context->service,
+										wispr_portal_browser_reply_cb,
+										wp_context->status_url, wp_context);
+		break;
 	case 400:
 	case 404:
-		if (__connman_service_online_check_failed(wp_context->service,
-						wp_context->type) == 0) {
-			wispr_portal_error(wp_context);
-			free_connman_wispr_portal_context(wp_context);
-			return false;
-		}
 
 		break;
 	default:
 		break;
+	}
+	if (__connman_service_online_check_failed(wp_context->service,
+		wp_context->type) == 0) {
+		wispr_portal_error(wp_context);
+		free_connman_wispr_portal_context(wp_context);
+		return false;
 	}
 
 	free_wispr_routes(wp_context);
@@ -885,6 +891,7 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 
 	proxy_method = connman_service_get_proxy_method(wp_context->service);
 
+	DBG("Proxy method %d",proxy_method);
 	if (proxy_method != CONNMAN_SERVICE_PROXY_METHOD_DIRECT) {
 		wp_context->token = connman_proxy_lookup(interface,
 						wp_context->status_url,
