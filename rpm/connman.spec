@@ -93,7 +93,6 @@ Documentation for connman.
 
 %build
 %reconfigure --disable-static \
-    --enable-threads \
     --enable-ethernet=builtin \
     --enable-wifi=builtin \
     --enable-bluetooth=builtin \
