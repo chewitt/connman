@@ -105,6 +105,8 @@ struct web_session {
 	gsize length;
 	gsize offset;
 	gpointer user_data;
+
+	bool cancelled;
 };
 
 struct _GWeb {
@@ -115,7 +117,7 @@ struct _GWeb {
 	int family;
 
 	int index;
-	GList *session_list;
+	GHashTable *session_hash;
 
 	GResolv *resolv;
 	char *proxy;
@@ -202,16 +204,17 @@ static void free_session(struct web_session *session)
 	g_free(session);
 }
 
+static gboolean cleanup_session(gpointer key, gpointer value, gpointer user_data)
+{
+	struct web_session *session = value;
+	free_session(session);
+	return TRUE;
+}
+
 static void flush_sessions(GWeb *web)
 {
-	GList *list;
-
-	for (list = g_list_first(web->session_list);
-					list; list = g_list_next(list))
-		free_session(list->data);
-
-	g_list_free(web->session_list);
-	web->session_list = NULL;
+	g_hash_table_foreach_remove(web->session_hash, cleanup_session, NULL);
+	g_hash_table_destroy(web->session_hash);
 }
 
 GWeb *g_web_new(int index)
@@ -232,7 +235,7 @@ GWeb *g_web_new(int index)
 	web->family = AF_UNSPEC;
 
 	web->index = index;
-	web->session_list = NULL;
+	web->session_hash = g_hash_table_new(g_direct_hash, g_direct_equal);
 
 	web->resolv = g_resolv_new(index);
 	if (!web->resolv) {
@@ -869,6 +872,9 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	gsize bytes_read;
 	GIOStatus status;
 
+	if (session->cancelled)
+		return FALSE;
+
 	if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
 		session->transport_watch = 0;
 		session->result.buffer = NULL;
@@ -1208,6 +1214,9 @@ static void handle_resolved_address(struct web_session *session)
 	char *port;
 	int ret;
 
+	if (session->cancelled)
+		return;
+
 	debug(session->web, "address %s", session->address);
 
 	memset(&hints, 0, sizeof(struct addrinfo));
@@ -1249,6 +1258,9 @@ static void resolv_result(GResolvResultStatus status,
 					char **results, gpointer user_data)
 {
 	struct web_session *session = user_data;
+
+	if (session->cancelled)
+		return;
 
 	if (!results || !results[0]) {
 		call_result_func(session, 404);
@@ -1320,6 +1332,7 @@ static guint do_request(GWeb *web, const char *url,
 	session->length = length;
 	session->offset = 0;
 	session->user_data = user_data;
+	session->cancelled = false;
 
 	session->receive_buffer = g_try_malloc(DEFAULT_BUFFER_SIZE);
 	if (!session->receive_buffer) {
@@ -1357,7 +1370,7 @@ static guint do_request(GWeb *web, const char *url,
 		}
 	}
 
-	web->session_list = g_list_append(web->session_list, session);
+	g_hash_table_insert(web->session_hash, GUINT_TO_POINTER(web->next_query_id), session);
 
 	return web->next_query_id++;
 }
@@ -1402,6 +1415,13 @@ bool g_web_cancel_request(GWeb *web, guint id)
 {
 	if (!web)
 		return false;
+
+	struct web_session *session = g_hash_table_lookup(web->session_hash, GUINT_TO_POINTER(id));
+	if (!session)
+		return false;
+
+	g_resolv_cancel_lookup(web->resolv, session->resolv_action);
+	session->cancelled = true;
 
 	return true;
 }
