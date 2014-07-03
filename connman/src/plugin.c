@@ -85,7 +85,7 @@ static bool check_plugin(struct connman_plugin_desc *desc,
 			if (g_pattern_match_simple(*excludes, desc->name))
 				break;
 		if (*excludes) {
-			connman_info("Excluding %s", desc->description);
+			DBG("Excluding %s", desc->description);
 			return false;
 		}
 	}
@@ -95,7 +95,7 @@ static bool check_plugin(struct connman_plugin_desc *desc,
 			if (g_pattern_match_simple(*patterns, desc->name))
 				break;
 		if (!*patterns) {
-			connman_info("Ignoring %s", desc->description);
+			DBG("Ignoring %s", desc->description);
 			return false;
 		}
 	}

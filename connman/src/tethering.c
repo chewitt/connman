@@ -99,7 +99,7 @@ const char *__connman_tethering_get_bridge(void)
 
 static void dhcp_server_debug(const char *str, void *data)
 {
-	connman_info("%s: %s\n", (const char *) data, str);
+	DBG("%s: %s\n", (const char *) data, str);
 }
 
 static void dhcp_server_error(GDHCPServerError error)

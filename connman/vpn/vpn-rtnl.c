@@ -50,7 +50,7 @@
 #define ARPHDR_PHONET_PIPE (821)
 #endif
 
-#define print(arg...) do { if (0) connman_info(arg); } while (0)
+#define print(arg...) do { if (0) DBG(arg); } while (0)
 #define debug(arg...) do { if (0) DBG(arg); } while (0)
 
 struct watch_data {
@@ -304,11 +304,11 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	}
 
 	if (memcmp(&address, &compare, ETH_ALEN) != 0)
-		connman_info("%s {newlink} index %d address %s mtu %u",
+		DBG("%s {newlink} index %d address %s mtu %u",
 						ifname, index, str, mtu);
 
 	if (operstate != 0xff)
-		connman_info("%s {newlink} index %d operstate %u <%s>",
+		DBG("%s {newlink} index %d operstate %u <%s>",
 						ifname, index, operstate,
 						operstate2str(operstate));
 
@@ -352,7 +352,7 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 	extract_link(msg, bytes, NULL, &ifname, NULL, &operstate, &stats);
 
 	if (operstate != 0xff)
-		connman_info("%s {dellink} index %d operstate %u <%s>",
+		DBG("%s {dellink} index %d operstate %u <%s>",
 						ifname, index, operstate,
 						operstate2str(operstate));
 

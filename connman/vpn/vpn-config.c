@@ -80,7 +80,7 @@ static void unregister_config(gpointer data)
 {
 	struct vpn_config *config = data;
 
-	connman_info("Removing configuration %s", config->ident);
+	DBG("Removing configuration %s", config->ident);
 
 	g_hash_table_destroy(config->provider_table);
 
@@ -101,7 +101,7 @@ static void unregister_provider(gpointer data)
 
 	provider_id = config_provider->provider_identifier;
 
-	connman_info("Removing provider configuration %s provider %s",
+	DBG("Removing provider configuration %s provider %s",
 				config_provider->ident, provider_id);
 
 	provider = __vpn_provider_lookup(provider_id);
@@ -274,7 +274,7 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 		goto err;
 	}
 
-	connman_info("Added provider configuration %s",
+	DBG("Added provider configuration %s",
 						config_provider->ident);
 	return 0;
 
@@ -387,7 +387,7 @@ static struct vpn_config *create_config(const char *ident)
 
 	g_hash_table_insert(config_table, config->ident, config);
 
-	connman_info("Adding configuration %s", config->ident);
+	DBG("Adding configuration %s", config->ident);
 
 	return config;
 }

@@ -335,7 +335,7 @@ int __connman_ipconfig_set_rp_filter()
 
 	set_rp_filter(2);
 
-	connman_info("rp_filter set to 2 (loose mode routing), "
+	DBG("rp_filter set to 2 (loose mode routing), "
 			"old value was %d", value);
 
 	return value;
@@ -345,7 +345,7 @@ void __connman_ipconfig_unset_rp_filter(int old_value)
 {
 	set_rp_filter(old_value);
 
-	connman_info("rp_filter restored to %d", old_value);
+	DBG("rp_filter restored to %d", old_value);
 }
 
 bool __connman_ipconfig_ipv6_privacy_enabled(struct connman_ipconfig *ipconfig)
@@ -382,7 +382,7 @@ static void free_ipdevice(gpointer data)
 	struct connman_ipdevice *ipdevice = data;
 	char *ifname = connman_inet_ifname(ipdevice->index);
 
-	connman_info("%s {remove} index %d", ifname, ipdevice->index);
+	DBG("%s {remove} index %d", ifname, ipdevice->index);
 
 	if (ipdevice->config_ipv4) {
 		__connman_ipconfig_unref(ipdevice->config_ipv4);
@@ -437,9 +437,9 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 	if (stats->rx_packets == 0 && stats->tx_packets == 0)
 		return;
 
-	connman_info("%s {RX} %llu packets %llu bytes", ifname,
+	DBG("%s {RX} %llu packets %llu bytes", ifname,
 					stats->rx_packets, stats->rx_bytes);
-	connman_info("%s {TX} %llu packets %llu bytes", ifname,
+	DBG("%s {TX} %llu packets %llu bytes", ifname,
 					stats->tx_packets, stats->tx_bytes);
 
 	if (!ipdevice->config_ipv4 && !ipdevice->config_ipv6)
@@ -508,7 +508,7 @@ void __connman_ipconfig_newlink(int index, unsigned short type,
 
 	g_hash_table_insert(ipdevice_hash, GINT_TO_POINTER(index), ipdevice);
 
-	connman_info("%s {create} index %d type %d <%s>", ifname,
+	DBG("%s {create} index %d type %d <%s>", ifname,
 						index, type, type2str(type));
 
 update:
@@ -552,7 +552,7 @@ update:
 	if (flags & IFF_LOWER_UP)
 		g_string_append(str, ",LOWER_UP");
 
-	connman_info("%s {update} flags %u <%s>", ifname, flags, str->str);
+	DBG("%s {update} flags %u <%s>", ifname, flags, str->str);
 
 	g_string_free(str, TRUE);
 
@@ -679,7 +679,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 								ipaddress);
 
 	ifname = connman_inet_ifname(index);
-	connman_info("%s {add} address %s/%u label %s family %d",
+	DBG("%s {add} address %s/%u label %s family %d",
 		ifname, address, prefixlen, label, family);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
@@ -755,7 +755,7 @@ void __connman_ipconfig_deladdr(int index, int family, const char *label,
 	g_free(ipaddress);
 
 	ifname = connman_inet_ifname(index);
-	connman_info("%s {del} address %s/%u label %s", ifname,
+	DBG("%s {del} address %s/%u label %s", ifname,
 						address, prefixlen, label);
 
 	if ((ipdevice->flags & (IFF_RUNNING | IFF_LOWER_UP)) != (IFF_RUNNING | IFF_LOWER_UP))
@@ -847,7 +847,7 @@ void __connman_ipconfig_newroute(int index, int family, unsigned char scope,
 		}
 	}
 
-	connman_info("%s {add} route %s gw %s scope %u <%s>",
+	DBG("%s {add} route %s gw %s scope %u <%s>",
 		ifname, dst, gateway, scope, scope2str(scope));
 
 out:
@@ -914,7 +914,7 @@ void __connman_ipconfig_delroute(int index, int family, unsigned char scope,
 		}
 	}
 
-	connman_info("%s {del} route %s gw %s scope %u <%s>",
+	DBG("%s {del} route %s gw %s scope %u <%s>",
 		ifname, dst, gateway, scope, scope2str(scope));
 
 out:

@@ -386,7 +386,7 @@ void __vpn_ipconfig_newlink(int index, unsigned short type,
 
 	g_hash_table_insert(ipdevice_hash, GINT_TO_POINTER(index), ipdevice);
 
-	connman_info("%s {create} index %d type %d <%s>", ipdevice->ifname,
+	DBG("%s {create} index %d type %d <%s>", ipdevice->ifname,
 						index, type, type2str(type));
 
 update:
@@ -412,7 +412,7 @@ update:
 	if (flags & IFF_LOWER_UP)
 		g_string_append(str, ",LOWER_UP");
 
-	connman_info("%s {update} flags %u <%s>", ipdevice->ifname,
+	DBG("%s {update} flags %u <%s>", ipdevice->ifname,
 							flags, str->str);
 
 	g_string_free(str, TRUE);
@@ -435,7 +435,7 @@ static void free_ipdevice(gpointer data)
 {
 	struct vpn_ipdevice *ipdevice = data;
 
-	connman_info("%s {remove} index %d", ipdevice->ifname,
+	DBG("%s {remove} index %d", ipdevice->ifname,
 							ipdevice->index);
 
 	g_free(ipdevice->ipv4_gateway);
