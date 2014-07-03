@@ -346,6 +346,54 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 }
 
+int __connman_service_load_modifiable(struct connman_service *service)
+{
+	GKeyFile *keyfile;
+	GError *error = NULL;
+	gchar *str;
+	bool autoconnect;
+
+	DBG("service %p", service);
+
+	keyfile = connman_storage_load_service(service->identifier);
+	if (!keyfile)
+		return -EIO;
+
+	switch (service->type) {
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_P2P:
+		break;
+	case CONNMAN_SERVICE_TYPE_VPN:
+		service->do_split_routing = g_key_file_get_boolean(keyfile,
+				service->identifier, "SplitRouting", NULL);
+		/* fall through */
+	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+		autoconnect = g_key_file_get_boolean(keyfile,
+				service->identifier, "AutoConnect", &error);
+		if (!error)
+			service->autoconnect = autoconnect;
+		g_clear_error(&error);
+		break;
+	}
+
+	str = g_key_file_get_string(keyfile,
+				service->identifier, "Modified", NULL);
+	if (str) {
+		g_time_val_from_iso8601(str, &service->modified);
+		g_free(str);
+	}
+
+	g_key_file_free(keyfile);
+
+	return 0;
+}
+
 static int service_load(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -908,13 +956,6 @@ static bool is_connected(struct connman_service *service)
 
 static int nameserver_get_index(struct connman_service *service)
 {
-	int index;
-
-	index = __connman_service_get_index(service);
-
-	if (index < 0)
-		return -1;
-
 	switch (combine_state(service->state_ipv4, service->state_ipv6)) {
 	case CONNMAN_SERVICE_STATE_UNKNOWN:
 	case CONNMAN_SERVICE_STATE_IDLE:
@@ -928,7 +969,7 @@ static int nameserver_get_index(struct connman_service *service)
 		break;
 	}
 
-	return index;
+	return __connman_service_get_index(service);
 }
 
 static void remove_nameservers(struct connman_service *service,
@@ -1247,15 +1288,12 @@ static void nameserver_del_routes(int index, char **nameservers,
 void __connman_service_nameserver_add_routes(struct connman_service *service,
 						const char *gw)
 {
-	int index = -1;
+	int index;
 
 	if (!service)
 		return;
 
-	if (service->network)
-		index = connman_network_get_index(service->network);
-	else if (service->provider)
-		index = connman_provider_get_index(service->provider);
+	index = __connman_service_get_index(service);
 
 	if (service->nameservers_config) {
 		/*
@@ -1278,15 +1316,12 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 void __connman_service_nameserver_del_routes(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
-	int index = -1;
+	int index;
 
 	if (!service)
 		return;
 
-	if (service->network)
-		index = connman_network_get_index(service->network);
-	else if (service->provider)
-		index = connman_provider_get_index(service->provider);
+	index = __connman_service_get_index(service);
 
 	if (service->nameservers_config)
 		nameserver_del_routes(index, service->nameservers_config,
@@ -3490,10 +3525,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (!str)
 			return __connman_error_invalid_arguments(msg);
 
-		if (service->type == CONNMAN_SERVICE_TYPE_VPN)
-			index = connman_provider_get_index(service->provider);
-		else
-			index = connman_network_get_index(service->network);
+		index = __connman_service_get_index(service);
 		gw = __connman_ipconfig_get_gateway_from_index(index,
 			CONNMAN_IPCONFIG_TYPE_ALL);
 
@@ -5213,23 +5245,7 @@ char *connman_service_get_interface(struct connman_service *service)
 	if (!service)
 		return NULL;
 
-	if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
-		if (service->ipconfig_ipv4)
-			index = __connman_ipconfig_get_index(
-						service->ipconfig_ipv4);
-		else if (service->ipconfig_ipv6)
-			index = __connman_ipconfig_get_index(
-						service->ipconfig_ipv6);
-		else
-			return NULL;
-
-		return connman_inet_ifname(index);
-	}
-
-	if (!service->network)
-		return NULL;
-
-	index = connman_network_get_index(service->network);
+	index = __connman_service_get_index(service);
 
 	return connman_inet_ifname(index);
 }
@@ -6711,9 +6727,8 @@ static int service_register(struct connman_service *service)
 
 	DBG("path %s", service->path);
 
-	__connman_config_provision_service(service);
-
-	service_load(service);
+	if (__connman_config_provision_service(service) < 0)
+		service_load(service);
 
 	g_dbus_register_interface(connection, service->path,
 					CONNMAN_SERVICE_INTERFACE,
