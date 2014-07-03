@@ -1805,8 +1805,13 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 		cache_update(data, reply, reply_len);
 	}
 
-	if (hdr->rcode > 0 && req->numresp < req->numserv)
-		return -EINVAL;
+	if (req->numresp < req->numserv) {
+		if (hdr->rcode > ns_r_noerror) {
+			return -EINVAL;
+		} else if (hdr->ancount == 0 && req->append_domain) {
+			return -EINVAL;
+		}
+	}
 
 	request_list = g_slist_remove(request_list, req);
 
