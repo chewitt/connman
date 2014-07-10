@@ -1614,7 +1614,11 @@ static void autoconnect_changed(struct connman_service *service)
 	if (!allow_property_changed(service))
 		return;
 
-	autoconnect = service->autoconnect;
+	if (service->favorite)
+		autoconnect = service->autoconnect;
+	else
+		autoconnect = service->favorite;
+
 	connman_dbus_property_changed_basic(service->path,
 				CONNMAN_SERVICE_INTERFACE, "AutoConnect",
 				DBUS_TYPE_BOOLEAN, &autoconnect);
@@ -4518,6 +4522,8 @@ bool __connman_service_remove(struct connman_service *service)
         service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
         __connman_service_set_favorite(service, false);
+		if (service->autoconnect)
+			autoconnect_changed(service);
 
         service_save(service);
 
@@ -5942,6 +5948,8 @@ static int service_indicate_state(struct connman_service *service)
 		service_update_preferred_order(def_service, service, new_state);
 
 		__connman_service_set_favorite(service, true);
+		if (service->autoconnect)
+			autoconnect_changed(service);
 
 		reply_pending(service, 0);
 
