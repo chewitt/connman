@@ -396,6 +396,13 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
 			"${enable_pptp}" != "no")
 
+AC_ARG_ENABLE(counter-wraparound, AC_HELP_STRING([--enable-counter-wraparound],
+			[enable checking 32-bit statistics counter wraparound]), [
+	if (test "${enableval}" = "yes" ); then
+		CFLAGS="$CFLAGS -DCOUNTER_WRAPAROUND_AT_32BIT"
+	fi
+])
+
 AC_OUTPUT(Makefile include/version.h src/connman.service
 		vpn/connman-vpn.service	vpn/net.connman.vpn.service
 		scripts/connman	connman.pc src/net.connman.service)

@@ -2182,6 +2182,17 @@ static void stats_append(struct connman_service *service,
 	__connman_counter_send_usage(counter, msg);
 }
 
+/* A 32-bit kernel may give statistics that wrap around at 4GiB,
+   depending on device driver implementation. Work around that by
+   checking for wraparound; note that counters need to be refreshed
+   fast enough to have at most one wraparound in between. */
+#ifdef COUNTER_WRAPAROUND_AT_32BIT
+#define DELTA(new, old) \
+	(((new) < (old)) ? ((1ULL<<32)+(new)-(old)) : ((new) - (old)))
+#else
+#define DELTA(new, old) ((new) - (old))
+#endif
+
 static void stats_update(struct connman_service *service,
 				uint64_t rx_packets, uint64_t tx_packets,
 				uint64_t rx_bytes, uint64_t tx_bytes,
@@ -2196,22 +2207,14 @@ static void stats_update(struct connman_service *service,
 	DBG("service %p", service);
 
 	if (stats->valid) {
-		data->rx_packets +=
-			rx_packets - data_last->rx_packets;
-		data->tx_packets +=
-			tx_packets - data_last->tx_packets;
-		data->rx_bytes +=
-			rx_bytes - data_last->rx_bytes;
-		data->tx_bytes +=
-			tx_bytes - data_last->tx_bytes;
-		data->rx_errors +=
-			rx_errors - data_last->rx_errors;
-		data->tx_errors +=
-			tx_errors - data_last->tx_errors;
-		data->rx_dropped +=
-			rx_dropped - data_last->rx_dropped;
-		data->tx_dropped +=
-			tx_dropped - data_last->tx_dropped;
+		data->rx_packets += DELTA(rx_packets, data_last->rx_packets);
+		data->tx_packets += DELTA(tx_packets, data_last->tx_packets);
+		data->rx_bytes += DELTA(rx_bytes, data_last->rx_bytes);
+		data->tx_bytes += DELTA(tx_bytes, data_last->tx_bytes);
+		data->rx_errors += DELTA(rx_errors, data_last->rx_errors);
+		data->tx_errors += DELTA(tx_errors, data_last->tx_errors);
+		data->rx_dropped += DELTA(rx_dropped, data_last->rx_dropped);
+		data->tx_dropped += DELTA(tx_dropped, data_last->tx_dropped);
 	} else {
 		stats->valid = true;
 	}

@@ -105,7 +105,8 @@ Documentation for connman.
     --enable-client \
     --enable-test \
     --with-systemdunitdir=/%{_lib}/systemd/system \
-    --enable-systemd
+    --enable-systemd \
+    --enable-counter-wraparound
 
 make %{?jobs:-j%jobs}
 
