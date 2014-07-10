@@ -357,8 +357,7 @@ static int dns_name_length(unsigned char *buf)
 static void update_cached_ttl(unsigned char *buf, int len, int new_ttl)
 {
 	unsigned char *c;
-	uint32_t *i;
-	uint16_t *w;
+	uint16_t w;
 	int l;
 
 	/* skip the header */
@@ -388,17 +387,19 @@ static void update_cached_ttl(unsigned char *buf, int len, int new_ttl)
 			break;
 
 		/* now the 4 byte TTL field */
-		i = (uint32_t *)c;
-		*i = htonl(new_ttl);
+		c[0] = new_ttl >> 24 & 0xff;
+		c[1] = new_ttl >> 16 & 0xff;
+		c[2] = new_ttl >> 8 & 0xff;
+		c[3] = new_ttl & 0xff;
 		c += 4;
 		len -= 4;
 		if (len < 0)
 			break;
 
 		/* now the 2 byte rdlen field */
-		w = (uint16_t *)c;
-		c += ntohs(*w) + 2;
-		len -= ntohs(*w) + 2;
+		w = c[0] << 8 | c[1];
+		c += w + 2;
+		len -= w + 2;
 	}
 }
 
@@ -1347,7 +1348,6 @@ static void cache_refresh(void)
 static int reply_query_type(unsigned char *msg, int len)
 {
 	unsigned char *c;
-	uint16_t *w;
 	int l;
 	int type;
 
@@ -1361,8 +1361,7 @@ static int reply_query_type(unsigned char *msg, int len)
 	/* now the query, which is a name and 2 16 bit words */
 	l = dns_name_length(c) + 1;
 	c += l;
-	w = (uint16_t *) c;
-	type = ntohs(*w);
+	type = c[0] << 8 | c[1];
 
 	return type;
 }
