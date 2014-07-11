@@ -177,6 +177,7 @@ struct _GSupplicantInterface {
 	GHashTable *group_table;
 	GHashTable *bss_mapping;
 	void *data;
+	const char *pending_peer_path;
 };
 
 struct g_supplicant_bss {
@@ -232,10 +233,12 @@ struct _GSupplicantPeer {
 	unsigned int wps_capabilities;
 	GSList *groups;
 	bool groups_changed;
+	const GSupplicantInterface *current_group_iface;
 };
 
 struct _GSupplicantGroup {
 	GSupplicantInterface *interface;
+	GSupplicantInterface *orig_interface;
 	char *path;
 	int role;
 	GSList *members;
@@ -2798,6 +2801,7 @@ static void signal_group_success(const char *path, DBusMessageIter *iter)
 		return;
 
 	memcpy(peer->iface_address, data.iface_address, ETH_ALEN);
+	interface->pending_peer_path = peer->path;
 }
 
 static void signal_group_failure(const char *path, DBusMessageIter *iter)
@@ -2825,9 +2829,10 @@ static void signal_group_failure(const char *path, DBusMessageIter *iter)
 
 static void signal_group_started(const char *path, DBusMessageIter *iter)
 {
-	GSupplicantInterface *interface;
+	GSupplicantInterface *interface, *g_interface;
 	struct group_sig_data data = {};
 	GSupplicantGroup *group;
+	GSupplicantPeer *peer;
 
 	SUPPLICANT_DBG("");
 
@@ -2839,9 +2844,15 @@ static void signal_group_started(const char *path, DBusMessageIter *iter)
 	if (!data.interface_obj_path || !data.group_obj_path)
 		return;
 
-	interface = g_hash_table_lookup(interface_table,
+	peer = g_hash_table_lookup(interface->peer_table,
+						interface->pending_peer_path);
+	interface->pending_peer_path = NULL;
+	if (!peer)
+		return;
+
+	g_interface = g_hash_table_lookup(interface_table,
 						data.interface_obj_path);
-	if (!interface)
+	if (!g_interface)
 		return;
 
 	group = g_hash_table_lookup(interface->group_table,
@@ -2854,11 +2865,16 @@ static void signal_group_started(const char *path, DBusMessageIter *iter)
 		return;
 
 	group->interface = interface;
+	group->interface = g_interface;
+	group->orig_interface = interface;
 	group->path = g_strdup(data.group_obj_path);
 	group->role = data.role;
 
 	g_hash_table_insert(interface->group_table, group->path, group);
 	g_hash_table_replace(group_mapping, group->path, group);
+
+	peer->current_group_iface = g_interface;
+	callback_peer_changed(peer, G_SUPPLICANT_PEER_GROUP_STARTED);
 }
 
 static void signal_group_finished(const char *path, DBusMessageIter *iter)
