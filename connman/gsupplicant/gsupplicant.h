@@ -242,6 +242,8 @@ int g_supplicant_interface_signal_poll(GSupplicantInterface *interface,
 					GSupplicantSignalPollCallback callback,
 							void *user_data);
 bool g_supplicant_interface_has_p2p(GSupplicantInterface *interface);
+int g_supplicant_interface_set_p2p_device_config(GSupplicantInterface *interface,
+						const char *device_name);
 
 /* Network and Peer API */
 struct _GSupplicantNetwork;
