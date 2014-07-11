@@ -43,6 +43,7 @@ struct connman_dhcp {
 	struct connman_ipconfig *ipconfig;
 	struct connman_network *network;
 	dhcp_cb callback;
+	gpointer user_data;
 
 	char **nameservers;
 	char **timeservers;
@@ -164,13 +165,15 @@ static void dhcp_invalidate(struct connman_dhcp *dhcp, bool callback)
 		ipv4ll_stop_client(dhcp);
 
 	if (dhcp->callback && callback)
-		dhcp->callback(dhcp->ipconfig, dhcp->network, false, NULL);
+		dhcp->callback(dhcp->ipconfig, dhcp->network,
+						false, dhcp->user_data);
 }
 
 static void dhcp_valid(struct connman_dhcp *dhcp)
 {
 	if (dhcp->callback)
-		dhcp->callback(dhcp->ipconfig, dhcp->network, true, NULL);
+		dhcp->callback(dhcp->ipconfig, dhcp->network,
+						true, dhcp->user_data);
 }
 
 static void dhcp_debug(const char *str, void *data)
@@ -590,7 +593,8 @@ static int dhcp_release(struct connman_dhcp *dhcp)
 }
 
 int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
-			struct connman_network *network, dhcp_cb callback)
+			struct connman_network *network, dhcp_cb callback,
+			gpointer user_data)
 {
 	const char *last_addr = NULL;
 	struct connman_dhcp *dhcp;
@@ -636,6 +640,7 @@ int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 	}
 
 	dhcp->callback = callback;
+	dhcp->user_data = user_data;
 
 	return g_dhcp_client_start(dhcp->dhcp_client, last_addr);
 }
