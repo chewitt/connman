@@ -1011,6 +1011,53 @@ const char *g_supplicant_peer_get_name(GSupplicantPeer *peer)
 	return peer->name;
 }
 
+/*
+ * Description: Network client requires additional wifi specific info
+ */
+const unsigned char *g_supplicant_network_get_bssid(GSupplicantNetwork *network)
+{
+	if (!network || !network->best_bss)
+		return NULL;
+
+	return (const unsigned char *)network->best_bss->bssid;
+}
+
+unsigned int g_supplicant_network_get_maxrate(GSupplicantNetwork *network)
+{
+	if (!network || !network->best_bss)
+		return 0;
+
+	return network->best_bss->maxrate;
+}
+
+const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
+{
+	if (!network || !network->best_bss)
+		return NULL;
+
+	if (network->best_bss->security == G_SUPPLICANT_SECURITY_PSK ||
+	    network->best_bss->security == G_SUPPLICANT_SECURITY_IEEE8021X) {
+		unsigned int pairwise;
+
+		pairwise = network->best_bss->rsn_pairwise |
+				network->best_bss->wpa_pairwise;
+
+		if ((pairwise & G_SUPPLICANT_PAIRWISE_CCMP) &&
+		    (pairwise & G_SUPPLICANT_PAIRWISE_TKIP))
+			return "mixed";
+		else if (pairwise & G_SUPPLICANT_PAIRWISE_CCMP)
+			return "aes";
+		else if (pairwise & G_SUPPLICANT_PAIRWISE_TKIP)
+			return "tkip";
+
+	} else if (network->best_bss->security == G_SUPPLICANT_SECURITY_WEP)
+		return "wep";
+	else if (network->best_bss->security == G_SUPPLICANT_SECURITY_NONE)
+		return "none";
+
+	return NULL;
+}
+
 static void merge_network(GSupplicantNetwork *network)
 {
 	GString *str;

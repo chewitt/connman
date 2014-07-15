@@ -191,6 +191,32 @@ Properties	string State [readonly]
 			This property might be only present for WiFi
 			services.
 
+		string BSSID [readonly]
+
+			If the service type is WiFi, then this property
+			indicates the BSSID of the service.
+
+		uint32 MaxRate [readonly]
+
+			If the service type is WiFi, then this property
+			indicates the Maximum speed(bps) of the service.
+
+		uint16 Frequency [readonly]
+
+			If the service type is WiFi, then this property
+			indicates the frequency band(MHz) of the service.
+
+		string EncryptionMode [readonly]
+
+			If the service type is WiFi, then this property
+			indicates the key encryption mode.
+
+			Possible values are "none", "wep", "tkip", "aes"
+			and "mixed".
+
+			This property might be only present for WiFi
+			services.
+
 		uint8 Strength [readonly]
 
 			Indicates the signal strength of the service. This

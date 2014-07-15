@@ -41,6 +41,9 @@
  */
 #define RS_REFRESH_TIMEOUT	3
 
+#define WIFI_ENCYPTION_MODE_LEN_MAX 6
+#define WIFI_BSSID_LEN_MAX 6
+
 static GSList *network_list = NULL;
 static GSList *driver_list = NULL;
 
@@ -87,6 +90,9 @@ struct connman_network {
 		bool wps;
 		bool use_wps;
 		char *pin_wps;
+		char encryption_mode[WIFI_ENCYPTION_MODE_LEN_MAX];
+		unsigned char bssid[WIFI_BSSID_LEN_MAX];
+		unsigned int maxrate;
 	} wifi;
 
 };
@@ -1722,6 +1728,67 @@ int connman_network_set_ipaddress(struct connman_network *network,
 
 	return 0;
 }
+
+/*
+ * Description: Network client requires additional wifi specific info
+ */
+int connman_network_set_bssid(struct connman_network *network,
+				const unsigned char *bssid)
+{
+	int i = 0;
+
+	if (!bssid)
+		return -EINVAL;
+
+	DBG("network %p bssid %02x:%02x:%02x:%02x:%02x:%02x", network,
+			bssid[0], bssid[1], bssid[2],
+			bssid[3], bssid[4], bssid[5]);
+
+	for (;i < WIFI_BSSID_LEN_MAX;i++)
+		network->wifi.bssid[i] = bssid[i];
+
+	return 0;
+}
+
+unsigned char *connman_network_get_bssid(struct connman_network *network)
+{
+	return (unsigned char *)network->wifi.bssid;
+}
+
+int connman_network_set_maxrate(struct connman_network *network,
+				unsigned int maxrate)
+{
+	DBG("network %p maxrate %d", network, maxrate);
+
+	network->wifi.maxrate = maxrate;
+
+	return 0;
+}
+
+unsigned int connman_network_get_maxrate(struct connman_network *network)
+{
+	return network->wifi.maxrate;
+}
+
+int connman_network_set_enc_mode(struct connman_network *network,
+				const char *encryption_mode)
+{
+	if (!encryption_mode)
+		return -EINVAL;
+
+	DBG("network %p encryption mode %s", network, encryption_mode);
+
+	g_strlcpy(network->wifi.encryption_mode, encryption_mode,
+					WIFI_ENCYPTION_MODE_LEN_MAX);
+
+	return 0;
+}
+
+const char *connman_network_get_enc_mode(struct connman_network *network)
+{
+	return (const char *)network->wifi.encryption_mode;
+}
+
 
 int connman_network_set_nameservers(struct connman_network *network,
 				const char *nameservers)
