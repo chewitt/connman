@@ -117,6 +117,22 @@ int connman_network_set_nameservers(struct connman_network *network,
 				const char *nameservers);
 int connman_network_set_domain(struct connman_network *network,
 			             const char *domain);
+
+/*
+ * Description: Network client requires additional wifi specific info
+ */
+int connman_network_set_bssid(struct connman_network *network,
+				const unsigned char *bssid);
+unsigned char *connman_network_get_bssid(struct connman_network *network);
+
+int connman_network_set_maxrate(struct connman_network *network,
+				unsigned int maxrate);
+unsigned int connman_network_get_maxrate(struct connman_network *network);
+
+int connman_network_set_enc_mode(struct connman_network *network,
+				const char *encryption_mode);
+const char *connman_network_get_enc_mode(struct connman_network *network);
+
 int connman_network_set_name(struct connman_network *network,
 							const char *name);
 int connman_network_set_strength(struct connman_network *network,

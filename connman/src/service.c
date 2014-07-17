@@ -42,6 +42,8 @@
 // Maximum time between failed online checks is ONLINE_CHECK_RETRY_COUNT^2 seconds
 #define ONLINE_CHECK_RETRY_COUNT 12
 
+#define WIFI_BSSID_STR_LEN	18
+
 static DBusConnection *connection = NULL;
 
 static GList *service_list = NULL;
@@ -2516,6 +2518,35 @@ int __connman_service_iterate_services(service_iterate_cb cb, void *user_data)
 	return 0;
 }
 
+static void append_wifi_ext_info(DBusMessageIter *dict,
+					struct connman_network *network)
+{
+	char bssid_buff[WIFI_BSSID_STR_LEN] = {0,};
+	char *bssid_str = bssid_buff;
+	unsigned char *bssid;
+	unsigned int maxrate;
+	uint16_t frequency;
+	const char *enc_mode;
+
+	bssid = connman_network_get_bssid(network);
+	maxrate = connman_network_get_maxrate(network);
+	frequency = connman_network_get_frequency(network);
+	enc_mode = connman_network_get_enc_mode(network);
+
+	snprintf(bssid_str, WIFI_BSSID_STR_LEN, "%02x:%02x:%02x:%02x:%02x:%02x",
+				bssid[0], bssid[1], bssid[2],
+				bssid[3], bssid[4], bssid[5]);
+
+	connman_dbus_dict_append_basic(dict, "BSSID",
+					DBUS_TYPE_STRING, &bssid_str);
+	connman_dbus_dict_append_basic(dict, "MaxRate",
+					DBUS_TYPE_UINT32, &maxrate);
+	connman_dbus_dict_append_basic(dict, "Frequency",
+					DBUS_TYPE_UINT16, &frequency);
+	connman_dbus_dict_append_basic(dict, "EncryptionMode",
+					DBUS_TYPE_STRING, &enc_mode);
+}
+
 static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 					struct connman_service *service)
 {
@@ -2581,6 +2612,12 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 						append_ethernet, service);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
+		if (service->network != NULL)
+			append_wifi_ext_info(dict, service->network);
+
+		connman_dbus_dict_append_dict(dict, "Ethernet",
+						append_ethernet, service);
+		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_GADGET:
