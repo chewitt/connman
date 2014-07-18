@@ -2669,6 +2669,10 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 	connman_dbus_dict_append_dict(dict, "Provider",
 						append_provider, service);
+    
+    connman_dbus_dict_append_basic(dict, "Hidden",
+					DBUS_TYPE_BOOLEAN, &service->hidden_service);
+    
 }
 
 static void append_struct_service(DBusMessageIter *iter,

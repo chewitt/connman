@@ -217,6 +217,12 @@ Properties	string State [readonly]
 			This property might be only present for WiFi
 			services.
 
+		boolean Hidden [readonly]
+		
+			If the service type is WiFi, then this property
+			indicates this service does not broadcast it's SSID.
+			
+
 		uint8 Strength [readonly]
 
 			Indicates the signal strength of the service. This
