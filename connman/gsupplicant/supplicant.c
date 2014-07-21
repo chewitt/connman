@@ -1762,7 +1762,7 @@ static void update_signal(gpointer key, gpointer value,
 
 static void update_network_signal(GSupplicantNetwork *network)
 {
-	if (g_hash_table_size(network->bss_table) <= 1)
+	if (g_hash_table_size(network->bss_table) <= 1 && network->best_bss)
 		return;
 
 	g_hash_table_foreach(network->bss_table,
@@ -1775,6 +1775,7 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 {
 	GSupplicantInterface *interface = user_data;
 	GSupplicantNetwork *network;
+	struct g_supplicant_bss *bss = NULL;
 	const char *path = NULL;
 
 	dbus_message_iter_get_basic(iter, &path);
@@ -1784,6 +1785,12 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 	network = g_hash_table_lookup(interface->bss_mapping, path);
 	if (!network)
 		return;
+
+	bss = g_hash_table_lookup(network->bss_table, path);
+	if (network->best_bss == bss) {
+		network->best_bss = NULL;
+		network->signal = 0;
+	}
 
 	g_hash_table_remove(bss_mapping, path);
 
