@@ -2370,47 +2370,53 @@ static void __connman_service_counter_append(const char *counter, struct connman
 
     dbus_message_iter_init_append(msg, &array);
 
+    bool registered = false;
+
     struct connman_stats_data data;
+    struct connman_stats_data *dataPointer = 0;
 
-    bzero(&data, sizeof(data));
-    if (__connman_stats_get(service, FALSE, &data) == 0) {
-        // Stats already loaded
 
-        // home counter
-        connman_dbus_dict_open(&array, &dict);
-        stats_append_counters(&dict, &data, &data, TRUE);
-        connman_dbus_dict_close(&array, &dict);
-
-        // roaming counter
-        connman_dbus_dict_open(&array, &dict);
-
-        bzero(&data, sizeof(data));
-        if (__connman_stats_get(service, TRUE, &data) == 0)
-            stats_append_counters(&dict, &data, &data, TRUE);
-
-        connman_dbus_dict_close(&array, &dict);
+    if (service->stats.valid) {
+        dataPointer = &service->stats.data;
     } else {
-        __connman_stats_service_register(service);
+        bzero(&data, sizeof(data));
 
-        // home counter
-        connman_dbus_dict_open(&array, &dict);
+        if (__connman_stats_get(service, FALSE, &data) == 0) {
+            dataPointer = &data;
+        } else {
+            __connman_stats_service_register(service);
+            registered = true;
+            if (__connman_stats_get(service, FALSE, &data) == 0)
+                dataPointer = &data;
+        }
+    }
+
+    // home counter
+    connman_dbus_dict_open(&array, &dict);
+    if (dataPointer)
+        stats_append_counters(&dict, dataPointer, dataPointer, TRUE);
+    connman_dbus_dict_close(&array, &dict);
+
+    if (service->stats_roaming.valid) {
+        dataPointer = &service->stats_roaming.data;
+    } else {
+        bzero(&data, sizeof(data));
 
         if (__connman_stats_get(service, FALSE, &data) == 0)
-            stats_append_counters(&dict, &data, &data, TRUE);
-
-        connman_dbus_dict_close(&array, &dict);
-
-        // roaming counter
-        connman_dbus_dict_open(&array, &dict);
-
-        bzero(&data, sizeof(data));
-        if (__connman_stats_get(service, TRUE, &data) == 0)
-            stats_append_counters(&dict, &data, &data, TRUE);
-
-        connman_dbus_dict_close(&array, &dict);
-
-        __connman_stats_service_unregister(service);
+            dataPointer = &data;
+        else
+            dataPointer = 0;
     }
+
+    // roaming counter
+    connman_dbus_dict_open(&array, &dict);
+    if (dataPointer)
+        stats_append_counters(&dict, dataPointer, dataPointer, TRUE);
+    connman_dbus_dict_close(&array, &dict);
+
+
+    if (registered)
+        __connman_stats_service_unregister(service);
 
     __connman_counter_send_usage(counter, msg);
 }
@@ -2425,14 +2431,11 @@ void __connman_service_counter_send_initial(const char *counter)
         return;
 
     for (i = 0; services[i] != NULL; i++) {
-
         struct connman_service *service =  g_hash_table_lookup(service_hash, services[i]);
-        if (!service) {
+        if (!service)
             __connman_service_counter_append_saved(counter, services[i]);
-            continue;
-        }
-
-        __connman_service_counter_append(counter, service);
+        else if (!is_connected(service))
+            __connman_service_counter_append(counter, service);
     }
     g_strfreev(services);
 }
