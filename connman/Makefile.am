@@ -11,7 +11,7 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/device.h include/network.h include/inet.h \
 			include/storage.h include/provision.h \
 			include/session.h include/ipaddress.h include/agent.h \
-			include/inotify.h include/peer.h
+			include/inotify.h include/peer.h include/wakeup_timer.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -105,11 +105,12 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
 			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c
+			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
+			src/wakeup_timer.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-			-lresolv -ldl -lrt
+			@IPHB_LIBS@ -lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
@@ -200,7 +201,8 @@ AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
 src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
-				@GNUTLS_CFLAGS@ $(builtin_cflags) \
+				@GNUTLS_CFLAGS@ @IPHB_CFLAGS@ \
+				$(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
@@ -303,10 +305,11 @@ tools_wpad_test_LDADD = @GLIB_LIBS@ -lresolv
 
 tools_stats_tool_LDADD = @GLIB_LIBS@
 
-tools_dhcp_test_SOURCES = $(gdhcp_sources) tools/dhcp-test.c
+tools_dhcp_test_SOURCES = $(gdhcp_sources) src/wakeup_timer.c tools/dhcp-test.c
 tools_dhcp_test_LDADD = @GLIB_LIBS@
 
-tools_dhcp_server_test_SOURCES = $(gdhcp_sources) tools/dhcp-server-test.c
+tools_dhcp_server_test_SOURCES = $(gdhcp_sources) src/wakeup_timer.c \
+					tools/dhcp-server-test.c
 tools_dhcp_server_test_LDADD = @GLIB_LIBS@
 
 tools_dbus_test_SOURCES = tools/dbus-test.c

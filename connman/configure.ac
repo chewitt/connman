@@ -66,6 +66,21 @@ AC_ARG_ENABLE(jolla-gps,
 			[enable_jolla_gps=${enableval}], [enable_jolla_gps="no"])
 AM_CONDITIONAL(JOLLA_GPS, test "${enable_jolla_gps}" != "no")
 
+AC_ARG_ENABLE(jolla_wakeup_timer, AC_HELP_STRING([--enable-jolla-wakeup-timer],
+				   [enable Jolla wakeup timer support]),
+					[enable_jolla_wakeup_timer=${enableval}])
+AM_CONDITIONAL(JOLLA_WAKEUP_TIMER, test "${enable_jolla_wakeup_timer}" != "no")
+
+if (test "${enable_jolla_wakeup_timer}" != "no"); then
+	PKG_CHECK_MODULES(IPHB, libiphb, dummy=yes,
+				AC_MSG_ERROR(IPHB library is required))
+else
+	IPHB_CFLAGS=""
+	IPHB_LIBS=""
+fi
+AC_SUBST(IPHB_CFLAGS)
+AC_SUBST(IPHB_LIBS)
+
 AC_ARG_ENABLE(systemd, 
 	AC_HELP_STRING([--enable-systemd],
 			[enable systemd notify on start]), [
