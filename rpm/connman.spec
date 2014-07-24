@@ -15,6 +15,7 @@ Requires:   ofono
 Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
+Requires:   libiphb
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -27,6 +28,7 @@ BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
+BuildRequires:  libiphb-devel
 
 %description
 Connection Manager provides a daemon for managing Internet connections
