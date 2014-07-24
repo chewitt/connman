@@ -2461,6 +2461,9 @@ static void peer_lost(GSupplicantPeer *peer)
 	struct connman_peer *connman_peer;
 	const char *identifier;
 
+	if (!wifi)
+		return;
+
 	identifier = g_supplicant_peer_get_identifier(peer);
 
 	DBG("ident: %s", identifier);
