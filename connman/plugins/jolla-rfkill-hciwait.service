@@ -1,0 +1,15 @@
+#
+# Wait unti a BT HCI adapter is available.
+#
+
+[Unit]
+Description=Wait for Bluetooth HCI adapter
+Before=connman.service
+After=dbus.socket
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/jolla-rfkill-hciwait
+
+[Install]
+WantedBy=multi-user.target
