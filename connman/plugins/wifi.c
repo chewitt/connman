@@ -1279,11 +1279,8 @@ static int wifi_scan(enum connman_service_type type,
 			return 0;
 		}
 	} else {
-		ret = get_latest_connections(driver_max_ssids, scan_params);
-		if (ret <= 0) {
-			g_supplicant_free_scan_params(scan_params);
-			return wifi_scan_simple(device);
-		}
+		g_supplicant_free_scan_params(scan_params);
+		return wifi_scan_simple(device);
 	}
 
 	connman_device_ref(device);
