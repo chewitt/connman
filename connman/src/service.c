@@ -2402,7 +2402,7 @@ static void __connman_service_counter_append(const char *counter, struct connman
     } else {
         bzero(&data, sizeof(data));
 
-        if (__connman_stats_get(service, FALSE, &data) == 0)
+        if (__connman_stats_get(service, TRUE, &data) == 0)
             dataPointer = &data;
         else
             dataPointer = 0;
