@@ -2304,10 +2304,6 @@ int __connman_service_counter_register(const char *counter)
 
 static void __connman_service_counter_append_saved(const char *counter, const char *identifier)
 {
-    // Ignore saved cellular services. Only report usage for the currently active SIM
-    if (strncmp(identifier, "cellular_", 9) == 0)
-        return;
-
     struct connman_service *service = connman_service_create();
     if (service == NULL)
         return;
