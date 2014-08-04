@@ -325,6 +325,9 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 	int ns_entries;
 	int i;
 
+	if (!dhcp->network)
+		return true;
+
 	service = connman_service_lookup_from_network(dhcp->network);
 	if (!service) {
 		connman_error("Can not lookup service");
