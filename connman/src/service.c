@@ -2616,7 +2616,10 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 		connman_dbus_dict_append_dict(dict, "Ethernet",
 						append_ethernet, service);
-		break;
+
+        connman_dbus_dict_append_basic(dict, "Hidden",
+                        DBUS_TYPE_BOOLEAN, &service->hidden_service);
+        break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -2668,9 +2671,6 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 	connman_dbus_dict_append_dict(dict, "Provider",
 						append_provider, service);
-    
-    connman_dbus_dict_append_basic(dict, "Hidden",
-					DBUS_TYPE_BOOLEAN, &service->hidden_service);
     
 }
 
