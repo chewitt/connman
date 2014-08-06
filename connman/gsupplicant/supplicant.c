@@ -4933,6 +4933,10 @@ static const char *g_supplicant_rule5 = "type=signal,"
 			"interface=" SUPPLICANT_INTERFACE ".Network";
 static const char *g_supplicant_rule6 = "type=signal,"
 		"interface=" SUPPLICANT_INTERFACE ".Interface.P2PDevice";
+static const char *g_supplicant_rule7 = "type=signal,"
+		"interface=" SUPPLICANT_INTERFACE ".Peer";
+static const char *g_supplicant_rule8 = "type=signal,"
+		"interface=" SUPPLICANT_INTERFACE ".Group";
 
 static void invoke_introspect_method(void)
 {
@@ -4986,6 +4990,8 @@ int g_supplicant_register(const GSupplicantCallbacks *callbacks)
 	dbus_bus_add_match(connection, g_supplicant_rule4, NULL);
 	dbus_bus_add_match(connection, g_supplicant_rule5, NULL);
 	dbus_bus_add_match(connection, g_supplicant_rule6, NULL);
+	dbus_bus_add_match(connection, g_supplicant_rule7, NULL);
+	dbus_bus_add_match(connection, g_supplicant_rule8, NULL);
 	dbus_connection_flush(connection);
 
 	if (dbus_bus_name_has_owner(connection,
@@ -5027,6 +5033,8 @@ void g_supplicant_unregister(const GSupplicantCallbacks *callbacks)
 	SUPPLICANT_DBG("");
 
 	if (connection) {
+		dbus_bus_remove_match(connection, g_supplicant_rule8, NULL);
+		dbus_bus_remove_match(connection, g_supplicant_rule7, NULL);
 		dbus_bus_remove_match(connection, g_supplicant_rule6, NULL);
 		dbus_bus_remove_match(connection, g_supplicant_rule5, NULL);
 		dbus_bus_remove_match(connection, g_supplicant_rule4, NULL);
