@@ -4780,6 +4780,8 @@ static void interface_p2p_connect_result(const char *error,
 		data->callback(err, data->interface, data->user_data);
 
 	g_free(data->path);
+	g_free(data->peer->wps_pin);
+	g_free(data->peer->path);
 	g_free(data->peer);
 	g_free(data);
 }
@@ -4847,7 +4849,7 @@ int g_supplicant_interface_p2p_connect(GSupplicantInterface *interface,
 		if (!peer)
 			return -ENODEV;
 
-		peer_params->path = peer->path;
+		peer_params->path = g_strdup(peer->path);
 	}
 
 	data = dbus_malloc0(sizeof(*data));
