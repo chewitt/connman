@@ -177,7 +177,6 @@ typedef struct _GSupplicantSignalPoll {
 typedef struct _GSupplicantScanParams GSupplicantScanParams;
 
 struct _GSupplicantPeerParams {
-	const char *identifier;
 	char *wps_pin;
 	char *path;
 };
