@@ -1965,9 +1965,6 @@ static void interface_added(GSupplicantInterface *interface)
 	}
 
 	connman_device_set_powered(wifi->device, true);
-
-	if (wifi->tethering)
-		return;
 }
 
 static bool is_idle(struct wifi_data *wifi)
