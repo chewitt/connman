@@ -88,6 +88,27 @@ AC_ARG_ENABLE(systemd,
 			CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
 fi])
 
+CONNMAN_SERVICE_REQUIRES=dbus.socket
+CONNMAN_SERVICE_AFTER=dbus.socket
+
+if (test "${enable_systemd}" != "no"); then
+   AC_ARG_ENABLE(jolla-rfkill,
+	AC_HELP_STRING([--enable-jolla-rfkill],
+			 [enable jolla rfkill support]),
+			 [enable_jolla_rfkill=${enableval}],
+			 [enable_jolla_rfkill="no"])
+
+   AM_CONDITIONAL(JOLLA_RFKILL, test "${enable_jolla_rfkill}" != "no")
+
+   if (test "${enable_jolla_rfkill}" != "no"); then
+      CONNMAN_SERVICE_REQUIRES=jolla-rfkill-hciwait.service
+      CONNMAN_SERVICE_AFTER=jolla-rfkill-hciwait.service
+   fi
+fi
+
+AC_SUBST(CONNMAN_SERVICE_REQUIRES)
+AC_SUBST(CONNMAN_SERVICE_AFTER)
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 
