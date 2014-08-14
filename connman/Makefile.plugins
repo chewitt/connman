@@ -58,18 +58,6 @@ builtin_modules += jolla_wakeup_timer
 builtin_sources += plugins/jolla_wakeup_timer.c
 endif
 
-if DATAFILES
-if SYSTEMD
-if JOLLA_RFKILL
-builtin_modules += jolla_rfkill
-builtin_sources += plugins/jolla-rfkill.c
-systemdunit_DATA += plugins/jolla-rfkill-hciwait.service
-plugins_jolla_rfkill_hciwait_SOURCES = plugins/jolla-rfkill-hciwait.c
-sbin_PROGRAMS += plugins/jolla-rfkill-hciwait
-endif
-endif
-endif
-
 if OFONO
 builtin_modules += ofono
 builtin_sources += plugins/mcc.h plugins/ofono.c

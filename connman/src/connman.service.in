@@ -1,7 +1,7 @@
 [Unit]
 Description=Connection service
-Requires=@CONNMAN_SERVICE_REQUIRES@
-After=@CONNMAN_SERVICE_AFTER@
+Requires=dbus.socket
+After=dbus.socket
 Before=remote-fs.target
 
 [Service]

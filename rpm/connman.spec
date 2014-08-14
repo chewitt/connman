@@ -16,7 +16,6 @@ Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
 Requires:   libiphb
-Requires:   bluez-libs
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -30,7 +29,6 @@ BuildRequires:  openvpn
 BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  libiphb-devel
-BuildRequires:  bluez-libs-devel
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -107,7 +105,6 @@ Documentation for connman.
     --enable-pacrunner=builtin \
     --enable-jolla-gps=builtin \
     --enable-jolla-wakeup-timer=builtin \
-    --enable-jolla-rfkill=builtin \
     --enable-client \
     --enable-test \
     --with-systemdunitdir=/%{_lib}/systemd/system \
@@ -135,12 +132,10 @@ cp -a %{SOURCE2} %{buildroot}%{_sysconfdir}/connman/
 
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/connman.service
-ln -s ../jolla-rfkill-hciwait.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/jolla-rfkill-hciwait.service
 
 %preun
 if [ "$1" -eq 0 ]; then
 systemctl stop connman.service || :
-systemctl stop jolla-rfkill-hciwait.service || :
 fi
 
 %post
@@ -162,8 +157,6 @@ systemctl daemon-reload || :
 /%{_lib}/systemd/system/network.target.wants/connman.service
 /%{_lib}/systemd/system/connman-vpn.service
 %{_datadir}/dbus-1/system-services/net.connman.vpn.service
-/%{_lib}/systemd/system/jolla-rfkill-hciwait.service
-/%{_lib}/systemd/system/network.target.wants/jolla-rfkill-hciwait.service
 
 %files devel
 %defattr(-,root,root,-)
