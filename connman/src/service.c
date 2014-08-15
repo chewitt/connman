@@ -4348,10 +4348,8 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 	//service->ignore = true;
 
 	err = __connman_service_disconnect(service);
-	if (err < 0) {
-		if (err != -EINPROGRESS)
-			return __connman_error_failed(msg, -err);
-	}
+	if (err < 0 && err != -EINPROGRESS)
+		return __connman_error_failed(msg, -err);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
