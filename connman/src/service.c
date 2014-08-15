@@ -5639,6 +5639,7 @@ static int service_indicate_state(struct connman_service *service)
 {
 	enum connman_service_state old_state, new_state;
 	struct connman_service *def_service;
+	enum connman_ipconfig_method method;
 	int result;
 
 	if (!service)
@@ -5678,14 +5679,26 @@ static int service_indicate_state(struct connman_service *service)
 	service->state = new_state;
 	state_changed(service);
 
-	if (new_state == CONNMAN_SERVICE_STATE_IDLE &&
-			old_state != CONNMAN_SERVICE_STATE_DISCONNECT) {
+	switch(new_state) {
+	case CONNMAN_SERVICE_STATE_UNKNOWN:
 
-		__connman_service_disconnect(service);
-	}
+		break;
 
-	if (new_state == CONNMAN_SERVICE_STATE_READY) {
-		enum connman_ipconfig_method method;
+	case CONNMAN_SERVICE_STATE_IDLE:
+		if (old_state != CONNMAN_SERVICE_STATE_DISCONNECT)
+			__connman_service_disconnect(service);
+
+		break;
+
+	case CONNMAN_SERVICE_STATE_ASSOCIATION:
+
+		break;
+
+	case CONNMAN_SERVICE_STATE_CONFIGURATION:
+
+		break;
+
+	case CONNMAN_SERVICE_STATE_READY:
 
 		service->new_service = false;
 
@@ -5735,7 +5748,13 @@ static int service_indicate_state(struct connman_service *service)
 		else if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 			vpn_auto_connect();
 
-	} else if (new_state == CONNMAN_SERVICE_STATE_DISCONNECT) {
+		break;
+
+	case CONNMAN_SERVICE_STATE_ONLINE:
+
+		break;
+
+	case CONNMAN_SERVICE_STATE_DISCONNECT:
 
 		reply_pending(service, ECONNABORTED);
 
@@ -5764,9 +5783,9 @@ static int service_indicate_state(struct connman_service *service)
 		downgrade_connected_services();
 
 		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-	}
+		break;
 
-	if (new_state == CONNMAN_SERVICE_STATE_FAILURE) {
+	case CONNMAN_SERVICE_STATE_FAILURE:
 		if (!service->connect_retry_timer) {
 			/* Schedule a retry, increasing timeout if necessary */
 			if (service->connect_retry_timer <
@@ -5789,7 +5808,11 @@ static int service_indicate_state(struct connman_service *service)
 					NULL) == -EINPROGRESS)
 			return 0;
 		service_complete(service);
-	} else
+
+		break;
+	}
+
+	if (new_state != CONNMAN_SERVICE_STATE_FAILURE)
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
 	service_list_sort();
