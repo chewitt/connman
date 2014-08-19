@@ -2154,7 +2154,7 @@ static void stats_append(struct connman_service *service,
 	DBusMessageIter array, dict;
 	DBusMessage *msg;
 
-	DBG("service %p counter %s", service, counter);
+    //DBG("service %p counter %s", service, counter);
 
 	msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
 	if (!msg)
@@ -2206,7 +2206,7 @@ static void stats_update(struct connman_service *service,
 	struct connman_stats_data *data = &stats->data;
 	unsigned int seconds;
 
-	DBG("service %p", service);
+//	DBG("service %p", service);
 
 	if (stats->valid) {
 		data->rx_packets += DELTA(rx_packets, data_last->rx_packets);
@@ -3291,7 +3291,7 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	DBusMessage *reply;
 	DBusMessageIter array, dict;
 
-	DBG("service %p", service);
+    //DBG("service %p", service);
 
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
@@ -4760,7 +4760,7 @@ static void service_append_added_foreach(gpointer data, gpointer user_data)
 		append_struct(service, iter);
 		g_hash_table_remove(services_notify->add, service->path);
 	} else {
-		DBG("changed %s", service->path);
+        //DBG("changed %s", service->path);
 
 		append_struct_service(iter, NULL, service);
 	}
@@ -4794,7 +4794,7 @@ static gboolean service_send_changed(gpointer data)
 {
 	DBusMessage *signal;
 
-	DBG("");
+    //DBG("");
 
 	services_notify->id = 0;
 

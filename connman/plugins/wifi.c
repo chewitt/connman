@@ -170,7 +170,7 @@ static void wifi_newlink(unsigned flags, unsigned change, void *user_data)
 	if (!wifi)
 		return;
 
-	DBG("index %d flags %d change %d", wifi->index, flags, change);
+    //DBG("index %d flags %d change %d", wifi->index, flags, change);
 
 	if ((wifi->flags & IFF_UP) != (flags & IFF_UP)) {
 		if (flags & IFF_UP)

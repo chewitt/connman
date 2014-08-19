@@ -437,10 +437,10 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 	if (stats->rx_packets == 0 && stats->tx_packets == 0)
 		return;
 
-	DBG("%s {RX} %llu packets %llu bytes", ifname,
-					stats->rx_packets, stats->rx_bytes);
-	DBG("%s {TX} %llu packets %llu bytes", ifname,
-					stats->tx_packets, stats->tx_bytes);
+//	DBG("%s {RX} %llu packets %llu bytes", ifname,
+//					stats->rx_packets, stats->rx_bytes);
+//	DBG("%s {TX} %llu packets %llu bytes", ifname,
+//					stats->tx_packets, stats->tx_bytes);
 
 	if (!ipdevice->config_ipv4 && !ipdevice->config_ipv6)
 		return;
@@ -483,7 +483,7 @@ void __connman_ipconfig_newlink(int index, unsigned short type,
 	bool lower_up = false, lower_down = false;
 	char *ifname;
 
-	DBG("index %d", index);
+//	DBG("index %d", index);
 
 	if (type == ARPHRD_LOOPBACK)
 		return;
@@ -1799,7 +1799,7 @@ void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
 	struct connman_ipaddress *append_addr = NULL;
 	const char *str;
 
-	DBG("");
+//	DBG("");
 
 	if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV4)
 		return;
@@ -1856,7 +1856,7 @@ void __connman_ipconfig_append_ipv6(struct connman_ipconfig *ipconfig,
 	struct connman_ipaddress *append_addr = NULL;
 	const char *str, *privacy;
 
-	DBG("");
+//	DBG("");
 
 	if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
 		return;
@@ -1914,7 +1914,7 @@ void __connman_ipconfig_append_ipv6config(struct connman_ipconfig *ipconfig,
 {
 	const char *str, *privacy;
 
-	DBG("");
+//	DBG("");
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)
@@ -1958,7 +1958,7 @@ void __connman_ipconfig_append_ipv4config(struct connman_ipconfig *ipconfig,
 {
 	const char *str;
 
-	DBG("");
+//	DBG("");
 
 	str = __connman_ipconfig_method2string(ipconfig->method);
 	if (!str)
