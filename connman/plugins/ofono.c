@@ -1435,7 +1435,7 @@ static void netreg_update_strength(struct modem_data *modem,
 {
 	dbus_message_iter_get_basic(value, &modem->strength);
 
-	DBG("%s Strength %d", modem->path, modem->strength);
+//	DBG("%s Strength %d", modem->path, modem->strength);
 
 	if (!modem->network)
 		return;

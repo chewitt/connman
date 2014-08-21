@@ -436,8 +436,8 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 						address.ether_addr_octet[5]);
 
 	if (flags & IFF_SLAVE) {
-		DBG("%s {newlink} ignoring slave, index %d address %s",
-						ifname, index, str);
+	//	DBG("%s {newlink} ignoring slave, index %d address %s",
+	//					ifname, index, str);
 		return;
 	}
 
@@ -453,13 +453,13 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 		break;
 	}
 
-        DBG("%s {newlink} index %d address %s mtu %u",
-						ifname, index, str, mtu);
+//        DBG("%s {newlink} index %d address %s mtu %u",
+//						ifname, index, str, mtu);
 
-	if (operstate != 0xff)
-		DBG("%s {newlink} index %d operstate %u <%s>",
-						ifname, index, operstate,
-						operstate2str(operstate));
+//	if (operstate != 0xff)
+//		DBG("%s {newlink} index %d operstate %u <%s>",
+//						ifname, index, operstate,
+//						operstate2str(operstate));
 
 	interface = g_hash_table_lookup(interface_list, GINT_TO_POINTER(index));
 	if (!interface) {
@@ -1326,10 +1326,10 @@ static int send_request(struct rtnl_request *req)
 	struct sockaddr_nl addr;
 	int sk;
 
-	DBG("%s len %d type %d flags 0x%04x seq %d",
-				type2string(req->hdr.nlmsg_type),
-				req->hdr.nlmsg_len, req->hdr.nlmsg_type,
-				req->hdr.nlmsg_flags, req->hdr.nlmsg_seq);
+//	DBG("%s len %d type %d flags 0x%04x seq %d",
+//				type2string(req->hdr.nlmsg_type),
+//				req->hdr.nlmsg_len, req->hdr.nlmsg_type,
+//				req->hdr.nlmsg_flags, req->hdr.nlmsg_seq);
 
 	sk = g_io_channel_unix_get_fd(channel);
 
@@ -1354,7 +1354,7 @@ static int process_response(guint32 seq)
 {
 	struct rtnl_request *req;
 
-	DBG("seq %d", seq);
+//	DBG("seq %d", seq);
 
 	req = find_request(seq);
 	if (req) {
@@ -1371,7 +1371,7 @@ static int process_response(guint32 seq)
 
 static void rtnl_message(void *buf, size_t len)
 {
-	DBG("buf %p len %zd", buf, len);
+//	DBG("buf %p len %zd", buf, len);
 
 	while (len > 0) {
 		struct nlmsghdr *hdr = buf;
@@ -1380,11 +1380,11 @@ static void rtnl_message(void *buf, size_t len)
 		if (!NLMSG_OK(hdr, len))
 			break;
 
-		DBG("%s len %d type %d flags 0x%04x seq %d pid %d",
-					type2string(hdr->nlmsg_type),
-					hdr->nlmsg_len, hdr->nlmsg_type,
-					hdr->nlmsg_flags, hdr->nlmsg_seq,
-					hdr->nlmsg_pid);
+//		DBG("%s len %d type %d flags 0x%04x seq %d pid %d",
+//					type2string(hdr->nlmsg_type),
+//					hdr->nlmsg_len, hdr->nlmsg_type,
+//					hdr->nlmsg_flags, hdr->nlmsg_seq,
+//					hdr->nlmsg_pid);
 
 		switch (hdr->nlmsg_type) {
 		case NLMSG_NOOP:
@@ -1468,7 +1468,7 @@ static int send_getlink(void)
 {
 	struct rtnl_request *req;
 
-	DBG("");
+//	DBG("");
 
 	req = g_try_malloc0(RTNL_REQUEST_SIZE);
 	if (!req)
