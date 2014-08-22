@@ -3886,9 +3886,6 @@ static bool is_ignore(struct connman_service *service)
 	if (!service->autoconnect)
 		return true;
 
-	if (service->roaming)
-		return true;
-
 	if (service->ignore)
 		return true;
 
