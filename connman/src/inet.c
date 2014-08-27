@@ -231,11 +231,15 @@ char *connman_inet_ifname(int index)
 	ifr.ifr_ifindex = index;
 
 	err = ioctl(sk, SIOCGIFNAME, &ifr);
+	if (err < 0)
+		err = -errno;
 
 	close(sk);
 
-	if (err < 0)
+	if (err < 0) {
+		connman_error("%s: %s", __func__, strerror(-err));
 		return NULL;
+	}
 
 	return g_strdup(ifr.ifr_name);
 }
