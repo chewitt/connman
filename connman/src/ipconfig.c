@@ -1779,6 +1779,9 @@ int __connman_ipconfig_ipv6_reset_privacy(struct connman_ipconfig *ipconfig)
 	struct connman_ipdevice *ipdevice;
 	int err;
 
+	if (!ipconfig)
+		return -EINVAL;
+
 	ipdevice = g_hash_table_lookup(ipdevice_hash,
 						GINT_TO_POINTER(ipconfig->index));
 	if (!ipdevice)
