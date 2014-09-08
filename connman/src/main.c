@@ -532,8 +532,7 @@ static GOptionEntry options[] = {
 				G_OPTION_ARG_NONE, &option_backtrace,
 				"Don't print out backtrace information" },
 #ifdef SYSTEMD
-	{ "systemd", 0, G_OPTION_FLAG_OPTIONAL_ARG,
-				G_OPTION_ARG_NONE, &option_systemd,
+	{ "systemd", 0, 0, G_OPTION_ARG_NONE, &option_systemd,
 				"Notify systemd when started"},
 #endif
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
