@@ -29,6 +29,12 @@
  *
  * Try not to schedule wakeups too often as it can be expensive; use a
  * large granularity in calculating the next scheduling.
+ *
+ * Because Glib uses CLOCK_MONOTONIC for its time counting purposes
+ * and that clock doesn't advance in suspend, keep track of timeouts
+ * in CLOCK_BOOTTIME and execute them from this code as
+ * needed. Timeout execution is driven by a Glib timer which gets
+ * re-created when we come out of suspend so that it stays on time.
  */
 
 #include <time.h>
@@ -57,10 +63,11 @@
 
 struct wakeup_context {
 	gboolean initialized;
-	iphb_t handle;
 	GList *timeouts;
-	guint source; /* unixfd source for iphb fd */
+	iphb_t wakeup_handle;
+	guint wakeup_source; /* unixfd source for iphb fd */
 	time_t wakeup_time;
+	guint timer_source; /* timer for the next timeout to trigger */
 };
 
 struct wakeup_timeout {
@@ -78,42 +85,51 @@ static struct wakeup_context context = {
 	NULL,
 	NULL,
 	0,
+	0,
 	0
 };
 
 static void wakeup_reschedule(void);
 
+static void timer_reschedule(gboolean remove_source);
+
 static gboolean wakeup_wakeup(gint fd, GIOCondition cnd, gpointer data);
 
 static void iphb_cleanup(void)
 {
-	if (context.source) {
-		g_source_remove(context.source);
-		context.source = 0;
+	if (context.wakeup_source) {
+		g_source_remove(context.wakeup_source);
+		context.wakeup_source = 0;
 	}
 
-	if (context.handle)
-		context.handle = iphb_close(context.handle);
+	if (context.wakeup_handle)
+		context.wakeup_handle = iphb_close(context.wakeup_handle);
+
+	if (context.timer_source) {
+		g_source_remove(context.timer_source);
+		context.timer_source = 0;
+	}
+
 }
 
 static int iphb_setup(void)
 {
 	int r = 0, fd = -1;
 
-	if (context.handle) {
+	if (context.wakeup_handle) {
 		/* already set up, no op */
 		goto out;
 	}
 
-	context.handle = iphb_open(NULL);
-	if (context.handle == NULL) {
+	context.wakeup_handle = iphb_open(NULL);
+	if (context.wakeup_handle == NULL) {
 		connman_warn("Cannot initialize IPHB handle: %s(%d).",
 				strerror(errno), errno);
 		r = -errno;
 		goto error;
 	}
 
-	fd = iphb_get_fd(context.handle);
+	fd = iphb_get_fd(context.wakeup_handle);
 	if (fd < 0) {
 		connman_warn("Cannot get IPHB fd: %s(%d).",
 				strerror(errno), errno);
@@ -121,11 +137,11 @@ static int iphb_setup(void)
 		goto error;
 	}
 
-	context.source = g_unix_fd_add_full(G_PRIORITY_HIGH, fd,
+	context.wakeup_source = g_unix_fd_add_full(G_PRIORITY_HIGH, fd,
 						G_IO_IN | G_IO_HUP |
 						G_IO_ERR | G_IO_NVAL,
 						wakeup_wakeup, NULL, NULL);
-	if (!context.source) {
+	if (!context.wakeup_source) {
 		connman_warn("Cannot set up IPHB source.");
 		r = -EIO;
 		goto error;
@@ -150,6 +166,7 @@ static gboolean iphb_reestablish(gpointer user_data)
 		/* Ok, force reschedule and that's it */
 		context.wakeup_time = 0;
 		wakeup_reschedule();
+		timer_reschedule(TRUE);
 		return FALSE;
 	}
 
@@ -198,6 +215,22 @@ static void timespec_add(struct timespec *t1, struct timespec *t2)
 	t1->tv_sec += t2->tv_sec;
 }
 
+static void timespec_sub(struct timespec *t1, struct timespec *t2)
+{
+	if (timespec_cmp(t1, t2) < 0) { /* Clamp at 0.0 if t1 < t2 */
+		t1->tv_sec = 0;
+		t1->tv_nsec = 0;
+	} else {
+		if (t1->tv_nsec < t2->tv_nsec) {
+			t1->tv_nsec = t1->tv_nsec + 1000000000 - t2->tv_nsec;
+			t1->tv_sec--;
+		} else {
+			t1->tv_nsec -= t2->tv_nsec;
+		}
+		t1->tv_sec -= t2->tv_sec;
+	}
+}
+
 static gint timeout_compare(gconstpointer a, gconstpointer b)
 {
 	const struct wakeup_timeout *t1 = a;
@@ -231,6 +264,7 @@ static void timeout_record(struct wakeup_timeout *timeout)
 						timeout,
 						timeout_compare);
 	wakeup_reschedule();
+	timer_reschedule(TRUE);
 	debug_timeouts();
 }
 
@@ -241,11 +275,8 @@ static gboolean timeout_function_wrapper(gpointer user_data)
 
 	DBG("Timeout %p expired", timeout);
 
-	if (g_list_find(context.timeouts, timeout)) {
+	if (g_list_find(context.timeouts, timeout))
 		context.timeouts = g_list_remove(context.timeouts, timeout);
-		wakeup_reschedule();
-		debug_timeouts();
-	}
 
 	/* If the timeout is to be repeated, put it back to the
 	   bookkeeping list in the right position; if not, our
@@ -271,12 +302,79 @@ static void timeout_notify_wrapper(gpointer user_data)
 	if (g_list_find(context.timeouts, timeout)) {
 		context.timeouts = g_list_remove(context.timeouts, timeout);
 		wakeup_reschedule();
+		timer_reschedule(TRUE);
 		debug_timeouts();
 	}
 
 	if (timeout->notify)
 		(timeout->notify)(timeout->user_data);
 	g_free(timeout);
+}
+
+static gboolean timer_event(gpointer user_data)
+{
+	DBG("");
+	timer_reschedule(FALSE);
+	return FALSE;
+}
+
+static void timer_trigger_expired(void)
+{
+	struct timespec now;
+
+	DBG("");
+
+	clock_gettime(CLOCK_BOOTTIME, &now);
+
+	while (context.timeouts) {
+		struct wakeup_timeout *timeout = context.timeouts->data;
+
+		if (timespec_cmp(&timeout->trigger, &now) <= 0) {
+			timeout_function_wrapper(timeout);
+		}
+
+		break;
+	}
+}
+
+static void timer_reschedule(gboolean remove_source)
+{
+	DBG("Rescheduling event timer.");
+
+	timer_trigger_expired();
+
+	if (context.timer_source && remove_source) {
+		DBG("Removing stale timer source.");
+		g_source_remove(context.timer_source);
+	}
+
+	/* Schedule a glib timeout based on the closest item */
+	if (context.timeouts) {
+		struct timespec now;
+		struct timespec diff;
+		struct wakeup_timeout *timeout = context.timeouts->data;
+
+		clock_gettime(CLOCK_BOOTTIME, &now);
+		DBG("The time is now %lu.%lu; timeout expires at %lu.%lu.",
+			now.tv_sec, now.tv_nsec,
+			timeout->trigger.tv_sec, timeout->trigger.tv_nsec);
+
+		diff.tv_sec = timeout->trigger.tv_sec;
+		diff.tv_nsec = timeout->trigger.tv_nsec;
+		timespec_sub(&diff, &now);
+
+		DBG("Scheduling timeout %lu ms from now",
+				diff.tv_sec*1000 + diff.tv_nsec/1000000);
+
+		context.timer_source =
+			g_timeout_add_full(G_PRIORITY_DEFAULT,
+					diff.tv_sec*1000 + diff.tv_nsec/1000000,
+					timer_event,
+					NULL,
+					NULL);
+	} else {
+		context.timer_source = 0;
+	}
 }
 
 static void wakeup_reschedule(void)
@@ -300,8 +398,8 @@ static void wakeup_reschedule(void)
 			DBG("Scheduling IPHB wakeup %lu..%lu seconds from now.",
 				delta_min, delta_max);
 
-			iphb_I_woke_up(context.handle);
-			if (iphb_wait2(context.handle, delta_min, delta_max,
+			if (iphb_wait2(context.wakeup_handle,
+					delta_min, delta_max,
 					0, 1) < 0) {
 				connman_warn("Cannot schedule IPHB wait.");
 			}
@@ -315,18 +413,20 @@ static void wakeup_reschedule(void)
 
 	} else {
 		DBG("No timeouts left, clearing any pending IPHB wakeup.");
-		iphb_I_woke_up(context.handle);
+		iphb_wait2(context.wakeup_handle, 0, 0, 0, 0);
 		context.wakeup_time = 0;
 	}
 }
 
 static gboolean wakeup_wakeup(gint fd, GIOCondition cnd, gpointer data)
 {
-	/* Glib will execute timeouts now that we are awake; rescheduling
-	   will happen through that as needed. */
+	/* After suspend Glib timers based on CLOCK_MONOTONIC are
+	   stale, so reschedule. */
 
 	DBG("Woke up.");
-	iphb_discard_wakeups(context.handle);
+	iphb_discard_wakeups(context.wakeup_handle);
+	wakeup_reschedule();
+	timer_reschedule(TRUE);
 	debug_timeouts();
 
 	if ((cnd & G_IO_ERR) || (cnd & G_IO_HUP) || (cnd & G_IO_NVAL)) {
@@ -341,6 +441,13 @@ static gboolean wakeup_wakeup(gint fd, GIOCondition cnd, gpointer data)
 	return TRUE;
 }
 
+static gboolean dummy_dispatch(GSource *sourceptr,
+				GSourceFunc callback,
+				gpointer user_data)
+{
+	return callback(user_data);
+}
+
 static guint wakeup_timeout(gint priority,
 				guint interval,
 				GSourceFunc function,
@@ -348,29 +455,34 @@ static guint wakeup_timeout(gint priority,
 				GDestroyNotify notify,
 				gboolean use_seconds)
 {
+	static GSourceFuncs dummy_funcs = {
+		NULL, NULL, dummy_dispatch, NULL
+	};
 	struct wakeup_timeout *timeout = NULL;
+	GSource *sourceptr = NULL;
 
 	timeout = g_new0(struct wakeup_timeout, 1);
 	timeout->interval = use_seconds ? 1000*interval : interval;
 	timeout->function = function;
 	timeout->user_data = user_data;
 	timeout->notify = notify;
-	timeout->source =
-		use_seconds
-		? g_timeout_add_seconds_full(priority,
-						interval,
-						timeout_function_wrapper,
-						timeout,
-						timeout_notify_wrapper)
-		: g_timeout_add_full(priority,
-					interval,
-					timeout_function_wrapper,
-					timeout,
-					timeout_notify_wrapper)
-		;
 
+	/* The source is only for providing the caller a handle, so
+	   that the caller can cancel the timeout and we get notified
+	   of that. */
+	sourceptr = g_source_new(&dummy_funcs, sizeof(GSource));
+	if (sourceptr == NULL) {
+		connman_warn("Failed to create a dummy source.");
+		g_free(timeout);
+		return 0;
+	}
+
+	g_source_set_callback(sourceptr, NULL, timeout, timeout_notify_wrapper);
+
+	timeout->source = g_source_attach(sourceptr, NULL);
 	if (timeout->source == 0) {
 		connman_warn("Failed to create a timeout source.");
+		g_source_unref(sourceptr);
 		g_free(timeout);
 		return 0;
 	}
@@ -450,11 +562,9 @@ static void jolla_wakeup_timer_exit(void)
 
 	connman_wakeup_timer_unregister(&timer);
 
-	while (context.timeouts) {
-		/* Clean up back to front to avoid unneeded rescheduling */
-		struct wakeup_timeout *timeout =
-			g_list_last(context.timeouts)->data;
-		g_source_remove(timeout->source);
+	if (context.timeouts) {
+		g_list_free(context.timeouts);
+		context.timeouts = NULL;
 	}
 
 	iphb_cleanup();
