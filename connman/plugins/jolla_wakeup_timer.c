@@ -76,7 +76,7 @@ struct wakeup_timeout {
 	GSourceFunc function;
 	gpointer user_data;
 	GDestroyNotify notify;
-	guint source;
+	GSource *source;
 	time_t wakeup_time;
 };
 
@@ -91,7 +91,7 @@ static struct wakeup_context context = {
 
 static void wakeup_reschedule(void);
 
-static void timer_reschedule(gboolean remove_source);
+static void timer_reschedule(void);
 
 static gboolean wakeup_wakeup(gint fd, GIOCondition cnd, gpointer data);
 
@@ -166,7 +166,7 @@ static gboolean iphb_reestablish(gpointer user_data)
 		/* Ok, force reschedule and that's it */
 		context.wakeup_time = 0;
 		wakeup_reschedule();
-		timer_reschedule(TRUE);
+		timer_reschedule();
 		return FALSE;
 	}
 
@@ -264,7 +264,7 @@ static void timeout_record(struct wakeup_timeout *timeout)
 						timeout,
 						timeout_compare);
 	wakeup_reschedule();
-	timer_reschedule(TRUE);
+	timer_reschedule();
 	debug_timeouts();
 }
 
@@ -288,6 +288,7 @@ static gboolean timeout_function_wrapper(gpointer user_data)
 		timeout_record(timeout);
 	} else {
 		DBG("Timeout %p not repeating.", timeout);
+		g_source_remove(g_source_get_id(timeout->source));
 	}
 
 	return again;
@@ -302,20 +303,15 @@ static void timeout_notify_wrapper(gpointer user_data)
 	if (g_list_find(context.timeouts, timeout)) {
 		context.timeouts = g_list_remove(context.timeouts, timeout);
 		wakeup_reschedule();
-		timer_reschedule(TRUE);
+		timer_reschedule();
 		debug_timeouts();
 	}
 
 	if (timeout->notify)
 		(timeout->notify)(timeout->user_data);
-	g_free(timeout);
-}
 
-static gboolean timer_event(gpointer user_data)
-{
-	DBG("");
-	timer_reschedule(FALSE);
-	return FALSE;
+	g_source_unref(timeout->source);
+	g_free(timeout);
 }
 
 static void timer_trigger_expired(void)
@@ -337,15 +333,23 @@ static void timer_trigger_expired(void)
 	}
 }
 
-static void timer_reschedule(gboolean remove_source)
+static gboolean timer_event(gpointer user_data)
+{
+	DBG("");
+	context.timer_source = 0; /* this source is invalid after returning */
+	timer_trigger_expired();
+	timer_reschedule();
+	return FALSE;
+}
+
+static void timer_reschedule(void)
 {
 	DBG("Rescheduling event timer.");
 
-	timer_trigger_expired();
-
-	if (context.timer_source && remove_source) {
+	if (context.timer_source) {
 		DBG("Removing stale timer source.");
 		g_source_remove(context.timer_source);
+		context.timer_source = 0;
 	}
 
 	/* Schedule a glib timeout based on the closest item */
@@ -372,8 +376,6 @@ static void timer_reschedule(gboolean remove_source)
 					timer_event,
 					NULL,
 					NULL);
-	} else {
-		context.timer_source = 0;
 	}
 }
 
@@ -426,7 +428,7 @@ static gboolean wakeup_wakeup(gint fd, GIOCondition cnd, gpointer data)
 	DBG("Woke up.");
 	iphb_discard_wakeups(context.wakeup_handle);
 	wakeup_reschedule();
-	timer_reschedule(TRUE);
+	timer_reschedule();
 	debug_timeouts();
 
 	if ((cnd & G_IO_ERR) || (cnd & G_IO_HUP) || (cnd & G_IO_NVAL)) {
@@ -459,7 +461,6 @@ static guint wakeup_timeout(gint priority,
 		NULL, NULL, dummy_dispatch, NULL
 	};
 	struct wakeup_timeout *timeout = NULL;
-	GSource *sourceptr = NULL;
 
 	timeout = g_new0(struct wakeup_timeout, 1);
 	timeout->interval = use_seconds ? 1000*interval : interval;
@@ -470,19 +471,19 @@ static guint wakeup_timeout(gint priority,
 	/* The source is only for providing the caller a handle, so
 	   that the caller can cancel the timeout and we get notified
 	   of that. */
-	sourceptr = g_source_new(&dummy_funcs, sizeof(GSource));
-	if (sourceptr == NULL) {
+	timeout->source = g_source_new(&dummy_funcs, sizeof(GSource));
+	if (timeout->source == NULL) {
 		connman_warn("Failed to create a dummy source.");
 		g_free(timeout);
 		return 0;
 	}
 
-	g_source_set_callback(sourceptr, NULL, timeout, timeout_notify_wrapper);
+	g_source_set_callback(timeout->source, NULL, timeout,
+					timeout_notify_wrapper);
 
-	timeout->source = g_source_attach(sourceptr, NULL);
-	if (timeout->source == 0) {
-		connman_warn("Failed to create a timeout source.");
-		g_source_unref(sourceptr);
+	if (g_source_attach(timeout->source, NULL) == 0) {
+		connman_warn("Failed to attach a source.");
+		g_source_unref(timeout->source);
 		g_free(timeout);
 		return 0;
 	}
@@ -490,7 +491,7 @@ static guint wakeup_timeout(gint priority,
 	DBG("Recording timeout %p", timeout);
 	timeout_record(timeout);
 
-	return timeout->source;
+	return g_source_get_id(timeout->source);
 }
 
 static guint wakeup_timeout_add(gint priority,
