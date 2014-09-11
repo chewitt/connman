@@ -255,7 +255,8 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl
 endif
 
-noinst_PROGRAMS += unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool
+noinst_PROGRAMS += unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool \
+			unit/test-jolla-wakeup-timer
 
 unit_test_pbkdf2_sha1_SOURCES = unit/test-pbkdf2-sha1.c \
 				src/shared/sha1.h src/shared/sha1.c
@@ -269,7 +270,13 @@ unit_test_ippool_SOURCES = src/log.c src/dbus.c src/ippool.c unit/test-ippool.c
 unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
-TESTS = unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool
+unit_test_jolla_wakeup_timer_SOURCES = unit/test-jolla-wakeup-timer.c \
+				src/log.c src/wakeup_timer.c \
+				plugins/jolla_wakeup_timer.c
+unit_test_jolla_wakeup_timer_LDADD = @GLIB_LIBS@ @IPHB_LIBS@ -lrt -ldl
+
+TESTS = unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool \
+		unit/test-jolla-wakeup-timer
 
 if WISPR
 noinst_PROGRAMS += tools/wispr
