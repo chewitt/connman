@@ -24,7 +24,11 @@
 #include <config.h>
 #endif
 
+#include <stdlib.h>
+#include <unistd.h>
+
 #include <glib.h>
+#include <iphbd/libiphb.h>
 
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #include "plugin.h"
@@ -45,6 +49,53 @@ extern int __connman_log_init(const char *program, const char *debug,
 static unsigned int timeouts_scheduled;
 static unsigned int timeouts_handled;
 
+/* Stub IPHB calls to allow unit testing in development environment */
+
+struct iphb_stub {
+	int pipe_fd[2]; /* Pipe to nowhere */
+};
+
+iphb_t iphb_open(int *dummy)
+{
+	struct iphb_stub *stub = NULL;
+
+	stub = g_new0(struct iphb_stub, 1);
+	g_assert(pipe(stub->pipe_fd) == 0);
+
+	return stub;
+}
+
+int iphb_get_fd(iphb_t iphbh)
+{
+	struct iphb_stub *stub = iphbh;
+
+	return stub->pipe_fd[0];
+}
+
+time_t iphb_wait2(iphb_t iphbh, unsigned mintime, unsigned maxtime,
+			int must_wait, int resume)
+{
+	return 0;
+}
+
+int iphb_discard_wakeups(iphb_t iphbh)
+{
+	return 0;
+}
+
+iphb_t iphb_close(iphb_t iphbh)
+{
+	struct iphb_stub *stub = iphbh;
+
+	if (stub->pipe_fd[0] >= 0)
+		close(stub->pipe_fd[0]);
+	if (stub->pipe_fd[1] >= 0)
+		close(stub->pipe_fd[1]);
+	g_free(stub);
+
+	return NULL;
+}
+
 static gboolean create_timeout_within_callback_cb(gpointer user_data)
 {
 	int i;
@@ -53,11 +104,12 @@ static gboolean create_timeout_within_callback_cb(gpointer user_data)
 
 	for (i = 0; i < CHUNK && timeouts_scheduled < MAX_COUNT; i++) {
 		timeouts_scheduled++;
-		connman_wakeup_timer(G_PRIORITY_DEFAULT,
-				g_test_rand_int_range(0, MAX_DELAY),
-				create_timeout_within_callback_cb,
-				NULL,
-				NULL);
+		g_assert(connman_wakeup_timer
+				(G_PRIORITY_DEFAULT,
+					g_test_rand_int_range(0, MAX_DELAY),
+					create_timeout_within_callback_cb,
+					NULL,
+					NULL) > 0);
 	}
 
 	timeouts_handled++;
@@ -75,11 +127,12 @@ static gboolean create_timeout_within_callback_seed(gpointer user_data)
 
 	for (i = 0; i < CHUNK && timeouts_scheduled < MAX_COUNT; i++) {
 		timeouts_scheduled++;
-		connman_wakeup_timer(G_PRIORITY_DEFAULT,
-				g_test_rand_int_range(0, MAX_DELAY),
-				create_timeout_within_callback_cb,
-				NULL,
-				NULL);
+		g_assert(connman_wakeup_timer
+				(G_PRIORITY_DEFAULT,
+					g_test_rand_int_range(0, MAX_DELAY),
+					create_timeout_within_callback_cb,
+					NULL,
+					NULL) > 0);
 	}
 
 	return FALSE;
@@ -95,7 +148,7 @@ static void create_timeout_within_callback(void)
 				g_test_verbose() ? "*" : NULL,
 				FALSE, FALSE,
 				"test-jolla-wakeup-timer", "1");
-	(__connman_builtin_jolla_wakeup_timer.init)();
+	g_assert((__connman_builtin_jolla_wakeup_timer.init)() == 0);
 
 	g_timeout_add(0, create_timeout_within_callback_seed, NULL);
 	g_main_loop_run(main_loop);

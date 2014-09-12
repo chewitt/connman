@@ -273,7 +273,7 @@ unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 unit_test_jolla_wakeup_timer_SOURCES = unit/test-jolla-wakeup-timer.c \
 				src/log.c src/wakeup_timer.c \
 				plugins/jolla_wakeup_timer.c
-unit_test_jolla_wakeup_timer_LDADD = @GLIB_LIBS@ @IPHB_LIBS@ -lrt -ldl
+unit_test_jolla_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 
 TESTS = unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool \
 		unit/test-jolla-wakeup-timer
