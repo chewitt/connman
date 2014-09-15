@@ -697,10 +697,10 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		g_web_parser_end_data(wp_context->wispr_parser);
 
-		if (wp_context->wispr_msg.message_type >= 0) {
-			if (wispr_manage_message(result, wp_context))
-				goto done;
-		}
+//		if (wp_context->wispr_msg.message_type >= 0) {
+//			if (wispr_manage_message(result, wp_context))
+//				goto done;
+//		}
 	}
 
 	status = g_web_result_get_status(result);
@@ -709,8 +709,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 	switch (status) {
 	case 200:
-		if (wp_context->wispr_msg.message_type >= 0)
-			break;
+//		if (wp_context->wispr_msg.message_type >= 0)
+//			break;
 
 		if (g_web_result_get_header(result, "X-ConnMan-Status",
 						&str)) {
