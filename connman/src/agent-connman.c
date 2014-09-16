@@ -664,6 +664,9 @@ static void request_connect_cb(/*connman_bool_t authentication_done,*/
 
 static void request_connect_reply(DBusMessage *reply, void *user_data)
 {
+    if (!reply)
+        return;
+
     DBusMessageIter iter;
     char *key;
 
