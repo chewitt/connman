@@ -3259,7 +3259,11 @@ int __connman_service_set_passphrase(struct connman_service *service,
 {
 	int err = 0;
 
-	if (service->immutable || service->hidden)
+	if (service->hidden)
+		return -EINVAL;
+
+	if (service->immutable &&
+			service->security != CONNMAN_SERVICE_SECURITY_8021X)
 		return -EINVAL;
 
 	err = check_passphrase(service, service->security, passphrase);
@@ -3526,6 +3530,7 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 	if (is_connecting_state(service, state) ||
 					is_connected_state(service, state))
 		__connman_network_clear_ipconfig(service->network, ipconfig);
+
 	__connman_ipconfig_unref(ipconfig);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
@@ -3533,13 +3538,16 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		service->ipconfig_ipv6 = new_ipconfig;
 
-	__connman_ipconfig_enable(new_ipconfig);
+	if (is_connecting_state(service, state) ||
+					is_connected_state(service, state))
+		__connman_ipconfig_enable(new_ipconfig);
 
 	if (new_state && new_method != old_method) {
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 			*new_state = service->state_ipv4;
 		else
 			*new_state = service->state_ipv6;
+
 		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
 
