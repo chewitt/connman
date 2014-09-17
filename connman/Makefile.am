@@ -276,7 +276,7 @@ unit_test_jolla_wakeup_timer_SOURCES = unit/test-jolla-wakeup-timer.c \
 unit_test_jolla_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 
 unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c
-unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -ldl
+unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
 TESTS = unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool \
 		unit/test-jolla-wakeup-timer unit/test-dnsproxy

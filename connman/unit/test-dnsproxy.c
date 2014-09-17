@@ -78,12 +78,44 @@ int socket(int domain, int type, int protocol)
 	return -1;
 }
 
+GResolv *g_resolv_new(int index)
+{
+	return NULL;
+}
+
+bool g_resolv_set_address_family(GResolv *resolv, int family)
+{
+	return FALSE;
+}
+
+bool g_resolv_add_nameserver(GResolv *resolv, const char *address,
+					uint16_t port, unsigned long flags)
+{
+	return FALSE;
+}
+
+guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
+				GResolvResultFunc func, gpointer user_data)
+{
+	return 0;
+}
+
 int __connman_agent_request_connection(void *user_data)
 {
 	return -1;
 }
 
+char *connman_inet_ifname(int index)
+{
+	return NULL;
+}
+
 int connman_inet_ifindex(const char *name)
+{
+	return -1;
+}
+
+int __connman_inet_get_interface_address(int index, int family, void *address)
 {
 	return -1;
 }
