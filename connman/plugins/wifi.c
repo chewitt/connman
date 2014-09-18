@@ -1880,7 +1880,8 @@ static void interface_removed(GSupplicantInterface *interface)
 	wifi = g_supplicant_interface_get_data(interface);
 
 	/* Set interface to null as it's being deallocated */
-	wifi->interface = NULL;
+	if (wifi)
+		wifi->interface = NULL;
 
 	if (wifi && wifi->tethering)
 		return;
