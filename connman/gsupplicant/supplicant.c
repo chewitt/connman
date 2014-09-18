@@ -2846,7 +2846,7 @@ static void interface_create_result(const char *error,
 	err = supplicant_dbus_property_get_all(path,
 					SUPPLICANT_INTERFACE ".Interface",
 					interface_create_property, data,
-					data->interface);
+					NULL);
 	if (err == 0)
 		return;
 
@@ -3055,7 +3055,7 @@ int g_supplicant_interface_remove(GSupplicantInterface *interface,
 						"RemoveInterface",
 						interface_remove_params,
 						interface_remove_result, data,
-						NULL);
+						interface);
 	if (ret < 0) {
 		g_free(data->path);
 		dbus_free(data);
