@@ -315,6 +315,9 @@ static void wifi_remove(struct connman_device *device)
 		connman_device_unref(wifi->device);
 	}
 
+	if (wifi->pending_network)
+		connman_network_unref(wifi->pending_network);
+
 	remove_networks(device, wifi);
 
 	connman_device_set_powered(device, false);
@@ -963,8 +966,10 @@ static int wifi_disable(struct connman_device *device)
 	wifi->connected = false;
 	wifi->disconnecting = false;
 
-	if (wifi->pending_network)
+	if (wifi->pending_network) {
+		connman_network_unref(wifi->pending_network);
 		wifi->pending_network = NULL;
+	}
 
 	stop_autoscan(device);
 
@@ -1515,7 +1520,7 @@ static int network_connect(struct connman_network *network)
 	ssid_init(ssid, network);
 
 	if (wifi->disconnecting) {
-		wifi->pending_network = network;
+		wifi->pending_network = connman_network_ref(network);
 		g_free(ssid);
 	} else {
 		wifi->network = connman_network_ref(network);
@@ -1559,6 +1564,7 @@ static void disconnect_callback(int result, GSupplicantInterface *interface,
 
 	if (wifi->pending_network) {
 		network_connect(wifi->pending_network);
+		connman_network_unref(wifi->pending_network);
 		wifi->pending_network = NULL;
 	}
 
