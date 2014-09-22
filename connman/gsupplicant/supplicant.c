@@ -3055,7 +3055,7 @@ int g_supplicant_interface_remove(GSupplicantInterface *interface,
 						"RemoveInterface",
 						interface_remove_params,
 						interface_remove_result, data,
-						interface);
+						NULL);
 	if (ret < 0) {
 		g_free(data->path);
 		dbus_free(data);
