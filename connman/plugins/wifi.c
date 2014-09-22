@@ -120,6 +120,15 @@ struct wifi_data {
 	unsigned int p2p_find_timeout;
 };
 
+struct wifi_tethering_info {
+	struct wifi_data *wifi;
+	struct connman_technology *technology;
+	char *ifname;
+	GSupplicantSSID *ssid;
+};
+
+static GSList *tethering_info_list = NULL;
+
 static GList *iface_list = NULL;
 
 static void start_autoscan(struct connman_device *device);
@@ -288,6 +297,7 @@ static void check_p2p_technology(void)
 static void wifi_remove(struct connman_device *device)
 {
 	struct wifi_data *wifi = connman_device_get_data(device);
+	GSList *t;
 
 	DBG("device %p wifi %p", device, wifi);
 
@@ -322,6 +332,12 @@ static void wifi_remove(struct connman_device *device)
 	g_free(wifi->autoscan);
 	g_free(wifi->identifier);
 	g_free(wifi);
+
+	for (t = tethering_info_list; t; t = t->next) {
+		struct wifi_tethering_info *info = t->data;
+		if (info->wifi == wifi)
+			info->wifi = NULL;
+	}
 }
 
 static bool is_duplicate(GSList *list, gchar *ssid, int ssid_len)
@@ -2169,13 +2185,6 @@ static void tech_remove(struct connman_technology *technology)
 	wifi_technology = NULL;
 }
 
-struct wifi_tethering_info {
-	struct wifi_data *wifi;
-	struct connman_technology *technology;
-	char *ifname;
-	GSupplicantSSID *ssid;
-};
-
 static GSupplicantSSID *ssid_ap_init(const char *ssid, const char *passphrase)
 {
 	GSupplicantSSID *ap;
@@ -2210,16 +2219,20 @@ static void ap_start_callback(int result, GSupplicantInterface *interface,
 	struct wifi_tethering_info *info = user_data;
 
 	DBG("result %d index %d bridge %s",
-		result, info->wifi->index, info->wifi->bridge);
+		result,
+		info->wifi ? info->wifi->index : -1,
+		info->wifi ? info->wifi->bridge : "");
 
-	if (result < 0) {
-		connman_inet_remove_from_bridge(info->wifi->index,
+	if (result < 0 || info->wifi == NULL) {
+		if (info->wifi)
+			connman_inet_remove_from_bridge(info->wifi->index,
 							info->wifi->bridge);
 		connman_technology_tethering_notify(info->technology, false);
 	}
 
 	g_free(info->ifname);
 	g_free(info);
+	tethering_info_list = g_slist_remove(tethering_info_list, info);
 }
 
 static void ap_create_callback(int result,
@@ -2231,14 +2244,16 @@ static void ap_create_callback(int result,
 	DBG("result %d ifname %s", result,
 				g_supplicant_interface_get_ifname(interface));
 
-	if (result < 0) {
-		connman_inet_remove_from_bridge(info->wifi->index,
+	if (result < 0 || info->wifi == NULL) {
+		if (info->wifi)
+			connman_inet_remove_from_bridge(info->wifi->index,
 							info->wifi->bridge);
 		connman_technology_tethering_notify(info->technology, false);
 
 		g_free(info->ifname);
 		g_free(info->ssid);
 		g_free(info);
+		tethering_info_list = g_slist_remove(tethering_info_list, info);
 		return;
 	}
 
@@ -2261,12 +2276,14 @@ static void sta_remove_callback(int result,
 
 	DBG("ifname %s result %d ", info->ifname, result);
 
-	if (result < 0) {
-		info->wifi->tethering = true;
+	if (result < 0 || info->wifi == NULL) {
+		if (info->wifi)
+			info->wifi->tethering = true;
 
 		g_free(info->ifname);
 		g_free(info->ssid);
 		g_free(info);
+		tethering_info_list = g_slist_remove(tethering_info_list, info);
 		return;
 	}
 
@@ -2347,6 +2364,8 @@ static int tech_set_tethering(struct connman_technology *technology,
 		}
 
 		info->wifi->tethering = true;
+
+		tethering_info_list = g_slist_prepend(tethering_info_list, info);
 
 		err = g_supplicant_interface_remove(interface,
 						sta_remove_callback,
