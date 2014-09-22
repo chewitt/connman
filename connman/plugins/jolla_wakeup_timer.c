@@ -272,6 +272,7 @@ static gboolean timeout_function_wrapper(gpointer user_data)
 {
 	struct wakeup_timeout *timeout = user_data;
 	gboolean again;
+	GSource *source;
 
 	DBG("Timeout %p expired", timeout);
 
@@ -282,14 +283,18 @@ static gboolean timeout_function_wrapper(gpointer user_data)
 	   bookkeeping list in the right position; if not, our
 	   GDestroyNotify wrapper will take care of cleanup when glib
 	   calls it. */
+
+	source = g_source_ref(timeout->source);
 	again = (timeout->function)(timeout->user_data);
 	if (again) {
 		DBG("Timeout %p repeating.", timeout);
 		timeout_record(timeout);
 	} else {
 		DBG("Timeout %p not repeating.", timeout);
-		g_source_remove(g_source_get_id(timeout->source));
+		if (!g_source_is_destroyed(source))
+			g_source_destroy(source);
 	}
+	g_source_unref(source);
 
 	return again;
 }
