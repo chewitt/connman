@@ -233,7 +233,6 @@ struct _GSupplicantPeer {
 	char *identifier;
 	unsigned int wps_capabilities;
 	GSList *groups;
-	bool groups_changed;
 	const GSupplicantInterface *current_group_iface;
 };
 
@@ -2590,14 +2589,15 @@ static void create_peer_identifier(GSupplicantPeer *peer)
 						peer->device_address[5]);
 }
 
-struct peer_group_data {
+struct peer_property_data {
 	GSupplicantPeer *peer;
 	GSList *old_groups;
+	bool groups_changed;
 };
 
 static void peer_groups_relation(DBusMessageIter *iter, void *user_data)
 {
-	struct peer_group_data *data = user_data;
+	struct peer_property_data *data = user_data;
 	GSupplicantPeer *peer = data->peer;
 	GSupplicantGroup *group;
 	const char *str = NULL;
@@ -2617,7 +2617,7 @@ static void peer_groups_relation(DBusMessageIter *iter, void *user_data)
 		peer->groups = g_slist_concat(elem, peer->groups);
 	} else {
 		peer->groups = g_slist_prepend(peer->groups, g_strdup(str));
-		peer->groups_changed = true;
+		data->groups_changed = true;
 	}
 }
 
@@ -2625,7 +2625,8 @@ static void peer_property(const char *key, DBusMessageIter *iter,
 							void *user_data)
 {
 	GSupplicantPeer *pending_peer;
-	GSupplicantPeer *peer = user_data;
+	struct peer_property_data *data = user_data;
+	GSupplicantPeer *peer = data->peer;
 
 	SUPPLICANT_DBG("key: %s", key);
 
@@ -2644,6 +2645,8 @@ static void peer_property(const char *key, DBusMessageIter *iter,
 				g_hash_table_remove(pending_peer_connection,
 						peer->path);
 			}
+
+			dbus_free(data);
 		}
 
 		return;
@@ -2675,23 +2678,21 @@ static void peer_property(const char *key, DBusMessageIter *iter,
 		if (wps_config & ~G_SUPPLICANT_WPS_CONFIG_PBC)
 			peer->wps_capabilities |= G_SUPPLICANT_WPS_PIN;
 	} else if (g_strcmp0(key, "Groups") == 0) {
-		struct peer_group_data data = {
-			.peer = peer,
-			.old_groups = peer->groups,
-		};
+		data->old_groups = peer->groups;
 		peer->groups = NULL;
 
 		supplicant_dbus_array_foreach(iter,
-						peer_groups_relation, &data);
-		if (g_slist_length(data.old_groups) > 0) {
-			g_slist_free_full(data.old_groups, g_free);
-			peer->groups_changed = true;
+						peer_groups_relation, data);
+		if (g_slist_length(data->old_groups) > 0) {
+			g_slist_free_full(data->old_groups, g_free);
+			data->groups_changed = true;
 		}
 	}
 }
 
 static void signal_peer_found(const char *path, DBusMessageIter *iter)
 {
+	struct peer_property_data *property_data;
 	GSupplicantInterface *interface;
 	const char *obj_path = NULL;
 	GSupplicantPeer *peer;
@@ -2719,16 +2720,20 @@ static void signal_peer_found(const char *path, DBusMessageIter *iter)
 	g_hash_table_insert(interface->peer_table, peer->path, peer);
 	g_hash_table_replace(peer_mapping, peer->path, interface);
 
+	property_data = dbus_malloc0(sizeof(struct peer_property_data));
+	property_data->peer = peer;
+
 	dbus_message_iter_next(iter);
 	if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_INVALID) {
-		supplicant_dbus_property_foreach(iter, peer_property, peer);
-		peer_property(NULL, NULL, peer);
+		supplicant_dbus_property_foreach(iter, peer_property,
+							property_data);
+		peer_property(NULL, NULL, property_data);
 		return;
 	}
 
 	supplicant_dbus_property_get_all(obj_path,
 					SUPPLICANT_INTERFACE ".Peer",
-					peer_property, peer, NULL);
+					peer_property, property_data, NULL);
 }
 
 static void signal_peer_lost(const char *path, DBusMessageIter *iter)
@@ -2756,6 +2761,7 @@ static void signal_peer_lost(const char *path, DBusMessageIter *iter)
 
 static void signal_peer_changed(const char *path, DBusMessageIter *iter)
 {
+	struct peer_property_data *property_data;
 	GSupplicantInterface *interface;
 	GSupplicantPeer *peer;
 
@@ -2771,13 +2777,16 @@ static void signal_peer_changed(const char *path, DBusMessageIter *iter)
 		return;
 	}
 
-	supplicant_dbus_property_foreach(iter, peer_property, peer);
-	if (!peer->groups_changed)
+	property_data = dbus_malloc0(sizeof(struct peer_property_data));
+	property_data->peer = peer;
+
+	supplicant_dbus_property_foreach(iter, peer_property, property_data);
+	if (!property_data->groups_changed)
 		return;
 
 	callback_peer_changed(peer, G_SUPPLICANT_PEER_GROUP_CHANGED);
 
-	peer->groups_changed = false;
+	dbus_free(property_data);
 }
 
 struct group_sig_data {
