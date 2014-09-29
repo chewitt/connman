@@ -1130,6 +1130,16 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 	return NULL;
 }
 
+const unsigned char *g_supplicant_peer_get_widi_ies(GSupplicantPeer *peer,
+								int *length)
+{
+	if (!peer || !length)
+		return NULL;
+
+	*length = peer->widi_ies_length;
+	return peer->widi_ies;
+}
+
 bool g_supplicant_peer_is_wps_pbc(GSupplicantPeer *peer)
 {
 	if (!peer)
