@@ -344,6 +344,7 @@ bool g_supplicant_peer_is_wps_pin(GSupplicantPeer *peer);
 bool g_supplicant_peer_is_in_a_group(GSupplicantPeer *peer);
 GSupplicantInterface *g_supplicant_peer_get_group_interface(GSupplicantPeer *peer);
 bool g_supplicant_peer_is_client(GSupplicantPeer *peer);
+bool g_supplicant_peer_has_requested_connection(GSupplicantPeer *peer);
 
 /*
  * Description: Network client requires additional wifi specific info
