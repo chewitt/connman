@@ -103,10 +103,10 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/storage.c src/dbus.c src/config.c \
 			src/technology.c src/counter.c src/ntp.c \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
-			src/stats.c src/iptables.c src/dnsproxy.c src/6to4.c \
+			src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
-			src/wakeup_timer.c
+			src/wakeup_timer.c src/jolla-stats.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \

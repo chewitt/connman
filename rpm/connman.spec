@@ -109,7 +109,6 @@ Documentation for connman.
     --enable-test \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
-    --enable-counter-wraparound
 
 make %{?jobs:-j%jobs}
 
