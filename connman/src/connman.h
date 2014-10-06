@@ -295,6 +295,17 @@ struct connman_ipconfig_ops {
 	void (*route_unset) (struct connman_ipconfig *ipconfig, const char *ifname);
 };
 
+struct connman_stats_data {
+	uint64_t rx_packets;
+	uint64_t tx_packets;
+	uint64_t rx_bytes;
+	uint64_t tx_bytes;
+	uint64_t rx_errors;
+	uint64_t tx_errors;
+	uint64_t rx_dropped;
+	uint64_t tx_dropped;
+};
+
 struct connman_ipconfig *__connman_ipconfig_create(int index,
 					enum connman_ipconfig_type type);
 
@@ -314,6 +325,8 @@ void *__connman_ipconfig_get_data(struct connman_ipconfig *ipconfig);
 void __connman_ipconfig_set_data(struct connman_ipconfig *ipconfig, void *data);
 
 int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig);
+gboolean __connman_ipconfig_get_stats(struct connman_ipconfig *ipconfig,
+				struct connman_stats_data *stats);
 
 void __connman_ipconfig_set_ops(struct connman_ipconfig *ipconfig,
 				const struct connman_ipconfig_ops *ops);
@@ -779,10 +792,7 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 		enum connman_service_state *new_state);
 
 void __connman_service_notify(struct connman_service *service,
-			uint64_t rx_packets, uint64_t tx_packets,
-			uint64_t rx_bytes, uint64_t tx_bytes,
-			uint64_t rx_error, uint64_t tx_error,
-			uint64_t rx_dropped, uint64_t tx_dropped);
+			const struct connman_stats_data *data);
 
 int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
@@ -852,27 +862,20 @@ int __connman_session_destroy(DBusMessage *msg);
 int __connman_session_init(void);
 void __connman_session_cleanup(void);
 
-struct connman_stats_data {
-        uint64_t rx_packets;
-        uint64_t tx_packets;
-        uint64_t rx_bytes;
-        uint64_t tx_bytes;
-        uint64_t rx_errors;
-        uint64_t tx_errors;
-        uint64_t rx_dropped;
-        uint64_t tx_dropped;
-        unsigned int time;
-};
-
 int __connman_stats_init(void);
 void __connman_stats_cleanup(void);
-int __connman_stats_service_register(struct connman_service *service);
-void __connman_stats_service_unregister(struct connman_service *service);
-int  __connman_stats_update(struct connman_service *service,
-				bool roaming,
-				struct connman_stats_data *data);
-int __connman_stats_get(struct connman_service *service,
-				bool roaming,
+
+struct connman_stats *__connman_stats_new(const char *identifier,
+							gboolean roaming);
+struct connman_stats *__connman_stats_new_existing(const char *identifier,
+							gboolean roaming);
+void __connman_stats_free(struct connman_stats *stats);
+void __connman_stats_reset(struct connman_stats *stats);
+void __connman_stats_update(struct connman_stats *stats,
+				const struct connman_stats_data *data);
+void __connman_stats_rebase(struct connman_stats *stats,
+				const struct connman_stats_data *data);
+void __connman_stats_get(struct connman_stats *stats,
 				struct connman_stats_data *data);
 
 int __connman_iptables_dump(const char *table_name);

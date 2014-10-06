@@ -66,14 +66,7 @@ struct connman_ipdevice {
 	unsigned int flags;
 	char *address;
 	uint16_t mtu;
-	uint64_t rx_packets;
-	uint64_t tx_packets;
-	uint64_t rx_bytes;
-	uint64_t tx_bytes;
-	uint64_t rx_errors;
-	uint64_t tx_errors;
-	uint64_t rx_dropped;
-	uint64_t tx_dropped;
+	struct connman_stats_data stats;
 
 	GSList *address_list;
 	char *ipv4_gateway;
@@ -433,6 +426,17 @@ static void update_stats(struct connman_ipdevice *ipdevice,
             const char *ifname, struct rtnl_link_stats64 *stats)
 {
 	struct connman_service *service;
+        struct connman_network *network;
+        int network_index;
+
+	ipdevice->stats.rx_packets = stats->rx_packets;
+	ipdevice->stats.tx_packets = stats->tx_packets;
+	ipdevice->stats.rx_bytes = stats->rx_bytes;
+	ipdevice->stats.tx_bytes = stats->tx_bytes;
+	ipdevice->stats.rx_errors = stats->rx_errors;
+	ipdevice->stats.tx_errors = stats->tx_errors;
+	ipdevice->stats.rx_dropped = stats->rx_dropped;
+	ipdevice->stats.tx_dropped = stats->tx_dropped;
 
 	if (stats->rx_packets == 0 && stats->tx_packets == 0)
 		return;
@@ -455,20 +459,35 @@ static void update_stats(struct connman_ipdevice *ipdevice,
 	if (!service)
 		return;
 
-	ipdevice->rx_packets = stats->rx_packets;
-	ipdevice->tx_packets = stats->tx_packets;
-	ipdevice->rx_bytes = stats->rx_bytes;
-	ipdevice->tx_bytes = stats->tx_bytes;
-	ipdevice->rx_errors = stats->rx_errors;
-	ipdevice->tx_errors = stats->tx_errors;
-	ipdevice->rx_dropped = stats->rx_dropped;
-	ipdevice->tx_dropped = stats->tx_dropped;
+        network = __connman_service_get_network(service);
+        if (!network)
+            return;
 
-	__connman_service_notify(service,
-				ipdevice->rx_packets, ipdevice->tx_packets,
-				ipdevice->rx_bytes, ipdevice->tx_bytes,
-				ipdevice->rx_errors, ipdevice->tx_errors,
-				ipdevice->rx_dropped, ipdevice->tx_dropped);
+        network_index = connman_network_get_index(network);
+        if (network_index != ipdevice->index) {
+		DBG("ignoring interface %d (%s), expecting %d",
+			ipdevice->index, ifname, network_index);
+		return;
+        }
+
+	__connman_service_notify(service, &ipdevice->stats);
+}
+
+gboolean __connman_ipconfig_get_stats(struct connman_ipconfig *ipconfig,
+				struct connman_stats_data *stats)
+{
+	struct connman_ipdevice *ipdevice;
+
+	if (!ipconfig || ipconfig->index < 0)
+		return false;
+
+	ipdevice = g_hash_table_lookup(ipdevice_hash,
+					GINT_TO_POINTER(ipconfig->index));
+	if (!ipdevice)
+		return false;
+
+	*stats = ipdevice->stats;
+	return true;
 }
 
 void __connman_ipconfig_newlink(int index, unsigned short type,
