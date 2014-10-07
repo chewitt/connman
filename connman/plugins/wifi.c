@@ -59,9 +59,6 @@
 #include <gsupplicant/gsupplicant.h>
 #include <gsupplicant/dbus.h>
 
-#define CONF_FILE "wifi.conf"
-#define WIFI_CONFIG_FILE CONFIGDIR "/" CONF_FILE
-
 #define CLEANUP_TIMEOUT   8	/* in seconds */
 #define INACTIVE_TIMEOUT  12	/* in seconds */
 #define FAVORITE_MAXIMUM_RETRIES 2
@@ -73,17 +70,6 @@
 #define P2P_CONNECTION_TIMEOUT 100
 #define P2P_LISTEN_PERIOD 500
 #define P2P_LISTEN_INTERVAL 2000
-
-static struct {
-	char *primary_dev_type;
-	char *secondary_dev_types;
-} wifi_settings = {
-	.primary_dev_type = NULL,
-	.secondary_dev_types = NULL,
-};
-
-#define CONF_PRIMARY_DEV_TYPE    "PrimaryDeviceType"
-#define CONF_SECONDARY_DEV_TYPES "SecondaryDeviceTypes"
 
 static struct connman_technology *wifi_technology = NULL;
 static struct connman_technology *p2p_technology = NULL;
@@ -2635,8 +2621,7 @@ static void p2p_support(GSupplicantInterface *interface)
 		hostname = "ConnMan";
 
 	g_supplicant_interface_set_p2p_device_config(interface,
-				hostname, wifi_settings.primary_dev_type,
-				wifi_settings.secondary_dev_types);
+							hostname, NULL, NULL);
 	connman_peer_driver_register(&peer_driver);
 }
 
@@ -3328,38 +3313,6 @@ done:
 		dbus_message_unref(reply);
 }
 
-static void load_wifi_settings(void)
-{
-	GKeyFile *keyfile;
-	char *str;
-
-	keyfile = g_key_file_new();
-
-	if (!g_key_file_load_from_file(keyfile, WIFI_CONFIG_FILE, 0, NULL))
-		goto out;
-
-	str = g_key_file_get_string(keyfile, "General",
-					CONF_PRIMARY_DEV_TYPE, NULL);
-	if (str)
-		wifi_settings.primary_dev_type = g_strchomp(str);
-
-	str =  g_key_file_get_string(keyfile, "General",
-					CONF_SECONDARY_DEV_TYPES, NULL);
-	if (str)
-		wifi_settings.secondary_dev_types = g_strchomp(str);
-out:
-	g_key_file_free(keyfile);
-}
-
-static void unload_wifi_settings(void)
-{
-	g_free(wifi_settings.primary_dev_type);
-	wifi_settings.primary_dev_type = NULL;
-
-	g_free(wifi_settings.secondary_dev_types);
-	wifi_settings.secondary_dev_types = NULL;
-}
-
 static int wifi_init(void)
 {
 	int err;
@@ -3381,8 +3334,6 @@ static int wifi_init(void)
 		return err;
 	}
 
-	load_wifi_settings();
-
 	return 0;
 }
 
@@ -3395,8 +3346,6 @@ static void wifi_exit(void)
 	g_supplicant_unregister(&callbacks);
 
 	connman_network_driver_unregister(&network_driver);
-
-	unload_wifi_settings();
 }
 
 CONNMAN_PLUGIN_DEFINE(wifi, "WiFi interface plugin", VERSION,
