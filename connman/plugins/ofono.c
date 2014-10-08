@@ -1928,6 +1928,7 @@ static gboolean sim_changed(DBusConnection *conn, DBusMessage *message,
 	struct modem_data *modem;
 	DBusMessageIter iter, value;
 	const char *key;
+	char *new_imsi;
 
 	modem = g_hash_table_lookup(modem_hash, path);
 	if (!modem)
@@ -1945,7 +1946,14 @@ static gboolean sim_changed(DBusConnection *conn, DBusMessage *message,
 	dbus_message_iter_recurse(&iter, &value);
 
 	if (g_str_equal(key, "SubscriberIdentity")) {
-		sim_update_imsi(modem, &value);
+		dbus_message_iter_get_basic(&value, &new_imsi);
+
+		if (g_strcmp0(modem->imsi,new_imsi) != 0) {
+			sim_update_imsi(modem, &value);
+
+			if (modem->device)
+				destroy_device(modem);
+		}
 
 		if (!ready_to_create_device(modem))
 			return TRUE;
