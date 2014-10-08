@@ -166,6 +166,9 @@ static int send_cancel_request(struct connman_agent *agent,
 {
 	DBusMessage *message;
 
+	if (!request->driver)
+		return 0;
+
 	DBG("send cancel req to %s %s", agent->owner, agent->path);
 
 	message = dbus_message_new_method_call(agent->owner,
