@@ -71,6 +71,8 @@ static GHashTable *bluetooth_devices = NULL;
 static GHashTable *bluetooth_networks = NULL;
 static GHashTable *pending_networks = NULL;
 
+static GSList *add_timeouts = NULL;
+
 static int pan_probe(struct connman_network *network)
 {
 	GHashTableIter iter;
@@ -779,7 +781,7 @@ done:
 	dbus_pending_call_unref(call);
 }
 
-static void add_adapter(DBusConnection *conn, const char *path)
+static void add_adapter_delayed(DBusConnection *conn, const char *path)
 {
 	DBusMessage *message;
 	DBusPendingCall *call;
@@ -808,6 +810,43 @@ static void add_adapter(DBusConnection *conn, const char *path)
 
 done:
 	dbus_message_unref(message);
+}
+
+struct add_adapter_data {
+	DBusConnection *conn;
+	char *path;
+	guint source;
+};
+
+static gboolean add_adapter_oneshot(gpointer data)
+{
+	struct add_adapter_data *d = data;
+	add_adapter_delayed(d->conn, d->path);
+	return FALSE;
+}
+
+static void add_adapter_cleanup(gpointer data)
+{
+	struct add_adapter_data *d = data;
+	add_timeouts = g_slist_remove(add_timeouts,
+				GUINT_TO_POINTER(d->source));
+	dbus_connection_unref(d->conn);
+	g_free(d->path);
+	g_free(d);
+}
+
+static void add_adapter(DBusConnection *conn, const char *path)
+{
+	struct add_adapter_data *d = g_new0(struct add_adapter_data, 1);
+	d->conn = dbus_connection_ref(conn);
+	d->path = g_strdup(path);
+	d->source = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT,
+					1,
+					add_adapter_oneshot,
+					d,
+					add_adapter_cleanup);
+	add_timeouts = g_slist_prepend(add_timeouts,
+					GUINT_TO_POINTER(d->source));
 }
 
 static gboolean adapter_added(DBusConnection *conn, DBusMessage *message,
@@ -1376,6 +1415,11 @@ static void bluetooth_exit(void)
 
 	connman_device_driver_unregister(&bluetooth_driver);
 	connman_network_driver_unregister(&pan_driver);
+
+	while (add_timeouts) {
+		guint source = GPOINTER_TO_UINT(add_timeouts->data);
+		g_source_remove(source);
+	}
 
 	dbus_connection_unref(connection);
 }
