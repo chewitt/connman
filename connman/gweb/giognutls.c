@@ -456,7 +456,8 @@ GIOChannel *g_io_channel_gnutls_new(int fd)
 						"NORMAL:%COMPAT", NULL);
 #else
 	gnutls_priority_set_direct(gnutls_channel->session,
-		"NORMAL:-VERS-TLS-ALL:+VERS-TLS1.0:+VERS-SSL3.0:%COMPAT", NULL);
+		"NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+VERS-TLS1.1:" \
+			"+VERS-TLS1.0:+VERS-SSL3.0:%COMPAT", NULL);
 #endif
 
 	gnutls_certificate_allocate_credentials(&gnutls_channel->cred);
