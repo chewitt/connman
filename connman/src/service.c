@@ -7283,6 +7283,8 @@ void __connman_service_remove_from_network(struct connman_network *network)
 	__connman_connection_gateway_remove(service,
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
+	stop_recurring_online_check(service);
+
 	connman_service_unref(service);
 }
 
