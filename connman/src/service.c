@@ -3657,7 +3657,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		stop_recurring_online_check(service);
 
-		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV4);
 		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV6);
 
 		service_save(service);
