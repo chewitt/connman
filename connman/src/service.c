@@ -6123,13 +6123,13 @@ int __connman_service_online_check_failed(struct connman_service *service,
 		redo_func = redo_wispr_ipv6;
 		break;
 	default:
-		return EAGAIN;
+		return -EAGAIN;
 	}
 
 	DBG("service %p type %d count %d", service, type, *online_check_count);
 
 	if (!__connman_service_is_connected_state(service, type))
-		return;
+		return 0;
 
 	/* Revert back to ready state */
 	switch (type) {
@@ -6152,7 +6152,7 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	DBG("Next online check for service %p type %d in %d seconds", service, type, timeout * timeout);
 	*online_check_timer = g_timeout_add_seconds(timeout * timeout, redo_func, connman_service_ref(service));
 
-	return EAGAIN;
+	return -EAGAIN;
 }
 
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
