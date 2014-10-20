@@ -683,6 +683,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	const char *str = NULL;
 	guint16 status;
 	gsize length;
+	bool skip_failed = false;
 
 	DBG("");
 
@@ -744,6 +745,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		wp_context->request_id = g_web_request_get(wp_context->web,
 				redirect, wispr_portal_web_result,
 				wispr_route_request, wp_context);
+		skip_failed = true;
 
 		break;
 	case 000:
@@ -770,7 +772,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	default:
 		break;
 	}
-	if (__connman_service_online_check_failed(wp_context->service,
+	if (!skip_failed && __connman_service_online_check_failed(wp_context->service,
 		wp_context->type) == 0) {
 		wispr_portal_error(wp_context);
 		free_connman_wispr_portal_context(wp_context);

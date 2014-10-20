@@ -6128,9 +6128,20 @@ int __connman_service_online_check_failed(struct connman_service *service,
 
 	DBG("service %p type %d count %d", service, type, *online_check_count);
 
+	if (!__connman_service_is_connected_state(service, type))
+		return;
+
 	/* Revert back to ready state */
-	if (service->state == CONNMAN_SERVICE_STATE_ONLINE)
-		g_idle_add(downgrade_func, service);
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		if (service->state_ipv4 == CONNMAN_SERVICE_STATE_ONLINE)
+			g_idle_add(downgrade_func, service);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		if (service->state_ipv6 == CONNMAN_SERVICE_STATE_ONLINE)
+			g_idle_add(downgrade_func, service);
+		break;
+	}
 
 	if (*online_check_count > 1)
 		--(*online_check_count);
@@ -6500,6 +6511,7 @@ int __connman_service_disconnect(struct connman_service *service)
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 
 	__connman_wispr_stop(service);
+	stop_recurring_online_check(service);
 
 	reply_pending(service, ECONNABORTED);
 
