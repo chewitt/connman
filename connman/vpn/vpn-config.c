@@ -460,7 +460,8 @@ static int read_configs(void)
 }
 
 static void config_notify_handler(struct inotify_event *event,
-                                        const char *ident)
+					const char *ident,
+					gpointer user_data)
 {
 	char *ext;
 
@@ -527,7 +528,7 @@ int __vpn_config_init(void)
 	config_table = g_hash_table_new_full(g_str_hash, g_str_equal,
 						NULL, unregister_config);
 
-	connman_inotify_register(dir, config_notify_handler);
+	connman_inotify_register(dir, config_notify_handler, NULL, NULL);
 
 	g_free(dir);
 
@@ -542,7 +543,7 @@ void __vpn_config_cleanup(void)
 
 	cleanup = true;
 
-	connman_inotify_unregister(dir, config_notify_handler);
+	connman_inotify_unregister(dir, config_notify_handler, NULL);
 
 	g_free(dir);
 

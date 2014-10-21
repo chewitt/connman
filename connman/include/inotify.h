@@ -25,10 +25,14 @@
 struct inotify_event;
 
 typedef void (* inotify_event_cb) (struct inotify_event *event,
-					const char *ident);
+					const char *ident,
+					gpointer user_data);
 
-int connman_inotify_register(const char *path, inotify_event_cb callback);
-void connman_inotify_unregister(const char *path, inotify_event_cb callback);
+int connman_inotify_register(const char *path, inotify_event_cb callback,
+				gpointer user_data,
+				GDestroyNotify free_func);
+void connman_inotify_unregister(const char *path, inotify_event_cb callback,
+				gpointer user_data);
 
 #ifdef __cplusplus
 }

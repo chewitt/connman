@@ -34,6 +34,12 @@
 
 #include "connman.h"
 
+struct connman_inotify_cb {
+	inotify_event_cb func;
+	gpointer user_data;
+	GDestroyNotify free_func;
+};
+
 struct connman_inotify {
 	GIOChannel *channel;
 	uint watch;
@@ -95,10 +101,12 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 		next_event += len;
 		bytes_read -= len;
 
-		for (list = inotify->list; list; list = list->next) {
-			inotify_event_cb callback = list->data;
+		for (list = inotify->list; list; ) {
+			struct connman_inotify_cb *cb = list->data;
+			GSList *next = list->next;
 
-			(*callback)(event, ident);
+			(cb->func)(event, ident, cb->user_data);
+			list = next;
 		}
 	}
 
@@ -163,9 +171,11 @@ static void remove_watch(struct connman_inotify *inotify)
 	g_io_channel_unref(inotify->channel);
 }
 
-int connman_inotify_register(const char *path, inotify_event_cb callback)
+int connman_inotify_register(const char *path, inotify_event_cb callback,
+				gpointer user_data, GDestroyNotify free_func)
 {
 	struct connman_inotify *inotify;
+	struct connman_inotify_cb *cb;
 	int err;
 
 	if (!callback)
@@ -190,30 +200,51 @@ int connman_inotify_register(const char *path, inotify_event_cb callback)
 	g_hash_table_replace(inotify_hash, g_strdup(path), inotify);
 
 update:
-	inotify->list = g_slist_prepend(inotify->list, callback);
+	cb = g_new0(struct connman_inotify_cb, 1);
+	cb->func = callback;
+	cb->user_data = user_data;
+	cb->free_func = free_func;
+	inotify->list = g_slist_prepend(inotify->list, cb);
 
 	return 0;
+}
+
+static void cleanup_inotify_cb(gpointer data)
+{
+	struct connman_inotify_cb *cb = data;
+	if (cb->free_func)
+		(cb->free_func)(cb->user_data);
+	g_free(cb);
 }
 
 static void cleanup_inotify(gpointer user_data)
 {
 	struct connman_inotify *inotify = user_data;
 
-	g_slist_free(inotify->list);
+	g_slist_free_full(inotify->list, cleanup_inotify_cb);
 
 	remove_watch(inotify);
 	g_free(inotify);
 }
 
-void connman_inotify_unregister(const char *path, inotify_event_cb callback)
+void connman_inotify_unregister(const char *path, inotify_event_cb callback,
+				gpointer user_data)
 {
 	struct connman_inotify *inotify;
+	GSList *l;
 
 	inotify = g_hash_table_lookup(inotify_hash, path);
 	if (!inotify)
 		return;
 
-	inotify->list = g_slist_remove(inotify->list, callback);
+	for (l = inotify->list; l; l = l->next) {
+		struct connman_inotify_cb *cb = l->data;
+		if (cb->func == callback && cb->user_data == user_data) {
+			cleanup_inotify_cb(cb);
+			inotify->list = g_slist_delete_link(inotify->list, l);
+			break;
+		}
+	}
 	if (inotify->list)
 		return;
 
