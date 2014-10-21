@@ -744,7 +744,7 @@ static int load_config(struct connman_config *config)
 			"configuration that can be provisioned!",
 			STORAGEDIR, config->ident);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return 0;
 }

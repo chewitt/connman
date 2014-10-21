@@ -205,7 +205,7 @@ static int set_duid(struct connman_service *service,
 
 		duid = g_try_malloc0(hex_duid_len / 2);
 		if (!duid) {
-			g_key_file_free(keyfile);
+			g_key_file_unref(keyfile);
 			g_free(hex_duid);
 			return -ENOMEM;
 		}
@@ -223,13 +223,13 @@ static int set_duid(struct connman_service *service,
 		ret = g_dhcpv6_create_duid(G_DHCPV6_DUID_LLT, index, type,
 					&duid, &duid_len);
 		if (ret < 0) {
-			g_key_file_free(keyfile);
+			g_key_file_unref(keyfile);
 			return ret;
 		}
 
 		hex_duid = convert_to_hex(duid, duid_len);
 		if (!hex_duid) {
-			g_key_file_free(keyfile);
+			g_key_file_unref(keyfile);
 			return -ENOMEM;
 		}
 
@@ -240,7 +240,7 @@ static int set_duid(struct connman_service *service,
 	}
 	g_free(hex_duid);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	g_dhcpv6_client_set_duid(dhcp_client, duid, duid_len);
 

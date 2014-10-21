@@ -362,7 +362,7 @@ static int load_config(struct vpn_config *config, char *path, enum what action)
 
 	g_strfreev(groups);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return 0;
 }

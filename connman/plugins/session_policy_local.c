@@ -411,7 +411,7 @@ err:
 	DBG("Unable to load %s: %s", pathname, error->message);
 	g_clear_error(&error);
 
-	g_key_file_free(*keyfile);
+	g_key_file_unref(*keyfile);
 	*keyfile = NULL;
 
 	return err;
@@ -648,7 +648,7 @@ static int load_file(const char *filename, struct policy_file *file)
 	if (err < 0)
 		g_slist_free_full(file->groups, cleanup_group);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return err;
 }

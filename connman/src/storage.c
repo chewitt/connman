@@ -54,11 +54,22 @@ static struct storage_dir_context storage = {
 	.subdirs = NULL
 };
 
+struct keyfile_record {
+	gchar *pathname;
+	GKeyFile *keyfile;
+};
+
+static GHashTable *keyfile_hash = NULL;
+
 static void storage_dir_cleanup(void);
 
 static void storage_inotify_subdir_cb(struct inotify_event *event,
 					const char *ident,
 					gpointer user_data);
+
+static void keyfile_inotify_cb(struct inotify_event *event,
+				const char *ident,
+				gpointer user_data);
 
 bool service_id_is_valid(const char *id)
 {
@@ -270,21 +281,101 @@ static void storage_dir_cleanup(void)
 	DBG("Cleanup done.");
 }
 
+static void keyfile_free(gpointer data)
+{
+	struct keyfile_record *record = data;
+	DBG("Freeing record %p for %s", record, record->pathname);
+	g_hash_table_remove(keyfile_hash, record->pathname);
+	g_key_file_unref(record->keyfile);
+	g_free(record->pathname);
+	g_free(record);
+}
+
+static void keyfile_unregister(gpointer data)
+{
+	struct keyfile_record *record = data;
+	char *str = g_strdup(record->pathname);
+	connman_inotify_unregister(str, keyfile_inotify_cb, record);
+	g_free(str);
+}
+
+static void keyfile_insert(const char *pathname, GKeyFile *keyfile)
+{
+	struct keyfile_record *record = g_new0(struct keyfile_record, 1);
+	record->pathname = g_strdup(pathname);
+	record->keyfile = g_key_file_ref(keyfile);
+	g_hash_table_insert(keyfile_hash, record->pathname, record);
+	connman_inotify_register(pathname, keyfile_inotify_cb, record,
+				keyfile_free);
+}
+
+static void keyfile_inotify_cb(struct inotify_event *event,
+				const char *ident,
+				gpointer user_data)
+{
+	struct keyfile_record *record = user_data;
+
+	if ((event->mask & IN_DELETE_SELF) || (event->mask & IN_MOVE_SELF) ||
+		(event->mask & IN_MODIFY) || (event->mask & IN_IGNORED)) {
+		DBG("File for record %p path %s changed, dropping from cache.",
+			record, record->pathname);
+		keyfile_unregister(record);
+		return;
+	}
+}
+
+static void keyfile_init(void)
+{
+	if (keyfile_hash)
+		return;
+
+	DBG("Creating keyfile hash.");
+	keyfile_hash = g_hash_table_new(g_str_hash, g_str_equal);
+}
+
+static void keyfile_cleanup(void)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+
+	if (!keyfile_hash)
+		return;
+
+	g_hash_table_iter_init(&iter, keyfile_hash);
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		g_hash_table_iter_steal(&iter);
+		keyfile_unregister(value);
+	}
+	g_hash_table_unref(keyfile_hash);
+	keyfile_hash = NULL;
+}
+
 static GKeyFile *storage_load(const char *pathname)
 {
-	GKeyFile *keyfile = NULL;
+	struct keyfile_record *record = NULL;
 	GError *error = NULL;
+	GKeyFile *keyfile = NULL;
 
 	DBG("Loading %s", pathname);
 
+	record = g_hash_table_lookup(keyfile_hash, pathname);
+	if (record) {
+		DBG("Found record %p for %s from cache.", record, pathname);
+		return g_key_file_ref(record->keyfile);
+        }
+
+	DBG("No keyfile in cache for %s", pathname);
 	keyfile = g_key_file_new();
 
 	if (!g_key_file_load_from_file(keyfile, pathname, 0, &error)) {
 		DBG("Unable to load %s: %s", pathname, error->message);
 		g_clear_error(&error);
 
-		g_key_file_free(keyfile);
+		g_key_file_unref(keyfile);
 		keyfile = NULL;
+	} else {
+		DBG("Storing record for %s into cache.", pathname);
+		keyfile_insert(pathname, keyfile);
 	}
 
 	return keyfile;
@@ -677,6 +768,7 @@ gchar **__connman_storage_get_providers(void)
 int __connman_storage_init(void)
 {
 	DBG("");
+	keyfile_init();
 	return 0;
 }
 
@@ -684,4 +776,5 @@ void __connman_storage_cleanup(void)
 {
 	DBG("");
 	storage_dir_cleanup();
+	keyfile_cleanup();
 }

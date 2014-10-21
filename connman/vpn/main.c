@@ -72,7 +72,7 @@ static GKeyFile *load_config(const char *file)
 		}
 
 		g_error_free(err);
-		g_key_file_free(keyfile);
+		g_key_file_unref(keyfile);
 		return NULL;
 	}
 
@@ -104,7 +104,7 @@ static int config_init(const char *file)
 	config = load_config(file);
 	parse_config(config, file);
 	if (config)
-		g_key_file_free(config);
+		g_key_file_unref(config);
 
 	return 0;
 }

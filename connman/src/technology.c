@@ -193,7 +193,7 @@ done:
 
 	__connman_storage_save_global(keyfile);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return;
 }
@@ -429,7 +429,7 @@ static void technology_load(struct connman_technology *technology)
 done:
 	g_free(identifier);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return;
 }
@@ -452,7 +452,7 @@ static void connman_technology_save_offlinemode(void)
 
 	__connman_storage_save_global(keyfile);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return;
 }
@@ -475,7 +475,7 @@ bool connman_technology_load_offlinemode(void)
 		g_clear_error(&error);
 	}
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return offlinemode;
 }
