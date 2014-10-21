@@ -498,3 +498,12 @@ gchar **__connman_storage_get_providers(void)
 
 	return providers;
 }
+
+int __connman_storage_init(void)
+{
+	return 0;
+}
+
+void __connman_storage_cleanup(void)
+{
+}
