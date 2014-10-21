@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <sys/inotify.h>
 
 #include <connman/storage.h>
 
@@ -38,6 +39,27 @@
 #define MODE		(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | \
 			S_IXGRP | S_IROTH | S_IXOTH)
 
+struct storage_subdir {
+	gchar *name;
+	gboolean has_settings;
+};
+
+struct storage_dir_context {
+	gboolean initialized;
+	GList *subdirs;
+};
+
+static struct storage_dir_context storage = {
+	.initialized = FALSE,
+	.subdirs = NULL
+};
+
+static void storage_dir_cleanup(void);
+
+static void storage_inotify_subdir_cb(struct inotify_event *event,
+					const char *ident,
+					gpointer user_data);
+
 bool service_id_is_valid(const char *id)
 {
 	char *check = g_strdup_printf("%s/service/%s", CONNMAN_PATH, id);
@@ -46,6 +68,206 @@ bool service_id_is_valid(const char *id)
 		DBG("Service ID '%s' is not valid.", id);
 	g_free(check);
 	return valid;
+}
+
+gboolean is_service_dir_name(const char *name)
+{
+	DBG("name %s", name);
+
+	if (strncmp(name, "provider_", 9) == 0 || !service_id_is_valid(name))
+		return FALSE;
+
+	return TRUE;
+}
+
+gboolean is_provider_dir_name(const char *name)
+{
+	DBG("name %s", name);
+
+	if (strncmp(name, "provider_", 9) == 0)
+		return TRUE;
+
+	return FALSE;
+}
+
+gint storage_subdir_cmp(gconstpointer a, gconstpointer b)
+{
+	const struct storage_subdir *d1 = a;
+	const struct storage_subdir *d2 = b;
+
+	DBG("name1 %s name2 %s", d1->name, d2->name);
+
+	return g_strcmp0(d1->name, d2->name);
+}
+
+static void storage_subdir_free(gpointer data)
+{
+	struct storage_subdir *subdir = data;
+	DBG("%s", subdir->name);
+	storage.subdirs = g_list_remove(storage.subdirs, subdir);
+	g_free(subdir->name);
+	g_free(subdir);
+}
+
+static void storage_subdir_unregister(gpointer data)
+{
+	struct storage_subdir *subdir = data;
+	gchar *str;
+
+	DBG("%s", subdir->name);
+	str = g_strdup_printf("%s/%s", STORAGEDIR, subdir->name);
+	connman_inotify_unregister(str, storage_inotify_subdir_cb, subdir);
+	g_free(str);
+}
+
+static void storage_subdir_append(const char *name)
+{
+	struct storage_subdir *subdir;
+	struct stat buf;
+	gchar *str;
+	int ret;
+
+	DBG("%s", name);
+
+	subdir = g_new0(struct storage_subdir, 1);
+	subdir->name = g_strdup(name);
+
+	str = g_strdup_printf("%s/%s/%s", STORAGEDIR, subdir->name, SETTINGS);
+	ret = stat(str, &buf);
+	g_free(str);
+	if (ret == 0)
+		subdir->has_settings = TRUE;
+
+	storage.subdirs = g_list_prepend(storage.subdirs, subdir);
+
+	str = g_strdup_printf("%s/%s", STORAGEDIR, subdir->name);
+	connman_inotify_register(str, storage_inotify_subdir_cb, subdir,
+				storage_subdir_free);
+	g_free(str);
+}
+
+static void storage_inotify_subdir_cb(struct inotify_event *event,
+					const char *ident,
+					gpointer user_data)
+{
+	struct storage_subdir *subdir = user_data;
+
+	DBG("name %s", subdir->name);
+
+	/* Only interested in files here */
+	if (event->mask & IN_ISDIR)
+		return;
+
+	if ((event->mask & IN_DELETE) || (event->mask & IN_MOVED_FROM)) {
+		DBG("delete/move-from %s", event->name);
+		if (!g_strcmp0(event->name, SETTINGS))
+			subdir->has_settings = FALSE;
+		return;
+	}
+
+	if ((event->mask & IN_CREATE) || (event->mask & IN_MOVED_TO)) {
+		DBG("create/move-to %s", event->name);
+		if (!g_strcmp0(event->name, SETTINGS)) {
+			struct stat st;
+			gchar *pathname;
+			pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR,
+						subdir->name, event->name);
+			if (stat(pathname, &st) == 0 && S_ISREG(st.st_mode)) {
+				subdir->has_settings = TRUE;
+			}
+			g_free(pathname);
+		}
+		return;
+	}
+}
+
+static void storage_inotify_cb(struct inotify_event *event, const char *ident,
+				gpointer user_data)
+{
+	DBG("");
+
+	if (event->mask & IN_DELETE_SELF) {
+		DBG("delete self");
+		storage_dir_cleanup();
+		return;
+	}
+
+	/* Only interested in subdirectories here */
+	if (!(event->mask & IN_ISDIR))
+		return;
+
+	if ((event->mask & IN_DELETE) || (event->mask & IN_MOVED_FROM)) {
+		struct storage_subdir key = { .name = event->name };
+		GList *pos;
+
+		DBG("delete/move-from %s", event->name);
+		pos = g_list_find_custom(storage.subdirs, &key,
+					storage_subdir_cmp);
+		if (pos)
+			storage_subdir_unregister(pos->data);
+
+		return;
+	}
+
+	if ((event->mask & IN_CREATE) || (event->mask & IN_MOVED_TO)) {
+		DBG("create %s", event->name);
+		storage_subdir_append(event->name);
+		return;
+	}
+}
+
+static void storage_dir_init(void)
+{
+	DIR *dir;
+	struct dirent *d;
+
+	if (storage.initialized)
+		return;
+
+	DBG("Initializing storage directories.");
+
+	dir = opendir(STORAGEDIR);
+	if (!dir)
+		return;
+
+	while ((d = readdir(dir))) {
+
+		if (strcmp(d->d_name, ".") == 0 || strcmp(d->d_name, "..") == 0)
+			continue;
+
+		switch (d->d_type) {
+		case DT_DIR:
+		case DT_UNKNOWN:
+			storage_subdir_append(d->d_name);
+			break;
+		}
+	}
+
+	closedir(dir);
+
+	connman_inotify_register(STORAGEDIR, storage_inotify_cb, NULL, NULL);
+
+	storage.initialized = TRUE;
+
+	DBG("Initialization done.");
+}
+
+static void storage_dir_cleanup(void)
+{
+	if (!storage.initialized)
+		return;
+
+	DBG("Cleaning up storage directories.");
+
+	connman_inotify_unregister(STORAGEDIR, storage_inotify_cb, NULL);
+
+	while (storage.subdirs)
+		storage_subdir_unregister(storage.subdirs->data);
+	storage.subdirs = NULL;
+
+	storage.initialized = FALSE;
+
+	DBG("Cleanup done.");
 }
 
 static GKeyFile *storage_load(const char *pathname)
@@ -200,62 +422,33 @@ GKeyFile *__connman_storage_open_service(const char *service_id)
 
 gchar **connman_storage_get_services(void)
 {
-	struct dirent *d;
-	gchar *str;
-	DIR *dir;
-	GString *result;
-	gchar **services = NULL;
-	struct stat buf;
-	int ret;
+	gchar **result = NULL;
+	GList *l;
+	int sum, pos;
 
-	dir = opendir(STORAGEDIR);
-	if (!dir)
-		return NULL;
+	DBG("");
 
-	result = g_string_new(NULL);
-
-	while ((d = readdir(dir))) {
-		if (strcmp(d->d_name, ".") == 0 ||
-				strcmp(d->d_name, "..") == 0 ||
-				strncmp(d->d_name, "provider_", 9) == 0)
-			continue;
-
-		if (!service_id_is_valid(d->d_name))
-			continue;
-
-		switch (d->d_type) {
-		case DT_DIR:
-		case DT_UNKNOWN:
-			/*
-			 * If the settings file is not found, then
-			 * assume this directory is not a services dir.
-			 */
-			str = g_strdup_printf("%s/%s/settings", STORAGEDIR,
-								d->d_name);
-			ret = stat(str, &buf);
-			g_free(str);
-			if (ret < 0)
-				continue;
-
-			g_string_append_printf(result, "%s/", d->d_name);
-			break;
-		}
+	if (!storage.initialized) {
+		storage_dir_init();
+		if (!storage.initialized)
+			return NULL;
 	}
 
-	closedir(dir);
-
-	str = g_string_free(result, FALSE);
-	if (str && str[0] != '\0') {
-		/*
-		 * Remove the trailing separator so that services doesn't end up
-		 * with an empty element.
-		 */
-		str[strlen(str) - 1] = '\0';
-		services = g_strsplit(str, "/", -1);
+	for (sum = 0, l = storage.subdirs; l; l = l->next) {
+		struct storage_subdir *subdir = l->data;
+		if (is_service_dir_name(subdir->name) && subdir->has_settings)
+			sum++;
 	}
-	g_free(str);
 
-	return services;
+	result = g_new0(gchar *, sum + 1);
+
+	for (pos = 0, l = storage.subdirs; l; l = l->next) {
+		struct storage_subdir *subdir = l->data;
+		if (is_service_dir_name(subdir->name) && subdir->has_settings)
+			result[pos++] = g_strdup(subdir->name);
+	}
+
+	return result;
 }
 
 GKeyFile *connman_storage_load_service(const char *service_id)
@@ -452,58 +645,43 @@ bool __connman_storage_remove_provider(const char *identifier)
 
 gchar **__connman_storage_get_providers(void)
 {
-	GSList *list = NULL;
-	int num = 0, i = 0;
-	struct dirent *d;
-	gchar *str;
-	DIR *dir;
-	struct stat buf;
-	int ret;
-	char **providers;
-	GSList *iter;
+	gchar **result = NULL;
+	GList *l;
+	int sum, pos;
 
-	dir = opendir(STORAGEDIR);
-	if (!dir)
-		return NULL;
+	DBG("");
 
-	while ((d = readdir(dir))) {
-		if (strcmp(d->d_name, ".") == 0 ||
-				strcmp(d->d_name, "..") == 0 ||
-				strncmp(d->d_name, "provider_", 9) != 0)
-			continue;
-
-		if (d->d_type == DT_DIR) {
-			str = g_strdup_printf("%s/%s/settings", STORAGEDIR,
-					d->d_name);
-			ret = stat(str, &buf);
-			g_free(str);
-			if (ret < 0)
-				continue;
-			list = g_slist_prepend(list, g_strdup(d->d_name));
-			num += 1;
-		}
+	if (!storage.initialized) {
+		storage_dir_init();
+		if (!storage.initialized)
+			return NULL;
 	}
 
-	closedir(dir);
-
-	providers = g_try_new0(char *, num + 1);
-	for (iter = list; iter; iter = g_slist_next(iter)) {
-		if (providers)
-			providers[i] = iter->data;
-		else
-			g_free(iter->data);
-		i += 1;
+	for (sum = 0, l = storage.subdirs; l; l = l->next) {
+		struct storage_subdir *subdir = l->data;
+		if (is_provider_dir_name(subdir->name) && subdir->has_settings)
+			sum++;
 	}
-	g_slist_free(list);
 
-	return providers;
+	result = g_new0(gchar *, sum + 1);
+
+	for (pos = 0, l = storage.subdirs; l; l = l->next) {
+		struct storage_subdir *subdir = l->data;
+		if (is_provider_dir_name(subdir->name) && subdir->has_settings)
+			result[pos++] = g_strdup(subdir->name);
+	}
+
+	return result;
 }
 
 int __connman_storage_init(void)
 {
+	DBG("");
 	return 0;
 }
 
 void __connman_storage_cleanup(void)
 {
+	DBG("");
+	storage_dir_cleanup();
 }
