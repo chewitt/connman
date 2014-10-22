@@ -39,6 +39,10 @@
 #define MODE		(S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | \
 			S_IXGRP | S_IROTH | S_IXOTH)
 
+#define NAME_MASK (IN_ACCESS | IN_ATTRIB | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE | \
+			IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | \
+			IN_MOVED_TO | IN_OPEN)
+
 struct storage_subdir {
 	gchar *name;
 	gboolean has_settings;
@@ -70,6 +74,86 @@ static void storage_inotify_subdir_cb(struct inotify_event *event,
 static void keyfile_inotify_cb(struct inotify_event *event,
 				const char *ident,
 				gpointer user_data);
+
+gboolean is_service_dir_name(const char *name);
+
+gboolean is_provider_dir_name(const char *name);
+
+static void debug_subdirs(void)
+{
+	GList *l;
+
+	if (!storage.initialized) {
+		DBG("Storage subdirs not initialized.");
+		return;
+	}
+
+	DBG("Storage subdirs: {");
+	for (l = storage.subdirs; l; l = l->next) {
+		struct storage_subdir *subdir = l->data;
+		DBG("\t%s[%s]", subdir->name,
+			subdir->has_settings ? (
+				is_service_dir_name(subdir->name) ? "S" :
+				is_provider_dir_name(subdir->name) ? "P" :
+				"X") : "-");
+	}
+	DBG("}");
+}
+
+static void debug_inotify_event(struct inotify_event *event)
+{
+	static const char *flags[] = {
+		"IN_ACCESS", 		// 1
+		"IN_MODIFY", 		// 2
+		"IN_ATTRIB", 		// 4
+		"IN_CLOSE_WRITE",	// 8
+
+		"IN_CLOSE_NOWRITE",	// 10
+		"IN_OPEN",		// 20
+		"IN_MOVED_FROM",	// 40
+		"IN_MOVED_TO",		// 80
+
+		"IN_CREATE",		// 100
+		"IN_DELETE",		// 200
+		"IN_DELETE_SELF",	// 400
+		"IN_MOVE_SELF",		// 800
+
+		"UNDEFINED_1000",
+		"IN_UNMOUNT",		// 2000
+		"IN_Q_OVERFLOW",	// 4000
+		"IN_IGNORED",		// 8000
+
+		"UNDEFINED_10000",
+		"UNDEFINED_20000",
+		"UNDEFINED_40000",
+		"UNDEFINED_80000",
+
+		"UNDEFINED_100000",
+		"UNDEFINED_200000",
+		"UNDEFINED_400000",
+		"UNDEFINED_800000",
+
+		"IN_ONLYDIR",           // 1000000
+		"IN_DONT_FOLLOW",	// 2000000
+		"IN_EXCL_UNLINK",	// 4000000
+		"UNDEFINED_800000",
+
+		"UNDEFINED_1000000",
+		"IN_MASK_ADD",		// 20000000
+		"IN_ISDIR",		// 40000000
+		"IN_ONESHOT",		// 80000000
+	};
+	int i;
+
+	DBG("Event flags: ");
+	for (i = 0; i < 32; i++) {
+		if (event->mask & (1 << i))
+			DBG("\t%s", flags[i]);
+	}
+
+	if (event->mask & NAME_MASK)
+		DBG("Event name: %s", event->name);
+}
 
 bool service_id_is_valid(const char *id)
 {
@@ -164,6 +248,7 @@ static void storage_inotify_subdir_cb(struct inotify_event *event,
 	struct storage_subdir *subdir = user_data;
 
 	DBG("name %s", subdir->name);
+	debug_inotify_event(event);
 
 	/* Only interested in files here */
 	if (event->mask & IN_ISDIR)
@@ -196,6 +281,7 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 				gpointer user_data)
 {
 	DBG("");
+	debug_inotify_event(event);
 
 	if (event->mask & IN_DELETE_SELF) {
 		DBG("delete self");
@@ -214,8 +300,10 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 		DBG("delete/move-from %s", event->name);
 		pos = g_list_find_custom(storage.subdirs, &key,
 					storage_subdir_cmp);
-		if (pos)
+		if (pos) {
 			storage_subdir_unregister(pos->data);
+			debug_subdirs();
+		}
 
 		return;
 	}
@@ -223,6 +311,7 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 	if ((event->mask & IN_CREATE) || (event->mask & IN_MOVED_TO)) {
 		DBG("create %s", event->name);
 		storage_subdir_append(event->name);
+		debug_subdirs();
 		return;
 	}
 }
@@ -250,6 +339,7 @@ static void storage_dir_init(void)
 		case DT_DIR:
 		case DT_UNKNOWN:
 			storage_subdir_append(d->d_name);
+			debug_subdirs();
 			break;
 		}
 	}
@@ -314,6 +404,9 @@ static void keyfile_inotify_cb(struct inotify_event *event,
 				gpointer user_data)
 {
 	struct keyfile_record *record = user_data;
+
+	DBG("name %s", record->pathname);
+	debug_inotify_event(event);
 
 	if ((event->mask & IN_DELETE_SELF) || (event->mask & IN_MOVE_SELF) ||
 		(event->mask & IN_MODIFY) || (event->mask & IN_IGNORED)) {
