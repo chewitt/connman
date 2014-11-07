@@ -75,6 +75,12 @@ enum ofono_api {
 	OFONO_API_CDMA_CM =	0x10,
 };
 
+enum ofono_active_request {
+	OFONO_ACTIVE_REQUEST_NONE,
+	OFONO_ACTIVE_REQUEST_ACTIVATE,
+	OFONO_ACTIVE_REQUEST_DEACTIVATE
+};
+
 /*
  * The way this plugin works is following:
  *
@@ -133,6 +139,7 @@ static GHashTable *context_hash;
 struct network_context {
 	char *path;
 	int index;
+	enum ofono_active_request next_active_request;
 
 	enum connman_ipconfig_method ipv4_method;
 	struct connman_ipaddress *ipv4_address;
@@ -373,11 +380,12 @@ static void set_property_reply(DBusPendingCall *call, void *user_data)
 		success = false;
 	}
 
+	g_hash_table_remove(info->modem->set_property_calls, info->property);
+
 	if (info->set_property_cb)
 		(*info->set_property_cb)(info->modem, success);
 
 	dbus_message_unref(reply);
-	g_hash_table_remove(info->modem->set_property_calls, info->property);
 }
 
 static int set_property(struct modem_data *modem,
@@ -535,6 +543,8 @@ static int get_properties(const char *path, const char *interface,
 	return -EINPROGRESS;
 }
 
+static int context_submit_next_active_request(struct modem_data *modem);
+
 static void context_set_active_reply(struct modem_data *modem,
 					bool success)
 {
@@ -542,9 +552,9 @@ static void context_set_active_reply(struct modem_data *modem,
 
 	if (success) {
 		/*
-		 * Don't handle do anything on success here. oFono will send
-		 * the change via PropertyChanged singal.
+		 * oFono will send the change via PropertyChanged singal.
 		 */
+		context_submit_next_active_request(modem);
 		return;
 	}
 
@@ -568,23 +578,43 @@ static void context_set_active_reply(struct modem_data *modem,
 				CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
 }
 
-static int context_set_active(struct modem_data *modem,
-				dbus_bool_t active)
+static int context_submit_next_active_request(struct modem_data *modem)
 {
-	int err;
+	int err = 0;
+	struct network_context* context = modem->context;
 
-	DBG("%s active %d", modem->path, active);
+	if (context->next_active_request != OFONO_ACTIVE_REQUEST_NONE) {
+		dbus_bool_t active = (context->next_active_request ==
+					OFONO_ACTIVE_REQUEST_ACTIVATE);
 
-	err = set_property(modem, modem->context->path,
+		context->next_active_request = OFONO_ACTIVE_REQUEST_NONE;
+		DBG("%s active %d", modem->path, active);
+		err = set_property(modem, modem->context->path,
 				OFONO_CONTEXT_INTERFACE,
 				"Active", DBUS_TYPE_BOOLEAN,
 				&active,
 				context_set_active_reply);
 
-	if (!active && err == -EINPROGRESS)
-		return 0;
+		if (!active && err == -EINPROGRESS)
+			err = 0;
+	}
 
 	return err;
+}
+
+static int context_set_active(struct modem_data *modem, gboolean active)
+{
+	if (!modem->context)
+		return 0;
+
+	modem->context->next_active_request = (active ?
+					OFONO_ACTIVE_REQUEST_ACTIVATE :
+					OFONO_ACTIVE_REQUEST_DEACTIVATE);
+
+	if (g_hash_table_lookup(modem->set_property_calls, "Active"))
+		return 0;
+
+	return context_submit_next_active_request(modem);
 }
 
 static void cdma_cm_set_powered_reply(struct modem_data *modem,
@@ -1199,6 +1229,9 @@ static gboolean context_changed(DBusConnection *conn,
 
 	modem = g_hash_table_lookup(context_hash, context_path);
 	if (!modem)
+		return TRUE;
+
+	if (!modem->context)
 		return TRUE;
 
 	if (!dbus_message_iter_init(message, &iter))
