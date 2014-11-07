@@ -4859,6 +4859,7 @@ static void service_destroy(struct connman_service *service)
         g_strfreev(service->proxies);
         g_strfreev(service->excludes);
 
+	g_free(service->hostname);
         g_free(service->domainname);
         g_free(service->pac);
         g_free(service->name);
@@ -4876,6 +4877,11 @@ static void service_destroy(struct connman_service *service)
         g_free(service->config_entry);
 
         stats_destroy(service);
+
+	if (current_default == service)
+		current_default = NULL;
+
+	stop_recurring_online_check(service);
 
         g_free(service);
 }
@@ -4904,65 +4910,7 @@ static void service_free(gpointer user_data)
 		g_free(path);
 	}
 
-	g_hash_table_destroy(service->counter_table);
-
-	if (service->network) {
-		__connman_network_disconnect(service->network);
-		connman_network_unref(service->network);
-		service->network = NULL;
-	}
-
-	if (service->provider)
-		connman_provider_unref(service->provider);
-
-	if (service->ipconfig_ipv4) {
-		__connman_ipconfig_set_ops(service->ipconfig_ipv4, NULL);
-		__connman_ipconfig_set_data(service->ipconfig_ipv4, NULL);
-		__connman_ipconfig_unref(service->ipconfig_ipv4);
-		service->ipconfig_ipv4 = NULL;
-	}
-
-	if (service->ipconfig_ipv6) {
-		__connman_ipconfig_set_ops(service->ipconfig_ipv6, NULL);
-		__connman_ipconfig_set_data(service->ipconfig_ipv6, NULL);
-		__connman_ipconfig_unref(service->ipconfig_ipv6);
-		service->ipconfig_ipv6 = NULL;
-	}
-
-	g_strfreev(service->timeservers);
-	g_strfreev(service->timeservers_config);
-	g_strfreev(service->nameservers);
-	g_strfreev(service->nameservers_config);
-	g_strfreev(service->nameservers_auto);
-	g_strfreev(service->domains);
-	g_strfreev(service->proxies);
-	g_strfreev(service->excludes);
-
-	g_free(service->hostname);
-	g_free(service->domainname);
-	g_free(service->pac);
-	g_free(service->name);
-	g_free(service->passphrase);
-	g_free(service->identifier);
-	g_free(service->eap);
-	g_free(service->identity);
-	g_free(service->agent_identity);
-	g_free(service->ca_cert_file);
-	g_free(service->client_cert_file);
-	g_free(service->private_key_file);
-	g_free(service->private_key_passphrase);
-	g_free(service->phase2);
-	g_free(service->config_file);
-	g_free(service->config_entry);
-
-        stats_destroy(service);
-
-	if (current_default == service)
-		current_default = NULL;
-
-	stop_recurring_online_check(service);
-
-	g_free(service);
+	service_destroy(service);
 }
 
 static void service_initialize(struct connman_service *service)
