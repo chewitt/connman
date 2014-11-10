@@ -550,11 +550,12 @@ static void context_set_active_reply(struct modem_data *modem,
 {
 	DBG("%s", modem->path);
 
+	context_submit_next_active_request(modem);
+
 	if (success) {
 		/*
 		 * oFono will send the change via PropertyChanged singal.
 		 */
-		context_submit_next_active_request(modem);
 		return;
 	}
 
