@@ -124,15 +124,17 @@ static gboolean stats_file_write(const char *path,
 				DBG("%s", path);
 				ok = true;
 			} else if (nbytes >= 0) {
-				connman_error("%s: failed to write (%u bytes)",
+				DBG("%s: failed to write (%u bytes)",
 					path, (unsigned int) nbytes);
 			} else {
-				connman_error("%s: %s", path, strerror(errno));
+				DBG("%s: %s", path, strerror(errno));
 			}
 		} else {
-			connman_error("%s: %s", path, strerror(errno));
+			DBG("%s: %s", path, strerror(errno));
 		}
 		close(fd);
+	} else {
+		DBG("%s: %s", path, strerror(errno));
 	}
 	return ok;
 }
