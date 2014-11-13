@@ -569,12 +569,12 @@ struct request_browser_reply_data {
 
 static void request_browser_reply(DBusMessage *reply, void *user_data)
 {
-	if (!reply)
-		return;
-
 	struct request_browser_reply_data *browser_reply_data = user_data;
 	bool result = false;
 	const char *error = NULL;
+
+	if (!reply)
+		goto done;
 
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		error = dbus_message_get_error_name(reply);
