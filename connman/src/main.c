@@ -723,6 +723,7 @@ int main(int argc, char *argv[])
 	else
 		config_init(option_config);
 
+	__connman_util_init();
 	__connman_technology_init();
 	__connman_notifier_init();
 	__connman_agent_init();
@@ -821,6 +822,7 @@ int main(int argc, char *argv[])
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 
+	__connman_util_cleanup();
 	__connman_dbus_cleanup();
 
 	__connman_log_cleanup(option_backtrace);
