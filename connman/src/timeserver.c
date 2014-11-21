@@ -61,7 +61,7 @@ static void save_timeservers(char **servers)
 
 	__connman_storage_save_global(keyfile);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return;
 }
@@ -78,7 +78,7 @@ static char **load_timeservers(void)
 	servers = g_key_file_get_string_list(keyfile, "global",
 						"Timeservers", NULL, NULL);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return servers;
 }

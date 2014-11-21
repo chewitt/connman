@@ -34,7 +34,15 @@
 
 #include "connman.h"
 
+struct connman_inotify_cb {
+	inotify_event_cb func;
+	gpointer user_data;
+	GDestroyNotify free_func;
+};
+
 struct connman_inotify {
+	unsigned int refcount;
+
 	GIOChannel *channel;
 	uint watch;
 	int wd;
@@ -42,13 +50,28 @@ struct connman_inotify {
 	GSList *list;
 };
 
+static void cleanup_inotify(gpointer user_data);
+
+void connman_inotify_ref(struct connman_inotify *i)
+{
+	__sync_fetch_and_add(&i->refcount, 1);
+}
+
+void connman_inotify_unref(gpointer data)
+{
+	struct connman_inotify *i = data;
+	if (__sync_fetch_and_sub(&i->refcount, 1) != 1)
+		return;
+	cleanup_inotify(data);
+}
+
 static GHashTable *inotify_hash;
 
 static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 							gpointer user_data)
 {
 	struct connman_inotify *inotify = user_data;
-	char buffer[256];
+	char buffer[sizeof(struct inotify_event) + NAME_MAX + 1];
 	char *next_event;
 	gsize bytes_read;
 	GIOStatus status;
@@ -60,7 +83,7 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 	}
 
 	status = g_io_channel_read_chars(channel, buffer,
-					sizeof(buffer) -1, &bytes_read, NULL);
+					sizeof(buffer), &bytes_read, NULL);
 
 	switch (status) {
 	case G_IO_STATUS_NORMAL:
@@ -74,6 +97,8 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 	}
 
 	next_event = buffer;
+
+	connman_inotify_ref(inotify);
 
 	while (bytes_read > 0) {
 		struct inotify_event *event;
@@ -95,12 +120,16 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 		next_event += len;
 		bytes_read -= len;
 
-		for (list = inotify->list; list; list = list->next) {
-			inotify_event_cb callback = list->data;
+		for (list = inotify->list; list; ) {
+			struct connman_inotify_cb *cb = list->data;
+			GSList *next = list->next;
 
-			(*callback)(event, ident);
+			(cb->func)(event, ident, cb->user_data);
+			list = next;
 		}
 	}
+
+	connman_inotify_unref(inotify);
 
 	return TRUE;
 }
@@ -163,9 +192,11 @@ static void remove_watch(struct connman_inotify *inotify)
 	g_io_channel_unref(inotify->channel);
 }
 
-int connman_inotify_register(const char *path, inotify_event_cb callback)
+int connman_inotify_register(const char *path, inotify_event_cb callback,
+				gpointer user_data, GDestroyNotify free_func)
 {
 	struct connman_inotify *inotify;
+	struct connman_inotify_cb *cb;
 	int err;
 
 	if (!callback)
@@ -179,6 +210,7 @@ int connman_inotify_register(const char *path, inotify_event_cb callback)
 	if (!inotify)
 		return -ENOMEM;
 
+	inotify->refcount = 1;
 	inotify->wd = -1;
 
 	err = create_watch(path, inotify);
@@ -190,30 +222,51 @@ int connman_inotify_register(const char *path, inotify_event_cb callback)
 	g_hash_table_replace(inotify_hash, g_strdup(path), inotify);
 
 update:
-	inotify->list = g_slist_prepend(inotify->list, callback);
+	cb = g_new0(struct connman_inotify_cb, 1);
+	cb->func = callback;
+	cb->user_data = user_data;
+	cb->free_func = free_func;
+	inotify->list = g_slist_prepend(inotify->list, cb);
 
 	return 0;
+}
+
+static void cleanup_inotify_cb(gpointer data)
+{
+	struct connman_inotify_cb *cb = data;
+	if (cb->free_func)
+		(cb->free_func)(cb->user_data);
+	g_free(cb);
 }
 
 static void cleanup_inotify(gpointer user_data)
 {
 	struct connman_inotify *inotify = user_data;
 
-	g_slist_free(inotify->list);
+	g_slist_free_full(inotify->list, cleanup_inotify_cb);
 
 	remove_watch(inotify);
 	g_free(inotify);
 }
 
-void connman_inotify_unregister(const char *path, inotify_event_cb callback)
+void connman_inotify_unregister(const char *path, inotify_event_cb callback,
+				gpointer user_data)
 {
 	struct connman_inotify *inotify;
+	GSList *l;
 
 	inotify = g_hash_table_lookup(inotify_hash, path);
 	if (!inotify)
 		return;
 
-	inotify->list = g_slist_remove(inotify->list, callback);
+	for (l = inotify->list; l; l = l->next) {
+		struct connman_inotify_cb *cb = l->data;
+		if (cb->func == callback && cb->user_data == user_data) {
+			cleanup_inotify_cb(cb);
+			inotify->list = g_slist_delete_link(inotify->list, l);
+			break;
+		}
+	}
 	if (inotify->list)
 		return;
 
@@ -225,7 +278,7 @@ int __connman_inotify_init(void)
 	DBG("");
 
 	inotify_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
-						g_free, cleanup_inotify);
+						g_free, connman_inotify_unref);
 	return 0;
 }
 

@@ -145,7 +145,7 @@ static GKeyFile *load_config(const char *file)
 		}
 
 		g_error_free(err);
-		g_key_file_free(keyfile);
+		g_key_file_unref(keyfile);
 		return NULL;
 	}
 
@@ -395,7 +395,7 @@ static int config_init(const char *file)
 	check_config(config);
 	parse_config(config);
 	if (config)
-		g_key_file_free(config);
+		g_key_file_unref(config);
 
 	return 0;
 }
@@ -678,12 +678,14 @@ int main(int argc, char *argv[])
 
 	__connman_dbus_init(conn);
 
+	__connman_inotify_init();
+	__connman_storage_init();
+
 	if (!option_config)
 		config_init(CONFIGMAINFILE);
 	else
 		config_init(option_config);
 
-	__connman_inotify_init();
 	__connman_technology_init();
 	__connman_notifier_init();
 	__connman_agent_init();
@@ -773,6 +775,7 @@ int main(int argc, char *argv[])
 	__connman_ipconfig_cleanup();
 	__connman_notifier_cleanup();
 	__connman_technology_cleanup();
+	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 
 	__connman_dbus_cleanup();

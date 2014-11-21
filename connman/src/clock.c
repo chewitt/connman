@@ -116,7 +116,7 @@ static void clock_properties_load(void)
 
 	g_free(str);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 }
 
 static void clock_properties_save(void)
@@ -144,7 +144,7 @@ static void clock_properties_save(void)
 
 	__connman_storage_save_global(keyfile);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 }
 
 enum time_updates __connman_clock_timeupdates(void)

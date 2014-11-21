@@ -744,7 +744,7 @@ static int load_config(struct connman_config *config)
 			"configuration that can be provisioned!",
 			STORAGEDIR, config->ident);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return 0;
 }
@@ -834,7 +834,8 @@ static int read_configs(void)
 }
 
 static void config_notify_handler(struct inotify_event *event,
-                                        const char *ident)
+					const char *ident,
+					gpointer user_data)
 {
 	char *ext;
 
@@ -891,7 +892,7 @@ int __connman_config_init(void)
 	config_table = g_hash_table_new_full(g_str_hash, g_str_equal,
 						NULL, unregister_config);
 
-	connman_inotify_register(STORAGEDIR, config_notify_handler);
+	connman_inotify_register(STORAGEDIR, config_notify_handler, NULL, NULL);
 
 	return read_configs();
 }
@@ -902,7 +903,7 @@ void __connman_config_cleanup(void)
 
 	cleanup = true;
 
-	connman_inotify_unregister(STORAGEDIR, config_notify_handler);
+	connman_inotify_unregister(STORAGEDIR, config_notify_handler, NULL);
 
 	g_hash_table_destroy(config_table);
 	config_table = NULL;

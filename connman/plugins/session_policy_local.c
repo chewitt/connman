@@ -411,7 +411,7 @@ err:
 	DBG("Unable to load %s: %s", pathname, error->message);
 	g_clear_error(&error);
 
-	g_key_file_free(*keyfile);
+	g_key_file_unref(*keyfile);
 	*keyfile = NULL;
 
 	return err;
@@ -648,7 +648,7 @@ static int load_file(const char *filename, struct policy_file *file)
 	if (err < 0)
 		g_slist_free_full(file->groups, cleanup_group);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return err;
 }
@@ -696,7 +696,8 @@ static int read_policies(void)
 
 
 static void notify_handler(struct inotify_event *event,
-                                        const char *filename)
+				const char *filename,
+				gpointer user_data)
 {
 	struct policy_file *file;
 
@@ -761,7 +762,7 @@ static int session_policy_local_init(void)
 	gid_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 					NULL, NULL);
 
-	err = connman_inotify_register(POLICYDIR, notify_handler);
+	err = connman_inotify_register(POLICYDIR, notify_handler, NULL, NULL);
 	if (err < 0)
 		goto err;
 
@@ -775,7 +776,7 @@ static int session_policy_local_init(void)
 
 err_notify:
 
-	connman_inotify_unregister(POLICYDIR, notify_handler);
+	connman_inotify_unregister(POLICYDIR, notify_handler, NULL);
 
 err:
 	if (file_hash)
@@ -814,7 +815,7 @@ static void session_policy_local_exit(void)
 
 	dbus_connection_unref(connection);
 
-	connman_inotify_unregister(POLICYDIR, notify_handler);
+	connman_inotify_unregister(POLICYDIR, notify_handler, NULL);
 }
 
 CONNMAN_PLUGIN_DEFINE(session_policy_local,

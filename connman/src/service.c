@@ -442,7 +442,7 @@ int __connman_service_load_modifiable(struct connman_service *service)
 		g_free(str);
 	}
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return 0;
 }
@@ -632,7 +632,7 @@ static int service_load(struct connman_service *service)
 					service->identifier, "Hidden", NULL);
 
 done:
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	return err;
 }
@@ -834,7 +834,7 @@ static int service_save(struct connman_service *service)
 done:
 	__connman_storage_save_service(keyfile, service->identifier);
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 
 	if (err == 0) {
 	  service_saved_schedule_changed();
@@ -6819,7 +6819,7 @@ void __connman_service_read_ip4config(struct connman_service *service)
 	__connman_ipconfig_load(service->ipconfig_ipv4, keyfile,
 				service->identifier, "IPv4.");
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 }
 
 void connman_service_create_ip4config(struct connman_service *service,
@@ -6849,7 +6849,7 @@ void __connman_service_read_ip6config(struct connman_service *service)
 	__connman_ipconfig_load(service->ipconfig_ipv6, keyfile,
 				service->identifier, "IPv6.");
 
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 }
 
 void connman_service_create_ip6config(struct connman_service *service,
@@ -7360,10 +7360,10 @@ static void remove_unprovisioned_services(void)
 
 	next:
 		if (keyfile)
-			g_key_file_free(keyfile);
+			g_key_file_unref(keyfile);
 
 		if (configkeyfile)
-			g_key_file_free(configkeyfile);
+			g_key_file_unref(configkeyfile);
 
 		g_free(section);
 		g_free(file);

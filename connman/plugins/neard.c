@@ -439,7 +439,7 @@ static int handle_wcs_data(const uint8_t *tlv_msg, int length)
 	ret = connman_config_provision_mutable_service(keyfile);
 
 out:
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 	free_wifi_sc(wsc);
 	return ret;
 }

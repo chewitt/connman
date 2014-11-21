@@ -523,7 +523,7 @@ static void policy_allowed_bearers(const char *allowed_bearers)
 	policy_save(keyfile, pathname);
 
 	g_free(pathname);
-	g_key_file_free(keyfile);
+	g_key_file_unref(keyfile);
 }
 
 static void policy_remove_file(void)
