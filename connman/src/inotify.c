@@ -41,12 +41,29 @@ struct connman_inotify_cb {
 };
 
 struct connman_inotify {
+	unsigned int refcount;
+
 	GIOChannel *channel;
 	uint watch;
 	int wd;
 
 	GSList *list;
 };
+
+static void cleanup_inotify(gpointer user_data);
+
+void connman_inotify_ref(struct connman_inotify *i)
+{
+	__sync_fetch_and_add(&i->refcount, 1);
+}
+
+void connman_inotify_unref(gpointer data)
+{
+	struct connman_inotify *i = data;
+	if (__sync_fetch_and_sub(&i->refcount, 1) != 1)
+		return;
+	cleanup_inotify(data);
+}
 
 static GHashTable *inotify_hash;
 
@@ -81,6 +98,8 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 
 	next_event = buffer;
 
+	connman_inotify_ref(inotify);
+
 	while (bytes_read > 0) {
 		struct inotify_event *event;
 		gchar *ident;
@@ -109,6 +128,8 @@ static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
 			list = next;
 		}
 	}
+
+	connman_inotify_unref(inotify);
 
 	return TRUE;
 }
@@ -189,6 +210,7 @@ int connman_inotify_register(const char *path, inotify_event_cb callback,
 	if (!inotify)
 		return -ENOMEM;
 
+	inotify->refcount = 1;
 	inotify->wd = -1;
 
 	err = create_watch(path, inotify);
@@ -256,7 +278,7 @@ int __connman_inotify_init(void)
 	DBG("");
 
 	inotify_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
-						g_free, cleanup_inotify);
+						g_free, connman_inotify_unref);
 	return 0;
 }
 
