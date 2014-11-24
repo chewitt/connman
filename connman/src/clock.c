@@ -283,6 +283,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 		connman_dbus_property_changed_basic(CONNMAN_MANAGER_PATH,
 				CONNMAN_CLOCK_INTERFACE, "TimeUpdates",
 				DBUS_TYPE_STRING, &strval);
+
+		__connman_timeserver_sync(NULL);
 	} else if (g_str_equal(name, "Timezone")) {
 		const char *strval;
 
