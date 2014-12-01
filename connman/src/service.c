@@ -5178,6 +5178,11 @@ bool __connman_service_is_connected_state(struct connman_service *service,
 		return is_connected_state(service, service->state_ipv4);
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
 		return is_connected_state(service, service->state_ipv6);
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		return is_connected_state(service,
+					CONNMAN_IPCONFIG_TYPE_IPV4) &&
+			is_connected_state(service,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
 	}
 
 	return false;
@@ -6093,6 +6098,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+	case CONNMAN_IPCONFIG_TYPE_ALL:
 		return -EINVAL;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
