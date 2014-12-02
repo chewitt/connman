@@ -6090,6 +6090,8 @@ int __connman_service_online_check_failed(struct connman_service *service,
 		if (service->state_ipv6 == CONNMAN_SERVICE_STATE_ONLINE)
 			g_idle_add(downgrade_func, service);
 		break;
+	default:
+		;
 	}
 
 	if (*online_check_count > 1)
