@@ -559,7 +559,7 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 
 	DBG("authentication_done %d", authentication_done);
 
-	if (!service || !wp_context)
+	if (!service || !wp_context || !authentication_done)
 		return;
 
 	/* Restarting the test */
@@ -715,6 +715,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		if (g_web_result_get_header(result, "X-ConnMan-Status",
 						&str)) {
+			// Cancel browser requests if useragent has not returned anything
+			connman_agent_cancel(wp_context->service);
 			portal_manage_status(result, wp_context);
 			break;
 		} else
@@ -723,6 +725,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 					wp_context->redirect_url, wp_context);
 		break;
 	case 204:
+		// Cancel browser requests if useragent has not returned anything
+		connman_agent_cancel(wp_context->service);
 		portal_manage_status(result, wp_context);
 		return false;
 	case 302:
