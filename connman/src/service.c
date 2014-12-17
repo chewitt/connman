@@ -180,16 +180,24 @@ static void do_single_online_check(struct connman_service *service, enum connman
 
 static void stop_recurring_online_check(struct connman_service *service)
 {
+	gboolean remove_ipv4 = false;
+	gboolean remove_ipv6 = false;
+
 	if (!service)
 		return;
 
-	if (service->online_check_timer_ipv4 > 0) {
+	if (service->online_check_timer_ipv4 > 0)
+		remove_ipv4 = true;
+	if (service->online_check_timer_ipv6 > 0)
+		remove_ipv6 = true;
+
+	if (remove_ipv4) {
 		g_source_remove(service->online_check_timer_ipv4);
 		service->online_check_timer_ipv4 = 0;
 		connman_service_unref(service);
 	}
 
-	if (service->online_check_timer_ipv6 > 0) {
+	if (remove_ipv6) {
 		g_source_remove(service->online_check_timer_ipv6);
 		service->online_check_timer_ipv6 = 0;
 		connman_service_unref(service);
