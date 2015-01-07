@@ -957,6 +957,8 @@ static void bluetooth_exit(void)
 	 */
 	device_driver.disable = NULL;
 
+	g_dbus_client_unref(client);
+
 	connman_network_driver_unregister(&network_driver);
 	g_hash_table_destroy(networks);
 
