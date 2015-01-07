@@ -1266,10 +1266,16 @@ static gboolean context_changed(DBusConnection *conn,
 		DBG("%s Settings", modem->path);
 
 		extract_ipv4_settings(&value, modem->context);
+
+		if (modem->active && modem->context->index > -1)
+			set_connected(modem);
 	} else if (g_str_equal(key, "IPv6.Settings")) {
 		DBG("%s IPv6.Settings", modem->path);
 
 		extract_ipv6_settings(&value, modem->context);
+
+		if (modem->active && modem->context->index > -1)
+			set_connected(modem);
 	} else if (g_str_equal(key, "Active")) {
 		dbus_bool_t active;
 
