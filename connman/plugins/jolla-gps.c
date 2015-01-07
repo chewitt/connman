@@ -308,6 +308,10 @@ static void jolla_gps_exit()
 
     connman_device_driver_unregister(&device_driver);
     connman_technology_driver_unregister(&tech_driver);
+
+    g_dbus_remove_watch(connection, device_watch);
+    g_dbus_remove_watch(connection, watch);
+    dbus_connection_unref(connection);
 }
 
 CONNMAN_PLUGIN_DEFINE(jolla_gps, "Jolla GPS", VERSION, CONNMAN_PLUGIN_PRIORITY_DEFAULT,
