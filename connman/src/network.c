@@ -1138,14 +1138,23 @@ void connman_network_set_index(struct connman_network *network, int index)
 		goto done;
 
 	ipconfig = __connman_service_get_ip4config(service);
-	if (!ipconfig)
-		goto done;
+	if (ipconfig) {
+		/* If index changed, the index of ipconfig must be reset. */
+		__connman_ipconfig_set_index(ipconfig, index);
 
-	/* If index changed, the index of ipconfig must be reset. */
-	__connman_ipconfig_set_index(ipconfig, index);
+		DBG("index %d service %p ip4config %p", network->index,
+			service, ipconfig);
+	}
 
-	DBG("index %d service %p ip4config %p", network->index,
-		service, ipconfig);
+	ipconfig = __connman_service_get_ip6config(service);
+	if (ipconfig) {
+		/* If index changed, the index of ipconfig must be reset. */
+		__connman_ipconfig_set_index(ipconfig, index);
+
+		DBG("index %d service %p ip6config %p", network->index,
+			service, ipconfig);
+	}
+
 done:
 	network->index = index;
 }
