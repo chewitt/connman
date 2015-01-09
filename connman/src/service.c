@@ -6033,6 +6033,7 @@ static void redo_wispr(struct connman_service *service, enum connman_ipconfig_ty
 static gboolean redo_wispr_ipv4(gpointer user_data)
 {
 	struct connman_service *service = user_data;
+	service->online_check_timer_ipv4 = 0;
 	redo_wispr(service, CONNMAN_IPCONFIG_TYPE_IPV4);
 	return FALSE;
 }
@@ -6040,6 +6041,7 @@ static gboolean redo_wispr_ipv4(gpointer user_data)
 static gboolean redo_wispr_ipv6(gpointer user_data)
 {
 	struct connman_service *service = user_data;
+	service->online_check_timer_ipv6 = 0;
 	redo_wispr(service, CONNMAN_IPCONFIG_TYPE_IPV6);
 	return FALSE;
 }
