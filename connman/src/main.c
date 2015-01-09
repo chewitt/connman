@@ -34,6 +34,7 @@
 #include <sys/stat.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 #include <gdbus.h>
 #ifdef SYSTEMD
@@ -78,6 +79,7 @@ static struct {
 	bool persistent_tethering_mode;
 	char *ipv6_status_url;
 	char *ipv4_status_url;
+	char *tethering_subnet_block;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -93,6 +95,7 @@ static struct {
 	.persistent_tethering_mode = false,
 	.ipv4_status_url = NULL,
 	.ipv6_status_url = NULL,
+	.tethering_subnet_block = NULL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -111,6 +114,8 @@ static struct {
 #define CONF_STATUS_URL_IPV6            "Ipv6StatusUrl"
 #define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
 
+#define CONF_TETHERING_SUBNET_BLOCK	"TetheringSubnetBlock"
+
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
 	CONF_PREF_TIMESERVERS,
@@ -126,6 +131,7 @@ static const char *supported_options[] = {
 	CONF_PERSISTENT_TETHERING_MODE,
 	CONF_STATUS_URL_IPV4,
 	CONF_STATUS_URL_IPV6,
+	CONF_TETHERING_SUBNET_BLOCK,
 	NULL
 };
 
@@ -250,6 +256,8 @@ static void parse_config(GKeyFile *config)
 	char **tethering;
 	char *ipv4url;
 	char *ipv6url;
+	char *tetheringsubnet;
+	struct in_addr ip;
 	gsize len;
 	int timeout;
 
@@ -382,6 +390,16 @@ static void parse_config(GKeyFile *config)
 		connman_settings.ipv6_status_url = ipv6url;
 	else
 		connman_settings.ipv6_status_url = "http://ipv6.connman.net/online/status.html";
+
+	g_clear_error(&error);
+
+	tetheringsubnet = __connman_config_get_string(config, "General",
+						CONF_TETHERING_SUBNET_BLOCK, &error);
+	if (!error && inet_pton(AF_INET, tetheringsubnet, &ip) == 1 &&
+		(ntohl(ip.s_addr) & 0xff) == 0)
+		connman_settings.tethering_subnet_block = tetheringsubnet;
+	else
+		connman_settings.tethering_subnet_block = "192.168.0.0";
 
 	g_clear_error(&error);
 
@@ -554,6 +572,9 @@ const char *connman_option_get_string(const char *key)
 	}
 	if (g_str_equal(key, CONF_STATUS_URL_IPV6) == TRUE)
 		return connman_settings.ipv6_status_url;
+
+	if (g_str_equal(key, CONF_TETHERING_SUBNET_BLOCK) == TRUE)
+		return connman_settings.tethering_subnet_block;
 
 	return NULL;
 }

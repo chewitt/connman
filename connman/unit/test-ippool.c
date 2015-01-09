@@ -39,6 +39,11 @@
 #define LOG(fmt, arg...)
 #endif
 
+const char *connman_option_get_string(const char *key)
+{
+	return "192.168.0.0";
+}
+
 static void test_case_1(void)
 {
 	struct connman_ippool *pool;
