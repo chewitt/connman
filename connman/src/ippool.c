@@ -60,7 +60,6 @@ struct connman_ippool {
 GSList *allocated_blocks;
 GHashTable *pool_hash;
 
-static uint32_t last_block;
 static uint32_t block_16_bits;
 static uint32_t block_20_bits;
 static uint32_t block_24_bits;
@@ -170,21 +169,16 @@ static uint32_t get_free_block(unsigned int size)
 	uint32_t block;
 	GSList *list;
 	bool collision;
+	uint32_t last_block;
 
 	/*
-	 * Instead starting always from the 16 bit block, we start
-	 * from the last assigned block. This is a simple optimimazion
-	 * for the case where a lot of blocks have been assigned, e.g.
-	 * the first half of the private IP pool is in use and a new
-	 * we need to find a new block.
+	 * We want to try to get the same block (192.168.0.0) every
+	 * time.
 	 *
 	 * To only thing we have to make sure is that we terminated if
 	 * there is no block left.
 	 */
-	if (last_block == 0)
-		block = block_16_bits;
-	else
-		block = next_block(last_block);
+	last_block = block = block_16_bits;
 
 	do {
 		collision = false;
@@ -370,8 +364,6 @@ struct connman_ippool *__connman_ippool_create(int index,
 		return NULL;
 	}
 
-	last_block = block;
-
 	info->index = index;
 	info->start = block;
 	info->end = block + range;
@@ -464,6 +456,5 @@ void __connman_ippool_cleanup(void)
 	pool_hash = NULL;
 
 	g_slist_free_full(allocated_blocks, g_free);
-	last_block = 0;
 	allocated_blocks = NULL;
 }
