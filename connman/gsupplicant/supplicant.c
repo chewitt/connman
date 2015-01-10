@@ -3021,8 +3021,7 @@ static void interface_remove_params(DBusMessageIter *iter, void *user_data)
 {
 	struct interface_data *data = user_data;
 
-	if (data)
-		dbus_message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH,
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH,
 							&data->interface->path);
 }
 
@@ -3031,7 +3030,7 @@ int g_supplicant_interface_remove(GSupplicantInterface *interface,
 			GSupplicantInterfaceCallback callback,
 							void *user_data)
 {
-	struct interface_data *data = NULL;
+	struct interface_data *data;
 	int ret;
 
 	if (!interface)
@@ -3042,27 +3041,25 @@ int g_supplicant_interface_remove(GSupplicantInterface *interface,
 
 	g_supplicant_interface_cancel(interface);
 
-	if (callback) {
-		data = dbus_malloc0(sizeof(*data));
-		if (!data)
-			return -ENOMEM;
+	data = dbus_malloc0(sizeof(*data));
+	if (!data)
+		return -ENOMEM;
 
-		data->interface = interface;
-		data->path = g_strdup(interface->path);
-		data->callback = callback;
-		data->user_data = user_data;
-	}
+	data->interface = interface;
+	data->path = g_strdup(interface->path);
+	data->callback = callback;
+	data->user_data = user_data;
 
 	ret = supplicant_dbus_method_call(SUPPLICANT_PATH,
 						SUPPLICANT_INTERFACE,
 						"RemoveInterface",
 						interface_remove_params,
-						data
+						callback
 						? interface_remove_result
 						: NULL,
 						data,
 						NULL);
-	if (ret < 0 && data) {
+	if (ret < 0 || !callback) {
 		g_free(data->path);
 		dbus_free(data);
 	}
