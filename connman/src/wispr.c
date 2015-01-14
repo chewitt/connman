@@ -432,6 +432,7 @@ static void portal_manage_status(GWebResult *result,
 			struct connman_wispr_portal_context *wp_context)
 {
 	enum connman_ipconfig_type type = wp_context->type;
+	struct connman_service *service;
 	const char *str = NULL;
 
 	DBG("");
@@ -453,10 +454,14 @@ static void portal_manage_status(GWebResult *result,
 				&str))
 		DBG("Client-Timezone: %s", str);
 
-	__connman_service_ipconfig_indicate_state(wp_context->service,
-					CONNMAN_SERVICE_STATE_ONLINE, type);
-
+	/* __connman_service_ipconfig_indicate_state may end up calling
+	 * __connman_wispr_start which would reinitialize the wispr context
+	 * so we better free it beforehand to avoid deallocating it twice. */
+	service = connman_service_ref(wp_context->service);
 	free_connman_wispr_portal_context(wp_context);
+	__connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ONLINE, type);
+	connman_service_unref(service);
 }
 
 static bool wispr_route_request(const char *address, int ai_family,
@@ -786,7 +791,6 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 	free_wispr_routes(wp_context);
 	wp_context->request_id = 0;
-done:
 	wp_context->wispr_msg.message_type = -1;
 	return false;
 }
