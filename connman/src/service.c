@@ -150,6 +150,7 @@ static struct connman_ipconfig *create_ip6config(struct connman_service *service
 		int index);
 
 static void service_destroy(struct connman_service *service);
+static int service_disconnect(struct connman_service *service);
 
 struct find_data {
 	const char *path;
@@ -5035,7 +5036,7 @@ void connman_service_unref_debug(struct connman_service *service,
 
 	service_list = g_list_remove(service_list, service);
 
-	__connman_service_disconnect(service);
+	service_disconnect(service);
 
 	g_hash_table_remove(service_hash, service->identifier);
 }
@@ -6462,7 +6463,7 @@ DBG("failure_connect_interval %d", failure_connect_interval);
 	return err;
 }
 
-int __connman_service_disconnect(struct connman_service *service)
+static int service_disconnect(struct connman_service *service)
 {
 	int err;
 
@@ -6504,6 +6505,17 @@ int __connman_service_disconnect(struct connman_service *service)
 
 	__connman_ipconfig_disable(service->ipconfig_ipv4);
 	__connman_ipconfig_disable(service->ipconfig_ipv6);
+
+	return err;
+}
+
+int __connman_service_disconnect(struct connman_service *service)
+{
+	int err;
+
+	connman_service_ref(service);
+	err = service_disconnect(service);
+	connman_service_unref(service);
 
 	return err;
 }
