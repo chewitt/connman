@@ -609,9 +609,6 @@ static int context_submit_next_active_request(struct modem_data *modem)
 				"Active", DBUS_TYPE_BOOLEAN,
 				&active,
 				context_set_active_reply);
-
-		if (!active && err == -EINPROGRESS)
-			err = 0;
 	}
 
 	return err;
@@ -627,7 +624,7 @@ static int context_set_active(struct modem_data *modem, gboolean active)
 					OFONO_ACTIVE_REQUEST_DEACTIVATE);
 
 	if (g_hash_table_lookup(modem->set_property_calls, "Active"))
-		return 0;
+		return -EINPROGRESS;
 
 	return context_submit_next_active_request(modem);
 }
