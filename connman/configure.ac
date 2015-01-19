@@ -353,6 +353,11 @@ AC_ARG_ENABLE(wispr, AC_HELP_STRING([--disable-wispr],
 					[enable_wispr=${enableval}])
 AM_CONDITIONAL(WISPR, test "${enable_wispr}" != "no")
 
+AC_ARG_ENABLE(logcontrol,
+	AC_HELP_STRING([--enable-logcontrol], [enable log control plugin]),
+			[enable_logcontrol=${enableval}], [enable_logcontrol="no"])
+AM_CONDITIONAL(LOGCONTROL, test "${enable_logcontrol}" != "no")
+
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])

@@ -68,6 +68,11 @@ builtin_modules += dundee
 builtin_sources += plugins/dundee.c
 endif
 
+if LOGCONTROL
+builtin_modules += logcontrol
+builtin_sources += plugins/logcontrol.c
+endif
+
 if VPN
 builtin_modules += vpn
 builtin_sources += plugins/vpn.c
