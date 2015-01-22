@@ -107,6 +107,7 @@ Documentation for connman.
     --enable-jolla-wakeup-timer=builtin \
     --enable-client \
     --enable-test \
+    --enable-logcontrol \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
 
