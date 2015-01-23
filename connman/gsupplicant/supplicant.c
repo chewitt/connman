@@ -42,6 +42,8 @@
 #define IEEE80211_CAP_IBSS	0x0002
 #define IEEE80211_CAP_PRIVACY	0x0010
 
+#define BSS_UNKNOWN_STRENGTH    -90
+
 static DBusConnection *connection;
 
 static const GSupplicantCallbacks *callbacks_pointer;
@@ -1639,6 +1641,9 @@ static void bss_property(const char *key, DBusMessageIter *iter,
 		dbus_message_iter_get_basic(iter, &signal);
 
 		bss->signal = signal;
+		if (!bss->signal)
+			bss->signal = BSS_UNKNOWN_STRENGTH;
+
 	} else if (g_strcmp0(key, "Level") == 0) {
 		dbus_int32_t level = 0;
 
@@ -1703,6 +1708,7 @@ static struct g_supplicant_bss *interface_bss_added(DBusMessageIter *iter,
 
 	bss->interface = interface;
 	bss->path = g_strdup(path);
+	bss->signal = BSS_UNKNOWN_STRENGTH;
 
 	return bss;
 }
@@ -1789,7 +1795,7 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 	bss = g_hash_table_lookup(network->bss_table, path);
 	if (network->best_bss == bss) {
 		network->best_bss = NULL;
-		network->signal = 0;
+		network->signal = BSS_UNKNOWN_STRENGTH;
 	}
 
 	g_hash_table_remove(bss_mapping, path);
