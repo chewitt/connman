@@ -787,7 +787,7 @@ static gboolean autoscan_timeout(gpointer data)
 	} else
 		interval = autoscan->interval * autoscan->base;
 
-	if (autoscan->interval >= autoscan->limit)
+	if (interval > autoscan->limit)
 		interval = autoscan->limit;
 
 	throw_wifi_scan(wifi->device, scan_callback_hidden);
@@ -811,6 +811,9 @@ static void start_autoscan(struct connman_device *device)
 	DBG("");
 
 	if (!wifi)
+		return;
+
+	if (wifi->connected)
 		return;
 
 	autoscan = wifi->autoscan;
@@ -869,22 +872,8 @@ static void setup_autoscan(struct wifi_data *wifi)
 	start_autoscan(wifi->device);
 }
 
-static void interface_autoscan_callback(int result,
-					GSupplicantInterface *interface,
-							void *user_data)
-{
-	struct wifi_data *wifi = user_data;
-
-	if (result < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
-	}
-}
-
 static void finalize_interface_creation(struct wifi_data *wifi)
 {
-	GSupplicantInterface *interface = wifi->interface;
-
 	DBG("interface is ready wifi %p tethering %d", wifi, wifi->tethering);
 
 	if (!wifi->device) {
@@ -897,12 +886,7 @@ static void finalize_interface_creation(struct wifi_data *wifi)
 	if (!connman_setting_get_bool("BackgroundScanning"))
 		return;
 
-	/* Setting up automatic scanning */
-	if (g_supplicant_interface_autoscan(interface, AUTOSCAN_DEFAULT,
-				interface_autoscan_callback, wifi) < 0) {
-		DBG("Could not enable Autoscan, falling back...");
-		setup_autoscan(wifi);
-	}
+	setup_autoscan(wifi);
 }
 
 static void interface_create_callback(int result,
