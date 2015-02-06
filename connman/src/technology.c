@@ -42,6 +42,7 @@ static GSList *techless_device_list = NULL;
 static GHashTable *rfkill_list;
 
 static bool global_offlinemode;
+static unsigned int global_offlinemode_override; /* Technology bitmask */
 
 struct connman_rfkill {
 	unsigned int index;
@@ -703,6 +704,11 @@ static int technology_enable(struct connman_technology *technology)
 
 	DBG("technology %p enable", technology);
 
+	if (global_offlinemode && technology->type < MAX_CONNMAN_SERVICE_TYPES) {
+		DBG("Overriding offlinemode for type %d", technology->type);
+		global_offlinemode_override |= (1 << technology->type);
+	}
+
 	__sync_synchronize();
 
 	if (technology->type == CONNMAN_SERVICE_TYPE_P2P) {
@@ -753,6 +759,12 @@ static int technology_disable(struct connman_technology *technology)
 	int err;
 
 	DBG("technology %p disable", technology);
+
+	if (global_offlinemode && technology->type < MAX_CONNMAN_SERVICE_TYPES) {
+		DBG("Clearing offlinemode override for type %d",
+			technology->type);
+		global_offlinemode_override &= ~(1 << technology->type);
+	}
 
 	__sync_synchronize();
 
@@ -1562,6 +1574,9 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 	} else
 		global_offlinemode = connman_technology_load_offlinemode();
 
+	DBG("Clearing offlinemode override bitmask.");
+	global_offlinemode_override = 0;
+
 	return err;
 }
 
@@ -1707,8 +1722,14 @@ done:
 		return __connman_rfkill_block(type, false);
 	else if (!technology->softblocked &&
 		(global_offlinemode ||
-				!technology->enable_persistent))
-		return __connman_rfkill_block(type, true);
+				!technology->enable_persistent)) {
+		/* Don't block for technologies which have been enabled
+		   since offlinemode was turned on */
+		if (global_offlinemode_override & (1 << type))
+			DBG("Overriding offlinemode for type %d", type);
+		else
+			return __connman_rfkill_block(type, true);
+	}
 
 	return 0;
 }
@@ -1787,6 +1808,7 @@ int __connman_technology_init(void)
 							NULL, free_rfkill);
 
 	global_offlinemode = connman_technology_load_offlinemode();
+	global_offlinemode_override = 0;
 
 	/* This will create settings file if it is missing */
 	connman_technology_save_offlinemode();
