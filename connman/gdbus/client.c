@@ -1152,8 +1152,6 @@ static void service_connect(DBusConnection *conn, void *user_data)
 
 	get_managed_objects(client);
 
-	client->connected = TRUE;
-
 	g_dbus_client_unref(client);
 }
 
@@ -1166,10 +1164,8 @@ static void service_disconnect(DBusConnection *conn, void *user_data)
 	g_list_free_full(client->proxy_list, proxy_free);
 	client->proxy_list = NULL;
 
-	if (client->disconn_func) {
+	if (client->disconn_func)
 		client->disconn_func(conn, client->disconn_data);
-		client->connected = FALSE;
-	}
 }
 
 static DBusHandlerResult message_filter(DBusConnection *connection,
