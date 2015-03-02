@@ -726,8 +726,13 @@ static void set_disconnected(struct connman_network *network)
 		switch (ipv6_method) {
 		case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
 		case CONNMAN_IPCONFIG_METHOD_OFF:
-		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
+			break;
+		case CONNMAN_IPCONFIG_METHOD_FIXED:
+			/* Dirty hack until we can get the cellular
+			   stack to work completly on auto-method. */
+			if (network->type == CONNMAN_NETWORK_TYPE_CELLULAR)
+				release_dhcpv6(network);
 			break;
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
 		case CONNMAN_IPCONFIG_METHOD_AUTO:
