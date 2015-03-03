@@ -659,7 +659,7 @@ static inline gint check_duplicate_address(gconstpointer a, gconstpointer b)
 	return g_strcmp0(addr1->local, addr2->local);
 }
 
-void __connman_ipconfig_newaddr(int index, int family, const char *label,
+int __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address)
 {
 	struct connman_ipdevice *ipdevice;
@@ -672,11 +672,11 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 
 	ipdevice = g_hash_table_lookup(ipdevice_hash, GINT_TO_POINTER(index));
 	if (!ipdevice)
-		return;
+		return -ENXIO;
 
 	ipaddress = connman_ipaddress_alloc(family);
 	if (!ipaddress)
-		return;
+		return -ENOMEM;
 
 	ipaddress->prefixlen = prefixlen;
 	ipaddress->local = g_strdup(address);
@@ -684,7 +684,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 	if (g_slist_find_custom(ipdevice->address_list, ipaddress,
 					check_duplicate_address)) {
 		connman_ipaddress_free(ipaddress);
-		return;
+		return -EALREADY;
 	}
 
 	if (family == AF_INET)
@@ -692,7 +692,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 	else if (family == AF_INET6)
 		type = CONNMAN_IPCONFIG_TYPE_IPV6;
 	else
-		return;
+		return -EINVAL;
 
 	ipdevice->address_list = g_slist_prepend(ipdevice->address_list,
 								ipaddress);
@@ -736,6 +736,7 @@ void __connman_ipconfig_newaddr(int index, int family, const char *label,
 
 out:
 	g_free(ifname);
+	return 0;
 }
 
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
