@@ -3344,6 +3344,11 @@ static void interface_select_network_params(DBusMessageIter *iter,
 					&interface->network_path);
 }
 
+static void objpath_param(DBusMessageIter *iter, void *path)
+{
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH, &path);
+}
+
 static void interface_add_network_result(const char *error,
 				DBusMessageIter *iter, void *user_data)
 {
@@ -3360,6 +3365,15 @@ static void interface_add_network_result(const char *error,
 		goto error;
 
 	SUPPLICANT_DBG("PATH: %s", path);
+
+	if (interface->network_path && strcmp(interface->network_path, path)) {
+		/* Prevent unused wpa_supplicant networks from piling up */
+		SUPPLICANT_DBG("Removing network %s", interface->network_path);
+		supplicant_dbus_method_call(interface->path,
+			SUPPLICANT_INTERFACE ".Interface", "RemoveNetwork",
+			objpath_param, NULL, interface->network_path,
+			interface);
+	}
 
 	g_free(interface->network_path);
 	interface->network_path = g_strdup(path);
