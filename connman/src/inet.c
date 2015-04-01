@@ -647,7 +647,7 @@ int connman_inet_del_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_dst_len = prefix_len;
 
-	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 0) {
+	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 1) {
 		err = -errno;
 		goto out;
 	}
@@ -697,17 +697,15 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_dst_len = prefix_len;
 
-	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 0) {
+	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 1) {
 		err = -errno;
 		goto out;
 	}
 
 	rt.rtmsg_flags = RTF_UP | RTF_HOST;
 
-	if (gateway) {
+	if (gateway && inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) > 0)
 		rt.rtmsg_flags |= RTF_GATEWAY;
-		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway);
-	}
 
 	rt.rtmsg_metric = 1;
 	rt.rtmsg_ifindex = index;
@@ -749,7 +747,7 @@ int connman_inet_clear_ipv6_gateway_address(int index, const char *gateway)
 
 	memset(&rt, 0, sizeof(rt));
 
-	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) < 0) {
+	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) < 1) {
 		err = -errno;
 		goto out;
 	}
