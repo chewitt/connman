@@ -724,7 +724,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 			// Cancel browser requests if useragent has not returned anything
 			connman_agent_cancel(wp_context->service);
 			portal_manage_status(result, wp_context);
-			break;
+			return false;
 		} else
 			__connman_agent_request_browser(wp_context->service,
 					wispr_portal_browser_reply_cb,
