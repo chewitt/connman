@@ -497,7 +497,7 @@ void connman_agent_cancel(void *user_context)
 
 	g_hash_table_iter_init(&iter, agent_hash);
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		GList *list;
+		GList *list, *next;
 		struct connman_agent *agent = value;
 
 		/*
@@ -506,6 +506,8 @@ void connman_agent_cancel(void *user_context)
 		list = agent->queue;
 		while (list) {
 			struct connman_agent_request *request = list->data;
+
+			next = list->next;
 
 			if (request && request->user_context &&
 						request->user_context ==
@@ -518,8 +520,9 @@ void connman_agent_cancel(void *user_context)
 
 				agent->queue = g_list_delete_link(agent->queue,
 									list);
-			} else
-				list = list->next;
+			}
+
+			list = next;
 		}
 
 		/*
