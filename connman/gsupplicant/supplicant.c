@@ -171,7 +171,9 @@ struct _GSupplicantInterface {
 	GSupplicantWpsState wps_state;
 	GHashTable *network_table;
 	GHashTable *peer_table;
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 	GHashTable *net_mapping;
+#endif
 	GHashTable *bss_mapping;
 	void *data;
 };
@@ -484,7 +486,9 @@ static void remove_interface(gpointer data)
 	GSupplicantInterface *interface = data;
 
 	g_hash_table_destroy(interface->bss_mapping);
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 	g_hash_table_destroy(interface->net_mapping);
+#endif
 	g_hash_table_destroy(interface->network_table);
 	g_hash_table_destroy(interface->peer_table);
 
@@ -1060,6 +1064,8 @@ const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
 	return NULL;
 }
 
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
+
 static void merge_network(GSupplicantNetwork *network)
 {
 	GString *str;
@@ -1193,6 +1199,8 @@ static void interface_network_removed(DBusMessageIter *iter, void *user_data)
 
 	g_hash_table_remove(interface->net_mapping, path);
 }
+
+#endif
 
 static char *create_name(unsigned char *ssid, int ssid_len)
 {
@@ -1903,7 +1911,9 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	} else if (g_strcmp0(key, "CurrentBSS") == 0) {
 		interface_bss_added_without_keys(iter, interface);
 	} else if (g_strcmp0(key, "CurrentNetwork") == 0) {
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 		interface_network_added(iter, interface);
+#endif
 	} else if (g_strcmp0(key, "BSSs") == 0) {
 		supplicant_dbus_array_foreach(iter,
 					interface_bss_added_without_keys,
@@ -1911,8 +1921,10 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	} else if (g_strcmp0(key, "Blobs") == 0) {
 		/* Nothing */
 	} else if (g_strcmp0(key, "Networks") == 0) {
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 		supplicant_dbus_array_foreach(iter, interface_network_added,
 								interface);
+#endif
 	} else
 		SUPPLICANT_DBG("key %s type %c",
 				key, dbus_message_iter_get_arg_type(iter));
@@ -1971,8 +1983,10 @@ static GSupplicantInterface *interface_alloc(const char *path)
 					g_str_equal, NULL, remove_network);
 	interface->peer_table = g_hash_table_new_full(g_str_hash,
 					g_str_equal, NULL, remove_peer);
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 	interface->net_mapping = g_hash_table_new_full(g_str_hash, g_str_equal,
 								NULL, NULL);
+#endif
 	interface->bss_mapping = g_hash_table_new_full(g_str_hash, g_str_equal,
 								NULL, NULL);
 
@@ -2252,6 +2266,8 @@ static void signal_bss_removed(const char *path, DBusMessageIter *iter)
 	interface_bss_removed(iter, interface);
 }
 
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
+
 static void signal_network_added(const char *path, DBusMessageIter *iter)
 {
 	GSupplicantInterface *interface;
@@ -2277,6 +2293,8 @@ static void signal_network_removed(const char *path, DBusMessageIter *iter)
 
 	interface_network_removed(iter, interface);
 }
+
+#endif
 
 static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 {
@@ -2598,8 +2616,11 @@ static struct {
 	{ SUPPLICANT_INTERFACE ".Interface", "ScanDone",          signal_scan_done         },
 	{ SUPPLICANT_INTERFACE ".Interface", "BSSAdded",          signal_bss_added         },
 	{ SUPPLICANT_INTERFACE ".Interface", "BSSRemoved",        signal_bss_removed       },
+
+#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 	{ SUPPLICANT_INTERFACE ".Interface", "NetworkAdded",      signal_network_added     },
 	{ SUPPLICANT_INTERFACE ".Interface", "NetworkRemoved",    signal_network_removed   },
+#endif
 
 	{ SUPPLICANT_INTERFACE ".BSS", "PropertiesChanged", signal_bss_changed   },
 
