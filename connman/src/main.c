@@ -81,6 +81,7 @@ static struct {
 	char *ipv4_status_url;
 	char *tethering_subnet_block;
 	char **dont_bring_down_at_startup;
+	bool enable_6to4;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -98,6 +99,7 @@ static struct {
 	.ipv6_status_url = NULL,
 	.tethering_subnet_block = NULL,
 	.dont_bring_down_at_startup = NULL,
+	.enable_6to4 = false,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -118,6 +120,7 @@ static struct {
 #define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
 
 #define CONF_TETHERING_SUBNET_BLOCK	"TetheringSubnetBlock"
+#define CONF_ENABLE_6TO4                "Enable6to4"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -136,6 +139,7 @@ static const char *supported_options[] = {
 	CONF_STATUS_URL_IPV6,
 	CONF_TETHERING_SUBNET_BLOCK,
 	CONF_DONT_BRING_DOWN_AT_STARTUP,
+	CONF_ENABLE_6TO4,
 	NULL
 };
 
@@ -416,6 +420,12 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	boolean = __connman_config_get_bool(config, "General",
+					CONF_ENABLE_6TO4, &error);
+	if (!error)
+		connman_settings.enable_6to4 = boolean;
+
+	g_clear_error(&error);
 }
 
 static int config_init(const char *file)
@@ -605,6 +615,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_PERSISTENT_TETHERING_MODE))
 		return connman_settings.persistent_tethering_mode;
+
+	if (g_str_equal(key, CONF_ENABLE_6TO4))
+		return connman_settings.enable_6to4;
 
 	return false;
 }
