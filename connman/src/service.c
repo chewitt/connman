@@ -1234,13 +1234,8 @@ int __connman_service_nameserver_remove(struct connman_service *service,
 	len = g_strv_length(nameservers);
 
 	if (len == 1) {
-		g_strfreev(nameservers);
-		if (is_auto)
-			service->nameservers_auto = NULL;
-		else
-			service->nameservers = NULL;
-
-		return 0;
+		servers = NULL;
+		goto set_servers;
 	}
 
 	servers = g_try_new0(char *, len);
@@ -1258,6 +1253,7 @@ int __connman_service_nameserver_remove(struct connman_service *service,
 	}
 	servers[len - 1] = NULL;
 
+set_servers:
 	g_strfreev(nameservers);
 	nameservers = servers;
 
