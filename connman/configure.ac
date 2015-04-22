@@ -358,6 +358,11 @@ AC_ARG_ENABLE(logcontrol,
 			[enable_logcontrol=${enableval}], [enable_logcontrol="no"])
 AM_CONDITIONAL(LOGCONTROL, test "${enable_logcontrol}" != "no")
 
+AC_ARG_ENABLE(jolla-usb,
+	AC_HELP_STRING([--enable-jolla-usb], [enable Jolla USB plugin]),
+			[enable_jolla_usb=${enableval}], [enable_jolla_usb="no"])
+AM_CONDITIONAL(JOLLA_USB, test "${enable_jolla_usb}" != "no")
+
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])

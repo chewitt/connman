@@ -73,6 +73,11 @@ builtin_modules += logcontrol
 builtin_sources += plugins/logcontrol.c
 endif
 
+if JOLLA_USB
+builtin_modules += jolla_usb
+builtin_sources += plugins/jolla-usb.c
+endif
+
 if VPN
 builtin_modules += vpn
 builtin_sources += plugins/vpn.c
