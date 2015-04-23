@@ -108,6 +108,8 @@ Documentation for connman.
     --enable-client \
     --enable-test \
     --enable-logcontrol \
+    --enable-jolla-usb \
+    --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
 
