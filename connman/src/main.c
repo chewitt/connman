@@ -754,8 +754,10 @@ int main(int argc, char *argv[])
 
 #ifdef SYSTEMD
 	/* Tell systemd that we have started up */
-	if( option_systemd )
+	if( option_systemd ) {
+		DBG("Notifying systemd.");
 		sd_notify(0, "READY=1");
+	}
 #endif
 
 	g_main_loop_run(main_loop);
