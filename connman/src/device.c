@@ -1370,6 +1370,24 @@ list:
 	return false;
 }
 
+static bool can_bring_down(const char *devname)
+{
+	char **pattern =
+		connman_setting_get_string_list("DontBringDownAtStartup");
+
+	if (pattern) {
+		while (*pattern) {
+			if (g_str_has_prefix(devname, *pattern++)) {
+				DBG("%s no", devname);
+				return false;
+			}
+		}
+	}
+
+	DBG("%s yes", devname);
+	return true;
+}
+
 static void cleanup_devices(void)
 {
 	/*
@@ -1401,6 +1419,9 @@ static void cleanup_devices(void)
 
 		filtered = __connman_device_isfiltered(interfaces[i]);
 		if (filtered)
+			continue;
+
+		if (!can_bring_down(interfaces[i]))
 			continue;
 
 		index = connman_inet_ifindex(interfaces[i]);
