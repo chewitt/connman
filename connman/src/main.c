@@ -80,6 +80,7 @@ static struct {
 	char *ipv6_status_url;
 	char *ipv4_status_url;
 	char *tethering_subnet_block;
+	char **dont_bring_down_at_startup;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -96,6 +97,7 @@ static struct {
 	.ipv4_status_url = NULL,
 	.ipv6_status_url = NULL,
 	.tethering_subnet_block = NULL,
+	.dont_bring_down_at_startup = NULL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -110,6 +112,7 @@ static struct {
 #define CONF_SINGLE_TECH                "SingleConnectedTechnology"
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
+#define CONF_DONT_BRING_DOWN_AT_STARTUP "DontBringDownAtStartup"
 
 #define CONF_STATUS_URL_IPV6            "Ipv6StatusUrl"
 #define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
@@ -132,6 +135,7 @@ static const char *supported_options[] = {
 	CONF_STATUS_URL_IPV4,
 	CONF_STATUS_URL_IPV6,
 	CONF_TETHERING_SUBNET_BLOCK,
+	CONF_DONT_BRING_DOWN_AT_STARTUP,
 	NULL
 };
 
@@ -257,6 +261,7 @@ static void parse_config(GKeyFile *config)
 	char *ipv4url;
 	char *ipv6url;
 	char *tetheringsubnet;
+	char **dontbringdown;
 	struct in_addr ip;
 	gsize len;
 	int timeout;
@@ -366,6 +371,14 @@ static void parse_config(GKeyFile *config)
 
 	if (!error)
 		connman_settings.tethering_technologies = tethering;
+
+	g_clear_error(&error);
+
+	dontbringdown = __connman_config_get_string_list(config, "General",
+			CONF_DONT_BRING_DOWN_AT_STARTUP, &len, &error);
+
+	if (!error)
+		connman_settings.dont_bring_down_at_startup = dontbringdown;
 
 	g_clear_error(&error);
 
@@ -610,6 +623,9 @@ char **connman_setting_get_string_list(const char *key)
 	if (g_str_equal(key, CONF_TETHERING_TECHNOLOGIES))
 		return connman_settings.tethering_technologies;
 
+	if (g_str_equal(key, CONF_DONT_BRING_DOWN_AT_STARTUP))
+		return connman_settings.dont_bring_down_at_startup;
+
 	return NULL;
 }
 
@@ -817,6 +833,7 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.fallback_nameservers);
 	g_strfreev(connman_settings.blacklisted_interfaces);
 	g_strfreev(connman_settings.tethering_technologies);
+	g_strfreev(connman_settings.dont_bring_down_at_startup);
 
 	g_free(option_debug);
 	g_free(option_wifi);
