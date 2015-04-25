@@ -118,6 +118,7 @@ struct wifi_data {
 
 	GSupplicantScanParams *scan_params;
 	unsigned int p2p_find_timeout;
+	unsigned int carrier_timeout;
 };
 
 struct wifi_tethering_info {
@@ -132,6 +133,8 @@ static GSList *tethering_info_list = NULL;
 static GList *iface_list = NULL;
 
 static void start_autoscan(struct connman_device *device);
+static int network_disconnect(struct connman_network *network);
+static gboolean carrier_timeout(gpointer data);
 
 static int p2p_tech_probe(struct connman_technology *technology)
 {
@@ -193,8 +196,14 @@ static void wifi_newlink(unsigned flags, unsigned change, void *user_data)
 			DBG("carrier on");
 
 			handle_tethering(wifi);
-		} else
+		} else {
 			DBG("carrier off");
+			if (wifi->carrier_timeout) {
+				g_source_remove(wifi->carrier_timeout);
+			}
+			wifi->carrier_timeout = g_timeout_add_seconds(10,
+							carrier_timeout, wifi);
+		}
 	}
 
 	wifi->flags = flags;
@@ -313,6 +322,10 @@ static void wifi_remove(struct connman_device *device)
 	if (wifi->p2p_find_timeout) {
 		g_source_remove(wifi->p2p_find_timeout);
 		connman_device_unref(wifi->device);
+	}
+
+	if (wifi->carrier_timeout) {
+		g_source_remove(wifi->carrier_timeout);
 	}
 
 	if (wifi->pending_network)
@@ -769,6 +782,24 @@ out:
 	scan_callback(result, interface, user_data);
 }
 
+static gboolean carrier_timeout(gpointer data)
+{
+	struct wifi_data *wifi = data;
+
+	if (!wifi)
+		return FALSE;
+
+	wifi->carrier_timeout = 0;
+
+	if (wifi->network) {
+		connman_warn("Disconnecting due connection might be stuck...");
+		network_disconnect(wifi->network);
+
+	}
+
+	return FALSE;
+}
+
 static gboolean autoscan_timeout(gpointer data)
 {
 	struct connman_device *device = data;
@@ -961,6 +992,11 @@ static int wifi_disable(struct connman_device *device)
 		g_source_remove(wifi->p2p_find_timeout);
 		wifi->p2p_find_timeout = 0;
 		connman_device_unref(wifi->device);
+	}
+
+	if (wifi->carrier_timeout) {
+		g_source_remove(wifi->carrier_timeout);
+		wifi->carrier_timeout = 0;
 	}
 
 	/* In case of a user scan, device is still referenced */
@@ -1786,6 +1822,11 @@ static void interface_state(GSupplicantInterface *interface)
 		/* though it should be already stopped: */
 		stop_autoscan(device);
 
+		if (wifi->carrier_timeout) {
+			g_source_remove(wifi->carrier_timeout);
+			wifi->carrier_timeout = 0;
+		}
+
 		if (!handle_wps_completion(interface, network, device, wifi))
 			break;
 
@@ -1820,6 +1861,11 @@ static void interface_state(GSupplicantInterface *interface)
 		if (g_supplicant_interface_enable_selected_network(interface,
 						FALSE) != 0)
 			DBG("Could not disables selected network");
+
+		if (wifi->carrier_timeout) {
+			g_source_remove(wifi->carrier_timeout);
+			wifi->carrier_timeout = 0;
+		}
 
 		connman_network_set_connected(network, false);
 		connman_network_set_associating(network, false);
