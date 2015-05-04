@@ -629,13 +629,9 @@ static int throw_wifi_scan(struct connman_device *device,
 	if (!wifi)
 		return -ENODEV;
 
-	struct connman_network *network = wifi->network;
-	if (!network)
-		return -ENODEV;
-
 	DBG("device %p %p", device, wifi->interface);
 
-	if (wifi->tethering || connman_network_get_associating(network))
+	if (wifi->tethering)
 		return -EBUSY;
 
 	if (connman_device_get_scanning(device))
