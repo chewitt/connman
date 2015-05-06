@@ -1774,6 +1774,9 @@ static void interface_state(GSupplicantInterface *interface)
 
 	switch (state) {
 	case G_SUPPLICANT_STATE_SCANNING:
+		if (wifi->connected)
+			connman_network_set_connected(network, false);
+
 		break;
 
 	case G_SUPPLICANT_STATE_AUTHENTICATING:
@@ -1866,6 +1869,13 @@ static void interface_state(GSupplicantInterface *interface)
 			connman_warn("Probably roaming right now!"
 						" Staying connected...");
 		else
+			wifi->connected = false;
+		break;
+	case G_SUPPLICANT_STATE_SCANNING:
+		if (wifi->connected) {
+			wifi->connected = false;
+			start_autoscan(device);
+		} else
 			wifi->connected = false;
 		break;
 	case G_SUPPLICANT_STATE_COMPLETED:
