@@ -1211,11 +1211,20 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 static void remove_cm_context(struct modem_data *modem,
 				const char *context_path)
 {
+	DBusPendingCall* call;
+
 	if (!modem->context)
 		return;
 
 	if (modem->network)
 		remove_network(modem);
+
+	call = g_hash_table_lookup(modem->set_property_calls, "Active");
+	if (call) {
+		DBG("cancelling %s activation", context_path);
+		dbus_pending_call_cancel(call);
+		g_hash_table_remove(modem->set_property_calls, "Active");
+	}
 
 	g_hash_table_remove(context_hash, context_path);
 
