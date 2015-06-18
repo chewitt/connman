@@ -241,6 +241,7 @@ static int set_duid(struct connman_service *service,
 
 		hex_duid = convert_to_hex(duid, duid_len);
 		if (!hex_duid) {
+			g_free(duid);
 			g_key_file_unref(keyfile);
 			return -ENOMEM;
 		}
