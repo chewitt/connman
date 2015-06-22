@@ -429,6 +429,9 @@ int __connman_agent_request_passphrase_input(struct connman_service *service,
 	if (!service || !agent || !agent_path || !callback)
 		return -ESRCH;
 
+	if (!__connman_service_get_network(service))
+		return -ENOLINK;
+
 	message = dbus_message_new_method_call(agent_sender, agent_path,
 					CONNMAN_AGENT_INTERFACE,
 					"RequestInput");
