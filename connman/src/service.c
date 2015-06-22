@@ -7065,6 +7065,11 @@ static void update_from_network(struct connman_service *service,
 	if (is_connected(service))
 		return;
 
+	if (service->network && service->network != network) {
+		connman_network_unref(service->network);
+		service->network = NULL;
+	}
+
 	if (is_connecting(service))
 		return;
 
@@ -7281,6 +7286,11 @@ void __connman_service_remove_from_network(struct connman_network *network)
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
 	stop_recurring_online_check(service);
+
+	if (service->network) {
+		connman_network_unref(service->network);
+		service->network = NULL;
+	}
 
 	connman_service_unref(service);
 }
