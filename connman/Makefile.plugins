@@ -90,6 +90,11 @@ builtin_modules += jolla_usb
 builtin_sources += plugins/jolla-usb.c
 endif
 
+if JOLLA_SIGNALPOLL
+builtin_modules += jolla_signalpoll
+builtin_sources += plugins/jolla-signalpoll.c
+endif
+
 if VPN
 builtin_modules += vpn
 builtin_sources += plugins/vpn.c

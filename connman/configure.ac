@@ -384,6 +384,11 @@ AC_ARG_ENABLE(jolla-usb,
 			[enable_jolla_usb=${enableval}], [enable_jolla_usb="no"])
 AM_CONDITIONAL(JOLLA_USB, test "${enable_jolla_usb}" != "no")
 
+AC_ARG_ENABLE(jolla-signalpoll,
+	AC_HELP_STRING([--enable-jolla-signalpoll], [enable Jolla signal poll plugin]),
+		[enable_jolla_signalpoll=${enableval}], [enable_jolla_signalpoll="no"])
+AM_CONDITIONAL(JOLLA_SIGNALPOLL, test "${enable_jolla_signalpoll}" != "no")
+
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])

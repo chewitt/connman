@@ -25,6 +25,7 @@ BuildRequires:  pkgconfig(glib-2.0) >= 2.28
 BuildRequires:  pkgconfig(gthread-2.0) >= 2.16
 BuildRequires:  pkgconfig(dbus-1) >= 1.4
 BuildRequires:  pkgconfig(gnutls)
+BuildRequires:  pkgconfig(mce)
 BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
@@ -111,6 +112,7 @@ Documentation for connman.
     --enable-client \
     --enable-test \
     --enable-logcontrol \
+    --enable-jolla-signalpoll \
     --enable-jolla-usb \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \

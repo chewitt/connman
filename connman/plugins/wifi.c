@@ -91,6 +91,21 @@ struct autoscan_params {
 	unsigned int timeout;
 };
 
+#define SIGNAL_POLL_HISTORY_SIZE (10)   /* Number of history entries */
+#define SIGNAL_POLL_HISTORY_SECS (10)   /* Max history depth in seconds */
+
+struct signal_poll_record {
+	unsigned char strength;
+	time_t time;
+};
+
+struct signal_poll_data {
+	bool in_progress;   /* D-Bus call in progress */
+	int first;          /* Oldest position in the history (inclusive) */
+	int last;           /* Latest position in the history (inclusive) */
+	struct signal_poll_record history[SIGNAL_POLL_HISTORY_SIZE];
+};
+
 struct wifi_data {
 	char *identifier;
 	struct connman_device *device;
@@ -111,6 +126,8 @@ struct wifi_data {
 	int retries;
 	struct hidden_params *hidden;
 	bool postpone_hidden;
+	struct signal_poll_data signal_poll;
+
 	/**
 	 * autoscan "emulation".
 	 */
@@ -211,6 +228,7 @@ static int wifi_probe(struct connman_device *device)
 		return -ENOMEM;
 
 	wifi->state = G_SUPPLICANT_STATE_INACTIVE;
+	wifi->signal_poll.first = wifi->signal_poll.last = -1;
 
 	connman_device_set_data(device, wifi);
 	wifi->device = connman_device_ref(device);
@@ -1336,6 +1354,122 @@ static int wifi_set_regdom(struct connman_device *device, const char *alpha2)
 	return ret;
 }
 
+static void wifi_update_strength(struct wifi_data *wifi, unsigned char strength)
+{
+	struct signal_poll_data *data = &wifi->signal_poll;
+	struct signal_poll_record* last;
+	const time_t now = time(NULL);
+	const time_t old = now - SIGNAL_POLL_HISTORY_SECS;
+
+	if (data->last >= 0) {
+		last = data->history + data->last;
+		if (last->time > now || last->time < old) {
+			/* Reset the history */
+			data->first = data->last;
+		} else if (last->time != now) {
+			/* Create new entry */
+			data->last = (data->last + 1)
+				% SIGNAL_POLL_HISTORY_SIZE;
+			if (data->last == data->first)
+				data->first = (data->first + 1)
+					% SIGNAL_POLL_HISTORY_SIZE;
+		}
+	} else {
+		/* First entry */
+		data->first = data->last = 0;
+	}
+
+	last = data->history + data->last;
+	last->strength = strength;
+	last->time = now;
+
+	if (wifi->network) {
+		/* Calculate average for the last SIGNAL_POLL_HISTORY_SECS */
+		unsigned int sum = last->strength;
+		int n = 1, pos = data->last;
+
+		DBG("%d %u", pos, last->strength);
+		while (pos != data->first) {
+			if (--pos < 0) pos = SIGNAL_POLL_HISTORY_SIZE - 1;
+			if (data->history[pos].time >= old) {
+				DBG("%d %u", pos, data->history[pos].strength);
+				sum += data->history[pos].strength;
+				n++;
+			} else {
+				/* This entry is too old */
+				data->first = (pos + 1)
+					% SIGNAL_POLL_HISTORY_SIZE;
+				break;
+			}
+		}
+
+		DBG("average %u", sum/n);
+		connman_network_set_strength(wifi->network, sum/n);
+		connman_network_update(wifi->network);
+	}
+}
+
+static unsigned char rssi_to_strength(int rssi)
+{
+	int strength = 120 + rssi;
+
+	if (strength > 100)
+		strength = 100;
+	else if (strength < 0)
+		strength = 0;
+
+	return (unsigned char)strength;
+}
+
+static void wifi_signal_poll_callback(int result,
+			const GSupplicantSignalPoll* data, void *user_data)
+{
+	struct connman_device *device = user_data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+
+	if (result == 0) {
+		DBG("rssi %d linkspeed %d noise %d frequency %u", data->rssi,
+			data->linkspeed, data->noise, data->frequency);
+		if (data->rssi > 1000 || data->rssi < -1000) {
+			DBG("ignoring bogus rssi value");
+		} else if (wifi) {
+			wifi_update_strength(wifi,
+					rssi_to_strength(data->rssi));
+		}
+	} else {
+		DBG("signal_poll error %d", result);
+	}
+
+	if (wifi)
+		wifi->signal_poll.in_progress = false;
+
+	connman_device_unref(device);
+}
+
+static int wifi_signal_poll(struct connman_device *device)
+{
+	struct wifi_data *wifi = connman_device_get_data(device);
+	int ret;
+
+	if (!wifi || !wifi->interface)
+		return -EINVAL;
+
+	if (wifi->signal_poll.in_progress) {
+		DBG("SignalPoll is already pending");
+		return -EALREADY;
+	}
+
+	ret = g_supplicant_interface_signal_poll(wifi->interface,
+						wifi_signal_poll_callback,
+								device);
+	if (ret < 0)
+		return ret;
+
+	wifi->signal_poll.in_progress = true;
+	connman_device_ref(device);
+	return 0;
+}
+
 static struct connman_device_driver wifi_ng_driver = {
 	.name		= "wifi",
 	.type		= CONNMAN_DEVICE_TYPE_WIFI,
@@ -1346,6 +1480,7 @@ static struct connman_device_driver wifi_ng_driver = {
 	.disable	= wifi_disable,
 	.scan		= wifi_scan,
 	.set_regdom	= wifi_set_regdom,
+	.signal_poll	= wifi_signal_poll,
 };
 
 static void system_ready(void)
@@ -1933,15 +2068,9 @@ static void scan_finished(GSupplicantInterface *interface)
 	DBG("");
 }
 
-static unsigned char calculate_strength(GSupplicantNetwork *supplicant_network)
+static unsigned char calculate_strength(GSupplicantNetwork *network)
 {
-	unsigned char strength;
-
-	strength = 120 + g_supplicant_network_get_signal(supplicant_network);
-	if (strength > 100)
-		strength = 100;
-
-	return strength;
+	return rssi_to_strength(g_supplicant_network_get_signal(network));
 }
 
 static void network_added(GSupplicantNetwork *supplicant_network)
