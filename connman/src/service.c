@@ -7264,6 +7264,22 @@ sorting:
 	}
 }
 
+void connman_service_update_strength_from_network(struct connman_network *network)
+{
+	struct connman_service *service;
+
+	service = connman_service_lookup_from_network(network);
+	if (service && service->network) {
+		uint8_t strength;
+
+		strength = connman_network_get_strength(service->network);
+		if (service->strength != strength) {
+			service->strength = strength;
+			strength_changed(service);
+		}
+	}
+}
+
 void __connman_service_remove_from_network(struct connman_network *network)
 {
 	struct connman_service *service;
