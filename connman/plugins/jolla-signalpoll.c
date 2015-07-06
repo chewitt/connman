@@ -135,8 +135,8 @@ static void signalpoll_remove_poll_service(struct connman_service *service)
 	DBG("%s (%sfound)", __connman_service_get_ident(service),
 							found ? "" : "not ");
 	if (found) {
-		connman_service_unref(service);
 		poll_services = g_slist_delete_link(poll_services, found);
+		connman_service_unref(service);
 		if (!poll_services) {
 			signalpoll_update();
 		}
