@@ -7282,6 +7282,12 @@ void __connman_service_remove_from_network(struct connman_network *network)
 
 	stop_recurring_online_check(service);
 
+	__connman_service_ipconfig_indicate_state(service,
+						CONNMAN_SERVICE_STATE_IDLE,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+	__connman_service_ipconfig_indicate_state(service,
+						CONNMAN_SERVICE_STATE_IDLE,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
 	connman_service_unref(service);
 }
 
