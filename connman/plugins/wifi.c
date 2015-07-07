@@ -1405,7 +1405,7 @@ static void wifi_update_strength(struct wifi_data *wifi, unsigned char strength)
 
 		DBG("average %u", sum/n);
 		connman_network_set_strength(wifi->network, sum/n);
-		connman_network_update(wifi->network);
+		connman_service_update_strength_from_network(wifi->network);
 	}
 }
 

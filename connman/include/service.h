@@ -129,6 +129,7 @@ bool connman_service_get_favorite(struct connman_service *service);
 bool connman_service_get_autoconnect(struct connman_service *service);
 
 struct connman_service *connman_service_lookup_from_network(struct connman_network *network);
+void connman_service_update_strength_from_network(struct connman_network *network);
 
 void connman_service_create_ip4config(struct connman_service *service,
 								int index);
