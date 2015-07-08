@@ -1913,6 +1913,10 @@ static void interface_state(GSupplicantInterface *interface)
 
 	case G_SUPPLICANT_STATE_AUTHENTICATING:
 	case G_SUPPLICANT_STATE_ASSOCIATING:
+		/* Scanning after connection request may have cleared
+		   availability flag for the network being connected to */
+		connman_network_set_available(network, true);
+
 		stop_autoscan(device);
 
 		if (!wifi->connected)
