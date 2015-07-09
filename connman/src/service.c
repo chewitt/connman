@@ -39,6 +39,9 @@
 
 #define CONNECT_TIMEOUT		120
 
+#define CONNECT_RETRY_TIMEOUT_STEP	5
+#define CONNECT_RETRY_TIMEOUT_MAX	1800
+
 // Maximum time between failed online checks is ONLINE_CHECK_RETRY_COUNT^2 seconds
 #define ONLINE_CHECK_RETRY_COUNT 12
 
@@ -138,6 +141,8 @@ struct connman_service {
 	char *config_entry;
 	guint online_check_timer_ipv4;
 	guint online_check_timer_ipv6;
+	guint connect_retry_timer;
+	guint connect_retry_timeout;
 };
 
 static bool allow_property_changed(struct connman_service *service);
@@ -3943,8 +3948,10 @@ static bool auto_connect_service(GList *services,
 		service = list->data;
 
 		if (ignore[service->type] || !service->autoconnect) {
-			DBG("service %p type %s ignore", service,
-				__connman_service_type2string(service->type));
+			DBG("service %p type %s ignore %d autoconnect %d",
+				service,
+				__connman_service_type2string(service->type),
+				ignore[service->type], service->autoconnect);
 			continue;
 		}
 
@@ -3971,8 +3978,11 @@ static bool auto_connect_service(GList *services,
 		}
 
 		if (is_ignore(service) || service->state !=
-				CONNMAN_SERVICE_STATE_IDLE)
+				CONNMAN_SERVICE_STATE_IDLE) {
+			DBG("service %p ignore %d state %d", service,
+				is_ignore(service), service->state);
 			continue;
+		}
 
 		if (autoconnecting && !active_sessions[service->type]) {
 			DBG("service %p type %s has no users", service,
@@ -4198,6 +4208,39 @@ void __connman_service_return_error(struct connman_service *service,
 	__connman_service_set_hidden_data(service, user_data);
 
 	reply_pending(service, error);
+}
+
+static void service_ipconfig_indicate_states(struct connman_service *service,
+					enum connman_service_state new_state)
+{
+	__connman_service_ipconfig_indicate_state(service, new_state,
+					CONNMAN_IPCONFIG_TYPE_IPV4);
+	__connman_service_ipconfig_indicate_state(service, new_state,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
+}
+
+static gboolean service_retry_connect(gpointer data)
+{
+	struct connman_service *service = data;
+
+	DBG("service %p", service);
+	service->connect_retry_timer = 0;
+
+	if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
+
+		/* Clear the state */
+		service_ipconfig_indicate_states(service,
+						CONNMAN_SERVICE_STATE_IDLE);
+		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		service->state = CONNMAN_SERVICE_STATE_IDLE;
+		state_changed(service);
+
+		/* Schedule the next auto-connect round */
+		__connman_service_auto_connect(
+			CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+	}
+
+	return FALSE;
 }
 
 static gboolean connect_timeout(gpointer user_data)
@@ -4855,6 +4898,8 @@ static void service_destroy(struct connman_service *service)
 		current_default = NULL;
 
 	stop_recurring_online_check(service);
+	if (service->connect_retry_timer)
+		g_source_remove(service->connect_retry_timer);
 
         g_free(service);
 }
@@ -5669,6 +5714,12 @@ static int service_indicate_state(struct connman_service *service)
 	def_service = __connman_service_get_default();
 
 	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
+		service->connect_retry_timeout = 0;
+		if (service->connect_retry_timer) {
+			g_source_remove(service->connect_retry_timer);
+			service->connect_retry_timer = 0;
+		}
+
 		result = service_update_preferred_order(def_service,
 				service, new_state);
 		if (result == -EALREADY)
@@ -5770,6 +5821,19 @@ static int service_indicate_state(struct connman_service *service)
 	}
 
 	if (new_state == CONNMAN_SERVICE_STATE_FAILURE) {
+		if (!service->connect_retry_timer) {
+			/* Schedule a retry, increasing timeout if necessary */
+			if (service->connect_retry_timer <
+						CONNECT_RETRY_TIMEOUT_MAX)
+				service->connect_retry_timeout +=
+					CONNECT_RETRY_TIMEOUT_STEP;
+
+			DBG("service %p retry timeout %d", service,
+					service->connect_retry_timeout);
+			service->connect_retry_timer = g_timeout_add_seconds(
+				service->connect_retry_timeout,
+				service_retry_connect, service);
+		}
 
 		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER &&
 			connman_agent_report_error(service, service->path,
@@ -7243,13 +7307,12 @@ void __connman_service_remove_from_network(struct connman_network *network)
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
 	stop_recurring_online_check(service);
+	if (service->connect_retry_timer) {
+		g_source_remove(service->connect_retry_timer);
+		service->connect_retry_timer = 0;
+	}
 
-	__connman_service_ipconfig_indicate_state(service,
-						CONNMAN_SERVICE_STATE_IDLE,
-						CONNMAN_IPCONFIG_TYPE_IPV4);
-	__connman_service_ipconfig_indicate_state(service,
-						CONNMAN_SERVICE_STATE_IDLE,
-						CONNMAN_IPCONFIG_TYPE_IPV6);
+	service_ipconfig_indicate_states(service, CONNMAN_SERVICE_STATE_IDLE);
 	connman_service_unref(service);
 }
 
