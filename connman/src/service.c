@@ -56,6 +56,7 @@ static unsigned int autoconnect_timeout = 0;
 static unsigned int vpn_autoconnect_timeout = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
+static bool autoconnect_paused = false;
 
 struct connman_stats_counter_data {
 	uint64_t rx_packets;
@@ -4012,7 +4013,9 @@ static gboolean run_auto_connect(gpointer data)
 
 	autoconnect_timeout = 0;
 
-	DBG("");
+	DBG("paused %d", autoconnect_paused);
+	if (autoconnect_paused)
+		return FALSE;
 
 	preferred_tech = preferred_tech_list_get();
 	if (preferred_tech) {
@@ -5520,6 +5523,7 @@ static void request_input_cb(struct connman_service *service,
 
 	DBG("RequestInput return, %p", service);
 	__connman_device_keep_network(NULL);
+	autoconnect_paused = false;
 
 	if (error) {
 		DBG("error: %s", error);
@@ -6464,6 +6468,7 @@ int __connman_service_connect(struct connman_service *service,
 		 * to a user agent crash, bug or whatever.
 		 */
 		__connman_device_keep_network(NULL);
+		autoconnect_paused = false;
 
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
@@ -6490,8 +6495,10 @@ int __connman_service_connect(struct connman_service *service,
 			 * Prevent the network from being removed from the list
 			 * while passphrase request is pending.
 			 */
-			if (err == -EINPROGRESS)
+			if (err == -EINPROGRESS) {
 				__connman_device_keep_network(service->network);
+				autoconnect_paused = true;
+			}
 
 			if (service->hidden && err != -EINPROGRESS)
 				service->pending = pending;
