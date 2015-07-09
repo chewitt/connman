@@ -1965,7 +1965,6 @@ static void interface_state(GSupplicantInterface *interface)
 
 		connman_network_set_connected(network, false);
 		connman_network_set_associating(network, false);
-		wifi->disconnecting = false;
 
 		start_autoscan(device);
 
