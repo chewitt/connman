@@ -5519,6 +5519,7 @@ static void request_input_cb(struct connman_service *service,
 	int err = 0;
 
 	DBG("RequestInput return, %p", service);
+	__connman_device_keep_network(NULL);
 
 	if (error) {
 		DBG("error: %s", error);
@@ -6456,6 +6457,14 @@ int __connman_service_connect(struct connman_service *service,
 			connman_provider_disconnect(service->provider);
 
 	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
+
+		/*
+		 * User-initiated connect would release the previously kept
+		 * network in case if passphrase request never completes due
+		 * to a user agent crash, bug or whatever.
+		 */
+		__connman_device_keep_network(NULL);
+
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
 
@@ -6474,12 +6483,22 @@ int __connman_service_connect(struct connman_service *service,
 					request_input_cb,
 					get_dbus_sender(service),
 					pending);
-            DBG("request reply %d", err);
+
+			DBG("passphrase input status %d", err);
+
+			/*
+			 * Prevent the network from being removed from the list
+			 * while passphrase request is pending.
+			 */
+			if (err == -EINPROGRESS)
+				__connman_device_keep_network(service->network);
+
 			if (service->hidden && err != -EINPROGRESS)
 				service->pending = pending;
-                return err;
+
+			return err;
 		}
-            reply_pending(service, -err);
+		reply_pending(service, -err);
 	}
 
 	return err;
