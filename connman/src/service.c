@@ -3217,6 +3217,23 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	return reply;
 }
 
+static char **remove_empty_strings(char **strv)
+{
+	int index = 0;
+	char **iter = strv;
+
+	while (*iter) {
+		if (**iter)
+			strv[index++] = *iter;
+		else
+			g_free(*iter);
+		iter++;
+	}
+
+	strv[index] = NULL;
+	return strv;
+}
+
 static int update_proxy_configuration(struct connman_service *service,
 				DBusMessageIter *array)
 {
