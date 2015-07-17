@@ -39,6 +39,9 @@
 
 #define CONNECT_TIMEOUT		120
 
+#define CONNECT_RETRY_TIMEOUT_STEP	5
+#define CONNECT_RETRY_TIMEOUT_MAX	1800
+
 // Maximum time between failed online checks is ONLINE_CHECK_RETRY_COUNT^2 seconds
 #define ONLINE_CHECK_RETRY_COUNT 12
 
@@ -53,8 +56,7 @@ static unsigned int autoconnect_timeout = 0;
 static unsigned int vpn_autoconnect_timeout = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
-
-int failure_connect_interval = 0;
+static bool autoconnect_paused = false;
 
 struct connman_stats_counter_data {
 	uint64_t rx_packets;
@@ -140,6 +142,8 @@ struct connman_service {
 	char *config_entry;
 	guint online_check_timer_ipv4;
 	guint online_check_timer_ipv6;
+	guint connect_retry_timer;
+	guint connect_retry_timeout;
 };
 
 static bool allow_property_changed(struct connman_service *service);
@@ -3927,14 +3931,6 @@ static GList *preferred_tech_list_get(void)
 	return tech_data.preferred_list;
 }
 
-
-static gboolean connect_failure_timeout(gpointer data)
-{
-    DBG("connect_failure_timeout %d",failure_connect_interval);
-	update_failure_interval();
-	return FALSE;
-}
-
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
 				bool preferred)
@@ -3953,8 +3949,10 @@ static bool auto_connect_service(GList *services,
 		service = list->data;
 
 		if (ignore[service->type] || !service->autoconnect) {
-			DBG("service %p type %s ignore", service,
-				__connman_service_type2string(service->type));
+			DBG("service %p type %s ignore %d autoconnect %d",
+				service,
+				__connman_service_type2string(service->type),
+				ignore[service->type], service->autoconnect);
 			continue;
 		}
 
@@ -3972,26 +3970,21 @@ static bool auto_connect_service(GList *services,
 
 			continue;
 		}
+
 		if (!service->favorite) {
 			if (preferred)
 			       continue;
 
 			return autoconnecting;
 		}
-DBG("state %d, failure_connect_interval %d"
-    ,service->state,failure_connect_interval);
 
-		if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
-			if (failure_connect_interval < 0) {
-				continue;
-			} else if (failure_connect_interval == 0) {
-				failure_connect_interval = 5;
-				g_timeout_add_seconds((guint)failure_connect_interval, connect_failure_timeout, NULL);
-			}
-		} else {
-			if (is_ignore(service) || service->state != CONNMAN_SERVICE_STATE_IDLE)
-				continue;
+		if (is_ignore(service) || service->state !=
+				CONNMAN_SERVICE_STATE_IDLE) {
+			DBG("service %p ignore %d state %d", service,
+				is_ignore(service), service->state);
+			continue;
 		}
+
 		if (autoconnecting && !active_sessions[service->type]) {
 			DBG("service %p type %s has no users", service,
 				__connman_service_type2string(service->type));
@@ -4020,7 +4013,9 @@ static gboolean run_auto_connect(gpointer data)
 
 	autoconnect_timeout = 0;
 
-	DBG("");
+	DBG("paused %d", autoconnect_paused);
+	if (autoconnect_paused)
+		return FALSE;
 
 	preferred_tech = preferred_tech_list_get();
 	if (preferred_tech) {
@@ -4035,43 +4030,18 @@ static gboolean run_auto_connect(gpointer data)
 	return FALSE;
 }
 
-void update_failure_interval()
-{
-	DBG("failure_connect_interval %d", failure_connect_interval);
-	if (failure_connect_interval <= 0) {
-		return;
-	} else if (failure_connect_interval == 1800) {
-		failure_connect_interval = -1;//stop after 30 minutes
-		return;
-	} else {
-		failure_connect_interval = failure_connect_interval * 2;
-		if (failure_connect_interval > 1800) //clamp down to 30 minutes
-			failure_connect_interval = 1800;
-	}
-	g_timeout_add_seconds((guint)failure_connect_interval, connect_failure_timeout, NULL);
-
-	run_auto_connect(GUINT_TO_POINTER(CONNMAN_SERVICE_CONNECT_REASON_AUTO));
-}
-
 void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 {
-	DBG("autoconnect_timeout %u",autoconnect_timeout);
+	DBG("");
 
 	if (autoconnect_timeout != 0)
 		return;
 
 	if (!__connman_session_policy_autoconnect(reason))
 		return;
-    DBG("failure_connect_interval %d",failure_connect_interval);
-    if (failure_connect_interval >= 0) {
-        if (failure_connect_interval == 0) {
-            failure_connect_interval = 5;
-            update_failure_interval();
-            return;
-        }
-    }
-		autoconnect_timeout = g_timeout_add_seconds(0, run_auto_connect,
-								GUINT_TO_POINTER(reason));
+
+	autoconnect_timeout = g_timeout_add_seconds(0, run_auto_connect,
+						GUINT_TO_POINTER(reason));
 }
 
 static gboolean run_vpn_auto_connect(gpointer data) {
@@ -4243,6 +4213,39 @@ void __connman_service_return_error(struct connman_service *service,
 	reply_pending(service, error);
 }
 
+static void service_ipconfig_indicate_states(struct connman_service *service,
+					enum connman_service_state new_state)
+{
+	__connman_service_ipconfig_indicate_state(service, new_state,
+					CONNMAN_IPCONFIG_TYPE_IPV4);
+	__connman_service_ipconfig_indicate_state(service, new_state,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
+}
+
+static gboolean service_retry_connect(gpointer data)
+{
+	struct connman_service *service = data;
+
+	DBG("service %p", service);
+	service->connect_retry_timer = 0;
+
+	if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
+
+		/* Clear the state */
+		service_ipconfig_indicate_states(service,
+						CONNMAN_SERVICE_STATE_IDLE);
+		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		service->state = CONNMAN_SERVICE_STATE_IDLE;
+		state_changed(service);
+
+		/* Schedule the next auto-connect round */
+		__connman_service_auto_connect(
+			CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+	}
+
+	return FALSE;
+}
+
 static gboolean connect_timeout(gpointer user_data)
 {
 	struct connman_service *service = user_data;
@@ -4346,9 +4349,6 @@ static DBusMessage *connect_service(DBusConnection *conn,
 	service->ignore = false;
 
 	service->pending = dbus_message_ref(msg);
-DBG("setting failure_connect_interval to 0 %d",failure_connect_interval);
-	if (failure_connect_interval < 0)
-        failure_connect_interval = 0;
 
 	err = __connman_service_connect(service,
 			CONNMAN_SERVICE_CONNECT_REASON_USER);
@@ -4901,6 +4901,8 @@ static void service_destroy(struct connman_service *service)
 		current_default = NULL;
 
 	stop_recurring_online_check(service);
+	if (service->connect_retry_timer)
+		g_source_remove(service->connect_retry_timer);
 
         g_free(service);
 }
@@ -5425,8 +5427,7 @@ static void service_complete(struct connman_service *service)
     DBG("");
 	reply_pending(service, EIO);
 
-	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER
-            &&  failure_connect_interval == 0)
+	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
 		__connman_service_auto_connect(service->connect_reason);
 
 	g_get_current_time(&service->modified);
@@ -5521,6 +5522,8 @@ static void request_input_cb(struct connman_service *service,
 	int err = 0;
 
 	DBG("RequestInput return, %p", service);
+	__connman_device_keep_network(NULL);
+	autoconnect_paused = false;
 
 	if (error) {
 		DBG("error: %s", error);
@@ -5532,10 +5535,6 @@ static void request_input_cb(struct connman_service *service,
 			if (service->hidden)
 				__connman_service_return_error(service,
 							ECANCELED, user_data);
-            DBG("failure_connect_interval %d", failure_connect_interval);
-            if (failure_connect_interval >= 0) {//let one through
-                failure_connect_interval  = -1;
-            }
 			goto done;
 		} else {
 			if (service->hidden)
@@ -5720,8 +5719,12 @@ static int service_indicate_state(struct connman_service *service)
 	def_service = __connman_service_get_default();
 
 	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
-        DBG("setting failure_connect_interval to 0");
-		failure_connect_interval = 0;
+		service->connect_retry_timeout = 0;
+		if (service->connect_retry_timer) {
+			g_source_remove(service->connect_retry_timer);
+			service->connect_retry_timer = 0;
+		}
+
 		result = service_update_preferred_order(def_service,
 				service, new_state);
 		if (result == -EALREADY)
@@ -5823,6 +5826,19 @@ static int service_indicate_state(struct connman_service *service)
 	}
 
 	if (new_state == CONNMAN_SERVICE_STATE_FAILURE) {
+		if (!service->connect_retry_timer) {
+			/* Schedule a retry, increasing timeout if necessary */
+			if (service->connect_retry_timer <
+						CONNECT_RETRY_TIMEOUT_MAX)
+				service->connect_retry_timeout +=
+					CONNECT_RETRY_TIMEOUT_STEP;
+
+			DBG("service %p retry timeout %d", service,
+					service->connect_retry_timeout);
+			service->connect_retry_timer = g_timeout_add_seconds(
+				service->connect_retry_timeout,
+				service_retry_connect, service);
+		}
 
 		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER &&
 			connman_agent_report_error(service, service->path,
@@ -6443,9 +6459,17 @@ int __connman_service_connect(struct connman_service *service,
 	else if (service->type == CONNMAN_SERVICE_TYPE_VPN &&
 				service->provider)
 			connman_provider_disconnect(service->provider);
-DBG("failure_connect_interval %d", failure_connect_interval);
-	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER
-            || failure_connect_interval >= 0) {
+
+	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
+
+		/*
+		 * User-initiated connect would release the previously kept
+		 * network in case if passphrase request never completes due
+		 * to a user agent crash, bug or whatever.
+		 */
+		__connman_device_keep_network(NULL);
+		autoconnect_paused = false;
+
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
 
@@ -6464,12 +6488,24 @@ DBG("failure_connect_interval %d", failure_connect_interval);
 					request_input_cb,
 					get_dbus_sender(service),
 					pending);
-            DBG("request reply %d", err);
+
+			DBG("passphrase input status %d", err);
+
+			/*
+			 * Prevent the network from being removed from the list
+			 * while passphrase request is pending.
+			 */
+			if (err == -EINPROGRESS) {
+				__connman_device_keep_network(service->network);
+				autoconnect_paused = true;
+			}
+
 			if (service->hidden && err != -EINPROGRESS)
 				service->pending = pending;
-                return err;
+
+			return err;
 		}
-            reply_pending(service, -err);
+		reply_pending(service, -err);
 	}
 
 	return err;
@@ -7297,13 +7333,12 @@ void __connman_service_remove_from_network(struct connman_network *network)
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
 	stop_recurring_online_check(service);
+	if (service->connect_retry_timer) {
+		g_source_remove(service->connect_retry_timer);
+		service->connect_retry_timer = 0;
+	}
 
-	__connman_service_ipconfig_indicate_state(service,
-						CONNMAN_SERVICE_STATE_IDLE,
-						CONNMAN_IPCONFIG_TYPE_IPV4);
-	__connman_service_ipconfig_indicate_state(service,
-						CONNMAN_SERVICE_STATE_IDLE,
-						CONNMAN_IPCONFIG_TYPE_IPV6);
+	service_ipconfig_indicate_states(service, CONNMAN_SERVICE_STATE_IDLE);
 	connman_service_unref(service);
 }
 

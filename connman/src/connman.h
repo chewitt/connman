@@ -557,6 +557,7 @@ int __connman_device_request_hidden_scan(struct connman_device *device,
 
 bool __connman_device_isfiltered(const char *devname);
 
+void __connman_device_keep_network(struct connman_network *network);
 void __connman_device_set_network(struct connman_device *device,
 					struct connman_network *network);
 void __connman_device_cleanup_networks(struct connman_device *device);

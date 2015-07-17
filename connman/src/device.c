@@ -37,6 +37,7 @@
 static GSList *device_list = NULL;
 static gchar **device_filter = NULL;
 static gchar **nodevice_filter = NULL;
+static struct connman_network *keep_network = NULL;
 
 enum connman_pending_type {
 	PENDING_NONE	= 0,
@@ -369,11 +370,20 @@ void connman_device_driver_unregister(struct connman_device_driver *driver)
 	remove_driver(driver);
 }
 
+void __connman_device_keep_network(struct connman_network *network)
+{
+	DBG("%p -> %p", keep_network, network);
+	keep_network = network;
+}
+
 static void free_network(gpointer data)
 {
 	struct connman_network *network = data;
 
 	DBG("network %p", network);
+
+	if (keep_network == network)
+		keep_network = NULL;
 
 	__connman_network_set_device(network, NULL);
 
@@ -704,6 +714,9 @@ static gboolean remove_unavailable_network(gpointer key, gpointer value,
 		return FALSE;
 
 	if (connman_network_get_available(network))
+		return FALSE;
+
+	if (network == keep_network)
 		return FALSE;
 
 	return TRUE;
