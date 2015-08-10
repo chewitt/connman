@@ -3902,7 +3902,7 @@ int g_supplicant_interface_scan(GSupplicantInterface *interface,
 
 static int parse_supplicant_error(DBusMessageIter *iter)
 {
-	int err = -ECANCELED;
+	int err = -ECONNABORTED;
 	char *key;
 
 	if (!iter)
