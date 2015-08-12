@@ -7232,6 +7232,7 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 		service->ipconfig_ipv6 = create_ip6config(service, index);
 
 	service_register(service);
+	service_schedule_added(service);
 
 	if (service->favorite) {
 		device = connman_network_get_device(service->network);
@@ -7264,7 +7265,6 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 	}
 
 	__connman_notifier_service_add(service, service->name);
-	service_schedule_added(service);
 
 	return service;
 }
