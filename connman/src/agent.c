@@ -357,7 +357,7 @@ static void report_error_reply(DBusMessage *reply, void *user_data)
 	if (!reply)
 		goto out;
 
-	if (reply && dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
+	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		dbus_err = dbus_message_get_error_name(reply);
 		if (dbus_err &&
 			strcmp(dbus_err,
