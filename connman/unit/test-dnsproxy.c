@@ -154,6 +154,15 @@ void connman_notifier_unregister(struct connman_notifier *notifier)
 {
 }
 
+int __connman_util_get_random(uint64_t *val)
+{
+        if (!val)
+                return -EINVAL;
+
+	*val = rand() % 2000;
+	return 0;
+}
+
 static gboolean server_creation_failure_check_state(gpointer user_data)
 {
 	DBG("cache_refcount is %d, expecting 0.", cache_refcount);
@@ -165,6 +174,9 @@ static gboolean server_creation_failure_check_state(gpointer user_data)
 static void server_creation_failure(void)
 {
 	int i;
+	time_t t;
+
+	srand((unsigned) time(&t));
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 	__connman_log_init("test-dnsproxy",
@@ -195,3 +207,4 @@ int main(int argc, char *argv[])
 
 	return g_test_run();
 }
+
