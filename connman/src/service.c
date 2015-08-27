@@ -4289,7 +4289,7 @@ static DBusMessage *connect_service(DBusConnection *conn,
 
 	DBG("service %p", service);
 
-	if (service->pending || is_connecting(service) || is_connected(service))
+	if (service->pending)
 		return __connman_error_in_progress(msg);
 	for (list = service_list; list; list = list->next) {
 		struct connman_service *temp = list->data;
