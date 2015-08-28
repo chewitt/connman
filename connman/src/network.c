@@ -348,6 +348,8 @@ static int manual_ipv6_set(struct connman_network *network,
 
 	connman_device_set_disconnected(network->device, false);
 
+	connman_network_set_associating(network, false);
+
 	network->connecting = false;
 
 	return 0;
@@ -391,8 +393,6 @@ static int dhcpv6_set_addresses(struct connman_network *network)
 	service = connman_service_lookup_from_network(network);
 	if (!service)
 		goto err;
-
-	connman_network_set_associating(network, false);
 
 	network->connecting = false;
 
@@ -501,7 +501,7 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 
 	prefixes = __connman_inet_ipv6_get_prefixes(reply, length);
 
- 	/*
+	/*
 	 * If IPv6 config is missing from service, then create it.
 	 * The ipconfig might be missing if we got a rtnl message
 	 * that disabled IPv6 config and thus removed it. This
@@ -512,6 +512,8 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 	service = connman_service_lookup_from_network(network);
 	if (service) {
 		connman_service_create_ip6config(service, network->index);
+
+		connman_network_set_associating(network, false);
 
 		__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_CONFIGURATION,
