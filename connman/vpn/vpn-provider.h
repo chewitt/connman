@@ -107,6 +107,8 @@ const char *vpn_provider_get_save_group(struct vpn_provider *provider);
 const char *vpn_provider_get_name(struct vpn_provider *provider);
 const char *vpn_provider_get_host(struct vpn_provider *provider);
 const char *vpn_provider_get_path(struct vpn_provider *provider);
+void vpn_provider_change_address(struct vpn_provider *provider);
+void vpn_provider_clear_address(struct vpn_provider *provider, int family);
 
 typedef void (* vpn_provider_connect_cb_t) (struct vpn_provider *provider,
 					void *user_data, int error);
@@ -130,6 +132,8 @@ struct vpn_provider_driver {
 			void *user_data);
 	int (*disconnect) (struct vpn_provider *provider);
 	int (*save) (struct vpn_provider *provider, GKeyFile *keyfile);
+	int (*set_state)(struct vpn_provider *provider,
+						enum vpn_provider_state state);
 };
 
 int vpn_provider_driver_register(struct vpn_provider_driver *driver);

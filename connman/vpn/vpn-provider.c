@@ -84,6 +84,8 @@ struct vpn_provider {
 	char *config_file;
 	char *config_entry;
 	bool immutable;
+	struct connman_ipaddress *prev_ipv4_addr;
+	struct connman_ipaddress *prev_ipv6_addr;
 };
 
 static void append_properties(DBusMessageIter *iter,
@@ -499,6 +501,12 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 	return NULL;
 }
 
+static DBusMessage *do_connect2(DBusConnection *conn, DBusMessage *msg,
+								void *data)
+{
+	return do_connect(conn, msg, data);
+}
+
 static DBusMessage *do_disconnect(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
@@ -525,6 +533,9 @@ static const GDBusMethodTable connection_methods[] = {
 			GDBUS_ARGS({ "name", "s" }), NULL,
 			clear_property) },
 	{ GDBUS_ASYNC_METHOD("Connect", NULL, NULL, do_connect) },
+	{ GDBUS_ASYNC_METHOD("Connect2",
+			GDBUS_ARGS({ "dbus_sender", "s" }),
+			NULL, do_connect2) },
 	{ GDBUS_METHOD("Disconnect", NULL, NULL, do_disconnect) },
 	{ },
 };
@@ -547,6 +558,12 @@ static void resolv_result(GResolvResultStatus status,
 		provider->host_ip = g_strdupv(results);
 
 	vpn_provider_unref(provider);
+
+	/* Remove the resolver here so that it will not be left
+	 * hanging around and cause double free in unregister_provider()
+	 */
+	g_resolv_unref(provider->resolv);
+	provider->resolv = NULL;
 }
 
 static void provider_resolv_host_addr(struct vpn_provider *provider)
@@ -1000,6 +1017,8 @@ static void provider_destruct(struct vpn_provider *provider)
 	g_strfreev(provider->host_ip);
 	g_free(provider->config_file);
 	g_free(provider->config_entry);
+	connman_ipaddress_free(provider->prev_ipv4_addr);
+	connman_ipaddress_free(provider->prev_ipv6_addr);
 	g_free(provider);
 }
 
@@ -1077,10 +1096,22 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 	DBG("provider %p", provider);
 
 	if (provider->driver && provider->driver->connect) {
+		const char *dbus_sender = dbus_message_get_sender(msg);
+
 		dbus_message_ref(msg);
+
+		if (dbus_message_has_signature(msg,
+						DBUS_TYPE_STRING_AS_STRING)) {
+			const char *sender = NULL;
+
+			dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING,
+					&sender, DBUS_TYPE_INVALID);
+			if (sender && sender[0])
+				dbus_sender = sender;
+		}
+
 		err = provider->driver->connect(provider, connect_cb,
-						dbus_message_get_sender(msg),
-						msg);
+						dbus_sender, msg);
 	} else
 		return -EOPNOTSUPP;
 
@@ -1306,13 +1337,6 @@ static int provider_indicate_state(struct vpn_provider *provider,
 		connman_dbus_property_changed_basic(provider->path,
 					VPN_CONNECTION_INTERFACE, "State",
 					DBUS_TYPE_STRING, &str);
-
-	/*
-	 * We do not stay in failure state as clients like connmand can
-	 * get confused about our current state.
-	 */
-	if (provider->state == VPN_PROVIDER_STATE_FAILURE)
-		provider->state = VPN_PROVIDER_STATE_IDLE;
 
 	return 0;
 }
@@ -1550,17 +1574,21 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 	DBG("provider %p id %s error %d", provider, provider->identifier,
 									error);
 
+	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
+
 	switch (error) {
-	case VPN_PROVIDER_ERROR_LOGIN_FAILED:
-		break;
-	case VPN_PROVIDER_ERROR_AUTH_FAILED:
-		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
-		break;
+	case VPN_PROVIDER_ERROR_UNKNOWN:
 	case VPN_PROVIDER_ERROR_CONNECT_FAILED:
 		break;
-	default:
+
+        case VPN_PROVIDER_ERROR_LOGIN_FAILED:
+        case VPN_PROVIDER_ERROR_AUTH_FAILED:
+		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
 		break;
 	}
+
+	if (provider->driver && provider->driver->set_state)
+		provider->driver->set_state(provider, provider->state);
 
 	return 0;
 }
@@ -1606,6 +1634,18 @@ static void unregister_provider(gpointer data)
 	configuration_count_del();
 
 	connection_unregister(provider);
+
+	/* If the provider has any DNS resolver queries pending,
+	 * they need to be cleared here because the unref will not
+	 * be able to do that (because the provider_resolv_host_addr()
+	 * has increased the ref count by 1). This is quite rare as
+	 * normally the resolving either returns a value or has a
+	 * timeout which clears the memory. Typically resolv_result() will
+	 * unref the provider but in this case that call has not yet
+	 * happened.
+	 */
+	if (provider->resolv)
+		vpn_provider_unref(provider);
 
 	vpn_provider_unref(provider);
 }
@@ -2304,19 +2344,41 @@ int vpn_provider_set_ipaddress(struct vpn_provider *provider,
 		break;
 	}
 
-	DBG("provider %p ipconfig %p family %d", provider, ipconfig,
-							ipaddress->family);
+	DBG("provider %p state %d ipconfig %p family %d", provider,
+		provider->state, ipconfig, ipaddress->family);
 
 	if (!ipconfig)
 		return -EINVAL;
 
 	provider->family = ipaddress->family;
 
-	__vpn_ipconfig_set_local(ipconfig, ipaddress->local);
-	__vpn_ipconfig_set_peer(ipconfig, ipaddress->peer);
-	__vpn_ipconfig_set_broadcast(ipconfig, ipaddress->broadcast);
-	__vpn_ipconfig_set_gateway(ipconfig, ipaddress->gateway);
-	__vpn_ipconfig_set_prefixlen(ipconfig, ipaddress->prefixlen);
+	if (provider->state == VPN_PROVIDER_STATE_CONNECT ||
+			provider->state == VPN_PROVIDER_STATE_READY) {
+		struct connman_ipaddress *addr =
+					__vpn_ipconfig_get_address(ipconfig);
+
+		/*
+		 * Remember the old address so that we can remove it in notify
+		 * function in plugins/vpn.c if we ever restart
+		 */
+		if (ipaddress->family == AF_INET6) {
+			connman_ipaddress_free(provider->prev_ipv6_addr);
+			provider->prev_ipv6_addr =
+						connman_ipaddress_copy(addr);
+		} else {
+			connman_ipaddress_free(provider->prev_ipv4_addr);
+			provider->prev_ipv4_addr =
+						connman_ipaddress_copy(addr);
+		}
+	}
+
+	if (ipaddress->local) {
+		__vpn_ipconfig_set_local(ipconfig, ipaddress->local);
+		__vpn_ipconfig_set_peer(ipconfig, ipaddress->peer);
+		__vpn_ipconfig_set_broadcast(ipconfig, ipaddress->broadcast);
+		__vpn_ipconfig_set_gateway(ipconfig, ipaddress->gateway);
+		__vpn_ipconfig_set_prefixlen(ipconfig, ipaddress->prefixlen);
+	}
 
 	return 0;
 }
@@ -2542,6 +2604,63 @@ const char *vpn_provider_get_host(struct vpn_provider *provider)
 const char *vpn_provider_get_path(struct vpn_provider *provider)
 {
 	return provider->path;
+}
+
+void vpn_provider_change_address(struct vpn_provider *provider)
+{
+	switch (provider->family) {
+	case AF_INET:
+		connman_inet_set_address(provider->index,
+			__vpn_ipconfig_get_address(provider->ipconfig_ipv4));
+		break;
+	case AF_INET6:
+		connman_inet_set_ipv6_address(provider->index,
+			__vpn_ipconfig_get_address(provider->ipconfig_ipv6));
+		break;
+	default:
+		break;
+	}
+}
+
+void vpn_provider_clear_address(struct vpn_provider *provider, int family)
+{
+	const char *address;
+	unsigned char len;
+
+	DBG("provider %p family %d ipv4 %p ipv6 %p", provider, family,
+		provider->prev_ipv4_addr, provider->prev_ipv6_addr);
+
+	switch (family) {
+	case AF_INET:
+		if (provider->prev_ipv4_addr) {
+			connman_ipaddress_get_ip(provider->prev_ipv4_addr,
+						&address, &len);
+
+			DBG("ipv4 %s/%d", address, len);
+
+			connman_inet_clear_address(provider->index,
+					provider->prev_ipv4_addr);
+			connman_ipaddress_free(provider->prev_ipv4_addr);
+			provider->prev_ipv4_addr = NULL;
+		}
+		break;
+	case AF_INET6:
+		if (provider->prev_ipv6_addr) {
+			connman_ipaddress_get_ip(provider->prev_ipv6_addr,
+						&address, &len);
+
+			DBG("ipv6 %s/%d", address, len);
+
+			connman_inet_clear_ipv6_address(provider->index,
+							address, len);
+
+			connman_ipaddress_free(provider->prev_ipv6_addr);
+			provider->prev_ipv6_addr = NULL;
+		}
+		break;
+	default:
+		break;
+	}
 }
 
 static int agent_probe(struct connman_agent *agent)

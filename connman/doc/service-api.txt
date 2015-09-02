@@ -155,7 +155,9 @@ Properties	string State [readonly]
 			the "failure" state. Otherwise it might be empty or
 			not present at all.
 
-			Current defined error code is "dhcp-failed".
+			Currently defined error codes are: "out-of-range",
+			"pin-missing", "dhcp-failed", "connect-failed",
+			"login-failed", "auth-failed" and "invalid-key".
 
 		string Name [readonly]
 
@@ -245,9 +247,9 @@ Properties	string State [readonly]
 			This value will be set to true if the service is
 			configured externally via a configuration file.
 
-			The only valid operation are Connect() and of
-			course Disconnect(). The Remove() method will
-			result in an error.
+			The only valid operations are Connect(), Disconnect()
+			and changing the AutoConnect property. The Remove()
+			method will result in an error.
 
 		boolean AutoConnect [readwrite]
 

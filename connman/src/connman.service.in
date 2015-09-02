@@ -1,14 +1,15 @@
 [Unit]
 Description=Connection service
 Requires=@CONNMAN_SERVICE_REQUIRES@
-After=@CONNMAN_SERVICE_AFTER@
-Before=remote-fs.target
+After=@CONNMAN_SERVICE_AFTER@ network-pre.target
+Before=network.target remote-fs-pre.target
+Wants=network.target remote-fs-pre.target
 
 [Service]
 Type=notify
 Restart=always
 EnvironmentFile=-/etc/tracing/connman/connman.tracing
-ExecStart=@prefix@/sbin/connmand -n --nobacktrace --systemd $TRACING
+ExecStart=@sbindir@/connmand -n --nobacktrace --systemd $TRACING
 StandardOutput=null
 
 [Install]

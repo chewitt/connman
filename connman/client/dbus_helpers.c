@@ -27,7 +27,7 @@
 #include "input.h"
 #include "dbus_helpers.h"
 
-#define TIMEOUT         60000
+#define TIMEOUT         120000
 
 void __connmanctl_dbus_print(DBusMessageIter *iter, const char *pre,
 		const char *dict, const char *sep)
@@ -145,6 +145,7 @@ static void dbus_method_reply(DBusPendingCall *call, void *user_data)
 	__connmanctl_save_rl();
 
 	reply = dbus_pending_call_steal_reply(call);
+	dbus_pending_call_unref(call);
 	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		DBusError err;
 
@@ -213,6 +214,9 @@ static int append_variant(DBusMessageIter *iter, const char *property,
         case DBUS_TYPE_STRING:
                 type_str = DBUS_TYPE_STRING_AS_STRING;
                 break;
+	case DBUS_TYPE_INT32:
+		type_str = DBUS_TYPE_INT32_AS_STRING;
+		break;
 	default:
 		return -EOPNOTSUPP;
 	}

@@ -83,10 +83,15 @@ The following options are valid if Type is "wifi"
   passphrase. The PrivateKeyPassphrase field is ignored when this field is set
   to fsid.
 - Identity: Identity string for EAP.
+- AnonymousIdentity: Anonymous Identity string for EAP.
 - Phase2: Phase2 (inner authentication with TLS tunnel) authentication method.
   Prefix the value with "EAP-" to indicate the usage of an EAP-based inner
   authentication method (should only be used with EAP = TTLS).
 - Passphrase: RSN/WPA/WPA2 Passphrase
+- Security: The security type of the network. Possible values are 'psk'
+  (WPA/WPA2 PSK), 'ieee8021x' (WPA EAP), 'none' and 'wep'. When not set, the
+  default value is 'ieee8021x' if an EAP type is configured, 'psk' if a
+  passphrase is present and 'none' otherwise.
 - Hidden: If set to true, then this AP is hidden. If missing or set to false,
   then AP is not hidden.
 

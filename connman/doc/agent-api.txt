@@ -23,6 +23,16 @@ Methods		void Release()
 
 			Possible Errors: net.connman.Agent.Error.Retry
 
+		void ReportPeerError(object peer, string error)
+
+			This method gets called when an error has to be
+			reported to the user about a peer connection.
+
+			A special return value can be used to trigger a
+			retry of the failed transaction.
+
+			Possible Errors: net.connman.Agent.Error.Retry
+
 		void RequestBrowser(object service, string url)
 
 			This method gets called when it is required
@@ -58,6 +68,25 @@ Methods		void Release()
 			Possible Errors: net.connman.Agent.Error.Canceled
 					 net.connman.Agent.Error.LaunchBrowser
 
+		dict RequestPeerAuthorization(object peer, dict fields) [experimental]
+
+			This method gets called when trying to connect to a
+			peer or when an incoming peer connection is requested,
+			for which some extra input is required. In this case,
+			it will only deal with WPS input as well as accepting
+			or rejecting an incoming connection.
+
+			The return value should be a dictionary where the
+			keys are the field names and the values are the
+			actual fields. Alternatively an error indicating that
+			the request got canceled or rejected can be returned.
+
+			The dictionary arguments contains field names with
+			their input parameters.
+
+			Possible Errors: net.connman.Agent.Error.Canceled
+			                 net.connman.Agent.Error.Rejected
+
 		void Cancel()
 
 			This method gets called to indicate that the agent
@@ -90,7 +119,7 @@ Fields		string Name
 		string PreviousPassphrase
 
 			The previous passphrase successfully saved, i.e.
-			which lead to a successfull connection. This field is
+			which led to a successfull connection. This field is
 			provided as an informational argument when connecting
 			with it does not work anymore, for instance when it
 			has been changed on the AP. Such argument appears when
@@ -106,6 +135,9 @@ Fields		string Name
 			either empty pin, if user wants to use push-button
 			method, or a pin code if user wants to use the pin
 			method.
+
+			In case of a RequestPeerAuthorization, this field will
+			be set as mandatory.
 
 		string Username
 
@@ -134,10 +166,10 @@ Arguments	string Type
 			would be the network name or SSID.
 
 			All "mandatory" fields must be returned, while the
-			"optional" can be returned if available.
+			"optional" ones can be returned if available.
 
 			Nothing needs to be returned for "informational", as it
-			is here only to provide an information so a value is
+			is here only to provide an information. A value is
 			attached to it.
 
 		array{string} Alternates
@@ -254,3 +286,20 @@ Examples	Requesting a passphrase for WPA2 network
 				}
 
 			==> { "Username" : "foo", "Password": "secret" }
+
+		Requesting a answer about an inconming peer connection:
+
+			RequestPeerAuthorization("/peer3", {})
+
+			==> { }
+
+		Requesting the WPS details when connecting to a peer:
+
+			RequestPeerAuthorization("/peer4",
+				{ "WPS":
+					{ "Type"        : "wpspin",
+					  "Requirement" : "mandatory"
+					}
+				}
+
+			==> { "WPS" : "" }

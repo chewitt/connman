@@ -1,6 +1,6 @@
 Name:       connman
 Summary:    Connection Manager
-Version:    1.24
+Version:    1.30
 Release:    1
 Group:      Communications/ConnMan
 License:    GPLv2
@@ -126,7 +126,6 @@ rm -rf %{buildroot}
 
 mkdir -p %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/stats-tool %{buildroot}%{_libdir}/%{name}/tools
-cp -a client/connmanctl %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/*-test %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/iptables-unit %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
@@ -160,6 +159,7 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %doc AUTHORS COPYING ChangeLog README
 %{_sbindir}/*
+%{_bindir}/*
 %{_libdir}/%{name}/scripts/*
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{_lib}/systemd/system/connman.service
@@ -195,4 +195,4 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %{_datadir}/man/man5/connman.conf.5.gz
 %{_datadir}/man/man8/connman.8.gz
-
+%{_datadir}/man/man1/connmanctl.1.gz

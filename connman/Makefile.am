@@ -11,7 +11,8 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/device.h include/network.h include/inet.h \
 			include/storage.h include/provision.h \
 			include/session.h include/ipaddress.h include/agent.h \
-			include/inotify.h include/peer.h include/wakeup_timer.h
+			include/inotify.h include/peer.h include/machine.h \
+			include/wakeup_timer.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -72,6 +73,13 @@ endif
 endif
 endif
 
+service_files_sources = src/connman.service.in src/net.connman.service.in \
+				vpn/connman-vpn.service.in \
+				vpn/net.connman.vpn.service.in
+service_files = src/connman.service src/net.connman.service \
+				vpn/connman-vpn.service \
+				vpn/net.connman.vpn.service
+
 plugin_LTLIBRARIES =
 
 plugin_objects =
@@ -82,6 +90,7 @@ builtin_libadd =
 builtin_cflags =
 
 noinst_PROGRAMS =
+bin_PROGRAMS =
 
 unit_objects =
 
@@ -106,6 +115,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/iptables.c src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
+			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/jolla-stats.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
@@ -145,13 +155,13 @@ vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/vpn/vpn.ver
 endif
 
-BUILT_SOURCES = $(local_headers) src/builtin.h
+BUILT_SOURCES = $(local_headers) src/builtin.h $(service_files) scripts/connman
 
 if VPN
 BUILT_SOURCES += vpn/builtin.h
 endif
 
-CLEANFILES = src/connman.conf $(BUILT_SOURCES)
+CLEANFILES = src/connman.conf $(BUILT_SOURCES) $(service_files)
 
 statedir = $(localstatedir)/run/connman
 vpn_statedir = $(localstatedir)/run/connman-vpn
@@ -213,7 +223,8 @@ src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-I$(builddir)/src
 
 EXTRA_DIST = src/genbuiltin src/connman-dbus.conf src/connman-polkit.conf \
-						plugins/connman-nmcompat.conf
+				plugins/connman-nmcompat.conf \
+				$(service_files_sources) scripts/connman.in
 
 if VPN
 vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
@@ -238,9 +249,9 @@ script_LTLIBRARIES =
 include Makefile.plugins
 
 if CLIENT
-noinst_PROGRAMS += client/connmanctl
+bin_PROGRAMS += client/connmanctl
 
-noinst_MANUAL_PAGES = doc/connmanctl.1
+MANUAL_PAGES += doc/connmanctl.1
 
 client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/services.h client/services.c \
@@ -255,18 +266,11 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl
 endif
 
-noinst_PROGRAMS += unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool \
+noinst_PROGRAMS += unit/test-ippool \
 			unit/test-jolla-wakeup-timer unit/test-dnsproxy
 
-unit_test_pbkdf2_sha1_SOURCES = unit/test-pbkdf2-sha1.c \
-				src/shared/sha1.h src/shared/sha1.c
-unit_test_pbkdf2_sha1_LDADD = @GLIB_LIBS@
-
-unit_test_prf_sha1_SOURCES = unit/test-prf-sha1.c \
-				src/shared/sha1.h src/shared/sha1.c
-unit_test_prf_sha1_LDADD = @GLIB_LIBS@
-
-unit_test_ippool_SOURCES = src/log.c src/dbus.c src/ippool.c unit/test-ippool.c
+unit_test_ippool_SOURCES = src/log.c src/dbus.c src/error.c \
+					src/ippool.c unit/test-ippool.c
 unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
@@ -278,7 +282,7 @@ unit_test_jolla_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c
 unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
-TESTS = unit/test-pbkdf2-sha1 unit/test-prf-sha1 unit/test-ippool \
+TESTS = unit/test-ippool \
 		unit/test-jolla-wakeup-timer unit/test-dnsproxy
 
 if WISPR
@@ -332,7 +336,7 @@ tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ -ldl
 
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
-tools_session_test_SOURCES = src/log.c src/dbus.c \
+tools_session_test_SOURCES = src/log.c src/dbus.c src/error.c \
 		tools/session-test.c tools/session-utils.c tools/manager-api.c \
 		tools/session-api.c tools/session-test.h
 tools_session_test_LDADD = gdbus/libgdbus-internal.la \
@@ -378,6 +382,8 @@ endif
 EXTRA_DIST += $(test_scripts)
 
 EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
+				doc/coding-style.txt doc/wifi-p2p-overview.txt \
+				doc/vpn-agent-api.txt doc/peer-api.txt \
 				doc/ipconfig-api.txt doc/plugin-api.txt \
 				doc/manager-api.txt doc/agent-api.txt \
 				doc/service-api.txt doc/technology-api.txt \
@@ -385,6 +391,7 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 				doc/clock-api.txt doc/session-api.txt \
 				doc/session-overview.txt doc/backtrace.txt \
 				doc/advanced-configuration.txt \
+				doc/vpn-config-format.txt \
 				doc/vpn-connection-api.txt \
 				doc/vpn-manager-api.txt doc/vpn-overview.txt \
 				doc/session-policy-format.txt
@@ -413,13 +420,15 @@ DISTCLEANFILES = $(pkgconfig_DATA)
 
 MAINTAINERCLEANFILES = Makefile.in \
 	aclocal.m4 configure config.h.in config.sub config.guess \
-	ltmain.sh depcomp compile missing install-sh mkinstalldirs
+	ltmain.sh depcomp compile missing install-sh mkinstalldirs test-driver
 
 
 src/builtin.h: src/genbuiltin $(builtin_sources)
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_modules) > $@
 
 vpn/builtin.h: src/genbuiltin $(builtin_vpn_sources)
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN)$(srcdir)/src/genbuiltin $(builtin_vpn_modules) > $@
 
 src/connman.conf: src/connman-dbus.conf src/connman-polkit.conf
@@ -449,6 +458,19 @@ connman-task.pp: vpn/connman-task.te
 endif
 
 EXTRA_DIST += vpn/connman-task.te
+
+do_subst = $(AM_V_GEN)$(SED) \
+		-e 's,[@]prefix[@],$(prefix),g' \
+		-e 's,[@]sbindir[@],$(sbindir),g' \
+		-e 's,[@]sysconfdir[@],$(sysconfdir),g'
+
+%.service: %.service.in Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
+	$(do_subst) < $< > $@
+
+scripts/connman: scripts/connman.in Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
+	$(do_subst) < $< > $@
 
 include/connman/version.h: include/version.h
 	$(AM_V_at)$(MKDIR_P) include/connman

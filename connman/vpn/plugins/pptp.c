@@ -2,7 +2,7 @@
  *
  *  ConnMan VPN daemon
  *
- *  Copyright (C) 2010,2013  BMW Car IT GmbH. All rights reserved.
+ *  Copyright (C) 2010,2013-2014  BMW Car IT GmbH.
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -289,8 +289,9 @@ static void request_input_reply(DBusMessage *reply, void *user_data)
 
 	DBG("provider %p", pptp_reply->provider);
 
-	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
-		error = dbus_message_get_error_name(reply);
+	if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
+		if (reply)
+			error = dbus_message_get_error_name(reply);
 		goto done;
 	}
 

@@ -165,15 +165,17 @@ static int send_cancel_request(struct connman_agent *agent,
 			struct connman_agent_request *request)
 {
 	DBusMessage *message;
+	const char *interface = NULL;
 
-	if (!request->driver)
-		return 0;
+	if (request && request->driver)
+		interface = request->driver->interface;
 
-	DBG("send cancel req to %s %s", agent->owner, agent->path);
+	DBG("send cancel req to %s %s iface %s", agent->owner, agent->path,
+								interface);
 
 	message = dbus_message_new_method_call(agent->owner,
 					agent->path,
-					request->driver->interface,
+					interface,
 					"Cancel");
 	if (!message) {
 		connman_error("Couldn't allocate D-Bus message");
@@ -357,7 +359,7 @@ static void report_error_reply(DBusMessage *reply, void *user_data)
 	if (!reply)
 		goto out;
 
-	if (reply && dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
+	if (dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
 		dbus_err = dbus_message_get_error_name(reply);
 		if (dbus_err &&
 			strcmp(dbus_err,
@@ -371,8 +373,8 @@ out:
 	g_free(report_error);
 }
 
-int connman_agent_report_error(void *user_context, const char *path,
-				const char *error,
+int connman_agent_report_error_full(void *user_context, const char *path,
+				const char *method, const char *error,
 				report_error_cb_t callback,
 				const char *dbus_sender, void *user_data)
 {
@@ -391,8 +393,7 @@ int connman_agent_report_error(void *user_context, const char *path,
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent->owner, agent->path,
-					CONNMAN_AGENT_INTERFACE,
-					"ReportError");
+					CONNMAN_AGENT_INTERFACE, method);
 	if (!message)
 		return -ENOMEM;
 
@@ -427,6 +428,16 @@ int connman_agent_report_error(void *user_context, const char *path,
 	dbus_message_unref(message);
 
 	return -EINPROGRESS;
+}
+
+int connman_agent_report_error(void *user_context, const char *path,
+				const char *error,
+				report_error_cb_t callback,
+				const char *dbus_sender, void *user_data)
+{
+	return connman_agent_report_error_full(user_context, path,
+				"ReportError", error, callback, dbus_sender,
+				user_data);
 }
 
 static gint compare_priority(gconstpointer a, gconstpointer b)

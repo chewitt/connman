@@ -45,6 +45,7 @@ struct connman_config_service {
 	unsigned int ssid_len;
 	char *eap;
 	char *identity;
+	char *anonymous_identity;
 	char *ca_cert_file;
 	char *client_cert_file;
 	char *private_key_file;
@@ -52,6 +53,7 @@ struct connman_config_service {
 	char *private_key_passphrase_type;
 	char *phase2;
 	char *passphrase;
+	enum connman_service_security security;
 	GSList *service_identifiers;
 	char *config_ident; /* file prefix */
 	char *config_entry; /* entry name */
@@ -97,8 +99,10 @@ static bool cleanup = false;
 #define SERVICE_KEY_PRV_KEY_PASS       "PrivateKeyPassphrase"
 #define SERVICE_KEY_PRV_KEY_PASS_TYPE  "PrivateKeyPassphraseType"
 #define SERVICE_KEY_IDENTITY           "Identity"
+#define SERVICE_KEY_ANONYMOUS_IDENTITY "AnonymousIdentity"
 #define SERVICE_KEY_PHASE2             "Phase2"
 #define SERVICE_KEY_PASSPHRASE         "Passphrase"
+#define SERVICE_KEY_SECURITY           "Security"
 #define SERVICE_KEY_HIDDEN             "Hidden"
 
 #define SERVICE_KEY_IPv4               "IPv4"
@@ -127,8 +131,10 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_PRV_KEY_PASS,
 	SERVICE_KEY_PRV_KEY_PASS_TYPE,
 	SERVICE_KEY_IDENTITY,
+	SERVICE_KEY_ANONYMOUS_IDENTITY,
 	SERVICE_KEY_PHASE2,
 	SERVICE_KEY_PASSPHRASE,
+	SERVICE_KEY_SECURITY,
 	SERVICE_KEY_HIDDEN,
 	SERVICE_KEY_IPv4,
 	SERVICE_KEY_IPv6,
@@ -217,6 +223,7 @@ free_only:
 	g_free(config_service->ssid);
 	g_free(config_service->eap);
 	g_free(config_service->identity);
+	g_free(config_service->anonymous_identity);
 	g_free(config_service->ca_cert_file);
 	g_free(config_service->client_cert_file);
 	g_free(config_service->private_key_file);
@@ -513,6 +520,7 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 	struct connman_config_service *service;
 	const char *ident;
 	char *str, *hex_ssid;
+	enum connman_service_security security;
 	bool service_created = false;
 
 	/* Strip off "service_" prefix */
@@ -651,6 +659,13 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 		service->identity = str;
 	}
 
+	str = __connman_config_get_string(keyfile, group,
+					SERVICE_KEY_ANONYMOUS_IDENTITY, NULL);
+	if (str) {
+		g_free(service->anonymous_identity);
+		service->anonymous_identity = str;
+	}
+
 	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_PHASE2, NULL);
 	if (str) {
 		g_free(service->phase2);
@@ -663,6 +678,47 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 		g_free(service->passphrase);
 		service->passphrase = str;
 	}
+
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_SECURITY,
+			NULL);
+	security = __connman_service_string2security(str);
+
+	if (service->eap) {
+
+		if (str && security != CONNMAN_SERVICE_SECURITY_8021X)
+			connman_info("Mismatch between EAP configuration and "
+					"setting %s = %s",
+					SERVICE_KEY_SECURITY, str);
+
+		service->security = CONNMAN_SERVICE_SECURITY_8021X;
+
+	} else if (service->passphrase) {
+
+		if (str) {
+			if (security == CONNMAN_SERVICE_SECURITY_PSK ||
+					security == CONNMAN_SERVICE_SECURITY_WEP) {
+				service->security = security;
+			} else {
+				connman_info("Mismatch with passphrase and "
+						"setting %s = %s",
+						SERVICE_KEY_SECURITY, str);
+
+				service->security =
+					CONNMAN_SERVICE_SECURITY_PSK;
+			}
+
+		} else
+			service->security = CONNMAN_SERVICE_SECURITY_PSK;
+	} else if (str) {
+
+		if (security != CONNMAN_SERVICE_SECURITY_NONE)
+			connman_info("Mismatch no security and "
+					"setting %s = %s",
+					SERVICE_KEY_SECURITY, str);
+
+			service->security = CONNMAN_SERVICE_SECURITY_NONE;
+	} else
+			service->security = CONNMAN_SERVICE_SECURITY_NONE;
 
 	service->config_ident = g_strdup(config->ident);
 	service->config_entry = g_strdup_printf("service_%s", service->ident);
@@ -856,10 +912,10 @@ static void config_notify_handler(struct inotify_event *event,
 		return;
 	}
 
-	if (event->mask & IN_CREATE)
+	if (event->mask & (IN_CREATE | IN_MOVED_TO))
 		create_config(ident);
 
-	if (event->mask & IN_MODIFY) {
+	if (event->mask & (IN_MODIFY | IN_MOVED_TO)) {
 		struct connman_config *config;
 
 		config = g_hash_table_lookup(config_table, ident);
@@ -881,7 +937,7 @@ static void config_notify_handler(struct inotify_event *event,
 		}
 	}
 
-	if (event->mask & IN_DELETE)
+	if (event->mask & (IN_DELETE | IN_MOVED_FROM))
 		g_hash_table_remove(config_table, ident);
 }
 
@@ -990,6 +1046,10 @@ static void provision_service_wifi(struct connman_config_service *config,
 		__connman_service_set_string(service, "Identity",
 							config->identity);
 
+	if (config->anonymous_identity)
+		__connman_service_set_string(service, "AnonymousIdentity",
+						config->anonymous_identity);
+
 	if (config->ca_cert_file)
 		__connman_service_set_string(service, "CACertFile",
 							config->ca_cert_file);
@@ -1063,22 +1123,7 @@ static int try_provision_service(struct connman_config_service *config,
 	enum connman_service_type type;
 	const void *ssid;
 	unsigned int ssid_len;
-
-	type = connman_service_get_type(service);
-	if (type == CONNMAN_SERVICE_TYPE_WIFI &&
-				g_strcmp0(config->type, "wifi") != 0)
-		return -ENOENT;
-
-	if (type == CONNMAN_SERVICE_TYPE_ETHERNET &&
-				g_strcmp0(config->type, "ethernet") != 0)
-		return -ENOENT;
-
-	if (type == CONNMAN_SERVICE_TYPE_GADGET &&
-				g_strcmp0(config->type, "gadget") != 0)
-		return -ENOENT;
-
-	DBG("service %p ident %s", service,
-					__connman_service_get_ident(service));
+	const char *str;
 
 	network = __connman_service_get_network(service);
 	if (!network) {
@@ -1088,6 +1133,54 @@ static int try_provision_service(struct connman_config_service *config,
 
 	DBG("network %p ident %s", network,
 				connman_network_get_identifier(network));
+
+	type = connman_service_get_type(service);
+
+	switch(type) {
+	case CONNMAN_SERVICE_TYPE_WIFI:
+		if (__connman_service_string2type(config->type) != type)
+			return -ENOENT;
+
+		ssid = connman_network_get_blob(network, "WiFi.SSID",
+						&ssid_len);
+		if (!ssid) {
+			connman_error("Network SSID not set");
+			return -EINVAL;
+		}
+
+		if (!config->ssid || ssid_len != config->ssid_len)
+			return -ENOENT;
+
+		if (memcmp(config->ssid, ssid, ssid_len))
+			return -ENOENT;
+
+		str = connman_network_get_string(network, "WiFi.Security");
+		if (config->security != __connman_service_string2security(str))
+			return -ENOENT;
+
+		break;
+
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+
+		if (__connman_service_string2type(config->type) != type)
+			return -ENOENT;
+
+		break;
+
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_VPN:
+	case CONNMAN_SERVICE_TYPE_P2P:
+
+		return -ENOENT;
+	}
+
+	DBG("service %p ident %s", service,
+					__connman_service_get_ident(service));
 
 	if (config->mac) {
 		struct connman_device *device;
@@ -1104,22 +1197,6 @@ static int try_provision_service(struct connman_config_service *config,
 		DBG("wants %s has %s", config->mac, device_addr);
 
 		if (g_ascii_strcasecmp(device_addr, config->mac) != 0)
-			return -ENOENT;
-	}
-
-	if (g_strcmp0(config->type, "wifi") == 0 &&
-				type == CONNMAN_SERVICE_TYPE_WIFI) {
-		ssid = connman_network_get_blob(network, "WiFi.SSID",
-						&ssid_len);
-		if (!ssid) {
-			connman_error("Network SSID not set");
-			return -EINVAL;
-		}
-
-		if (!config->ssid || ssid_len != config->ssid_len)
-			return -ENOENT;
-
-		if (memcmp(config->ssid, ssid, ssid_len) != 0)
 			return -ENOENT;
 	}
 
@@ -1211,9 +1288,6 @@ static int try_provision_service(struct connman_config_service *config,
 		g_slist_prepend(config->service_identifiers,
 				g_strdup(service_id));
 
-	if (!config->virtual)
-		__connman_service_set_immutable(service, true);
-
 	__connman_service_set_favorite_delayed(service, true, true);
 
 	__connman_service_set_config(service, config->config_ident,
@@ -1241,13 +1315,10 @@ static int try_provision_service(struct connman_config_service *config,
 		__connman_service_set_timeservers(service,
 						config->timeservers);
 
-	if (g_strcmp0(config->type, "wifi") == 0 &&
-				type == CONNMAN_SERVICE_TYPE_WIFI) {
+	if (type == CONNMAN_SERVICE_TYPE_WIFI) {
 		provision_service_wifi(config, service, network,
 							ssid, ssid_len);
-	} else
-		__connman_service_connect(service,
-					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+	}
 
 	__connman_service_mark_dirty();
 
@@ -1261,28 +1332,54 @@ static int try_provision_service(struct connman_config_service *config,
 		virtual->vfile = config->virtual_file;
 
 		g_timeout_add(0, remove_virtual_config, virtual);
-	} else
-		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+
+		return 0;
+	}
+
+	__connman_service_set_immutable(service, true);
+
+	if (type == CONNMAN_SERVICE_TYPE_ETHERNET ||
+			type == CONNMAN_SERVICE_TYPE_GADGET) {
+		__connman_service_connect(service,
+				CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+
+		return 0;
+	}
+
+	__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	return 0;
 }
 
+static int
+find_and_provision_service_from_config(struct connman_service *service,
+					struct connman_config *config)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+
+	g_hash_table_iter_init(&iter, config->service_table);
+	while (g_hash_table_iter_next(&iter, &key,
+					&value)) {
+		if (!try_provision_service(value, service))
+			return 0;
+	}
+
+	return -ENOENT;
+}
+
 static int find_and_provision_service(struct connman_service *service)
 {
-	GHashTableIter iter, iter_service;
-	gpointer value, key, value_service, key_service;
+	GHashTableIter iter;
+	gpointer value, key;
 
 	g_hash_table_iter_init(&iter, config_table);
 
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		struct connman_config *config = value;
 
-		g_hash_table_iter_init(&iter_service, config->service_table);
-		while (g_hash_table_iter_next(&iter_service, &key_service,
-						&value_service)) {
-			if (!try_provision_service(value_service, service))
-				return 0;
-		}
+		if (!find_and_provision_service_from_config(service, config))
+			return 0;
 	}
 
 	return -ENOENT;
@@ -1366,7 +1463,7 @@ int __connman_config_provision_service_ident(struct connman_service *service,
 			}
 		}
 
-		find_and_provision_service(service);
+		find_and_provision_service_from_config(service, config);
 	}
 
 	return ret;
@@ -1376,12 +1473,14 @@ static void generate_random_string(char *str, int length)
 {
 	uint8_t val;
 	int i;
+	uint64_t rand;
 
 	memset(str, '\0', length);
 
 	for (i = 0; i < length-1; i++) {
 		do {
-			val = (uint8_t)(random() % 122);
+			__connman_util_get_random(&rand);
+			val = (uint8_t)(rand % 122);
 			if (val < 48)
 				val += 48;
 		} while((val > 57 && val < 65) || (val > 90 && val < 97));

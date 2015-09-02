@@ -81,6 +81,7 @@ static struct {
 	char *ipv4_status_url;
 	char *tethering_subnet_block;
 	char **dont_bring_down_at_startup;
+	bool enable_6to4;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -98,6 +99,7 @@ static struct {
 	.ipv6_status_url = NULL,
 	.tethering_subnet_block = NULL,
 	.dont_bring_down_at_startup = NULL,
+	.enable_6to4 = false,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -118,6 +120,7 @@ static struct {
 #define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
 
 #define CONF_TETHERING_SUBNET_BLOCK	"TetheringSubnetBlock"
+#define CONF_ENABLE_6TO4                "Enable6to4"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -136,6 +139,7 @@ static const char *supported_options[] = {
 	CONF_STATUS_URL_IPV6,
 	CONF_TETHERING_SUBNET_BLOCK,
 	CONF_DONT_BRING_DOWN_AT_STARTUP,
+	CONF_ENABLE_6TO4,
 	NULL
 };
 
@@ -416,6 +420,12 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	boolean = __connman_config_get_bool(config, "General",
+					CONF_ENABLE_6TO4, &error);
+	if (!error)
+		connman_settings.enable_6to4 = boolean;
+
+	g_clear_error(&error);
 }
 
 static int config_init(const char *file)
@@ -606,6 +616,9 @@ bool connman_setting_get_bool(const char *key)
 	if (g_str_equal(key, CONF_PERSISTENT_TETHERING_MODE))
 		return connman_settings.persistent_tethering_mode;
 
+	if (g_str_equal(key, CONF_ENABLE_6TO4))
+		return connman_settings.enable_6to4;
+
 	return false;
 }
 
@@ -723,10 +736,12 @@ int main(int argc, char *argv[])
 	else
 		config_init(option_config);
 
+	__connman_util_init();
 	__connman_technology_init();
 	__connman_notifier_init();
 	__connman_agent_init();
 	__connman_service_init();
+	__connman_peer_service_init();
 	__connman_peer_init();
 	__connman_provider_init();
 	__connman_network_init();
@@ -743,7 +758,6 @@ int main(int argc, char *argv[])
 	__connman_stats_init();
 	__connman_clock_init();
 
-	__connman_resolver_init(option_dnsproxy);
 	__connman_ipconfig_init();
 	__connman_rtnl_init();
 	__connman_task_init();
@@ -755,12 +769,14 @@ int main(int argc, char *argv[])
 
 	__connman_plugin_init(option_plugin, option_noplugin);
 
+	__connman_resolver_init(option_dnsproxy);
 	__connman_rtnl_start();
 	__connman_dhcp_init();
 	__connman_dhcpv6_init();
 	__connman_wpad_init();
 	__connman_wispr_init();
 	__connman_rfkill_init();
+	__connman_machine_init();
 
 	g_free(option_config);
 	g_free(option_device);
@@ -780,6 +796,7 @@ int main(int argc, char *argv[])
 
 	g_source_remove(signal);
 
+	__connman_machine_cleanup();
 	__connman_rfkill_cleanup();
 	__connman_wispr_cleanup();
 	__connman_wpad_cleanup();
@@ -804,12 +821,13 @@ int main(int argc, char *argv[])
 	__connman_nat_cleanup();
 	__connman_firewall_cleanup();
 	__connman_iptables_cleanup();
+	__connman_peer_service_cleanup();
+	__connman_peer_cleanup();
 	__connman_ippool_cleanup();
 	__connman_device_cleanup();
 	__connman_network_cleanup();
 	__connman_dhcp_cleanup();
 	__connman_service_cleanup();
-	__connman_peer_cleanup();
 	__connman_agent_cleanup();
 	__connman_ipconfig_cleanup();
 	__connman_notifier_cleanup();
@@ -817,6 +835,7 @@ int main(int argc, char *argv[])
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 
+	__connman_util_cleanup();
 	__connman_dbus_cleanup();
 
 	__connman_log_cleanup(option_backtrace);

@@ -45,12 +45,9 @@ struct connman_ipconfig {
 	int index;
 	enum connman_ipconfig_type type;
 
-	struct connman_ipconfig *origin;
-
 	const struct connman_ipconfig_ops *ops;
 	void *ops_data;
 
-	bool enabled;
 	enum connman_ipconfig_method method;
 	struct connman_ipaddress *address;
 	struct connman_ipaddress *system;
@@ -128,6 +125,7 @@ const char *__connman_ipconfig_type2string(enum connman_ipconfig_type type)
 {
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+	case CONNMAN_IPCONFIG_TYPE_ALL:
 		return "unknown";
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
 		return "IPv4";
@@ -401,27 +399,6 @@ static void free_ipdevice(gpointer data)
 	g_free(ipdevice);
 }
 
-static void __connman_ipconfig_lower_up(struct connman_ipdevice *ipdevice)
-{
-	DBG("ipconfig ipv4 %p ipv6 %p", ipdevice->config_ipv4,
-					ipdevice->config_ipv6);
-}
-
-static void __connman_ipconfig_lower_down(struct connman_ipdevice *ipdevice)
-{
-	DBG("ipconfig ipv4 %p ipv6 %p", ipdevice->config_ipv4,
-					ipdevice->config_ipv6);
-
-	if (ipdevice->config_ipv4)
-		connman_inet_clear_address(ipdevice->index,
-					ipdevice->config_ipv4->address);
-
-	if (ipdevice->config_ipv6)
-		connman_inet_clear_ipv6_address(ipdevice->index,
-				ipdevice->config_ipv6->address->local,
-				ipdevice->config_ipv6->address->prefixlen);
-}
-
 static void update_stats(struct connman_ipdevice *ipdevice,
             const char *ifname, struct rtnl_link_stats64 *stats)
 {
@@ -595,11 +572,6 @@ update:
 	}
 	g_list_free(ipconfig_copy);
 
-	if (lower_up)
-		__connman_ipconfig_lower_up(ipdevice);
-	if (lower_down)
-		__connman_ipconfig_lower_down(ipdevice);
-
 out:
 	g_free(ifname);
 }
@@ -639,8 +611,6 @@ void __connman_ipconfig_dellink(int index, struct rtnl_link_stats64 *stats)
 	}
 
 	g_free(ifname);
-
-	__connman_ipconfig_lower_down(ipdevice);
 
 	g_hash_table_remove(ipdevice_hash, GINT_TO_POINTER(index));
 }
@@ -1105,8 +1075,6 @@ int __connman_ipconfig_gateway_add(struct connman_ipconfig *ipconfig)
 	if (!service)
 		return -EINVAL;
 
-	__connman_connection_gateway_remove(service, ipconfig->type);
-
 	DBG("type %d gw %s peer %s", ipconfig->type,
 		ipconfig->address->gateway, ipconfig->address->peer);
 
@@ -1162,7 +1130,6 @@ static struct connman_ipconfig *create_ipv6config(int index)
 	ipv6config->refcount = 1;
 
 	ipv6config->index = index;
-	ipv6config->enabled = false;
 	ipv6config->type = CONNMAN_IPCONFIG_TYPE_IPV6;
 
 	if (!is_ipv6_supported)
@@ -1212,7 +1179,6 @@ struct connman_ipconfig *__connman_ipconfig_create(int index,
 	ipconfig->refcount = 1;
 
 	ipconfig->index = index;
-	ipconfig->enabled = false;
 	ipconfig->type = CONNMAN_IPCONFIG_TYPE_IPV4;
 
 	ipconfig->address = connman_ipaddress_alloc(AF_INET);
@@ -1270,11 +1236,6 @@ void __connman_ipconfig_unref_debug(struct connman_ipconfig *ipconfig,
 
 	__connman_ipconfig_set_ops(ipconfig, NULL);
 
-	if (ipconfig->origin && ipconfig->origin != ipconfig) {
-		__connman_ipconfig_unref(ipconfig->origin);
-		ipconfig->origin = NULL;
-	}
-
 	connman_ipaddress_free(ipconfig->system);
 	connman_ipaddress_free(ipconfig->address);
 	g_free(ipconfig->last_dhcp_address);
@@ -1318,9 +1279,6 @@ int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig)
 {
 	if (!ipconfig)
 		return -1;
-
-	if (ipconfig->origin)
-		return ipconfig->origin->index;
 
 	return ipconfig->index;
 }
@@ -1628,8 +1586,6 @@ int __connman_ipconfig_enable(struct connman_ipconfig *ipconfig)
 	} else
 		return -EINVAL;
 
-	ipconfig->enabled = true;
-
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
 					ipdevice->config_ipv4) {
 		ipconfig_list = g_list_remove(ipconfig_list,
@@ -1703,8 +1659,6 @@ int __connman_ipconfig_disable(struct connman_ipconfig *ipconfig)
 
 	if (!ipdevice->config_ipv4 && !ipdevice->config_ipv6)
 		return -EINVAL;
-
-	ipconfig->enabled = false;
 
 	if (ipdevice->config_ipv4 == ipconfig) {
 		ipconfig_list = g_list_remove(ipconfig_list, ipconfig);
@@ -2144,6 +2098,7 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 			type = AF_INET6;
 			break;
 		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		case CONNMAN_IPCONFIG_TYPE_ALL:
 			type = -1;
 			break;
 		}
@@ -2233,6 +2188,7 @@ int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_AUTO;
 			break;
 		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		case CONNMAN_IPCONFIG_TYPE_ALL:
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_OFF;
 			break;
 		}

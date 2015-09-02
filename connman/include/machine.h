@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2012,2014  BMW Car IT GmbH.
+ *  Copyright (C) 2014  Intel Corporation. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,23 +19,17 @@
  *
  */
 
-#ifndef __CONNMAN_INOTIFY_H
-#define __CONNMAN_INOTIFY_H
+#ifndef __CONNMAN_MACHINE_H
+#define __CONNMAN_MACHINE_H
 
-struct inotify_event;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef void (* inotify_event_cb) (struct inotify_event *event,
-					const char *ident,
-					gpointer user_data);
-
-int connman_inotify_register(const char *path, inotify_event_cb callback,
-				gpointer user_data,
-				GDestroyNotify free_func);
-void connman_inotify_unregister(const char *path, inotify_event_cb callback,
-				gpointer user_data);
+const char *connman_machine_get_type(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __CONNMAN_INOTIFY_H */
+#endif /* __CONNMAN_MACHINE_H */

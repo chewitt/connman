@@ -219,7 +219,11 @@ static guint cache_timer = 0;
 
 static guint16 get_id(void)
 {
-	return random();
+	uint64_t rand;
+
+	__connman_util_get_random(&rand);
+
+	return rand;
 }
 
 static int protocol_offset(int protocol)
@@ -329,14 +333,14 @@ static void refresh_dns_entry(struct cache_entry *entry, char *name)
 	}
 
 	if (!entry->ipv4) {
-		DBG("Refresing A record for %s", name);
+		DBG("Refreshing A record for %s", name);
 		g_resolv_lookup_hostname(ipv4_resolve, name,
 					dummy_resolve_func, NULL);
 		age = 4;
 	}
 
 	if (!entry->ipv6) {
-		DBG("Refresing AAAA record for %s", name);
+		DBG("Refreshing AAAA record for %s", name);
 		g_resolv_lookup_hostname(ipv6_resolve, name,
 					dummy_resolve_func, NULL);
 		age = 4;
@@ -357,8 +361,7 @@ static int dns_name_length(unsigned char *buf)
 static void update_cached_ttl(unsigned char *buf, int len, int new_ttl)
 {
 	unsigned char *c;
-	uint32_t *i;
-	uint16_t *w;
+	uint16_t w;
 	int l;
 
 	/* skip the header */
@@ -388,17 +391,19 @@ static void update_cached_ttl(unsigned char *buf, int len, int new_ttl)
 			break;
 
 		/* now the 4 byte TTL field */
-		i = (uint32_t *)c;
-		*i = htonl(new_ttl);
+		c[0] = new_ttl >> 24 & 0xff;
+		c[1] = new_ttl >> 16 & 0xff;
+		c[2] = new_ttl >> 8 & 0xff;
+		c[3] = new_ttl & 0xff;
 		c += 4;
 		len -= 4;
 		if (len < 0)
 			break;
 
 		/* now the 2 byte rdlen field */
-		w = (uint16_t *)c;
-		c += ntohs(*w) + 2;
-		len -= ntohs(*w) + 2;
+		w = c[0] << 8 | c[1];
+		c += w + 2;
+		len -= w + 2;
 	}
 }
 
@@ -526,6 +531,8 @@ static void destroy_request_data(struct request_data *req)
 static gboolean request_timeout(gpointer user_data)
 {
 	struct request_data *req = user_data;
+	struct sockaddr *sa;
+	int sk;
 
 	if (!req)
 		return FALSE;
@@ -533,47 +540,38 @@ static gboolean request_timeout(gpointer user_data)
 	DBG("id 0x%04x", req->srcid);
 
 	request_list = g_slist_remove(request_list, req);
-	req->numserv--;
+
+	if (req->protocol == IPPROTO_UDP) {
+		sk = get_req_udp_socket(req);
+		sa = &req->sa;
+	} else if (req->protocol == IPPROTO_TCP) {
+		sk = req->client_sk;
+		sa = NULL;
+	} else
+		goto out;
 
 	if (req->resplen > 0 && req->resp) {
-		int sk, err;
+		/*
+		 * Here we have received at least one reply (probably telling
+		 * "not found" result), so send that back to client instead
+		 * of more fatal server failed error.
+		 */
+		if (sk >= 0)
+			sendto(sk, req->resp, req->resplen, MSG_NOSIGNAL,
+				sa, req->sa_len);
 
-		if (req->protocol == IPPROTO_UDP) {
-			sk = get_req_udp_socket(req);
-			if (sk < 0)
-				return FALSE;
-
-			err = sendto(sk, req->resp, req->resplen, MSG_NOSIGNAL,
-				&req->sa, req->sa_len);
-		} else {
-			sk = req->client_sk;
-			err = send(sk, req->resp, req->resplen, MSG_NOSIGNAL);
-			if (err < 0)
-				close(sk);
-		}
-		if (err < 0)
-			return FALSE;
-	} else if (req->request && req->numserv == 0) {
+	} else if (req->request) {
+		/*
+		 * There was not reply from server at all.
+		 */
 		struct domain_hdr *hdr;
 
-		if (req->protocol == IPPROTO_TCP) {
-			hdr = (void *) (req->request + 2);
-			hdr->id = req->srcid;
-			send_response(req->client_sk, req->request,
-				req->request_len, NULL, 0, IPPROTO_TCP);
+		hdr = (void *)(req->request + protocol_offset(req->protocol));
+		hdr->id = req->srcid;
 
-		} else if (req->protocol == IPPROTO_UDP) {
-			int sk;
-
-			hdr = (void *) (req->request);
-			hdr->id = req->srcid;
-
-			sk = get_req_udp_socket(req);
-			if (sk >= 0)
-				send_response(sk, req->request,
-					req->request_len, &req->sa,
-					req->sa_len, IPPROTO_UDP);
-		}
+		if (sk >= 0)
+			send_response(sk, req->request, req->request_len,
+				sa, req->sa_len, req->protocol);
 	}
 
 	/*
@@ -586,6 +584,7 @@ static gboolean request_timeout(gpointer user_data)
 				GINT_TO_POINTER(req->client_sk));
 	}
 
+out:
 	req->timeout = 0;
 	destroy_request_data(req);
 
@@ -1347,7 +1346,6 @@ static void cache_refresh(void)
 static int reply_query_type(unsigned char *msg, int len)
 {
 	unsigned char *c;
-	uint16_t *w;
 	int l;
 	int type;
 
@@ -1361,8 +1359,7 @@ static int reply_query_type(unsigned char *msg, int len)
 	/* now the query, which is a name and 2 16 bit words */
 	l = dns_name_length(c) + 1;
 	c += l;
-	w = (uint16_t *) c;
-	type = ntohs(*w);
+	type = c[0] << 8 | c[1];
 
 	return type;
 }
@@ -2690,6 +2687,34 @@ static void append_domain(int index, const char *domain)
 	}
 }
 
+static void flush_requests(struct server_data *server)
+{
+	GSList *list;
+
+	list = request_list;
+	while (list) {
+		struct request_data *req = list->data;
+
+		list = list->next;
+
+		if (ns_resolv(server, req, req->request, req->name)) {
+			/*
+			 * A cached result was sent,
+			 * so the request can be released
+			 */
+			request_list =
+				g_slist_remove(request_list, req);
+			destroy_request_data(req);
+			continue;
+		}
+
+		if (req->timeout > 0)
+			g_source_remove(req->timeout);
+
+		req->timeout = g_timeout_add_seconds(5, request_timeout, req);
+	}
+}
+
 int __connman_dnsproxy_append(int index, const char *domain,
 							const char *server)
 {
@@ -2721,6 +2746,8 @@ int __connman_dnsproxy_append(int index, const char *domain,
 	data = create_server(index, domain, server, IPPROTO_UDP);
 	if (!data)
 		return -EIO;
+
+	flush_requests(data);
 
 	return 0;
 }
@@ -2755,33 +2782,6 @@ int __connman_dnsproxy_remove(int index, const char *domain,
 	remove_server(index, domain, server, IPPROTO_TCP);
 
 	return 0;
-}
-
-void __connman_dnsproxy_flush(void)
-{
-	GSList *list;
-
-	list = request_list;
-	while (list) {
-		struct request_data *req = list->data;
-
-		list = list->next;
-
-		if (resolv(req, req->request, req->name)) {
-			/*
-			 * A cached result was sent,
-			 * so the request can be released
-			 */
-			request_list =
-				g_slist_remove(request_list, req);
-			destroy_request_data(req);
-			continue;
-		}
-
-		if (req->timeout > 0)
-			g_source_remove(req->timeout);
-		req->timeout = g_timeout_add_seconds(5, request_timeout, req);
-	}
 }
 
 static void dnsproxy_offline_mode(bool enabled)
@@ -3835,8 +3835,6 @@ int __connman_dnsproxy_init(void)
 	int err, index;
 
 	DBG("");
-
-	srandom(time(NULL));
 
 	listener_table = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 							NULL, g_free);
