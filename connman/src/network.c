@@ -808,21 +808,6 @@ static void network_remove(struct connman_network *network)
 	network->driver = NULL;
 }
 
-static void network_change(struct connman_network *network)
-{
-	DBG("network %p name %s", network, network->name);
-
-	if (!network->connected)
-		return;
-
-	if (network->driver && network->driver->disconnect) {
-		network->driver->disconnect(network);
-		return;
-	}
-
-	network->connected = false;
-}
-
 static void probe_driver(struct connman_network_driver *driver)
 {
 	GSList *list;
@@ -1313,9 +1298,6 @@ void connman_network_set_error(struct connman_network *network,
 {
 	DBG("network %p error %d", network, error);
 
-	network->connecting = false;
-	network->associating = false;
-
 	switch (error) {
 	case CONNMAN_NETWORK_ERROR_UNKNOWN:
 		return;
@@ -1333,7 +1315,7 @@ void connman_network_set_error(struct connman_network *network,
 		break;
 	}
 
-	network_change(network);
+	__connman_network_disconnect(network);
 }
 
 /**
@@ -1354,8 +1336,7 @@ int connman_network_set_connected(struct connman_network *network,
 							!connected) {
 		connman_network_set_error(network,
 					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
-		if (__connman_network_disconnect(network) == 0)
-			return 0;
+		return 0;
 	}
 
 	if (network->connected == connected)
