@@ -87,10 +87,6 @@ void connman_device_reset_scanning(struct connman_device *device);
 bool connman_device_supports_signal_poll(struct connman_device *device);
 int connman_device_signal_poll(struct connman_device *device);
 
-int connman_device_set_disconnected(struct connman_device *device,
-						bool disconnected);
-bool connman_device_get_disconnected(struct connman_device *device);
-
 int connman_device_set_string(struct connman_device *device,
 					const char *key, const char *value);
 const char *connman_device_get_string(struct connman_device *device,
