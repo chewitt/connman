@@ -142,8 +142,6 @@ static void set_configuration(struct connman_network *network,
 
 	__connman_device_set_network(network->device, network);
 
-	connman_device_set_disconnected(network->device, false);
-
 	service = connman_service_lookup_from_network(network);
 	__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_CONFIGURATION,
@@ -297,8 +295,6 @@ static int manual_ipv6_set(struct connman_network *network,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 
 	__connman_device_set_network(network->device, network);
-
-	connman_device_set_disconnected(network->device, false);
 
 	connman_network_set_associating(network, false);
 
@@ -477,12 +473,14 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 	/*
 	 * We do stateful/stateless DHCPv6 if router advertisement says so.
 	 */
-	if (reply->nd_ra_flags_reserved & ND_RA_FLAG_MANAGED)
+	if (reply->nd_ra_flags_reserved & ND_RA_FLAG_MANAGED) {
 		__connman_dhcpv6_start(network, prefixes, dhcpv6_callback);
-	else {
-		g_slist_free_full(prefixes, g_free);
+	} else {
 		if (reply->nd_ra_flags_reserved & ND_RA_FLAG_OTHER)
-			__connman_dhcpv6_start_info(network, dhcpv6_info_callback);
+			__connman_dhcpv6_start_info(network,
+							dhcpv6_info_callback);
+		g_slist_free_full(prefixes, g_free);
+		network->connecting = false;
 	}
 
 	connman_network_unref(network);
@@ -560,10 +558,6 @@ static void autoconf_ipv6_set(struct connman_network *network)
 	}
 
 	__connman_device_set_network(network->device, network);
-
-	connman_device_set_disconnected(network->device, false);
-
-	network->connecting = false;
 
 	service = connman_service_lookup_from_network(network);
 	if (!service)
@@ -814,23 +808,6 @@ static void network_remove(struct connman_network *network)
 	network->driver = NULL;
 }
 
-static void network_change(struct connman_network *network)
-{
-	DBG("network %p name %s", network, network->name);
-
-	if (!network->connected)
-		return;
-
-	connman_device_set_disconnected(network->device, true);
-
-	if (network->driver && network->driver->disconnect) {
-		network->driver->disconnect(network);
-		return;
-	}
-
-	network->connected = false;
-}
-
 static void probe_driver(struct connman_network_driver *driver)
 {
 	GSList *list;
@@ -850,20 +827,6 @@ static void probe_driver(struct connman_network_driver *driver)
 			continue;
 
 		network->driver = driver;
-	}
-}
-
-static void remove_driver(struct connman_network_driver *driver)
-{
-	GSList *list;
-
-	DBG("driver %p name %s", driver, driver->name);
-
-	for (list = network_list; list; list = list->next) {
-		struct connman_network *network = list->data;
-
-		if (network->driver == driver)
-			network_remove(network);
 	}
 }
 
@@ -903,11 +866,18 @@ int connman_network_driver_register(struct connman_network_driver *driver)
  */
 void connman_network_driver_unregister(struct connman_network_driver *driver)
 {
+	GSList *list;
+
 	DBG("driver %p name %s", driver, driver->name);
 
 	driver_list = g_slist_remove(driver_list, driver);
 
-	remove_driver(driver);
+	for (list = network_list; list; list = list->next) {
+		struct connman_network *network = list->data;
+
+		if (network->driver == driver)
+			network_remove(network);
+	}
 }
 
 static void network_destruct(struct connman_network *network)
@@ -1321,9 +1291,6 @@ void connman_network_set_error(struct connman_network *network,
 {
 	DBG("network %p error %d", network, error);
 
-	network->connecting = false;
-	network->associating = false;
-
 	switch (error) {
 	case CONNMAN_NETWORK_ERROR_UNKNOWN:
 		return;
@@ -1341,7 +1308,7 @@ void connman_network_set_error(struct connman_network *network,
 		break;
 	}
 
-	network_change(network);
+	__connman_network_disconnect(network);
 }
 
 /**
@@ -1362,8 +1329,7 @@ int connman_network_set_connected(struct connman_network *network,
 							!connected) {
 		connman_network_set_error(network,
 					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
-		if (__connman_network_disconnect(network) == 0)
-			return 0;
+		return 0;
 	}
 
 	if (network->connected == connected)
