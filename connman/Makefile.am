@@ -463,6 +463,7 @@ do_subst = $(AM_V_GEN)$(SED) \
 		-e 's,[@]prefix[@],$(prefix),g' \
 		-e 's,[@]sbindir[@],$(sbindir),g' \
 		-e 's,[@]sysconfdir[@],$(sysconfdir),g' \
+		-e 's,[@]localstatedir[@],$(localstatedir),g' \
 		-e 's,[@]CONNMAN_SERVICE_REQUIRES[@],$(CONNMAN_SERVICE_REQUIRES),g' \
 		-e 's,[@]CONNMAN_SERVICE_AFTER[@],$(CONNMAN_SERVICE_AFTER),g'
 
