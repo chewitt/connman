@@ -9,7 +9,8 @@ Wants=network.target remote-fs-pre.target
 Type=notify
 Restart=always
 EnvironmentFile=-/etc/tracing/connman/connman.tracing
-ExecStart=@sbindir@/connmand -n --nobacktrace --systemd $TRACING
+EnvironmentFile=-/etc/sysconfig/connman
+ExecStart=@sbindir@/connmand -n --nobacktrace --systemd $TRACING $SYSCONF_ARGS
 StandardOutput=null
 
 [Install]
