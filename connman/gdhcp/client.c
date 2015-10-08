@@ -1626,8 +1626,7 @@ static uint32_t get_lease(struct dhcp_packet *packet)
 		return 3600;
 
 	lease_seconds = get_be32(option);
-	/* paranoia: must not be prone to overflows */
-	lease_seconds &= 0x0fffffff;
+
 	if (lease_seconds < 10)
 		lease_seconds = 10;
 
