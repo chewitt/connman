@@ -2335,7 +2335,7 @@ void __connman_service_counter_send_initial(const char *counter)
         struct connman_service *service =  g_hash_table_lookup(service_hash, services[i]);
         if (!service)
             __connman_service_counter_append_saved(counter, services[i]);
-        else if (!is_connected(service))
+        else
             __connman_service_counter_append(counter, service);
     }
     g_strfreev(services);
