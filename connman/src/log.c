@@ -295,8 +295,13 @@ void __connman_log_enable(struct connman_debug_desc *start,
 				file = NULL;
 		}
 
-		if (is_enabled(desc))
+		if (is_enabled(desc) &&
+				!(desc->flags & CONNMAN_DEBUG_FLAG_PRINT)) {
 			desc->flags |= CONNMAN_DEBUG_FLAG_PRINT;
+			if (desc->notify) {
+				desc->notify(desc);
+			}
+		}
 	}
 }
 
