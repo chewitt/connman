@@ -62,6 +62,7 @@
 
 #define CLEANUP_TIMEOUT   8	/* in seconds */
 #define INACTIVE_TIMEOUT  12	/* in seconds */
+#define SCAN_FAIL_TIMEOUT 60	/* in seconds */
 #define FAVORITE_MAXIMUM_RETRIES 2
 
 #define BGSCAN_DEFAULT "simple:30:-65:300"
@@ -148,6 +149,7 @@ struct wifi_data {
 	bool postpone_hidden;
 	struct signal_poll_data signal_poll;
 	struct wifi_tethering_info *tethering_param;
+	unsigned int scan_fail_timeout;
 	/**
 	 * autoscan "emulation".
 	 */
@@ -837,9 +839,25 @@ static void reset_autoscan(struct connman_device *device)
 	connman_device_unref(device);
 }
 
+static gboolean scan_fail_timeout(gpointer data)
+{
+	struct connman_device *device = data;
+	struct wifi_data *wifi = connman_device_get_data(device);
+
+	DBG("");
+
+	if (!wifi)
+		return FALSE;
+
+	connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_WIFI, false);
+	wifi->scan_fail_timeout = 0;
+
+	return FALSE;
+}
+
 static void stop_autoscan(struct connman_device *device)
 {
-	const struct wifi_data *wifi = connman_device_get_data(device);
+	struct wifi_data *wifi = connman_device_get_data(device);
 
 	if (!wifi || !wifi->autoscan)
 		return;
@@ -847,6 +865,11 @@ static void stop_autoscan(struct connman_device *device)
 	reset_autoscan(device);
 
 	connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_WIFI, false);
+
+	if (wifi->scan_fail_timeout) {
+		g_source_remove(wifi->scan_fail_timeout);
+		wifi->scan_fail_timeout = 0;
+	}
 }
 
 static void check_p2p_technology(void)
@@ -896,6 +919,10 @@ static void wifi_remove(struct connman_device *device)
 
 	if (wifi->p2p_connection_timeout)
 		g_source_remove(wifi->p2p_connection_timeout);
+
+	if (wifi->scan_fail_timeout) {
+		g_source_remove(wifi->scan_fail_timeout);
+	}
 
 	if (wifi->pending_network)
 		connman_network_unref(wifi->pending_network);
@@ -1223,6 +1250,11 @@ static int throw_wifi_scan(struct connman_device *device,
 	if (ret == 0) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, true);
+
+		wifi->scan_fail_timeout = g_timeout_add_seconds(
+						SCAN_FAIL_TIMEOUT,
+						scan_fail_timeout,
+						device);
 	} else
 		connman_device_unref(device);
 
@@ -1292,6 +1324,11 @@ static void scan_callback(int result, GSupplicantInterface *interface,
 	if (scanning) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, false);
+
+		if (wifi && wifi->scan_fail_timeout) {
+			g_source_remove(wifi->scan_fail_timeout);
+			wifi->scan_fail_timeout = 0;
+		}
 	}
 
 	if (result != -ENOLINK)
@@ -1546,6 +1583,11 @@ static int wifi_disable(struct connman_device *device)
 		wifi->p2p_find_timeout = 0;
 		connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_P2P, false);
 		connman_device_unref(wifi->device);
+	}
+
+	if (wifi->scan_fail_timeout) {
+		g_source_remove(wifi->scan_fail_timeout);
+		wifi->scan_fail_timeout = 0;
 	}
 
 	/* In case of a user scan, device is still referenced */
@@ -1890,6 +1932,12 @@ static int wifi_scan(enum connman_service_type type,
 	if (ret == 0) {
 		connman_device_set_scanning(device,
 				CONNMAN_SERVICE_TYPE_WIFI, true);
+
+		wifi->scan_fail_timeout = g_timeout_add_seconds(
+						SCAN_FAIL_TIMEOUT,
+						scan_fail_timeout,
+						device);
+
 	} else {
 		g_supplicant_free_scan_params(scan_params);
 		connman_device_unref(device);
