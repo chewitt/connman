@@ -49,6 +49,10 @@ void connman_debug(const char *format, ...)
 	}						\
 } while (0)
 
+#define CONNMAN_DEBUG_ALIGN 8
+#define CONNMAN_DEBUG_ATTR \
+	__attribute__((used, section("__debug"), aligned(CONNMAN_DEBUG_ALIGN)))
+
 struct connman_debug_desc {
 	const char *name;
 	const char *file;
@@ -56,11 +60,12 @@ struct connman_debug_desc {
 #define CONNMAN_DEBUG_FLAG_PRINT   (1 << 0)
 #define CONNMAN_DEBUG_FLAG_ALIAS   (1 << 1)
 	unsigned int flags;
-} __attribute__((aligned(8)));
+	void (*notify)(struct connman_debug_desc* desc);
+} __attribute__((aligned(CONNMAN_DEBUG_ALIGN)));
 
 #define CONNMAN_DEBUG_DEFINE(name) \
 	static struct connman_debug_desc __debug_alias_ ## name \
-	__attribute__((used, section("__debug"), aligned(8))) = { \
+	CONNMAN_DEBUG_ATTR = { \
 		#name, __FILE__, CONNMAN_DEBUG_FLAG_ALIAS \
 	};
 
@@ -74,7 +79,7 @@ struct connman_debug_desc {
  */
 #define DBG(fmt, arg...) do { \
 	static struct connman_debug_desc __connman_debug_desc \
-	__attribute__((used, section("__debug"), aligned(8))) = { \
+	CONNMAN_DEBUG_ATTR = { \
 		.file = __FILE__, .flags = CONNMAN_DEBUG_FLAG_DEFAULT, \
 	}; \
 	if (__connman_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) \

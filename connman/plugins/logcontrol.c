@@ -68,8 +68,15 @@ static void logcontrol_update(const char* pattern, unsigned int set_flags,
 		if ((name && g_pattern_match_simple(pattern, name)) ||
 			(desc->file && g_pattern_match_simple(pattern,
 							desc->file))) {
-			desc->flags |= set_flags;
-			desc->flags &= ~clear_flags;
+			unsigned int flags;
+
+			flags = (desc->flags | set_flags) & ~clear_flags;
+			if (desc->flags != flags) {
+				desc->flags = flags;
+				if (desc->notify) {
+					desc->notify(desc);
+				}
+			}
 		}
 	}
 }
