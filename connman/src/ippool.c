@@ -59,7 +59,7 @@ struct connman_ippool {
 
 GSList *allocated_blocks;
 
-static uint32_t starting_block;
+static uint32_t last_block;
 static uint32_t block_16_bits;
 static uint32_t block_20_bits;
 static uint32_t block_24_bits;
@@ -180,16 +180,21 @@ static uint32_t get_free_block(unsigned int size)
 	uint32_t block;
 	GSList *list;
 	bool collision;
-	uint32_t last_block;
 
 	/*
-	 * We want to try to get the same block (192.168.0.0) every
-	 * time, unless starting_block is set something different.
+	 * Instead starting always from the 16 bit block, we start
+	 * from the last assigned block. This is a simple optimimazion
+	 * for the case where a lot of blocks have been assigned, e.g.
+	 * the first half of the private IP pool is in use and a new
+	 * we need to find a new block.
 	 *
 	 * To only thing we have to make sure is that we terminated if
 	 * there is no block left.
 	 */
-	last_block = block = starting_block;
+	if (last_block)
+		block = last_block;
+	else
+		block = block_16_bits;
 
 	do {
 		collision = false;
@@ -375,6 +380,8 @@ struct connman_ippool *__connman_ippool_create(int index,
 		return NULL;
 	}
 
+	last_block = block;
+
 	info->index = index;
 	info->start = block;
 	info->end = block + range;
@@ -434,11 +441,11 @@ int __connman_ippool_init(void)
 	block_24_bits = ntohl(inet_addr("10.0.0.0"));
 	subnet_mask_24 = ntohl(inet_addr("255.255.255.0"));
 
-	starting_block = ntohl(inet_addr(connman_option_get_string(
+	last_block = ntohl(inet_addr(connman_option_get_string(
 						CONF_TETHERING_SUBNET_BLOCK)));
 
-	if (!is_private_address(starting_block))
-		starting_block = block_16_bits;
+	if (!is_private_address(last_block))
+		last_block = 0;
 
 	return 0;
 }
@@ -448,5 +455,6 @@ void __connman_ippool_cleanup(void)
 	DBG("");
 
 	g_slist_free_full(allocated_blocks, g_free);
+	last_block = 0;
 	allocated_blocks = NULL;
 }
