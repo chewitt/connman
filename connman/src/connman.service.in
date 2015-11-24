@@ -13,6 +13,7 @@ EnvironmentFile=-/etc/sysconfig/connman
 ExecStart=@sbindir@/connmand -n -W nl80211 --nobacktrace --systemd $TRACING $SYSCONF_ARGS
 StandardOutput=null
 ProtectHome=true
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target
