@@ -160,7 +160,6 @@ static struct connman_ipconfig *create_ip6config(struct connman_service *service
 
 static void service_destroy(struct connman_service *service);
 static int service_disconnect(struct connman_service *service);
-static int searchdomain_add_all(struct connman_service *service);
 
 struct find_data {
 	const char *path;
