@@ -114,12 +114,6 @@ enum GDbusPropertyChangedFlags {
 	G_DBUS_PROPERTY_CHANGED_FLAG_FLUSH = (1 << 0),
 };
 
-typedef enum GDBusMethodFlags GDBusMethodFlags;
-typedef enum GDBusSignalFlags GDBusSignalFlags;
-typedef enum GDBusPropertyFlags GDBusPropertyFlags;
-typedef enum GDBusSecurityFlags GDBusSecurityFlags;
-typedef enum GDbusPropertyChangedFlags GDbusPropertyChangedFlags;
-
 struct GDBusArgInfo {
 	const char *name;
 	const char *signature;
