@@ -92,6 +92,11 @@ builtin_modules += jolla_signalpoll
 builtin_sources += plugins/jolla-signalpoll.c
 endif
 
+if JOLLA_OFONO
+builtin_modules += jolla_ofono
+builtin_sources += plugins/jolla-ofono.c
+endif
+
 if VPN
 builtin_modules += vpn
 builtin_sources += plugins/vpn.c

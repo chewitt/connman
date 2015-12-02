@@ -32,6 +32,8 @@ BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  libiphb-devel
 BuildRequires:  bluez-libs-devel
+BuildRequires:  libgofono-devel
+BuildRequires:  libgofonoext-devel
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -114,6 +116,8 @@ Documentation for connman.
     --enable-logcontrol \
     --enable-jolla-signalpoll \
     --enable-jolla-usb \
+    --enable-jolla-ofono \
+    --disable-ofono \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
