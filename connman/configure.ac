@@ -395,6 +395,22 @@ AC_ARG_ENABLE(jolla-signalpoll,
 		[enable_jolla_signalpoll=${enableval}], [enable_jolla_signalpoll="no"])
 AM_CONDITIONAL(JOLLA_SIGNALPOLL, test "${enable_jolla_signalpoll}" != "no")
 
+AC_ARG_ENABLE(jolla-ofono,
+	AC_HELP_STRING([--enable-jolla-ofono], [enable Jolla ofono plugin]),
+			[enable_jolla_ofono=${enableval}], [enable_jolla_ofono="no"])
+AM_CONDITIONAL(JOLLA_OFONO, test "${enable_jolla_ofono}" != "no")
+
+if (test "${enable_jolla_ofono}" = "yes"); then
+	PKG_CHECK_MODULES(GOFONO, libgofono, dummy=yes,
+				AC_MSG_ERROR(libgofono is required))
+	PKG_CHECK_MODULES(GOFONOEXT, libgofonoext, dummy=yes,
+				AC_MSG_ERROR(libgofonoext is required))
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil, dummy=yes,
+				AC_MSG_ERROR(libglibutil is required))
+	CFLAGS="$CFLAGS $GOFONO_CFLAGS $GOFONOEXT_CFLAGS $GLIBUTIL_CFLAGS"
+	LIBS="$LIBS $GOFONO_LIBS $GOFONOEXT_LIBS $GLIBUTIL_LIBS"
+fi
+
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])
