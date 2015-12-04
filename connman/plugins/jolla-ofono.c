@@ -295,6 +295,7 @@ static void modem_create_device(struct modem_data *data)
 	connman_device_set_ident(data->device, ident);
 	connman_device_set_string(data->device, "Path", path);
 	connman_device_set_data(data->device, data);
+	connman_device_set_powered(data->device, data->modem->online);
 	if (connman_device_register(data->device)) {
 		connman_error("Failed to register cellular device");
 		connman_device_unref(data->device);
@@ -303,7 +304,6 @@ static void modem_create_device(struct modem_data *data)
 	} else {
 		gboolean offline = connman_technology_load_offlinemode();
 		ofono_modem_set_online(data->modem, !offline);
-		connman_device_set_powered(data->device, data->modem->online);
 	}
 	g_free(tmp);
 }
@@ -372,7 +372,10 @@ static gboolean modem_can_create_network(struct modem_data *data)
 static void modem_update_device(struct modem_data *data)
 {
 	if (modem_can_create_device(data)) {
-		if (!data->device) {
+		if (data->device) {
+			connman_device_set_powered(data->device,
+							data->modem->online);
+		} else {
 			modem_create_device(data);
 		}
 	} else {
