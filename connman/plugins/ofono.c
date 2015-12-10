@@ -152,6 +152,7 @@ struct modem_data {
 
 	struct connman_device *device;
 
+	struct network_context *context;
 	GSList *context_list;
 
 	/* Modem Interface */
@@ -229,23 +230,6 @@ static struct network_context *get_context_with_path(GSList *context_list,
 		struct network_context *context = list->data;
 
 		if (g_strcmp0(context->path, path) == 0)
-			return context;
-	}
-
-	return NULL;
-}
-
-static struct network_context *get_context_with_network(GSList *context_list,
-				const struct connman_network *network)
-{
-	GSList *list;
-
-	DBG("network %p", network);
-
-	for (list = context_list; list; list = list->next) {
-		struct network_context *context = list->data;
-
-		if (context->network == network)
 			return context;
 	}
 
@@ -1250,19 +1234,29 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 static void remove_cm_context(struct modem_data *modem,
 				struct network_context *context)
 {
+	GSList *list = NULL;
+
+	DBG("");
+
+	if (modem->context_list == NULL)
+		return;
 	if (!modem->context_list)
 		return;
 	if (!context)
 		return;
 
+	for (list = modem->context_list; list; list = list->next) {
+		struct network_context *context = list->data;
+
 	g_hash_table_remove(context_hash, context->path);
 
-	if (context->network)
-		remove_network(modem, context);
 	modem->context_list = g_slist_remove(modem->context_list, context);
 
-	network_context_free(context);
-	context = NULL;
+static void remove_all_networks(struct modem_data *modem)
+{
+	GSList *list;
+
+	modem->valid_apn = false;
 }
 
 static void remove_all_contexts(struct modem_data *modem)
@@ -1281,17 +1275,6 @@ static void remove_all_contexts(struct modem_data *modem)
 	}
 	g_slist_free(modem->context_list);
 	modem->context_list = NULL;
-}
-
-static void remove_all_networks(struct modem_data *modem)
-{
-	GSList *list;
-
-	for (list = modem->context_list; list; list = list->next) {
-		struct network_context *context = list->data;
-
-		remove_network(modem, context);
-	}
 }
 
 static gboolean context_changed(DBusConnection *conn,
