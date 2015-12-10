@@ -1219,14 +1219,17 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 	if (ip_protocol)
 		set_context_ipconfig(context, ip_protocol);
 
+	modem->context = context;
 	context->active = active;
 
 	modem->context_list = g_slist_prepend(modem->context_list, context);
 	g_hash_table_replace(context_hash, g_strdup(context_path), modem);
 
 	if (context->valid_apn && modem->attached &&
-	    has_interface(modem->interfaces, OFONO_API_NETREG))
-		add_network(modem, context);
+			has_interface(modem->interfaces,
+				OFONO_API_NETREG)) {
+		add_network(modem);
+	}
 
 	return 0;
 }
@@ -1252,11 +1255,8 @@ static void remove_cm_context(struct modem_data *modem,
 
 	modem->context_list = g_slist_remove(modem->context_list, context);
 
-static void remove_all_networks(struct modem_data *modem)
-{
-	GSList *list;
-
-	modem->valid_apn = false;
+	network_context_free(modem->context);
+	modem->context = NULL;
 }
 
 static void remove_all_contexts(struct modem_data *modem)
@@ -1327,7 +1327,7 @@ static gboolean context_changed(DBusConnection *conn,
 		DBG("%s Active %d", modem->path, context->active);
 
 		if (context->active)
-			set_connected(modem, context);
+			set_connected(modem);
 		else
 			set_disconnected(context);
 	} else if (g_str_equal(key, "AccessPointName")) {
@@ -1353,7 +1353,7 @@ static gboolean context_changed(DBusConnection *conn,
 			add_network(modem, context);
 
 			if (context->active)
-				set_connected(modem, context);
+				set_connected(modem);
 		} else {
 			context->valid_apn = false;
 
@@ -1757,9 +1757,9 @@ static void netreg_properties_reply(struct modem_data *modem,
 		struct network_context *context = list->data;
 
 		if (context->valid_apn)
-			add_network(modem, context);
+			add_network(modem);
 		if (context->active)
-			set_connected(modem, context);
+			set_connected(modem);
 	}
 }
 
