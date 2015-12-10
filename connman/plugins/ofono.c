@@ -236,6 +236,23 @@ static struct network_context *get_context_with_path(GSList *context_list,
 	return NULL;
 }
 
+static struct network_context *get_context_with_network(GSList *context_list,
+				const struct connman_network *network)
+{
+	GSList *list;
+
+	DBG("network %p", network);
+
+	for (list = context_list; list; list = list->next) {
+		struct network_context *context = list->data;
+
+		if (context->network == network)
+			return context;
+	}
+
+	return NULL;
+}
+
 static struct network_context *network_context_alloc(const char *path)
 {
 	struct network_context *context;
@@ -345,17 +362,19 @@ static void set_disconnected(struct network_context *context)
 	if (context->network)
 		connman_network_set_connected(context->network, false);
 
-	g_free(context->ipv4_nameservers);
-	context->ipv4_nameservers = NULL;
-	if (context->ipv4_method != CONNMAN_IPCONFIG_METHOD_OFF)
-		context->ipv4_method =
-			CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+	if (context) {
+		g_free(context->ipv4_nameservers);
+		context->ipv4_nameservers = NULL;
+		if (context->ipv4_method != CONNMAN_IPCONFIG_METHOD_OFF)
+			context->ipv4_method =
+					CONNMAN_IPCONFIG_METHOD_UNKNOWN;
 
-	g_free(context->ipv6_nameservers);
-	context->ipv6_nameservers = NULL;
-	if (context->ipv6_method != CONNMAN_IPCONFIG_METHOD_OFF)
-		context->ipv6_method =
-			CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+		g_free(context->ipv6_nameservers);
+		context->ipv6_nameservers = NULL;
+		if (context->ipv6_method != CONNMAN_IPCONFIG_METHOD_OFF)
+			context->ipv6_method =
+					CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+	}
 }
 
 typedef void (*set_property_cb)(struct modem_data *data,
@@ -657,9 +676,7 @@ static int cdma_cm_set_powered(struct modem_data *modem, dbus_bool_t powered)
 
 	DBG("%s powered %d", modem->path, powered);
 
-	/* In case of CDMA, there is only one context */
-	context = modem->context_list->data;
-	err = set_property(modem, context, modem->path,
+	err = set_property(modem, modem->context, modem->path,
 				OFONO_CDMA_CM_INTERFACE,
 				"Powered", DBUS_TYPE_BOOLEAN,
 				&powered,
@@ -1098,7 +1115,7 @@ static void remove_network(struct modem_data *modem,
 {
 	DBG("%s", modem->path);
 
-	if (!context || !context->network)
+	if (!context)
 		return;
 
 	DBG("network %p", context->network);
@@ -1226,10 +1243,8 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 	g_hash_table_replace(context_hash, g_strdup(context_path), modem);
 
 	if (context->valid_apn && modem->attached &&
-			has_interface(modem->interfaces,
-				OFONO_API_NETREG)) {
-		add_network(modem);
-	}
+	    has_interface(modem->interfaces, OFONO_API_NETREG))
+		add_network(modem, context);
 
 	return 0;
 }
@@ -1248,11 +1263,10 @@ static void remove_cm_context(struct modem_data *modem,
 	if (!context)
 		return;
 
-	for (list = modem->context_list; list; list = list->next) {
-		struct network_context *context = list->data;
-
 	g_hash_table_remove(context_hash, context->path);
 
+	if (context->network)
+		remove_network(modem, context);
 	modem->context_list = g_slist_remove(modem->context_list, context);
 
 	network_context_free(modem->context);
@@ -1275,6 +1289,17 @@ static void remove_all_contexts(struct modem_data *modem)
 	}
 	g_slist_free(modem->context_list);
 	modem->context_list = NULL;
+}
+
+static void remove_all_networks(struct modem_data *modem)
+{
+	GSList *list;
+
+	for (list = modem->context_list; list; list = list->next) {
+		struct network_context *context = list->data;
+
+		remove_network(modem, context);
+	}
 }
 
 static gboolean context_changed(DBusConnection *conn,
@@ -1327,7 +1352,7 @@ static gboolean context_changed(DBusConnection *conn,
 		DBG("%s Active %d", modem->path, context->active);
 
 		if (context->active)
-			set_connected(modem);
+			set_connected(modem, context);
 		else
 			set_disconnected(context);
 	} else if (g_str_equal(key, "AccessPointName")) {
@@ -1353,7 +1378,7 @@ static gboolean context_changed(DBusConnection *conn,
 			add_network(modem, context);
 
 			if (context->active)
-				set_connected(modem);
+				set_connected(modem, context);
 		} else {
 			context->valid_apn = false;
 
@@ -1757,9 +1782,9 @@ static void netreg_properties_reply(struct modem_data *modem,
 		struct network_context *context = list->data;
 
 		if (context->valid_apn)
-			add_network(modem);
+			add_network(modem, context);
 		if (context->active)
-			set_connected(modem);
+			set_connected(modem, context);
 	}
 }
 
@@ -1833,7 +1858,7 @@ static gboolean cdma_netreg_changed(DBusConnection *conn,
 	if (modem->registered)
 		add_cdma_network(modem);
 	else
-		remove_all_networks(modem);
+		remove_network(modem, modem->context);
 
 	return TRUE;
 }
@@ -1868,7 +1893,7 @@ static void cdma_netreg_properties_reply(struct modem_data *modem,
 	if (modem->registered)
 		add_cdma_network(modem);
 	else
-		remove_all_networks(modem);
+		remove_network(modem, modem->context);
 }
 
 static int cdma_netreg_get_properties(struct modem_data *modem)
@@ -1888,7 +1913,7 @@ static void cm_update_attached(struct modem_data *modem,
 	DBG("%s Attached %d", modem->path, modem->attached);
 
 	if (!modem->attached) {
-		remove_all_networks(modem);
+		remove_network(modem, modem->context);
 		return;
 	}
 
@@ -1957,15 +1982,15 @@ static void cdma_cm_update_powered(struct modem_data *modem,
 
 	DBG("%s CDMA cm Powered %d", modem->path, modem->cdma_cm_powered);
 
-	if (!modem->context_list)
+	if (!modem->context)
 		return;
 
 	/* In case of CDMA, there is only one context */
 	context = modem->context_list->data;
 	if (modem->cdma_cm_powered)
-		set_connected(modem, context);
+		set_connected(modem, modem->context);
 	else
-		set_disconnected(context);
+		set_disconnected(modem->context);
 }
 
 static void cdma_cm_update_settings(struct modem_data *modem,
@@ -1988,7 +2013,7 @@ static gboolean cdma_cm_changed(DBusConnection *conn,
 	if (!modem)
 		return TRUE;
 
-	if (modem->online && !modem->context_list)
+	if (modem->online && !modem->context)
 		cdma_netreg_get_properties(modem);
 
 	if (!dbus_message_iter_init(message, &iter))
