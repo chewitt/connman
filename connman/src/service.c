@@ -371,19 +371,6 @@ static void stop_recurring_online_check(struct connman_service *service)
 	}
 }
 
-static void set_split_routing(struct connman_service *service, bool value)
-{
-	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
-		return;
-
-	service->do_split_routing = value;
-
-	if (service->do_split_routing)
-		service->order = 0;
-	else
-		service->order = 10;
-}
-
 static void get_config_string(GKeyFile *keyfile, const char *group,
 					const char *key, char **value)
 {
@@ -622,6 +609,19 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 }
 
+static void set_split_routing(struct connman_service *service, bool value)
+{
+	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
+		return;
+
+	service->do_split_routing = value;
+
+	if (service->do_split_routing)
+		service->order = 0;
+	else
+		service->order = 10;
+}
+
 int __connman_service_load_modifiable(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -688,7 +688,9 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 		break;
 	case CONNMAN_SERVICE_TYPE_VPN:
 		set_split_routing(service, g_key_file_get_boolean(keyfile,
-				service->identifier, "SplitRouting", NULL));
+							service->identifier,
+							"SplitRouting", NULL));
+
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
