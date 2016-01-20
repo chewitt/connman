@@ -40,6 +40,8 @@
 #include <connman/log.h>
 #include <connman/technology.h>
 
+#include "connman.h"
+
 enum mm_handler_id {
 	MM_HANDLER_VALID,
 	MM_HANDLER_DATA_MODEM,
@@ -254,7 +256,6 @@ static int ofono_device_enable(struct connman_device *device)
 {
 	struct modem_data *md = connman_device_get_data(device);
 	DBG("%s device %p", ofono_modem_path(md->modem), device);
-	ofono_modem_set_online(md->modem, TRUE);
 	return 0;
 }
 
@@ -262,7 +263,6 @@ static int ofono_device_disable(struct connman_device *device)
 {
 	struct modem_data *md = connman_device_get_data(device);
 	DBG("%s device %p", ofono_modem_path(md->modem), device);
-	ofono_modem_set_online(md->modem, FALSE);
 	return 0;
 }
 
@@ -273,24 +273,6 @@ static struct connman_device_driver ofono_device_driver = {
 	.remove         = ofono_device_remove,
 	.enable         = ofono_device_enable,
 	.disable        = ofono_device_disable,
-};
-
-static int ofono_tech_probe(struct connman_technology *technology)
-{
-	DBG("");
-	return 0;
-}
-
-static void ofono_tech_remove(struct connman_technology *technology)
-{
-	DBG("");
-}
-
-static struct connman_technology_driver ofono_tech_driver = {
-	.name           = "cellular",
-	.type           = CONNMAN_SERVICE_TYPE_CELLULAR,
-	.probe          = ofono_tech_probe,
-	.remove         = ofono_tech_remove,
 };
 
 static const char *modem_ident(struct modem_data *md)
@@ -331,11 +313,7 @@ static void modem_create_device(struct modem_data *md)
 	if (connman_device_register(md->device)) {
 		connman_error("Failed to register cellular device");
 		connman_device_unref(md->device);
-		ofono_modem_set_online(md->modem, FALSE);
 		md->device = NULL;
-	} else {
-		gboolean offline = connman_technology_load_offlinemode();
-		ofono_modem_set_online(md->modem, !offline);
 	}
 	g_free(tmp);
 }
@@ -606,17 +584,6 @@ static void object_valid_changed(OfonoObject *object, void *arg)
 	modem_update_network(arg);
 }
 
-static void modem_valid_changed(OfonoModem *modem, void *arg)
-{
-	DBG("%s %d", ofono_modem_path(modem), ofono_modem_valid(modem));
-	if (ofono_modem_valid(modem)) {
-		DBG("%s powered %d online %d", ofono_modem_path(modem),
-					modem->powered, modem->online);
-		ofono_modem_set_powered(modem, TRUE);
-	}
-	modem_update_network(arg);
-}
-
 static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
@@ -688,10 +655,30 @@ static void connmgr_contexts_changed(OfonoConnMgr *onnmgr,
 	modem_update_context(arg);
 }
 
+static void modem_set_online(struct modem_data *md, gboolean online)
+{
+	OfonoModem *modem = md->modem;
+	if (modem->online != online) {
+		DBG("%s going %sline", ofono_modem_path(modem),
+						online ? "on" : "off");
+		ofono_modem_set_online(modem, online);
+	}
+}
+
 static void modem_changed(OfonoModem *modem, void *arg)
 {
-	DBG("%s powered %d online %d", ofono_modem_path(modem),
+	struct modem_data *md = arg;
+	if (ofono_modem_valid(modem)) {
+		DBG("%s powered %d online %d", ofono_modem_path(modem),
 					modem->powered, modem->online);
+		if (!modem->powered) {
+			DBG("%s powering up", ofono_modem_path(modem));
+			ofono_modem_set_powered(modem, TRUE);
+		}
+
+		/* Keep modem online state in sync with the offline mode */
+		modem_set_online(md, !__connman_technology_get_offlinemode());
+	}
 	modem_update_network(arg);
 }
 
@@ -723,13 +710,14 @@ static void connmgr_attached_changed(OfonoConnMgr *connmgr, void *arg)
 static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 {
 	const char *path = ofono_modem_path(modem);
+	const gboolean online = !__connman_technology_get_offlinemode();
 	struct modem_data *md = g_new0(struct modem_data, 1);
 
 	md->mm = ofonoext_mm_ref(plugin->mm);
 	md->modem = ofono_modem_ref(modem);
 	md->modem_handler_id[MODEM_HANDLER_VALID] =
 		ofono_modem_add_valid_changed_handler(md->modem,
-					modem_valid_changed, md);
+					modem_changed, md);
 	md->modem_handler_id[MODEM_HANDLER_POWERED] =
 		ofono_modem_add_powered_changed_handler(md->modem,
 					modem_changed, md);
@@ -785,6 +773,7 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 
 	if (ofono_modem_valid(modem)) {
 		ofono_modem_set_powered(modem, TRUE);
+		ofono_modem_set_online(modem, online);
 	}
 	modem_update_network(md);
 	modem_update_roaming(md);
@@ -899,6 +888,16 @@ static void mm_changed(OfonoExtModemManager *mm, void *arg)
 	}
 }
 
+static void ofono_plugin_set_online(struct plugin_data *plugin, gboolean online)
+{
+	GHashTableIter it;
+	gpointer value;
+	g_hash_table_iter_init(&it, plugin->modems);
+	while (g_hash_table_iter_next(&it, NULL, &value)) {
+		modem_set_online((struct modem_data *)value, online);
+	}
+}
+
 static struct plugin_data *ofono_plugin_new(void)
 {
 	struct plugin_data *plugin = g_new0(struct plugin_data, 1);
@@ -957,6 +956,31 @@ static void ofono_plugin_log_notify(struct connman_debug_desc *desc)
 }
 
 static struct plugin_data *ofono_plugin;
+
+static int ofono_tech_probe(struct connman_technology *tech)
+{
+	DBG("");
+	return 0;
+}
+
+static void ofono_tech_remove(struct connman_technology *tech)
+{
+	DBG("");
+}
+
+static void ofono_tech_enabled_notify(struct connman_technology *tech, bool on)
+{
+	DBG("%d", on);
+	ofono_plugin_set_online(ofono_plugin, on);
+}
+
+static struct connman_technology_driver ofono_tech_driver = {
+	.name           = "cellular",
+	.type           = CONNMAN_SERVICE_TYPE_CELLULAR,
+	.probe          = ofono_tech_probe,
+	.remove         = ofono_tech_remove,
+	.enabled_notify = ofono_tech_enabled_notify
+};
 
 static int jolla_ofono_init(void)
 {
