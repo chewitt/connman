@@ -1,8 +1,7 @@
 /*
- *
  *  Connection Manager
  *
- *  Copyright (C) 2015 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2015-2016 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -13,10 +12,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 
@@ -104,7 +99,7 @@ struct modem_data {
 	OfonoSimMgr *simmgr;
 	OfonoConnMgr *connmgr;
 	OfonoConnCtx *connctx;
-	OfonoExtModemManager* mm;
+	OfonoExtModemManager *mm;
 	gulong modem_handler_id[MODEM_HANDLER_COUNT];
 	gulong netreg_handler_id[NETREG_HANDLER_COUNT];
 	gulong simmgr_handler_id[SIMMGR_HANDLER_COUNT];
@@ -120,8 +115,8 @@ struct modem_data {
 };
 
 struct plugin_data {
-	OfonoExtModemManager* mm;
-	OfonoManager* manager;
+	OfonoExtModemManager *mm;
+	OfonoManager *manager;
 	GHashTable *modems;
 	gulong mm_handler_id[MM_HANDLER_COUNT];
 	gulong manager_handler_id[MANAGER_HANDLER_COUNT];
@@ -129,54 +124,54 @@ struct plugin_data {
 
 static void connctx_update_active(struct modem_data *data);
 
-static void connctx_cancel_activate_failed_handler(struct modem_data *data)
+static void connctx_cancel_activate_failed_handler(struct modem_data *md)
 {
-	if (data->connctx_handler_id[CONNCTX_HANDLER_FAILED]) {
-		ofono_connctx_remove_handler(data->connctx,
-			data->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
-		data->connctx_handler_id[CONNCTX_HANDLER_FAILED] = 0;
+	if (md->connctx_handler_id[CONNCTX_HANDLER_FAILED]) {
+		ofono_connctx_remove_handler(md->connctx,
+			md->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
+		md->connctx_handler_id[CONNCTX_HANDLER_FAILED] = 0;
 	}
 }
 
-static void connctx_activate_failed(OfonoConnCtx* ctx, const GError* err,
-								void* arg)
+static void connctx_activate_failed(OfonoConnCtx *ctx, const GError *err,
+								void *arg)
 {
-	struct modem_data *data = arg;
+	struct modem_data *md = arg;
 	GASSERT(data->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
-	connctx_cancel_activate_failed_handler(data);
-	if (data->network) {
-		connman_network_set_error(data->network,
+	connctx_cancel_activate_failed_handler(md);
+	if (md->network) {
+		connman_network_set_error(md->network,
 				CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
 	}
 }
 
 static int ofono_network_probe(struct connman_network *network)
 {
-	struct modem_data *data = connman_network_get_data(network);
-	DBG("%s network %p", ofono_modem_path(data->modem), network);
+	struct modem_data *md = connman_network_get_data(network);
+	DBG("%s network %p", ofono_modem_path(md->modem), network);
 	return 0;
 }
 
 static void ofono_network_remove(struct connman_network *network)
 {
-	struct modem_data *data = connman_network_get_data(network);
-	DBG("%s network %p", ofono_modem_path(data->modem), network);
+	struct modem_data *md = connman_network_get_data(network);
+	DBG("%s network %p", ofono_modem_path(md->modem), network);
 }
 
 static int ofono_network_connect(struct connman_network *network)
 {
-	struct modem_data *data = connman_network_get_data(network);
-	DBG("%s network %p", ofono_modem_path(data->modem), network);
-	connctx_cancel_activate_failed_handler(data);
-	if (data->connctx) {
-		ofono_connctx_activate(data->connctx);
-		if (data->connctx->active) {
+	struct modem_data *md = connman_network_get_data(network);
+	DBG("%s network %p", ofono_modem_path(md->modem), network);
+	connctx_cancel_activate_failed_handler(md);
+	if (md->connctx) {
+		ofono_connctx_activate(md->connctx);
+		if (md->connctx->active) {
 			return 0;
 		} else {
-			data->connctx_handler_id[CONNCTX_HANDLER_FAILED] =
+			md->connctx_handler_id[CONNCTX_HANDLER_FAILED] =
 				ofono_connctx_add_activate_failed_handler(
-					data->connctx, connctx_activate_failed,
-					data);
+					md->connctx, connctx_activate_failed,
+					md);
 			return (-EINPROGRESS);
 		}
 	} else {
@@ -186,11 +181,11 @@ static int ofono_network_connect(struct connman_network *network)
 
 static int ofono_network_disconnect(struct connman_network *network)
 {
-	struct modem_data *data = connman_network_get_data(network);
-	DBG("%s network %p", ofono_modem_path(data->modem), network);
-	if (data->connctx) {
-		ofono_connctx_deactivate(data->connctx);
-		return data->connctx->active ? (-EINPROGRESS) : 0;
+	struct modem_data *md = connman_network_get_data(network);
+	DBG("%s network %p", ofono_modem_path(md->modem), network);
+	if (md->connctx) {
+		ofono_connctx_deactivate(md->connctx);
+		return md->connctx->active ? (-EINPROGRESS) : 0;
 	} else {
 		return -ENOSYS;
 	}
@@ -207,30 +202,30 @@ static struct connman_network_driver ofono_network_driver = {
 
 static int ofono_device_probe(struct connman_device *device)
 {
-	struct modem_data *data = connman_device_get_data(device);
-	DBG("%s device %p", ofono_modem_path(data->modem), device);
+	struct modem_data *md = connman_device_get_data(device);
+	DBG("%s device %p", ofono_modem_path(md->modem), device);
 	return 0;
 }
 
 static void ofono_device_remove(struct connman_device *device)
 {
-	struct modem_data *data = connman_device_get_data(device);
-	DBG("%s device %p", ofono_modem_path(data->modem), device);
+	struct modem_data *md = connman_device_get_data(device);
+	DBG("%s device %p", ofono_modem_path(md->modem), device);
 }
 
 static int ofono_device_enable(struct connman_device *device)
 {
-	struct modem_data *data = connman_device_get_data(device);
-	DBG("%s device %p", ofono_modem_path(data->modem), device);
-	ofono_modem_set_online(data->modem, TRUE);
+	struct modem_data *md = connman_device_get_data(device);
+	DBG("%s device %p", ofono_modem_path(md->modem), device);
+	ofono_modem_set_online(md->modem, TRUE);
 	return 0;
 }
 
 static int ofono_device_disable(struct connman_device *device)
 {
-	struct modem_data *data = connman_device_get_data(device);
-	DBG("%s device %p", ofono_modem_path(data->modem), device);
-	ofono_modem_set_online(data->modem, FALSE);
+	struct modem_data *md = connman_device_get_data(device);
+	DBG("%s device %p", ofono_modem_path(md->modem), device);
+	ofono_modem_set_online(md->modem, FALSE);
 	return 0;
 }
 
@@ -261,9 +256,9 @@ static struct connman_technology_driver ofono_tech_driver = {
 	.remove         = ofono_tech_remove,
 };
 
-static const char *modem_ident(struct modem_data *data)
+static const char *modem_ident(struct modem_data *md)
 {
-	const char *path = ofono_connctx_path(data->connctx);
+	const char *path = ofono_connctx_path(md->connctx);
 	if (path && path[0] == '/') {
 		const char *slash = strrchr(path, '/');
 		if (slash) {
@@ -273,129 +268,129 @@ static const char *modem_ident(struct modem_data *data)
 	return NULL;
 }
 
-static void modem_create_device(struct modem_data *data)
+static void modem_create_device(struct modem_data *md)
 {
-	const char *path = ofono_modem_path(data->modem);
+	const char *path = ofono_modem_path(md->modem);
 	const char *ident;
 	char *tmp;
 
-	GASSERT(!data->device);
-	if (connman_dbus_validate_ident(data->imsi)) {
+	GASSERT(!md->device);
+	if (connman_dbus_validate_ident(md->imsi)) {
 		tmp = NULL;
-		ident = data->imsi;
+		ident = md->imsi;
 	} else {
-		tmp = connman_dbus_encode_string(data->imsi);
+		tmp = connman_dbus_encode_string(md->imsi);
 		ident = tmp;
 	}
 
-	data->device = connman_device_create("ofono",
+	md->device = connman_device_create("ofono",
 						CONNMAN_DEVICE_TYPE_CELLULAR);
 
-	DBG("%s device %p ident %s", path, data->device, ident);
-	connman_device_set_ident(data->device, ident);
-	connman_device_set_string(data->device, "Path", path);
-	connman_device_set_data(data->device, data);
-	connman_device_set_powered(data->device, data->modem->online);
-	if (connman_device_register(data->device)) {
+	DBG("%s device %p ident %s", path, md->device, ident);
+	connman_device_set_ident(md->device, ident);
+	connman_device_set_string(md->device, "Path", path);
+	connman_device_set_data(md->device, md);
+	connman_device_set_powered(md->device, md->modem->online);
+	if (connman_device_register(md->device)) {
 		connman_error("Failed to register cellular device");
-		connman_device_unref(data->device);
-		ofono_modem_set_online(data->modem, FALSE);
-		data->device = NULL;
+		connman_device_unref(md->device);
+		ofono_modem_set_online(md->modem, FALSE);
+		md->device = NULL;
 	} else {
 		gboolean offline = connman_technology_load_offlinemode();
-		ofono_modem_set_online(data->modem, !offline);
+		ofono_modem_set_online(md->modem, !offline);
 	}
 	g_free(tmp);
 }
 
-static void modem_create_network(struct modem_data *data)
+static void modem_create_network(struct modem_data *md)
 {
-	const char *path = ofono_modem_path(data->modem);
+	const char *path = ofono_modem_path(md->modem);
 
 	DBG("%s", path);
-	GASSERT(data->device);
-	GASSERT(!data->network);
+	GASSERT(md->device);
+	GASSERT(!md->network);
 
-	data->network = connman_network_create(path,
+	md->network = connman_network_create(path,
 					CONNMAN_NETWORK_TYPE_CELLULAR);
-	DBG("network %p", data->network);
+	DBG("network %p", md->network);
 
-	connman_network_set_data(data->network, data);
-	connman_network_set_name(data->network, data->name ? data->name : "");
-	connman_network_set_group(data->network, modem_ident(data));
-	connman_network_set_strength(data->network, data->strength);
-	connman_network_set_bool(data->network, "Roaming", data->roaming);
-	connman_network_set_string(data->network, "Path", path);
+	connman_network_set_data(md->network, md);
+	connman_network_set_name(md->network, md->name ? md->name : "");
+	connman_network_set_group(md->network, modem_ident(md));
+	connman_network_set_strength(md->network, md->strength);
+	connman_network_set_bool(md->network, "Roaming", md->roaming);
+	connman_network_set_string(md->network, "Path", path);
 
-	if (connman_device_add_network(data->device, data->network) == 0) {
-		connctx_update_active(data);
+	if (connman_device_add_network(md->device, md->network) == 0) {
+		connctx_update_active(md);
 	} else {
-		connman_network_unref(data->network);
-		data->network = NULL;
+		connman_network_unref(md->network);
+		md->network = NULL;
 	}
 }
 
-static void modem_destroy_network(struct modem_data *data)
+static void modem_destroy_network(struct modem_data *md)
 {
-	if (data->network) {
-		connman_device_remove_network(data->device, data->network);
-		connman_network_unref(data->network);
-		data->network = NULL;
+	if (md->network) {
+		connman_device_remove_network(md->device, md->network);
+		connman_network_unref(md->network);
+		md->network = NULL;
 	}
 }
 
-static void modem_destroy_device(struct modem_data *data)
+static void modem_destroy_device(struct modem_data *md)
 {
-	if (data->device) {
-		DBG("%s", ofono_modem_path(data->modem));
-		connman_device_set_powered(data->device, false);
-		modem_destroy_network(data);
-		connman_device_unregister(data->device);
-		connman_device_unref(data->device);
-		data->device = NULL;
+	if (md->device) {
+		DBG("%s", ofono_modem_path(md->modem));
+		connman_device_set_powered(md->device, false);
+		modem_destroy_network(md);
+		connman_device_unregister(md->device);
+		connman_device_unref(md->device);
+		md->device = NULL;
 	}
 }
 
-static gboolean modem_can_create_device(struct modem_data *data)
+static gboolean modem_can_create_device(struct modem_data *md)
 {
-	return ofono_modem_valid(data->modem) && data->modem->powered &&
-		ofono_simmgr_valid(data->simmgr) && data->imsi &&
-		ofono_connmgr_valid(data->connmgr) && data->mm->valid &&
-		ofono_modem_equal(data->mm->data_modem, data->modem);
+	return ofono_modem_valid(md->modem) && md->modem->powered &&
+		ofono_simmgr_valid(md->simmgr) && md->imsi &&
+		ofono_connmgr_valid(md->connmgr) && md->mm->valid &&
+		ofono_modem_equal(md->mm->data_modem, md->modem);
 }
 
-static gboolean modem_can_create_network(struct modem_data *data)
+static gboolean modem_can_create_network(struct modem_data *md)
 {
-	return data->device && data->connmgr->attached;
+	return md->device && md->connmgr->attached;
 }
 
-static void modem_update_device(struct modem_data *data)
+static void modem_update_device(struct modem_data *md)
 {
-	if (modem_can_create_device(data)) {
-		if (data->device) {
-			connman_device_set_powered(data->device,
-							data->modem->online);
+	if (modem_can_create_device(md)) {
+		if (md->device) {
+			connman_device_set_powered(md->device,
+							md->modem->online);
 		} else {
-			modem_create_device(data);
+			modem_create_device(md);
 		}
 	} else {
-		modem_destroy_device(data);
+		modem_destroy_device(md);
 	}
 }
 
-static void modem_update_network(struct modem_data *data)
+static void modem_update_network(struct modem_data *md)
 {
-	modem_update_device(data);
-	if (modem_can_create_network(data)) {
-		if (!data->network) {
-			modem_create_network(data);
+	modem_update_device(md);
+	if (modem_can_create_network(md)) {
+		if (!md->network) {
+			modem_create_network(md);
 		}
 	} else {
-		modem_destroy_network(data);
+		modem_destroy_network(md);
 	}
 }
 
-static GString *modem_append_strv(GString *str, char* const* strv)
+static GString *modem_append_strv(GString *str, char *const *strv)
 {
 	if (strv) {
 		while (*strv) {
@@ -455,129 +450,126 @@ static GString *modem_configure_ipv6(struct connman_network *network,
 	return modem_append_strv(nameservers, config->dns);
 }
 
-static int modem_configure(struct modem_data *data)
+static int modem_configure(struct modem_data *md)
 {
-	const int index = connman_inet_ifindex(data->connctx->ifname);
+	const int index = connman_inet_ifindex(md->connctx->ifname);
 	struct connman_service *service =
-		connman_service_lookup_from_network(data->network);
+		connman_service_lookup_from_network(md->network);
 
 	if (index >= 0 && service) {
-		GString *nameservers = NULL;
+		GString *ns = NULL;
 
-		DBG("%s %d", ofono_modem_path(data->modem), index);
+		DBG("%s %d", ofono_modem_path(md->modem), index);
 
-		if (data->connctx->settings) {
+		if (md->connctx->settings) {
 			connman_service_create_ip4config(service, index);
-			nameservers = modem_configure_ipv4(data->network,
-					data->connctx->settings, nameservers);
+			ns = modem_configure_ipv4(md->network,
+					md->connctx->settings, ns);
 		} else {
-			connman_network_set_ipv4_method(data->network,
+			connman_network_set_ipv4_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
 		}
 
-		if (data->connctx->ipv6_settings) {
+		if (md->connctx->ipv6_settings) {
 			connman_service_create_ip6config(service, index);
-			nameservers = modem_configure_ipv6(data->network,
-				data->connctx->ipv6_settings, nameservers);
+			ns = modem_configure_ipv6(md->network,
+					md->connctx->ipv6_settings, ns);
 		} else {
-			connman_network_set_ipv6_method(data->network,
+			connman_network_set_ipv6_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_AUTO);
 		}
 
-		if (nameservers) {
-			connman_network_set_nameservers(data->network,
-							nameservers->str);
-			g_string_free(nameservers, TRUE);
+		if (ns) {
+			connman_network_set_nameservers(md->network, ns->str);
+			g_string_free(ns, TRUE);
 		}
 	}
 
 	return index;
 }
 
-static void modem_connected(struct modem_data *data)
+static void modem_connected(struct modem_data *md)
 {
-	const int index = modem_configure(data);
+	const int index = modem_configure(md);
 
 	if (index >= 0) {
-		connman_network_set_index(data->network, index);
-		connman_network_set_connected(data->network, TRUE);
+		connman_network_set_index(md->network, index);
+		connman_network_set_connected(md->network, TRUE);
 	}
 }
 
-static void simmgr_changed(OfonoSimMgr* simmgr, void* arg)
+static void simmgr_changed(OfonoSimMgr *simmgr, void *arg)
 {
-	struct modem_data *data = arg;
-	GASSERT(data->simmgr == simmgr);
+	struct modem_data *md = arg;
+	GASSERT(md->simmgr == simmgr);
 	if (ofono_simmgr_valid(simmgr)) {
-		DBG("%s %s", ofono_modem_path(data->modem), simmgr->imsi);
-		if (g_strcmp0(simmgr->imsi, data->imsi)) {
-			modem_destroy_device(data);
-			g_free(data->imsi);
-			data->imsi = g_strdup(simmgr->imsi);
+		DBG("%s %s", ofono_modem_path(md->modem), simmgr->imsi);
+		if (g_strcmp0(simmgr->imsi, md->imsi)) {
+			modem_destroy_device(md);
+			g_free(md->imsi);
+			md->imsi = g_strdup(simmgr->imsi);
 		}
 	} else {
-		DBG("%s invalid", ofono_modem_path(data->modem));
-		g_free(data->imsi);
-		data->imsi = NULL;
+		DBG("%s invalid", ofono_modem_path(md->modem));
+		g_free(md->imsi);
+		md->imsi = NULL;
 	}
-	modem_update_network(data);
+	modem_update_network(md);
 }
 
-static void modem_update_roaming(struct modem_data *data)
+static void modem_update_roaming(struct modem_data *md)
 {
-	const gboolean roaming = data->roaming;
-	data->roaming = (ofono_netreg_valid(data->netreg) &&
-			data->netreg->status == OFONO_NETREG_STATUS_ROAMING);
-	if (data->network && data->roaming != roaming) {
-		DBG("%d", data->roaming);
-		connman_network_set_bool(data->network, "Roaming",
-								data->roaming);
-		connman_network_update(data->network);
-	}
-}
-
-static void modem_update_strength(struct modem_data *data)
-{
-	const guint strength = data->strength;
-	data->strength = (ofono_netreg_valid(data->netreg) ?
-						data->netreg->strength : 0);
-	if (data->network && data->strength != strength) {
-		DBG("%u", data->strength);
-		connman_network_set_strength(data->network, data->strength);
-		connman_network_update(data->network);
+	const gboolean roaming = md->roaming;
+	md->roaming = (ofono_netreg_valid(md->netreg) &&
+			md->netreg->status == OFONO_NETREG_STATUS_ROAMING);
+	if (md->network && md->roaming != roaming) {
+		DBG("%d", md->roaming);
+		connman_network_set_bool(md->network, "Roaming", md->roaming);
+		connman_network_update(md->network);
 	}
 }
 
-static void modem_update_name(struct modem_data *data)
+static void modem_update_strength(struct modem_data *md)
 {
-	const char *name = ofono_netreg_valid(data->netreg) ?
-						data->netreg->name : "";
-	if (g_strcmp0(data->name, name)) {
+	const guint strength = md->strength;
+	md->strength = ofono_netreg_valid(md->netreg) ? md->netreg->strength : 0;
+	if (md->network && md->strength != strength) {
+		DBG("%u", md->strength);
+		connman_network_set_strength(md->network, md->strength);
+		connman_network_update(md->network);
+	}
+}
+
+static void modem_update_name(struct modem_data *md)
+{
+	const char *name = ofono_netreg_valid(md->netreg) ?
+						md->netreg->name : "";
+	if (g_strcmp0(md->name, name)) {
 		DBG("%s", name);
-		g_free(data->name);
-		data->name = g_strdup(name);
-		if (data->network) {
-			connman_network_set_name(data->network, data->name);
+		g_free(md->name);
+		md->name = g_strdup(name);
+		if (md->network) {
+			connman_network_set_name(md->network, md->name);
 		}
 	}
 }
 
-static void modem_update_country(struct modem_data *data)
+static void modem_update_country(struct modem_data *md)
 {
-	const char *country = data->country;
-	data->country = ofono_netreg_country(data->netreg);
-	if (data->country && g_strcmp0(data->country, country)) {
-		DBG("%s", data->country);
-		connman_technology_set_regdom(data->country);
+	const char *country = md->country;
+	md->country = ofono_netreg_country(md->netreg);
+	if (md->country && g_strcmp0(md->country, country)) {
+		DBG("%s", md->country);
+		connman_technology_set_regdom(md->country);
 	}
 }
 
-static void object_valid_changed(OfonoObject* object, void* arg)
+static void object_valid_changed(OfonoObject *object, void *arg)
 {
 	modem_update_network(arg);
 }
 
-static void modem_valid_changed(OfonoModem* modem, void* arg)
+static void modem_valid_changed(OfonoModem *modem, void *arg)
 {
 	DBG("%s %d", ofono_modem_path(modem), ofono_modem_valid(modem));
 	if (ofono_modem_valid(modem)) {
@@ -588,216 +580,217 @@ static void modem_valid_changed(OfonoModem* modem, void* arg)
 	modem_update_network(arg);
 }
 
-static void connctx_update_active(struct modem_data *data)
+static void connctx_update_active(struct modem_data *md)
 {
-	GASSERT(data->connctx);
-	if (ofono_connctx_valid(data->connctx) && data->connctx->active) {
-		connctx_cancel_activate_failed_handler(data);
-		if (data->network &&
-			!connman_network_get_connected(data->network)) {
-			modem_connected(data);
+	GASSERT(md->connctx);
+	if (ofono_connctx_valid(md->connctx) && md->connctx->active) {
+		connctx_cancel_activate_failed_handler(md);
+		if (md->network &&
+			!connman_network_get_connected(md->network)) {
+			modem_connected(md);
 		}
-	} else if (data->network) {
-		connman_network_set_connected(data->network, FALSE);
+	} else if (md->network) {
+		connman_network_set_connected(md->network, FALSE);
 	}
 }
 
-static void connctx_active_changed(OfonoConnCtx* connctx, void* arg)
+static void connctx_active_changed(OfonoConnCtx *connctx, void *arg)
 {
 	connctx_update_active(arg);
 }
 
-static void connctx_settings_changed(OfonoConnCtx* connctx, void* arg)
+static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
 {
 	modem_configure(arg);
 }
 
-static void modem_update_context(struct modem_data *data)
+static void modem_update_context(struct modem_data *md)
 {
-	OfonoConnCtx* ctx = ofono_connmgr_get_context_for_type(data->connmgr,
+	OfonoConnCtx *ctx = ofono_connmgr_get_context_for_type(md->connmgr,
 						OFONO_CONNCTX_TYPE_INTERNET);
-	const char* old_path = ofono_connctx_path(data->connctx);
-	const char* new_path = ofono_connctx_path(ctx);
+	const char *old_path = ofono_connctx_path(md->connctx);
+	const char *new_path = ofono_connctx_path(ctx);
 	if (g_strcmp0(old_path, new_path)) {
-		if (data->connctx) {
-			modem_destroy_network(data);
-			ofono_connctx_remove_handlers(data->connctx,
-						data->connctx_handler_id,
-						CONNCTX_HANDLER_COUNT);
-			ofono_connctx_unref(data->connctx);
+		if (md->connctx) {
+			modem_destroy_network(md);
+			ofono_connctx_remove_handlers(md->connctx,
+					md->connctx_handler_id,
+					G_N_ELEMENTS(md->connctx_handler_id));
+			ofono_connctx_unref(md->connctx);
 		}
-		data->connctx = ofono_connctx_ref(ctx);
-		if (data->connctx) {
-			DBG("%s", ofono_connctx_path(data->connctx));
-			data->connctx_handler_id[CONNCTX_HANDLER_VALID] =
+		md->connctx = ofono_connctx_ref(ctx);
+		if (md->connctx) {
+			DBG("%s", ofono_connctx_path(md->connctx));
+			md->connctx_handler_id[CONNCTX_HANDLER_VALID] =
 				ofono_object_add_valid_changed_handler(
-					ofono_connctx_object(data->connctx),
-					object_valid_changed, data);
-			data->connctx_handler_id[CONNCTX_HANDLER_ACTIVE] =
+					ofono_connctx_object(md->connctx),
+					object_valid_changed, md);
+			md->connctx_handler_id[CONNCTX_HANDLER_ACTIVE] =
 				ofono_connctx_add_active_changed_handler(
-					data->connctx, connctx_active_changed,
-					data);
-			data->connctx_handler_id[CONNCTX_HANDLER_SETTINGS] =
+					md->connctx, connctx_active_changed,
+					md);
+			md->connctx_handler_id[CONNCTX_HANDLER_SETTINGS] =
 				ofono_connctx_add_active_changed_handler(
-					data->connctx, connctx_settings_changed,
-					data);
-			data->connctx_handler_id[CONNCTX_HANDLER_IPV6_SETTINGS] =
+					md->connctx, connctx_settings_changed,
+					md);
+			md->connctx_handler_id[CONNCTX_HANDLER_IPV6_SETTINGS] =
 				ofono_connctx_add_active_changed_handler(
-					data->connctx, connctx_settings_changed,
-					data);
-			connctx_update_active(data);
+					md->connctx, connctx_settings_changed,
+					md);
+			connctx_update_active(md);
 		} else {
 			DBG("no internet context");
 		}
 	}
-	modem_update_network(data);
+	modem_update_network(md);
 }
 
-static void connmgr_contexts_changed(OfonoConnMgr* onnmgr,
-					OfonoConnCtx* context, void* arg)
+static void connmgr_contexts_changed(OfonoConnMgr *onnmgr,
+					OfonoConnCtx *context, void *arg)
 {
 	modem_update_context(arg);
 }
 
-static void modem_changed(OfonoModem* modem, void* arg)
+static void modem_changed(OfonoModem *modem, void *arg)
 {
 	DBG("%s powered %d online %d", ofono_modem_path(modem),
 					modem->powered, modem->online);
 	modem_update_network(arg);
 }
 
-static void netreg_status_changed(OfonoNetReg* netreg, void* arg)
+static void netreg_status_changed(OfonoNetReg *netreg, void *arg)
 {
 	modem_update_roaming(arg);
 }
 
-static void netreg_strength_changed(OfonoNetReg* netreg, void* arg)
+static void netreg_strength_changed(OfonoNetReg *netreg, void *arg)
 {
 	modem_update_strength(arg);
 }
 
-static void netreg_name_changed(OfonoNetReg* netreg, void* arg)
+static void netreg_name_changed(OfonoNetReg *netreg, void *arg)
 {
 	modem_update_name(arg);
 }
 
-static void netreg_network_changed(OfonoNetReg* netreg, void* arg)
+static void netreg_network_changed(OfonoNetReg *netreg, void *arg)
 {
 	modem_update_country(arg);
 }
 
-static void connmgr_attached_changed(OfonoConnMgr* connmgr, void* arg)
+static void connmgr_attached_changed(OfonoConnMgr *connmgr, void *arg)
 {
 	modem_update_network(arg);
 }
 
 static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 {
-	const char* path = ofono_modem_path(modem);
-	struct modem_data *data = g_new0(struct modem_data, 1);
+	const char *path = ofono_modem_path(modem);
+	struct modem_data *md = g_new0(struct modem_data, 1);
 
-	data->mm = ofonoext_mm_ref(plugin->mm);
-	data->modem = ofono_modem_ref(modem);
-	data->modem_handler_id[MODEM_HANDLER_VALID] =
-		ofono_modem_add_valid_changed_handler(data->modem,
-					modem_valid_changed, data);
-	data->modem_handler_id[MODEM_HANDLER_POWERED] =
-		ofono_modem_add_powered_changed_handler(data->modem,
-					modem_changed, data);
-	data->modem_handler_id[MODEM_HANDLER_ONLINE] =
-		ofono_modem_add_online_changed_handler(data->modem,
-					modem_changed, data);
+	md->mm = ofonoext_mm_ref(plugin->mm);
+	md->modem = ofono_modem_ref(modem);
+	md->modem_handler_id[MODEM_HANDLER_VALID] =
+		ofono_modem_add_valid_changed_handler(md->modem,
+					modem_valid_changed, md);
+	md->modem_handler_id[MODEM_HANDLER_POWERED] =
+		ofono_modem_add_powered_changed_handler(md->modem,
+					modem_changed, md);
+	md->modem_handler_id[MODEM_HANDLER_ONLINE] =
+		ofono_modem_add_online_changed_handler(md->modem,
+					modem_changed, md);
 
-	data->netreg = ofono_netreg_new(path);
-	data->netreg_handler_id[NETREG_HANDLER_VALID] =
-		ofono_netreg_add_valid_changed_handler(data->netreg,
-					netreg_status_changed, data);
-	data->netreg_handler_id[NETREG_HANDLER_STATUS] =
-		ofono_netreg_add_status_changed_handler(data->netreg,
-					netreg_status_changed, data);
-	data->netreg_handler_id[NETREG_HANDLER_MCC] =
-		ofono_netreg_add_mcc_changed_handler(data->netreg,
-					netreg_network_changed, data);
-	data->netreg_handler_id[NETREG_HANDLER_MNC] =
-		ofono_netreg_add_mnc_changed_handler(data->netreg,
-					netreg_network_changed, data);
-	data->netreg_handler_id[NETREG_HANDLER_STRENGTH] =
-		ofono_netreg_add_strength_changed_handler(data->netreg,
-					netreg_strength_changed, data);
-	data->netreg_handler_id[NETREG_HANDLER_NAME] =
-		ofono_netreg_add_strength_changed_handler(data->netreg,
-					netreg_name_changed, data);
+	md->netreg = ofono_netreg_new(path);
+	md->netreg_handler_id[NETREG_HANDLER_VALID] =
+		ofono_netreg_add_valid_changed_handler(md->netreg,
+					netreg_status_changed, md);
+	md->netreg_handler_id[NETREG_HANDLER_STATUS] =
+		ofono_netreg_add_status_changed_handler(md->netreg,
+					netreg_status_changed, md);
+	md->netreg_handler_id[NETREG_HANDLER_MCC] =
+		ofono_netreg_add_mcc_changed_handler(md->netreg,
+					netreg_network_changed, md);
+	md->netreg_handler_id[NETREG_HANDLER_MNC] =
+		ofono_netreg_add_mnc_changed_handler(md->netreg,
+					netreg_network_changed, md);
+	md->netreg_handler_id[NETREG_HANDLER_STRENGTH] =
+		ofono_netreg_add_strength_changed_handler(md->netreg,
+					netreg_strength_changed, md);
+	md->netreg_handler_id[NETREG_HANDLER_NAME] =
+		ofono_netreg_add_strength_changed_handler(md->netreg,
+					netreg_name_changed, md);
 
-	data->simmgr = ofono_simmgr_new(path);
-	data->simmgr_handler_id[SIMMGR_HANDLER_VALID] =
-		ofono_simmgr_add_valid_changed_handler(data->simmgr,
-					simmgr_changed, data);
-	data->simmgr_handler_id[SIMMGR_HANDLER_IMSI] =
-		ofono_simmgr_add_imsi_changed_handler(data->simmgr,
-					simmgr_changed, data);
+	md->simmgr = ofono_simmgr_new(path);
+	md->simmgr_handler_id[SIMMGR_HANDLER_VALID] =
+		ofono_simmgr_add_valid_changed_handler(md->simmgr,
+					simmgr_changed, md);
+	md->simmgr_handler_id[SIMMGR_HANDLER_IMSI] =
+		ofono_simmgr_add_imsi_changed_handler(md->simmgr,
+					simmgr_changed, md);
 
-	data->connmgr = ofono_connmgr_new(path);
-	data->connmgr_handler_id[CONNMGR_HANDLER_VALID] =
+	md->connmgr = ofono_connmgr_new(path);
+	md->connmgr_handler_id[CONNMGR_HANDLER_VALID] =
 		ofono_object_add_valid_changed_handler(
-			ofono_connmgr_object(data->connmgr),
-			object_valid_changed, data);
-	data->connmgr_handler_id[CONNMGR_HANDLER_ATTACHED] =
-		ofono_connmgr_add_attached_changed_handler(data->connmgr,
-					connmgr_attached_changed, data);
-	data->connmgr_handler_id[CONNMGR_HANDLER_CONTEXT_ADDED] =
-		ofono_connmgr_add_context_added_handler(data->connmgr,
-					connmgr_contexts_changed, data);
-	data->connmgr_handler_id[CONNMGR_HANDLER_CONTEXT_REMOVED] =
-		ofono_connmgr_add_context_removed_handler(data->connmgr,
-					connmgr_contexts_changed, data);
+			ofono_connmgr_object(md->connmgr),
+			object_valid_changed, md);
+	md->connmgr_handler_id[CONNMGR_HANDLER_ATTACHED] =
+		ofono_connmgr_add_attached_changed_handler(md->connmgr,
+					connmgr_attached_changed, md);
+	md->connmgr_handler_id[CONNMGR_HANDLER_CONTEXT_ADDED] =
+		ofono_connmgr_add_context_added_handler(md->connmgr,
+					connmgr_contexts_changed, md);
+	md->connmgr_handler_id[CONNMGR_HANDLER_CONTEXT_REMOVED] =
+		ofono_connmgr_add_context_removed_handler(md->connmgr,
+					connmgr_contexts_changed, md);
 
-	data->imsi = g_strdup(data->simmgr->imsi);
-	g_hash_table_replace(plugin->modems, g_strdup(path), data);
+	md->imsi = g_strdup(md->simmgr->imsi);
+	g_hash_table_replace(plugin->modems, g_strdup(path), md);
 
 	if (ofono_modem_valid(modem)) {
 		ofono_modem_set_powered(modem, TRUE);
 	}
-	modem_update_network(data);
-	modem_update_roaming(data);
-	modem_update_strength(data);
-	modem_update_name(data);
-	modem_update_country(data);
+	modem_update_network(md);
+	modem_update_roaming(md);
+	modem_update_strength(md);
+	modem_update_name(md);
+	modem_update_country(md);
 }
 
 static void modem_delete(gpointer value)
 {
-	struct modem_data *data = value;
+	struct modem_data *md = value;
 
-	DBG("%s", ofono_modem_path(data->modem));
-	modem_destroy_device(data);
-	ofonoext_mm_unref(data->mm);
+	DBG("%s", ofono_modem_path(md->modem));
+	modem_destroy_device(md);
+	ofonoext_mm_unref(md->mm);
 
-	ofono_modem_remove_handlers(data->modem,
-			data->modem_handler_id, MODEM_HANDLER_COUNT);
-	ofono_modem_unref(data->modem);
+	ofono_modem_remove_handlers(md->modem, md->modem_handler_id,
+					G_N_ELEMENTS(md->modem_handler_id));
+	ofono_modem_unref(md->modem);
 
-	ofono_netreg_remove_handlers(data->netreg,
-			data->netreg_handler_id, NETREG_HANDLER_COUNT);
-	ofono_netreg_unref(data->netreg);
+	ofono_netreg_remove_handlers(md->netreg, md->netreg_handler_id,
+					G_N_ELEMENTS(md->netreg_handler_id));
+	ofono_netreg_unref(md->netreg);
 
-	ofono_simmgr_remove_handlers(data->simmgr,
-			data->simmgr_handler_id, SIMMGR_HANDLER_COUNT);
-	ofono_simmgr_unref(data->simmgr);
+	ofono_simmgr_remove_handlers(md->simmgr, md->simmgr_handler_id,
+					G_N_ELEMENTS(md->simmgr_handler_id));
+	ofono_simmgr_unref(md->simmgr);
 
-	ofono_connmgr_remove_handlers(data->connmgr,
-			data->connmgr_handler_id, CONNMGR_HANDLER_COUNT);
-	ofono_connmgr_unref(data->connmgr);
+	ofono_connmgr_remove_handlers(md->connmgr, md->connmgr_handler_id,
+					G_N_ELEMENTS(md->connmgr_handler_id));
+	ofono_connmgr_unref(md->connmgr);
 
-	if (data->connctx) {
-		ofono_connctx_deactivate(data->connctx);
-		ofono_connctx_remove_handlers(data->connctx,
-			data->connctx_handler_id, CONNCTX_HANDLER_COUNT);
-		ofono_connctx_unref(data->connctx);
+	if (md->connctx) {
+		ofono_connctx_deactivate(md->connctx);
+		ofono_connctx_remove_handlers(md->connctx,
+					md->connctx_handler_id,
+					G_N_ELEMENTS(md->connctx_handler_id));
+		ofono_connctx_unref(md->connctx);
 	}
 
-	g_free(data->name);
-	g_free(data->imsi);
-	g_free(data);
+	g_free(md->name);
+	g_free(md->imsi);
+	g_free(md);
 }
 
 static void manager_valid(struct plugin_data *plugin)
@@ -843,7 +836,7 @@ static void modem_removed(OfonoManager *manager, const char *path, void *arg)
 	g_hash_table_remove(plugin->modems, path);
 }
 
-static void mm_changed(OfonoExtModemManager* mm, void* arg)
+static void mm_changed(OfonoExtModemManager *mm, void *arg)
 {
 	GHashTableIter it;
 	gpointer value;
@@ -855,9 +848,9 @@ static void mm_changed(OfonoExtModemManager* mm, void* arg)
 	/* Unregister stale devices first */
 	g_hash_table_iter_init(&it, plugin->modems);
 	while (g_hash_table_iter_next(&it, NULL, &value)) {
-		struct modem_data *data = value;
-		if (!modem_can_create_device(data)) {
-			modem_destroy_device(data);
+		struct modem_data *md = value;
+		if (!modem_can_create_device(md)) {
+			modem_destroy_device(md);
 		}
 	}
 
@@ -904,11 +897,12 @@ static void ofono_plugin_delete(struct plugin_data *plugin)
 {
 	if (plugin) {
 		g_hash_table_destroy(plugin->modems);
-		ofonoext_mm_remove_handlers(plugin->mm,
-			plugin->mm_handler_id, MM_HANDLER_COUNT); 
+		ofonoext_mm_remove_handlers(plugin->mm, plugin->mm_handler_id,
+				G_N_ELEMENTS(plugin->mm_handler_id));
 		ofonoext_mm_unref(plugin->mm);
 		ofono_manager_remove_handlers(plugin->manager,
-			plugin->manager_handler_id, MANAGER_HANDLER_COUNT);
+				plugin->manager_handler_id,
+				G_N_ELEMENTS(plugin->manager_handler_id));
 		ofono_manager_unref(plugin->manager);
 		g_free(plugin);
 	}
@@ -924,7 +918,7 @@ static void ofono_plugin_log_notify(struct connman_debug_desc *desc)
 	DBG("%s log level %d", gofono_log.name, gofono_log.level);
 }
 
-static struct plugin_data* ofono_plugin;
+static struct plugin_data *ofono_plugin;
 
 static int jolla_ofono_init(void)
 {
