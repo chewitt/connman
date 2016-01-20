@@ -962,12 +962,14 @@ static int jolla_ofono_init(void)
 {
 	int err;
 	static struct connman_debug_desc ofono_debug_desc CONNMAN_DEBUG_ATTR = {
-		.name = "libgofono",
+		.name = "gofono",
 		.file = __FILE__,
 		.flags = CONNMAN_DEBUG_FLAG_DEFAULT,
 		.notify = ofono_plugin_log_notify
 	};
 
+	/* connman core calls openlog() */
+	gutil_log_func = gutil_log_syslog;
 	if (ofono_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) {
 		gofono_log.level = GLOG_LEVEL_VERBOSE;
 	}
