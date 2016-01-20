@@ -93,6 +93,9 @@ enum connctx_handler_id {
 	CONNCTX_HANDLER_COUNT
 };
 
+/* Should be less than CONNECT_TIMEOUT defined in service.c (currently 120) */
+#define ACTIVATE_TIMEOUT_SEC (60)
+
 struct modem_data {
 	OfonoModem *modem;
 	OfonoNetReg *netreg;
@@ -105,6 +108,7 @@ struct modem_data {
 	gulong simmgr_handler_id[SIMMGR_HANDLER_COUNT];
 	gulong connmgr_handler_id[CONNMGR_HANDLER_COUNT];
 	gulong connctx_handler_id[CONNCTX_HANDLER_COUNT];
+	guint activate_timeout_id;
 	struct connman_device *device;
 	struct connman_network *network;
 	const char *country;
@@ -124,12 +128,22 @@ struct plugin_data {
 
 static void connctx_update_active(struct modem_data *data);
 
-static void connctx_cancel_activate_failed_handler(struct modem_data *md)
+static void connctx_remove_handler(struct modem_data *md,
+						enum connctx_handler_id id)
 {
-	if (md->connctx_handler_id[CONNCTX_HANDLER_FAILED]) {
+	if (md->connctx_handler_id[id]) {
 		ofono_connctx_remove_handler(md->connctx,
-			md->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
-		md->connctx_handler_id[CONNCTX_HANDLER_FAILED] = 0;
+			md->connctx_handler_id[id]);
+		md->connctx_handler_id[id] = 0;
+	}
+}
+
+static void connctx_activate_cancel(struct modem_data *md)
+{
+	connctx_remove_handler(md, CONNCTX_HANDLER_FAILED);
+	if (md->activate_timeout_id) {
+		g_source_remove(md->activate_timeout_id);
+		md->activate_timeout_id = 0;
 	}
 }
 
@@ -137,12 +151,20 @@ static void connctx_activate_failed(OfonoConnCtx *ctx, const GError *err,
 								void *arg)
 {
 	struct modem_data *md = arg;
+	DBG("%s failed", ofono_modem_path(md->modem));
 	GASSERT(data->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
-	connctx_cancel_activate_failed_handler(md);
-	if (md->network) {
-		connman_network_set_error(md->network,
-				CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
-	}
+	connctx_update_active(md);
+}
+
+/* Handles both activation and deactivation timeouts */
+static gboolean connctx_activate_timeout(gpointer data)
+{
+	struct modem_data *md = data;
+	DBG("%s timed out", ofono_modem_path(md->modem));
+	GASSERT(md->activate_timeout_id);
+	md->activate_timeout_id = 0;
+	connctx_update_active(md);
+	return FALSE;
 }
 
 static int ofono_network_probe(struct connman_network *network)
@@ -156,13 +178,14 @@ static void ofono_network_remove(struct connman_network *network)
 {
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
+	connctx_activate_cancel(md);
 }
 
 static int ofono_network_connect(struct connman_network *network)
 {
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
-	connctx_cancel_activate_failed_handler(md);
+	connctx_activate_cancel(md);
 	if (md->connctx) {
 		ofono_connctx_activate(md->connctx);
 		if (md->connctx->active) {
@@ -172,6 +195,9 @@ static int ofono_network_connect(struct connman_network *network)
 				ofono_connctx_add_activate_failed_handler(
 					md->connctx, connctx_activate_failed,
 					md);
+			md->activate_timeout_id =
+				g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
+					connctx_activate_timeout, md);
 			return (-EINPROGRESS);
 		}
 	} else {
@@ -185,7 +211,18 @@ static int ofono_network_disconnect(struct connman_network *network)
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
 	if (md->connctx) {
 		ofono_connctx_deactivate(md->connctx);
-		return md->connctx->active ? (-EINPROGRESS) : 0;
+		if (!md->connctx->active) {
+			return 0;
+		} else {
+			/* Reset the timeout */
+			if (md->activate_timeout_id) {
+				g_source_remove(md->activate_timeout_id);
+			}
+			md->activate_timeout_id =
+				g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
+					connctx_activate_timeout, md);
+			return (-EINPROGRESS);
+		}
 	} else {
 		return -ENOSYS;
 	}
@@ -584,7 +621,7 @@ static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
 	if (ofono_connctx_valid(md->connctx) && md->connctx->active) {
-		connctx_cancel_activate_failed_handler(md);
+		connctx_activate_cancel(md);
 		if (md->network &&
 			!connman_network_get_connected(md->network)) {
 			modem_connected(md);
@@ -761,6 +798,7 @@ static void modem_delete(gpointer value)
 	struct modem_data *md = value;
 
 	DBG("%s", ofono_modem_path(md->modem));
+	connctx_activate_cancel(md);
 	modem_destroy_device(md);
 	ofonoext_mm_unref(md->mm);
 
