@@ -40,6 +40,8 @@
 #include <connman/log.h>
 #include <connman/technology.h>
 
+#include "connman.h"
+
 enum mm_handler_id {
 	MM_HANDLER_VALID,
 	MM_HANDLER_DATA_MODEM,
@@ -93,6 +95,9 @@ enum connctx_handler_id {
 	CONNCTX_HANDLER_COUNT
 };
 
+/* Should be less than CONNECT_TIMEOUT defined in service.c (currently 120) */
+#define ACTIVATE_TIMEOUT_SEC (60)
+
 struct modem_data {
 	OfonoModem *modem;
 	OfonoNetReg *netreg;
@@ -105,6 +110,7 @@ struct modem_data {
 	gulong simmgr_handler_id[SIMMGR_HANDLER_COUNT];
 	gulong connmgr_handler_id[CONNMGR_HANDLER_COUNT];
 	gulong connctx_handler_id[CONNCTX_HANDLER_COUNT];
+	guint activate_timeout_id;
 	struct connman_device *device;
 	struct connman_network *network;
 	const char *country;
@@ -124,12 +130,22 @@ struct plugin_data {
 
 static void connctx_update_active(struct modem_data *data);
 
-static void connctx_cancel_activate_failed_handler(struct modem_data *md)
+static void connctx_remove_handler(struct modem_data *md,
+						enum connctx_handler_id id)
 {
-	if (md->connctx_handler_id[CONNCTX_HANDLER_FAILED]) {
+	if (md->connctx_handler_id[id]) {
 		ofono_connctx_remove_handler(md->connctx,
-			md->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
-		md->connctx_handler_id[CONNCTX_HANDLER_FAILED] = 0;
+			md->connctx_handler_id[id]);
+		md->connctx_handler_id[id] = 0;
+	}
+}
+
+static void connctx_activate_cancel(struct modem_data *md)
+{
+	connctx_remove_handler(md, CONNCTX_HANDLER_FAILED);
+	if (md->activate_timeout_id) {
+		g_source_remove(md->activate_timeout_id);
+		md->activate_timeout_id = 0;
 	}
 }
 
@@ -137,12 +153,20 @@ static void connctx_activate_failed(OfonoConnCtx *ctx, const GError *err,
 								void *arg)
 {
 	struct modem_data *md = arg;
+	DBG("%s failed", ofono_modem_path(md->modem));
 	GASSERT(data->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
-	connctx_cancel_activate_failed_handler(md);
-	if (md->network) {
-		connman_network_set_error(md->network,
-				CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
-	}
+	connctx_update_active(md);
+}
+
+/* Handles both activation and deactivation timeouts */
+static gboolean connctx_activate_timeout(gpointer data)
+{
+	struct modem_data *md = data;
+	DBG("%s timed out", ofono_modem_path(md->modem));
+	GASSERT(md->activate_timeout_id);
+	md->activate_timeout_id = 0;
+	connctx_update_active(md);
+	return FALSE;
 }
 
 static int ofono_network_probe(struct connman_network *network)
@@ -156,13 +180,14 @@ static void ofono_network_remove(struct connman_network *network)
 {
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
+	connctx_activate_cancel(md);
 }
 
 static int ofono_network_connect(struct connman_network *network)
 {
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
-	connctx_cancel_activate_failed_handler(md);
+	connctx_activate_cancel(md);
 	if (md->connctx) {
 		ofono_connctx_activate(md->connctx);
 		if (md->connctx->active) {
@@ -172,6 +197,9 @@ static int ofono_network_connect(struct connman_network *network)
 				ofono_connctx_add_activate_failed_handler(
 					md->connctx, connctx_activate_failed,
 					md);
+			md->activate_timeout_id =
+				g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
+					connctx_activate_timeout, md);
 			return (-EINPROGRESS);
 		}
 	} else {
@@ -185,7 +213,18 @@ static int ofono_network_disconnect(struct connman_network *network)
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
 	if (md->connctx) {
 		ofono_connctx_deactivate(md->connctx);
-		return md->connctx->active ? (-EINPROGRESS) : 0;
+		if (!md->connctx->active) {
+			return 0;
+		} else {
+			/* Reset the timeout */
+			if (md->activate_timeout_id) {
+				g_source_remove(md->activate_timeout_id);
+			}
+			md->activate_timeout_id =
+				g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
+					connctx_activate_timeout, md);
+			return (-EINPROGRESS);
+		}
 	} else {
 		return -ENOSYS;
 	}
@@ -217,7 +256,6 @@ static int ofono_device_enable(struct connman_device *device)
 {
 	struct modem_data *md = connman_device_get_data(device);
 	DBG("%s device %p", ofono_modem_path(md->modem), device);
-	ofono_modem_set_online(md->modem, TRUE);
 	return 0;
 }
 
@@ -225,7 +263,6 @@ static int ofono_device_disable(struct connman_device *device)
 {
 	struct modem_data *md = connman_device_get_data(device);
 	DBG("%s device %p", ofono_modem_path(md->modem), device);
-	ofono_modem_set_online(md->modem, FALSE);
 	return 0;
 }
 
@@ -236,24 +273,6 @@ static struct connman_device_driver ofono_device_driver = {
 	.remove         = ofono_device_remove,
 	.enable         = ofono_device_enable,
 	.disable        = ofono_device_disable,
-};
-
-static int ofono_tech_probe(struct connman_technology *technology)
-{
-	DBG("");
-	return 0;
-}
-
-static void ofono_tech_remove(struct connman_technology *technology)
-{
-	DBG("");
-}
-
-static struct connman_technology_driver ofono_tech_driver = {
-	.name           = "cellular",
-	.type           = CONNMAN_SERVICE_TYPE_CELLULAR,
-	.probe          = ofono_tech_probe,
-	.remove         = ofono_tech_remove,
 };
 
 static const char *modem_ident(struct modem_data *md)
@@ -294,11 +313,7 @@ static void modem_create_device(struct modem_data *md)
 	if (connman_device_register(md->device)) {
 		connman_error("Failed to register cellular device");
 		connman_device_unref(md->device);
-		ofono_modem_set_online(md->modem, FALSE);
 		md->device = NULL;
-	} else {
-		gboolean offline = connman_technology_load_offlinemode();
-		ofono_modem_set_online(md->modem, !offline);
 	}
 	g_free(tmp);
 }
@@ -569,22 +584,11 @@ static void object_valid_changed(OfonoObject *object, void *arg)
 	modem_update_network(arg);
 }
 
-static void modem_valid_changed(OfonoModem *modem, void *arg)
-{
-	DBG("%s %d", ofono_modem_path(modem), ofono_modem_valid(modem));
-	if (ofono_modem_valid(modem)) {
-		DBG("%s powered %d online %d", ofono_modem_path(modem),
-					modem->powered, modem->online);
-		ofono_modem_set_powered(modem, TRUE);
-	}
-	modem_update_network(arg);
-}
-
 static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
 	if (ofono_connctx_valid(md->connctx) && md->connctx->active) {
-		connctx_cancel_activate_failed_handler(md);
+		connctx_activate_cancel(md);
 		if (md->network &&
 			!connman_network_get_connected(md->network)) {
 			modem_connected(md);
@@ -651,10 +655,30 @@ static void connmgr_contexts_changed(OfonoConnMgr *onnmgr,
 	modem_update_context(arg);
 }
 
+static void modem_set_online(struct modem_data *md, gboolean online)
+{
+	OfonoModem *modem = md->modem;
+	if (modem->online != online) {
+		DBG("%s going %sline", ofono_modem_path(modem),
+						online ? "on" : "off");
+		ofono_modem_set_online(modem, online);
+	}
+}
+
 static void modem_changed(OfonoModem *modem, void *arg)
 {
-	DBG("%s powered %d online %d", ofono_modem_path(modem),
+	struct modem_data *md = arg;
+	if (ofono_modem_valid(modem)) {
+		DBG("%s powered %d online %d", ofono_modem_path(modem),
 					modem->powered, modem->online);
+		if (!modem->powered) {
+			DBG("%s powering up", ofono_modem_path(modem));
+			ofono_modem_set_powered(modem, TRUE);
+		}
+
+		/* Keep modem online state in sync with the offline mode */
+		modem_set_online(md, !__connman_technology_get_offlinemode());
+	}
 	modem_update_network(arg);
 }
 
@@ -686,13 +710,14 @@ static void connmgr_attached_changed(OfonoConnMgr *connmgr, void *arg)
 static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 {
 	const char *path = ofono_modem_path(modem);
+	const gboolean online = !__connman_technology_get_offlinemode();
 	struct modem_data *md = g_new0(struct modem_data, 1);
 
 	md->mm = ofonoext_mm_ref(plugin->mm);
 	md->modem = ofono_modem_ref(modem);
 	md->modem_handler_id[MODEM_HANDLER_VALID] =
 		ofono_modem_add_valid_changed_handler(md->modem,
-					modem_valid_changed, md);
+					modem_changed, md);
 	md->modem_handler_id[MODEM_HANDLER_POWERED] =
 		ofono_modem_add_powered_changed_handler(md->modem,
 					modem_changed, md);
@@ -748,6 +773,7 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 
 	if (ofono_modem_valid(modem)) {
 		ofono_modem_set_powered(modem, TRUE);
+		ofono_modem_set_online(modem, online);
 	}
 	modem_update_network(md);
 	modem_update_roaming(md);
@@ -761,6 +787,7 @@ static void modem_delete(gpointer value)
 	struct modem_data *md = value;
 
 	DBG("%s", ofono_modem_path(md->modem));
+	connctx_activate_cancel(md);
 	modem_destroy_device(md);
 	ofonoext_mm_unref(md->mm);
 
@@ -861,6 +888,16 @@ static void mm_changed(OfonoExtModemManager *mm, void *arg)
 	}
 }
 
+static void ofono_plugin_set_online(struct plugin_data *plugin, gboolean online)
+{
+	GHashTableIter it;
+	gpointer value;
+	g_hash_table_iter_init(&it, plugin->modems);
+	while (g_hash_table_iter_next(&it, NULL, &value)) {
+		modem_set_online((struct modem_data *)value, online);
+	}
+}
+
 static struct plugin_data *ofono_plugin_new(void)
 {
 	struct plugin_data *plugin = g_new0(struct plugin_data, 1);
@@ -920,16 +957,43 @@ static void ofono_plugin_log_notify(struct connman_debug_desc *desc)
 
 static struct plugin_data *ofono_plugin;
 
+static int ofono_tech_probe(struct connman_technology *tech)
+{
+	DBG("");
+	return 0;
+}
+
+static void ofono_tech_remove(struct connman_technology *tech)
+{
+	DBG("");
+}
+
+static void ofono_tech_enabled_notify(struct connman_technology *tech, bool on)
+{
+	DBG("%d", on);
+	ofono_plugin_set_online(ofono_plugin, on);
+}
+
+static struct connman_technology_driver ofono_tech_driver = {
+	.name           = "cellular",
+	.type           = CONNMAN_SERVICE_TYPE_CELLULAR,
+	.probe          = ofono_tech_probe,
+	.remove         = ofono_tech_remove,
+	.enabled_notify = ofono_tech_enabled_notify
+};
+
 static int jolla_ofono_init(void)
 {
 	int err;
 	static struct connman_debug_desc ofono_debug_desc CONNMAN_DEBUG_ATTR = {
-		.name = "libgofono",
+		.name = "gofono",
 		.file = __FILE__,
 		.flags = CONNMAN_DEBUG_FLAG_DEFAULT,
 		.notify = ofono_plugin_log_notify
 	};
 
+	/* connman core calls openlog() */
+	gutil_log_func = gutil_log_syslog;
 	if (ofono_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) {
 		gofono_log.level = GLOG_LEVEL_VERBOSE;
 	}
