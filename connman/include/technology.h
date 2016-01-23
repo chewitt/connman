@@ -62,8 +62,6 @@ struct connman_technology_driver {
 				const char *bridge, bool enabled);
 	int (*set_regdom) (struct connman_technology *technology,
 						const char *alpha2);
-	void (*enabled_notify) (struct connman_technology *technology,
-								bool enabled);
 };
 
 int connman_technology_driver_register(struct connman_technology_driver *driver);

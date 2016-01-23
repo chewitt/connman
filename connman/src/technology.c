@@ -649,18 +649,6 @@ static int technology_affect_devices(struct connman_technology *technology,
 static void powered_changed(struct connman_technology *technology)
 {
 	dbus_bool_t enabled;
-	GSList *tech_drivers = technology->driver_list;
-
-	while (tech_drivers) {
-		GSList *next = g_slist_next(tech_drivers);
-		struct connman_technology_driver *driver = tech_drivers->data;
-
-		if (driver->enabled_notify) {
-			driver->enabled_notify(technology, technology->enabled);
-		}
-
-		tech_drivers = next;
-	}
 
 	if (!technology->dbus_registered)
 		return;
