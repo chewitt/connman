@@ -975,10 +975,10 @@ static void ofono_tech_remove(struct connman_technology *tech)
 	DBG("");
 }
 
-static void ofono_tech_enabled_notify(struct connman_technology *tech, bool on)
+static void ofono_tech_set_offline(bool offline)
 {
-	DBG("%d", on);
-	ofono_plugin_set_online(ofono_plugin, on);
+	DBG("%d", offline);
+	ofono_plugin_set_online(ofono_plugin, !offline);
 }
 
 static struct connman_technology_driver ofono_tech_driver = {
@@ -986,7 +986,7 @@ static struct connman_technology_driver ofono_tech_driver = {
 	.type           = CONNMAN_SERVICE_TYPE_CELLULAR,
 	.probe          = ofono_tech_probe,
 	.remove         = ofono_tech_remove,
-	.enabled_notify = ofono_tech_enabled_notify
+	.set_offline    = ofono_tech_set_offline
 };
 
 static int jolla_ofono_init(void)
