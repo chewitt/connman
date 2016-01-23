@@ -144,6 +144,7 @@ static void connctx_activate_cancel(struct modem_data *md)
 {
 	connctx_remove_handler(md, CONNCTX_HANDLER_FAILED);
 	if (md->activate_timeout_id) {
+		DBG("%s done", ofono_modem_path(md->modem));
 		g_source_remove(md->activate_timeout_id);
 		md->activate_timeout_id = 0;
 	}
@@ -162,7 +163,7 @@ static void connctx_activate_failed(OfonoConnCtx *ctx, const GError *err,
 static gboolean connctx_activate_timeout(gpointer data)
 {
 	struct modem_data *md = data;
-	DBG("%s timed out", ofono_modem_path(md->modem));
+	DBG("%s", ofono_modem_path(md->modem));
 	GASSERT(md->activate_timeout_id);
 	md->activate_timeout_id = 0;
 	connctx_update_active(md);
@@ -348,6 +349,7 @@ static void modem_create_network(struct modem_data *md)
 static void modem_destroy_network(struct modem_data *md)
 {
 	if (md->network) {
+		connctx_activate_cancel(md);
 		connman_device_remove_network(md->device, md->network);
 		connman_network_unref(md->network);
 		md->network = NULL;
@@ -587,20 +589,25 @@ static void object_valid_changed(OfonoObject *object, void *arg)
 static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
-	if (ofono_connctx_valid(md->connctx) && md->connctx->active) {
-		connctx_activate_cancel(md);
-		if (md->network &&
-			!connman_network_get_connected(md->network)) {
-			modem_connected(md);
+	if (ofono_connctx_valid(md->connctx) && md->network) {
+		if (md->connctx->active) {
+			if (!connman_network_get_connected(md->network)) {
+				connctx_activate_cancel(md);
+				modem_connected(md);
+			}
+		} else if (connman_network_get_connected(md->network)) {
+			connctx_activate_cancel(md);
+			connman_network_set_connected(md->network, FALSE);
 		}
-	} else if (md->network) {
-		connman_network_set_connected(md->network, FALSE);
 	}
 }
 
 static void connctx_active_changed(OfonoConnCtx *connctx, void *arg)
 {
-	connctx_update_active(arg);
+	struct modem_data *md = arg;
+
+	DBG("%s %d", ofono_modem_path(md->modem), connctx->active);
+	connctx_update_active(md);
 }
 
 static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
