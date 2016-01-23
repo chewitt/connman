@@ -1566,6 +1566,15 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 
 	global_offlinemode = offlinemode;
 
+	/* Notify technology drivers that global_offlinemode has changed */
+	for (list = driver_list; list; list = list->next) {
+		struct connman_technology_driver *driver = list->data;
+
+		if (driver->set_offline) {
+			driver->set_offline(offlinemode);
+		}
+	}
+
 	/* Traverse technology list, enable/disable each technology. */
 	for (list = technology_list; list; list = list->next) {
 		struct connman_technology *technology = list->data;
