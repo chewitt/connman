@@ -179,9 +179,17 @@ static int ofono_network_probe(struct connman_network *network)
 
 static void ofono_network_remove(struct connman_network *network)
 {
+	/*
+	 * ofono_network_remove can be invoked spontaneously by connman
+	 * if the associated network interface disappears.
+	 */
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
 	connctx_activate_cancel(md);
+	if (md->network) {
+		connman_network_unref(md->network);
+		md->network = NULL;
+	}
 }
 
 static int ofono_network_connect(struct connman_network *network)
@@ -349,10 +357,15 @@ static void modem_create_network(struct modem_data *md)
 static void modem_destroy_network(struct modem_data *md)
 {
 	if (md->network) {
-		connctx_activate_cancel(md);
+		DBG("%s", ofono_modem_path(md->modem));
 		connman_device_remove_network(md->device, md->network);
-		connman_network_unref(md->network);
-		md->network = NULL;
+
+		/*
+		 * Assertion: the above call is supposed to invoke
+		 * ofono_network_remove callback which unreferences
+		 * the network and resets the pointer.
+		 */
+		GASSERT(!md->network);
 	}
 }
 
