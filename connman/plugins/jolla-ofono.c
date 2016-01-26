@@ -654,11 +654,11 @@ static void modem_update_context(struct modem_data *md)
 					md->connctx, connctx_active_changed,
 					md);
 			md->connctx_handler_id[CONNCTX_HANDLER_SETTINGS] =
-				ofono_connctx_add_active_changed_handler(
+				ofono_connctx_add_settings_changed_handler(
 					md->connctx, connctx_settings_changed,
 					md);
 			md->connctx_handler_id[CONNCTX_HANDLER_IPV6_SETTINGS] =
-				ofono_connctx_add_active_changed_handler(
+				ofono_connctx_add_ipv6_settings_changed_handler(
 					md->connctx, connctx_settings_changed,
 					md);
 			connctx_update_active(md);
