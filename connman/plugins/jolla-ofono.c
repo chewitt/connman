@@ -198,18 +198,41 @@ static int ofono_network_connect(struct connman_network *network)
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
 	connctx_activate_cancel(md);
 	if (md->connctx) {
-		ofono_connctx_activate(md->connctx);
-		if (md->connctx->active) {
-			return 0;
-		} else {
-			md->connctx_handler_id[CONNCTX_HANDLER_FAILED] =
+		/*
+		 * Refuse to connect mobile data if the cellular service
+		 * is not autoconnectable. The AutoConnect property in the
+		 * Sailfish UI is presented to users as on/off switch for
+		 * mobile data. Let's interpret it as such.
+		 *
+		 * Strictly speaking, the value of the AutoConnect property
+		 * isn't equal to service->autconnect, as one might think.
+		 * It's actually service->favorite && service->autoconnect,
+		 * but we only need to check service->autoconnect because
+		 * for whatever reason favorite becomes true only after
+		 * the service has been connected at least once.
+		 */
+		struct connman_service *service =
+			connman_service_lookup_from_network(network);
+		if (service && connman_service_get_autoconnect(service)) {
+			ofono_connctx_activate(md->connctx);
+			if (md->connctx->active) {
+				/* Already connected */
+				return 0;
+			} else {
+				md->connctx_handler_id[CONNCTX_HANDLER_FAILED] =
 				ofono_connctx_add_activate_failed_handler(
 					md->connctx, connctx_activate_failed,
 					md);
-			md->activate_timeout_id =
-				g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
-					connctx_activate_timeout, md);
-			return (-EINPROGRESS);
+				md->activate_timeout_id =
+					g_timeout_add_seconds(
+						ACTIVATE_TIMEOUT_SEC,
+						connctx_activate_timeout, md);
+				/* Asynchronous connection */
+				return (-EINPROGRESS);
+			}
+		} else {
+			connman_warn("Refusing to connect mobile data");
+			return (-EACCES);
 		}
 	} else {
 		return (-ENOSYS);
