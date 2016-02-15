@@ -197,6 +197,12 @@ static struct connman_technology_driver p2p_tech_driver = {
 	.remove		= p2p_tech_remove,
 };
 
+static bool is_valid_wifi_data(struct wifi_data *wifi)
+{
+	return wifi && (g_list_find(iface_list, wifi) ||
+			g_list_find(p2p_iface_list, wifi));
+}
+
 static bool is_p2p_connecting(void)
 {
 	GList *list;
@@ -3251,20 +3257,27 @@ static void sta_remove_callback(int result,
 
 	DBG("ifname %s result %d ", info->ifname, result);
 
-	if (result < 0 || info->wifi == NULL || (info->wifi->ap_supported != WIFI_AP_SUPPORTED)) {
-		if (info->wifi)
+	if (!is_valid_wifi_data(info->wifi))
+		info->wifi = NULL;
+
+	if (result < 0 || info->wifi == NULL ||
+			(info->wifi->ap_supported != WIFI_AP_SUPPORTED)) {
+
+		if (info->wifi) {
 			info->wifi->tethering = true;
+
+			if (info->wifi->tethering_param){
+				g_free(info->wifi->tethering_param->ssid);
+				g_free(info->wifi->tethering_param);
+				info->wifi->tethering_param = NULL;
+			}
+		}
 
 		g_free(info->ifname);
 		g_free(info->ssid);
 		g_free(info);
 		tethering_info_list = g_slist_remove(tethering_info_list, info);
 
-		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED){
-			g_free(info->wifi->tethering_param->ssid);
-			g_free(info->wifi->tethering_param);
-			info->wifi->tethering_param = NULL;
-		}
 		return;
 	}
 
