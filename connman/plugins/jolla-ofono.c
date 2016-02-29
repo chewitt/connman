@@ -97,6 +97,7 @@ enum connctx_handler_id {
 
 /* Should be less than CONNECT_TIMEOUT defined in service.c (currently 120) */
 #define ACTIVATE_TIMEOUT_SEC (60)
+#define ONLINE_CHECK_SEC  (2)
 
 struct modem_data {
 	OfonoModem *modem;
@@ -111,6 +112,7 @@ struct modem_data {
 	gulong connmgr_handler_id[CONNMGR_HANDLER_COUNT];
 	gulong connctx_handler_id[CONNCTX_HANDLER_COUNT];
 	guint activate_timeout_id;
+	guint online_check_id;
 	struct connman_device *device;
 	struct connman_network *network;
 	const char *country;
@@ -128,7 +130,8 @@ struct plugin_data {
 	gulong manager_handler_id[MANAGER_HANDLER_COUNT];
 };
 
-static void connctx_update_active(struct modem_data *data);
+static void connctx_update_active(struct modem_data *md);
+static void modem_online_check(struct modem_data *md);
 
 static void connctx_remove_handler(struct modem_data *md,
 						enum connctx_handler_id id)
@@ -167,7 +170,7 @@ static gboolean connctx_activate_timeout(gpointer data)
 	GASSERT(md->activate_timeout_id);
 	md->activate_timeout_id = 0;
 	connctx_update_active(md);
-	return FALSE;
+	return G_SOURCE_REMOVE;
 }
 
 static int ofono_network_probe(struct connman_network *network)
@@ -692,20 +695,43 @@ static void modem_update_context(struct modem_data *md)
 	modem_update_network(md);
 }
 
-static void connmgr_contexts_changed(OfonoConnMgr *onnmgr,
+static void connmgr_contexts_changed(OfonoConnMgr *connmgr,
 					OfonoConnCtx *context, void *arg)
 {
 	modem_update_context(arg);
 }
 
+static gboolean modem_online_check_timer(gpointer data)
+{
+	struct modem_data *md = data;
+	md->online_check_id = 0;
+	modem_online_check(md);
+	return G_SOURCE_REMOVE;
+}
+
 static void modem_set_online(struct modem_data *md, gboolean online)
 {
 	OfonoModem *modem = md->modem;
-	if (modem->online != online) {
+	if (modem->online == online) {
+		if (md->online_check_id) {
+			DBG("%s is %sline", ofono_modem_path(modem),
+						online ? "on" : "off");
+			g_source_remove(md->online_check_id);
+			md->online_check_id = 0;
+		}
+	} else if (!md->online_check_id) {
 		DBG("%s going %sline", ofono_modem_path(modem),
 						online ? "on" : "off");
+		md->online_check_id = g_timeout_add_seconds(
+						ONLINE_CHECK_SEC,
+						modem_online_check_timer, md);
 		ofono_modem_set_online(modem, online);
 	}
+}
+
+static void modem_online_check(struct modem_data *md)
+{
+	modem_set_online(md, !__connman_technology_get_offlinemode());
 }
 
 static void modem_changed(OfonoModem *modem, void *arg)
@@ -720,7 +746,7 @@ static void modem_changed(OfonoModem *modem, void *arg)
 		}
 
 		/* Keep modem online state in sync with the offline mode */
-		modem_set_online(md, !__connman_technology_get_offlinemode());
+		modem_online_check(md);
 	}
 	modem_update_network(arg);
 }
@@ -753,7 +779,6 @@ static void connmgr_attached_changed(OfonoConnMgr *connmgr, void *arg)
 static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 {
 	const char *path = ofono_modem_path(modem);
-	const gboolean online = !__connman_technology_get_offlinemode();
 	struct modem_data *md = g_new0(struct modem_data, 1);
 
 	md->mm = ofonoext_mm_ref(plugin->mm);
@@ -816,7 +841,7 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 
 	if (ofono_modem_valid(modem)) {
 		ofono_modem_set_powered(modem, TRUE);
-		ofono_modem_set_online(modem, online);
+		modem_online_check(md);
 	}
 	modem_update_network(md);
 	modem_update_roaming(md);
@@ -831,6 +856,10 @@ static void modem_delete(gpointer value)
 
 	DBG("%s", ofono_modem_path(md->modem));
 	connctx_activate_cancel(md);
+	if (md->online_check_id) {
+		g_source_remove(md->online_check_id);
+	}
+
 	modem_destroy_device(md);
 	ofonoext_mm_unref(md->mm);
 
