@@ -75,12 +75,6 @@ enum ofono_api {
 	OFONO_API_CDMA_CM =	0x10,
 };
 
-enum ofono_active_request {
-	OFONO_ACTIVE_REQUEST_NONE,
-	OFONO_ACTIVE_REQUEST_ACTIVATE,
-	OFONO_ACTIVE_REQUEST_DEACTIVATE
-};
-
 /*
  * The way this plugin works is following:
  *
@@ -139,7 +133,6 @@ static GHashTable *context_hash;
 struct network_context {
 	char *path;
 	int index;
-	enum ofono_active_request next_active_request;
 
 	enum connman_ipconfig_method ipv4_method;
 	struct connman_ipaddress *ipv4_address;
@@ -189,7 +182,7 @@ struct modem_data {
 	bool roaming;
 
 	/* pending calls */
-	GHashTable *set_property_calls;
+	DBusPendingCall	*call_set_property;
 	DBusPendingCall	*call_get_properties;
 	DBusPendingCall *call_get_contexts;
 };
@@ -264,6 +257,7 @@ static void network_context_free(struct network_context *context)
 static void set_connected(struct modem_data *modem)
 {
 	struct connman_service *service;
+	bool setip = false;
 	enum connman_ipconfig_method method;
 	char *nameservers;
 	int index;
@@ -272,8 +266,10 @@ static void set_connected(struct modem_data *modem)
 
 	index = modem->context->index;
 
-	if (index < 0 ) {
-		connman_error("Invalid index");
+	method = modem->context->ipv4_method;
+	if (index < 0 || (!modem->context->ipv4_address &&
+				method == CONNMAN_IPCONFIG_METHOD_FIXED)) {
+		connman_error("Invalid index and/or address");
 		return;
 	}
 
@@ -281,36 +277,25 @@ static void set_connected(struct modem_data *modem)
 	if (!service)
 		return;
 
-	method = modem->context->ipv4_method;
+	connman_service_create_ip4config(service, index);
+	connman_network_set_ipv4_method(modem->network, method);
+
+	if (method == CONNMAN_IPCONFIG_METHOD_FIXED ||
+			method == CONNMAN_IPCONFIG_METHOD_DHCP)	{
+		setip = true;
+	}
+
 	if (method == CONNMAN_IPCONFIG_METHOD_FIXED) {
-		if (modem->context->ipv4_address) {
-			connman_service_create_ip4config(service, index);
-			connman_network_set_ipv4_method(modem->network, method);
-			connman_network_set_ipaddress(modem->network,
+		connman_network_set_ipaddress(modem->network,
 						modem->context->ipv4_address);
-		} else {
-			connman_error("Invalid ipv4-address");
-			return;
-		}
-	} else {
-		connman_service_create_ip4config(service, index);
-		connman_network_set_ipv4_method(modem->network, CONNMAN_IPCONFIG_METHOD_DHCP);
 	}
 
 	method = modem->context->ipv6_method;
-	if (method == CONNMAN_IPCONFIG_METHOD_FIXED) {
-		if (modem->context->ipv6_address) {
-			connman_service_create_ip6config(service, index);
-			connman_network_set_ipv6_method(modem->network, method);
-			connman_network_set_ipaddress(modem->network,
-						modem->context->ipv6_address);
-		} else {
-			connman_error("Invalid ipv6-address");
-			return;
-		}
-	} else {
-		connman_service_create_ip6config(service, index);
-		connman_network_set_ipv6_method(modem->network, CONNMAN_IPCONFIG_METHOD_AUTO);
+	connman_service_create_ip6config(service, index);
+	connman_network_set_ipv6_method(modem->network, method);
+
+	if (method == CONNMAN_IPCONFIG_METHOD_AUTO) {
+		setip = true;
 	}
 
 	/* Set the nameservers */
@@ -329,9 +314,10 @@ static void set_connected(struct modem_data *modem)
 					modem->context->ipv6_nameservers);
 	}
 
-	connman_network_set_index(modem->network, index);
-	connman_network_set_connected(modem->network, true);
-
+	if (setip) {
+		connman_network_set_index(modem->network, index);
+		connman_network_set_connected(modem->network, true);
+	}
 }
 
 static void set_disconnected(struct modem_data *modem)
@@ -344,11 +330,15 @@ static void set_disconnected(struct modem_data *modem)
 	if (modem->context) {
 		g_free(modem->context->ipv4_nameservers);
 		modem->context->ipv4_nameservers = NULL;
-		modem->context->ipv4_method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+		if (modem->context->ipv4_method != CONNMAN_IPCONFIG_METHOD_OFF)
+			modem->context->ipv4_method =
+					CONNMAN_IPCONFIG_METHOD_UNKNOWN;
 
 		g_free(modem->context->ipv6_nameservers);
 		modem->context->ipv6_nameservers = NULL;
-		modem->context->ipv6_method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+		if (modem->context->ipv6_method != CONNMAN_IPCONFIG_METHOD_OFF)
+			modem->context->ipv6_method =
+					CONNMAN_IPCONFIG_METHOD_UNKNOWN;
 	}
 }
 
@@ -366,12 +356,6 @@ struct property_info {
 	get_properties_cb get_properties_cb;
 };
 
-static void set_property_cancel(gpointer key, gpointer value, gpointer data)
-{
-	DBG("Cancel pending SetProperty %s", (char*)key);
-	dbus_pending_call_cancel(value);
-}
-
 static void set_property_reply(DBusPendingCall *call, void *user_data)
 {
 	struct property_info *info = user_data;
@@ -381,6 +365,8 @@ static void set_property_reply(DBusPendingCall *call, void *user_data)
 
 	DBG("%s path %s %s.%s", info->modem->path,
 		info->path, info->interface, info->property);
+
+	info->modem->call_set_property = NULL;
 
 	dbus_error_init(&error);
 
@@ -394,12 +380,12 @@ static void set_property_reply(DBusPendingCall *call, void *user_data)
 		success = false;
 	}
 
-	g_hash_table_remove(info->modem->set_property_calls, info->property);
-
 	if (info->set_property_cb)
 		(*info->set_property_cb)(info->modem, success);
 
 	dbus_message_unref(reply);
+
+	dbus_pending_call_unref(call);
 }
 
 static int set_property(struct modem_data *modem,
@@ -409,17 +395,15 @@ static int set_property(struct modem_data *modem,
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
-	DBusPendingCall* call;
 	struct property_info *info;
 
 	DBG("%s path %s %s.%s", modem->path, path, interface, property);
 
-	call = g_hash_table_lookup(modem->set_property_calls, property);
-	if (call) {
+	if (modem->call_set_property) {
 		DBG("Cancel pending SetProperty");
-		dbus_pending_call_cancel(call);
-		g_hash_table_remove(modem->set_property_calls, property);
-		call = NULL;
+		dbus_pending_call_cancel(modem->call_set_property);
+		dbus_pending_call_unref(modem->call_set_property);
+		modem->call_set_property = NULL;
 	}
 
 	message = dbus_message_new_method_call(OFONO_SERVICE, path,
@@ -431,14 +415,14 @@ static int set_property(struct modem_data *modem,
 	connman_dbus_property_append_basic(&iter, property, type, value);
 
 	if (!dbus_connection_send_with_reply(connection, message,
-					&call, TIMEOUT)) {
+					&modem->call_set_property, TIMEOUT)) {
 		connman_error("Failed to change property: %s %s.%s",
 				path, interface, property);
 		dbus_message_unref(message);
 		return -EINVAL;
 	}
 
-	if (!call) {
+	if (!modem->call_set_property) {
 		connman_error("D-Bus connection not available");
 		dbus_message_unref(message);
 		return -EINVAL;
@@ -446,7 +430,6 @@ static int set_property(struct modem_data *modem,
 
 	info = g_try_new0(struct property_info, 1);
 	if (!info) {
-		dbus_pending_call_unref(call);
 		dbus_message_unref(message);
 		return -ENOMEM;
 	}
@@ -457,8 +440,9 @@ static int set_property(struct modem_data *modem,
 	info->property = property;
 	info->set_property_cb = notify;
 
-	g_hash_table_insert(modem->set_property_calls, (void*)property, call);
-	dbus_pending_call_set_notify(call, set_property_reply, info, g_free);
+	dbus_pending_call_set_notify(modem->call_set_property,
+					set_property_reply, info, g_free);
+
 	dbus_message_unref(message);
 
 	return -EINPROGRESS;
@@ -557,18 +541,15 @@ static int get_properties(const char *path, const char *interface,
 	return -EINPROGRESS;
 }
 
-static int context_submit_next_active_request(struct modem_data *modem);
-
 static void context_set_active_reply(struct modem_data *modem,
 					bool success)
 {
 	DBG("%s", modem->path);
 
-	context_submit_next_active_request(modem);
-
 	if (success) {
 		/*
-		 * oFono will send the change via PropertyChanged singal.
+		 * Don't handle do anything on success here. oFono will send
+		 * the change via PropertyChanged singal.
 		 */
 		return;
 	}
@@ -593,40 +574,23 @@ static void context_set_active_reply(struct modem_data *modem,
 				CONNMAN_NETWORK_ERROR_ASSOCIATE_FAIL);
 }
 
-static int context_submit_next_active_request(struct modem_data *modem)
+static int context_set_active(struct modem_data *modem,
+				dbus_bool_t active)
 {
-	int err = 0;
-	struct network_context* context = modem->context;
+	int err;
 
-	if (context->next_active_request != OFONO_ACTIVE_REQUEST_NONE) {
-		dbus_bool_t active = (context->next_active_request ==
-					OFONO_ACTIVE_REQUEST_ACTIVATE);
+	DBG("%s active %d", modem->path, active);
 
-		context->next_active_request = OFONO_ACTIVE_REQUEST_NONE;
-		DBG("%s active %d", modem->path, active);
-		err = set_property(modem, modem->context->path,
+	err = set_property(modem, modem->context->path,
 				OFONO_CONTEXT_INTERFACE,
 				"Active", DBUS_TYPE_BOOLEAN,
 				&active,
 				context_set_active_reply);
-	}
 
-	return err;
-}
-
-static int context_set_active(struct modem_data *modem, gboolean active)
-{
-	if (!modem->context)
+	if (!active && err == -EINPROGRESS)
 		return 0;
 
-	modem->context->next_active_request = (active ?
-					OFONO_ACTIVE_REQUEST_ACTIVATE :
-					OFONO_ACTIVE_REQUEST_DEACTIVATE);
-
-	if (g_hash_table_lookup(modem->set_property_calls, "Active"))
-		return -EINPROGRESS;
-
-	return context_submit_next_active_request(modem);
+	return err;
 }
 
 static void cdma_cm_set_powered_reply(struct modem_data *modem,
@@ -960,16 +924,16 @@ static void extract_ipv6_settings(DBusMessageIter *array,
 	if (index < 0)
 		goto out;
 
+	context->ipv6_method = CONNMAN_IPCONFIG_METHOD_AUTO;
+
 	context->ipv6_address =
 		connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV6);
 	if (!context->ipv6_address)
 		goto out;
 
 	context->index = index;
-	if (!connman_ipaddress_set_ipv6(context->ipv6_address, address,
-				prefix_length, gateway)) {
-		context->ipv6_method = CONNMAN_IPCONFIG_METHOD_FIXED;
-	}
+	connman_ipaddress_set_ipv6(context->ipv6_address, address,
+				prefix_length, gateway);
 
 	g_free(context->ipv6_nameservers);
 	context->ipv6_nameservers = nameservers;
@@ -1041,13 +1005,6 @@ static void create_device(struct modem_data *modem)
 	}
 
 	modem->device = device;
-	
-	bool isOffline = connman_technology_load_offlinemode();
-	if(!isOffline) {
-		// We must set modem online in boot if flight mode is not
-		// enabled
-		modem_set_online(modem, TRUE);
-	}
 
 	connman_device_set_powered(modem->device, modem->online);
 out:
@@ -1127,12 +1084,53 @@ static void remove_network(struct modem_data *modem)
 	modem->network = NULL;
 }
 
+static int set_context_ipconfig(struct network_context *context,
+				const char *protocol)
+{
+	DBG("context %p protocol %s", context, protocol);
+
+	if (!context || !protocol)
+		return -EINVAL;
+
+	if (g_str_equal(protocol, "ip")) {
+		if (context->ipv4_method == CONNMAN_IPCONFIG_METHOD_OFF)
+			context->ipv4_method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+
+		context->ipv6_method = CONNMAN_IPCONFIG_METHOD_OFF;
+
+		connman_ipaddress_free(context->ipv6_address);
+		context->ipv6_address = NULL;
+
+	} else if (g_str_equal(protocol, "ipv6")) {
+		if (context->ipv6_method == CONNMAN_IPCONFIG_METHOD_OFF)
+			context->ipv6_method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+
+		context->ipv4_method = CONNMAN_IPCONFIG_METHOD_OFF;
+
+		connman_ipaddress_free(context->ipv4_address);
+		context->ipv4_address = NULL;
+
+	} else if (g_str_equal(protocol, "dual")) {
+		if (context->ipv4_method == CONNMAN_IPCONFIG_METHOD_OFF)
+			context->ipv4_method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+
+		if (context->ipv6_method == CONNMAN_IPCONFIG_METHOD_OFF)
+			context->ipv6_method = CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+	}
+
+	DBG("ipv4 method %d ipv6 method %d", context->ipv4_method,
+		context->ipv6_method);
+
+	return 0;
+}
+
 static int add_cm_context(struct modem_data *modem, const char *context_path,
 				DBusMessageIter *dict)
 {
 	const char *context_type = NULL;
 	struct network_context *context = NULL;
 	dbus_bool_t active = FALSE;
+	const char *ip_protocol = NULL;
 
 	DBG("%s context path %s", modem->path, context_path);
 
@@ -1185,7 +1183,14 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 				modem->valid_apn = false;
 
 			DBG("%s AccessPointName '%s'", modem->path, apn);
+		}  else if (g_str_equal(key, "Protocol") &&
+			dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING ) {
+
+			dbus_message_iter_get_basic(&value, &ip_protocol);
+
+			DBG("%s Protocol %s", modem->path, ip_protocol);
 		}
+
 		dbus_message_iter_next(dict);
 	}
 
@@ -1193,6 +1198,9 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 		network_context_free(context);
 		return -EINVAL;
 	}
+
+	if (ip_protocol)
+		set_context_ipconfig(context, ip_protocol);
 
 	modem->context = context;
 	modem->active = active;
@@ -1211,20 +1219,11 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 static void remove_cm_context(struct modem_data *modem,
 				const char *context_path)
 {
-	DBusPendingCall* call;
-
 	if (!modem->context)
 		return;
 
 	if (modem->network)
 		remove_network(modem);
-
-	call = g_hash_table_lookup(modem->set_property_calls, "Active");
-	if (call) {
-		DBG("cancelling %s activation", context_path);
-		dbus_pending_call_cancel(call);
-		g_hash_table_remove(modem->set_property_calls, "Active");
-	}
 
 	g_hash_table_remove(context_hash, context_path);
 
@@ -1252,9 +1251,6 @@ static gboolean context_changed(DBusConnection *conn,
 	if (!modem)
 		return TRUE;
 
-	if (!modem->context)
-		return TRUE;
-
 	if (!dbus_message_iter_init(message, &iter))
 		return TRUE;
 
@@ -1272,16 +1268,10 @@ static gboolean context_changed(DBusConnection *conn,
 		DBG("%s Settings", modem->path);
 
 		extract_ipv4_settings(&value, modem->context);
-
-		if (modem->active && modem->context->index > -1)
-			set_connected(modem);
 	} else if (g_str_equal(key, "IPv6.Settings")) {
 		DBG("%s IPv6.Settings", modem->path);
 
 		extract_ipv6_settings(&value, modem->context);
-
-		if (modem->active && modem->context->index > -1)
-			set_connected(modem);
 	} else if (g_str_equal(key, "Active")) {
 		dbus_bool_t active;
 
@@ -1326,6 +1316,14 @@ static gboolean context_changed(DBusConnection *conn,
 
 			remove_network(modem);
 		}
+
+	} else if (g_str_equal(key, "Protocol") &&
+		dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING ) {
+		const char *ip_protocol;
+
+		dbus_message_iter_get_basic(&value, &ip_protocol);
+
+		set_context_ipconfig(modem->context, ip_protocol);
 	}
 
 	return TRUE;
@@ -1495,7 +1493,7 @@ static void netreg_update_strength(struct modem_data *modem,
 {
 	dbus_message_iter_get_basic(value, &modem->strength);
 
-//	DBG("%s Strength %d", modem->path, modem->strength);
+	DBG("%s Strength %d", modem->path, modem->strength);
 
 	if (!modem->network)
 		return;
@@ -1988,7 +1986,6 @@ static gboolean sim_changed(DBusConnection *conn, DBusMessage *message,
 	struct modem_data *modem;
 	DBusMessageIter iter, value;
 	const char *key;
-	char *new_imsi;
 
 	modem = g_hash_table_lookup(modem_hash, path);
 	if (!modem)
@@ -2006,14 +2003,7 @@ static gboolean sim_changed(DBusConnection *conn, DBusMessage *message,
 	dbus_message_iter_recurse(&iter, &value);
 
 	if (g_str_equal(key, "SubscriberIdentity")) {
-		dbus_message_iter_get_basic(&value, &new_imsi);
-
-		if (g_strcmp0(modem->imsi,new_imsi) != 0) {
-			sim_update_imsi(modem, &value);
-
-			if (modem->device)
-				destroy_device(modem);
-		}
+		sim_update_imsi(modem, &value);
 
 		if (!ready_to_create_device(modem))
 			return TRUE;
@@ -2277,8 +2267,6 @@ static void add_modem(const char *path, DBusMessageIter *prop)
 		return;
 
 	modem->path = g_strdup(path);
-	modem->set_property_calls = g_hash_table_new_full(g_str_hash,
-		g_str_equal, NULL, (GDestroyNotify) dbus_pending_call_unref);
 
 	g_hash_table_insert(modem_hash, g_strdup(path), modem);
 
@@ -2362,8 +2350,10 @@ static void remove_modem(gpointer data)
 
 	DBG("%s", modem->path);
 
-	g_hash_table_foreach(modem->set_property_calls,
-					set_property_cancel, NULL);
+	if (modem->call_set_property) {
+		dbus_pending_call_cancel(modem->call_set_property);
+		dbus_pending_call_unref(modem->call_set_property);
+	}
 
 	if (modem->call_get_properties) {
 		dbus_pending_call_cancel(modem->call_get_properties);
@@ -2381,7 +2371,6 @@ static void remove_modem(gpointer data)
 	if (modem->context)
 		remove_cm_context(modem, modem->context->path);
 
-	g_hash_table_destroy(modem->set_property_calls);
 	g_free(modem->serial);
 	g_free(modem->name);
 	g_free(modem->imsi);
