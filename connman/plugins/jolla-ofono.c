@@ -117,6 +117,7 @@ struct modem_data {
 	struct connman_network *network;
 	const char *country;
 	gboolean roaming;
+	gboolean enabled;
 	guint strength;
 	char *name;
 	char *imsi;
@@ -131,6 +132,7 @@ struct plugin_data {
 };
 
 static void connctx_update_active(struct modem_data *md);
+static void modem_update_network(struct modem_data *md);
 static void modem_online_check(struct modem_data *md);
 
 static void connctx_remove_handler(struct modem_data *md,
@@ -140,16 +142,6 @@ static void connctx_remove_handler(struct modem_data *md,
 		ofono_connctx_remove_handler(md->connctx,
 			md->connctx_handler_id[id]);
 		md->connctx_handler_id[id] = 0;
-	}
-}
-
-static void connctx_activate_cancel(struct modem_data *md)
-{
-	connctx_remove_handler(md, CONNCTX_HANDLER_FAILED);
-	if (md->activate_timeout_id) {
-		DBG("%s done", ofono_modem_path(md->modem));
-		g_source_remove(md->activate_timeout_id);
-		md->activate_timeout_id = 0;
 	}
 }
 
@@ -173,6 +165,26 @@ static gboolean connctx_activate_timeout(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
+static void connctx_activate_cancel(struct modem_data *md)
+{
+	connctx_remove_handler(md, CONNCTX_HANDLER_FAILED);
+	if (md->activate_timeout_id) {
+		DBG("%s done", ofono_modem_path(md->modem));
+		g_source_remove(md->activate_timeout_id);
+		md->activate_timeout_id = 0;
+	}
+}
+
+static void connctx_activate_restart_timer(struct modem_data *md)
+{
+	if (md->activate_timeout_id) {
+		g_source_remove(md->activate_timeout_id);
+	}
+	md->activate_timeout_id =
+			g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
+					connctx_activate_timeout, md);
+}
+
 static int ofono_network_probe(struct connman_network *network)
 {
 	struct modem_data *md = connman_network_get_data(network);
@@ -188,7 +200,13 @@ static void ofono_network_remove(struct connman_network *network)
 	 */
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p", ofono_modem_path(md->modem), network);
-	connctx_activate_cancel(md);
+	if (md->connctx) {
+		/* Make sure mobile data gets disconnected */
+		ofono_connctx_deactivate(md->connctx);
+		if (md->connctx->active) {
+			connctx_activate_restart_timer(md);
+		}
+	}
 	if (md->network) {
 		connman_network_unref(md->network);
 		md->network = NULL;
@@ -226,10 +244,7 @@ static int ofono_network_connect(struct connman_network *network)
 				ofono_connctx_add_activate_failed_handler(
 					md->connctx, connctx_activate_failed,
 					md);
-				md->activate_timeout_id =
-					g_timeout_add_seconds(
-						ACTIVATE_TIMEOUT_SEC,
-						connctx_activate_timeout, md);
+				connctx_activate_restart_timer(md);
 				/* Asynchronous connection */
 				return (-EINPROGRESS);
 			}
@@ -251,13 +266,7 @@ static int ofono_network_disconnect(struct connman_network *network)
 		if (!md->connctx->active) {
 			return 0;
 		} else {
-			/* Reset the timeout */
-			if (md->activate_timeout_id) {
-				g_source_remove(md->activate_timeout_id);
-			}
-			md->activate_timeout_id =
-				g_timeout_add_seconds(ACTIVATE_TIMEOUT_SEC,
-					connctx_activate_timeout, md);
+			connctx_activate_restart_timer(md);
 			return (-EINPROGRESS);
 		}
 	} else {
@@ -291,6 +300,8 @@ static int ofono_device_enable(struct connman_device *device)
 {
 	struct modem_data *md = connman_device_get_data(device);
 	DBG("%s device %p", ofono_modem_path(md->modem), device);
+	md->enabled = TRUE;
+	modem_update_network(md);
 	return 0;
 }
 
@@ -298,6 +309,8 @@ static int ofono_device_disable(struct connman_device *device)
 {
 	struct modem_data *md = connman_device_get_data(device);
 	DBG("%s device %p", ofono_modem_path(md->modem), device);
+	md->enabled = FALSE;
+	modem_update_network(md);
 	return 0;
 }
 
@@ -344,7 +357,8 @@ static void modem_create_device(struct modem_data *md)
 	connman_device_set_ident(md->device, ident);
 	connman_device_set_string(md->device, "Path", path);
 	connman_device_set_data(md->device, md);
-	connman_device_set_powered(md->device, md->modem->online);
+	connman_device_set_powered(md->device, md->enabled &&
+							md->modem->online);
 	if (connman_device_register(md->device)) {
 		connman_error("Failed to register cellular device");
 		connman_device_unref(md->device);
@@ -399,7 +413,7 @@ static void modem_destroy_device(struct modem_data *md)
 {
 	if (md->device) {
 		DBG("%s", ofono_modem_path(md->modem));
-		connman_device_set_powered(md->device, false);
+		connman_device_set_powered(md->device, FALSE);
 		modem_destroy_network(md);
 		connman_device_unregister(md->device);
 		connman_device_unref(md->device);
@@ -417,14 +431,18 @@ static gboolean modem_can_create_device(struct modem_data *md)
 
 static gboolean modem_can_create_network(struct modem_data *md)
 {
-	return md->device && md->connmgr->attached;
+	/*
+	 * Don't create the network if cellular technology is disabled,
+	 * otherwise connman will keep on trying to connect it.
+	 */
+	return md->enabled && md->device && md->connmgr->attached;
 }
 
 static void modem_update_device(struct modem_data *md)
 {
 	if (modem_can_create_device(md)) {
 		if (md->device) {
-			connman_device_set_powered(md->device,
+			connman_device_set_powered(md->device, md->enabled &&
 							md->modem->online);
 		} else {
 			modem_create_device(md);
@@ -628,13 +646,24 @@ static void object_valid_changed(OfonoObject *object, void *arg)
 static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
-	if (ofono_connctx_valid(md->connctx) && md->network) {
+	if (ofono_connctx_valid(md->connctx)) {
 		if (md->connctx->active) {
-			if (!connman_network_get_connected(md->network)) {
+			if (!md->enabled || !md->network) {
+				/*
+				 * Mobile data is not supposed to be
+				 * connected.
+				 */
+				ofono_connctx_deactivate(md->connctx);
+				if (md->connctx->active) {
+					connctx_activate_restart_timer(md);
+				}
+			} else if (!connman_network_get_connected(
+							 md->network)) {
 				connctx_activate_cancel(md);
 				modem_connected(md);
 			}
-		} else if (connman_network_get_connected(md->network)) {
+		} else if (md->network &&
+				connman_network_get_connected(md->network)) {
 			connctx_activate_cancel(md);
 			connman_network_set_connected(md->network, FALSE);
 		}
