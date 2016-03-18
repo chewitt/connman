@@ -109,12 +109,16 @@ static bool apply_dhcp_invalidate_on_network(struct connman_dhcp *dhcp)
 			__connman_service_timeserver_remove(service,
 							dhcp->timeservers[i]);
 		}
+		g_strfreev(dhcp->timeservers);
+		dhcp->timeservers = NULL;
 	}
 	if (dhcp->nameservers) {
 		for (i = 0; dhcp->nameservers[i]; i++) {
 			__connman_service_nameserver_remove(service,
 						dhcp->nameservers[i], false);
 		}
+		g_strfreev(dhcp->nameservers);
+		dhcp->nameservers = NULL;
 	}
 
 	return true;
@@ -473,11 +477,12 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	}
 
 	if (!apply_lease_available_on_network(dhcp_client, dhcp))
-		return;
+		goto done;
 
 	if (ip_change)
 		dhcp_valid(dhcp);
 
+done:
 	g_free(address);
 	g_free(netmask);
 	g_free(gateway);

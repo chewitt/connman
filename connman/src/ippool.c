@@ -58,7 +58,6 @@ struct connman_ippool {
 };
 
 GSList *allocated_blocks;
-GHashTable *pool_hash;
 
 static uint32_t starting_block;
 static uint32_t block_16_bits;
@@ -90,7 +89,18 @@ void __connman_ippool_unref_debug(struct connman_ippool *pool,
 	if (__sync_fetch_and_sub(&pool->refcount, 1) != 1)
 		return;
 
-	g_hash_table_remove(pool_hash, pool);
+	if (pool->info) {
+		allocated_blocks = g_slist_remove(allocated_blocks, pool->info);
+		g_free(pool->info);
+	}
+
+	g_free(pool->gateway);
+	g_free(pool->broadcast);
+	g_free(pool->start_ip);
+	g_free(pool->end_ip);
+	g_free(pool->subnet_mask);
+
+	g_free(pool);
 }
 
 static char *get_ip(uint32_t ip)
@@ -386,7 +396,6 @@ struct connman_ippool *__connman_ippool_create(int index,
 	pool->end_ip = get_ip(block + start + range);
 
 	allocated_blocks = g_slist_prepend(allocated_blocks, info);
-	g_hash_table_insert(pool_hash, pool, pool);
 
 	return pool;
 }
@@ -416,24 +425,6 @@ const char *__connman_ippool_get_subnet_mask(struct connman_ippool *pool)
 	return pool->subnet_mask;
 }
 
-static void pool_free(gpointer data)
-{
-	struct connman_ippool *pool = data;
-
-	if (pool->info) {
-		allocated_blocks = g_slist_remove(allocated_blocks, pool->info);
-		g_free(pool->info);
-	}
-
-	g_free(pool->gateway);
-	g_free(pool->broadcast);
-	g_free(pool->start_ip);
-	g_free(pool->end_ip);
-	g_free(pool->subnet_mask);
-
-	g_free(pool);
-}
-
 int __connman_ippool_init(void)
 {
 	DBG("");
@@ -449,18 +440,12 @@ int __connman_ippool_init(void)
 	if (!is_private_address(starting_block))
 		starting_block = block_16_bits;
 
-	pool_hash = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL,
-					pool_free);
-
 	return 0;
 }
 
 void __connman_ippool_cleanup(void)
 {
 	DBG("");
-
-	g_hash_table_destroy(pool_hash);
-	pool_hash = NULL;
 
 	g_slist_free_full(allocated_blocks, g_free);
 	allocated_blocks = NULL;

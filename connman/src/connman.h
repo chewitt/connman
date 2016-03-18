@@ -506,8 +506,6 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 int __connman_connection_get_vpn_index(int phy_index);
 
 bool __connman_connection_update_gateway(void);
-void __connman_connection_gateway_activate(struct connman_service *service,
-					enum connman_ipconfig_type type);
 
 int __connman_ntp_start(char *server);
 void __connman_ntp_stop();
@@ -676,6 +674,9 @@ int __connman_service_load_modifiable(struct connman_service *service);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
 
+int __connman_service_compare(const struct connman_service *a,
+					const struct connman_service *b);
+
 struct connman_service *__connman_service_lookup_from_index(int index);
 struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
 struct connman_service *__connman_service_create_from_network(struct connman_network *network);
@@ -700,7 +701,6 @@ const char *__connman_service_get_path(struct connman_service *service);
 const char *__connman_service_get_name(struct connman_service *service);
 unsigned int __connman_service_get_order(struct connman_service *service);
 enum connman_service_state __connman_service_get_state(struct connman_service *service);
-void __connman_service_update_ordering(void);
 struct connman_network *__connman_service_get_network(struct connman_service *service);
 enum connman_service_security __connman_service_get_security(struct connman_service *service);
 const char *__connman_service_get_phase2(struct connman_service *service);

@@ -258,7 +258,7 @@ static void test_case_4(void)
 
 static void test_case_5(void)
 {
-	struct connman_ippool *pool;
+	struct connman_ippool *pool1, *pool2;
 	const char *gateway;
 	const char *broadcast;
 	const char *subnet_mask;
@@ -276,14 +276,14 @@ static void test_case_5(void)
 	g_assert(flag == 0);
 
 	/* pool should return 192.168.0.1 now */
-	pool = __connman_ippool_create(26, 1, 100, collision_cb, &flag);
-	g_assert(pool);
+	pool1 = __connman_ippool_create(26, 1, 100, collision_cb, &flag);
+	g_assert(pool1);
 
-	gateway = __connman_ippool_get_gateway(pool);
-	broadcast = __connman_ippool_get_broadcast(pool);
-	subnet_mask = __connman_ippool_get_subnet_mask(pool);
-	start_ip = __connman_ippool_get_start_ip(pool);
-	end_ip = __connman_ippool_get_end_ip(pool);
+	gateway = __connman_ippool_get_gateway(pool1);
+	broadcast = __connman_ippool_get_broadcast(pool1);
+	subnet_mask = __connman_ippool_get_subnet_mask(pool1);
+	start_ip = __connman_ippool_get_start_ip(pool1);
+	end_ip = __connman_ippool_get_end_ip(pool1);
 
 	g_assert(gateway);
 	g_assert(broadcast);
@@ -301,8 +301,6 @@ static void test_case_5(void)
 		"\tgateway %s broadcast %s mask %s", start_ip, end_ip,
 		gateway, broadcast, subnet_mask);
 
-	__connman_ippool_unref(pool);
-
 	/*
 	 * Now create the pool again, we should not get collision
 	 * with existing allocated address.
@@ -310,14 +308,14 @@ static void test_case_5(void)
 
 	/* pool should return 192.168.2.1 now */
 	flag = 0;
-	pool = __connman_ippool_create(23, 1, 100, collision_cb, &flag);
-	g_assert(pool);
+	pool2 = __connman_ippool_create(23, 1, 100, collision_cb, &flag);
+	g_assert(pool2);
 
-	gateway = __connman_ippool_get_gateway(pool);
-	broadcast = __connman_ippool_get_broadcast(pool);
-	subnet_mask = __connman_ippool_get_subnet_mask(pool);
-	start_ip = __connman_ippool_get_start_ip(pool);
-	end_ip = __connman_ippool_get_end_ip(pool);
+	gateway = __connman_ippool_get_gateway(pool2);
+	broadcast = __connman_ippool_get_broadcast(pool2);
+	subnet_mask = __connman_ippool_get_subnet_mask(pool2);
+	start_ip = __connman_ippool_get_start_ip(pool2);
+	end_ip = __connman_ippool_get_end_ip(pool2);
 
 	g_assert(gateway);
 	g_assert(broadcast);
@@ -337,14 +335,15 @@ static void test_case_5(void)
 
 	g_assert(flag == 0);
 
-	__connman_ippool_unref(pool);
+	__connman_ippool_unref(pool1);
+	__connman_ippool_unref(pool2);
 
 	__connman_ippool_cleanup();
 }
 
 static void test_case_6(void)
 {
-	struct connman_ippool *pool;
+	struct connman_ippool *pool1, *pool2;
 	const char *gateway;
 	const char *broadcast;
 	const char *subnet_mask;
@@ -367,14 +366,14 @@ static void test_case_6(void)
 	g_assert(flag == 0);
 
 	/* pool should return 192.168.2.1 now */
-	pool = __connman_ippool_create(26, 1, 100, collision_cb, &flag);
-	g_assert(pool);
+	pool1 = __connman_ippool_create(26, 1, 100, collision_cb, &flag);
+	g_assert(pool1);
 
-	gateway = __connman_ippool_get_gateway(pool);
-	broadcast = __connman_ippool_get_broadcast(pool);
-	subnet_mask = __connman_ippool_get_subnet_mask(pool);
-	start_ip = __connman_ippool_get_start_ip(pool);
-	end_ip = __connman_ippool_get_end_ip(pool);
+	gateway = __connman_ippool_get_gateway(pool1);
+	broadcast = __connman_ippool_get_broadcast(pool1);
+	subnet_mask = __connman_ippool_get_subnet_mask(pool1);
+	start_ip = __connman_ippool_get_start_ip(pool1);
+	end_ip = __connman_ippool_get_end_ip(pool1);
 
 	g_assert(gateway);
 	g_assert(broadcast);
@@ -392,8 +391,6 @@ static void test_case_6(void)
 		"\tgateway %s broadcast %s mask %s", start_ip, end_ip,
 		gateway, broadcast, subnet_mask);
 
-	__connman_ippool_unref(pool);
-
 	/*
 	 * Now create the pool again, we should not get collision
 	 * with existing allocated address.
@@ -401,14 +398,14 @@ static void test_case_6(void)
 
 	/* pool should return 192.168.3.1 now */
 	flag = 0;
-	pool = __connman_ippool_create(23, 1, 100, collision_cb, &flag);
-	g_assert(pool);
+	pool2 = __connman_ippool_create(23, 1, 100, collision_cb, &flag);
+	g_assert(pool2);
 
-	gateway = __connman_ippool_get_gateway(pool);
-	broadcast = __connman_ippool_get_broadcast(pool);
-	subnet_mask = __connman_ippool_get_subnet_mask(pool);
-	start_ip = __connman_ippool_get_start_ip(pool);
-	end_ip = __connman_ippool_get_end_ip(pool);
+	gateway = __connman_ippool_get_gateway(pool2);
+	broadcast = __connman_ippool_get_broadcast(pool2);
+	subnet_mask = __connman_ippool_get_subnet_mask(pool2);
+	start_ip = __connman_ippool_get_start_ip(pool2);
+	end_ip = __connman_ippool_get_end_ip(pool2);
 
 	g_assert(gateway);
 	g_assert(broadcast);
@@ -433,7 +430,8 @@ static void test_case_6(void)
 	__connman_ippool_newaddr(25, start_ip, 24);
 	g_assert(flag == 1);
 
-	__connman_ippool_unref(pool);
+	__connman_ippool_unref(pool1);
+	__connman_ippool_unref(pool2);
 
 	__connman_ippool_cleanup();
 }
