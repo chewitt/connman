@@ -399,13 +399,10 @@ static void modem_destroy_network(struct modem_data *md)
 	if (md->network) {
 		DBG("%s", ofono_modem_path(md->modem));
 		connman_device_remove_network(md->device, md->network);
-
-		/*
-		 * Assertion: the above call is supposed to invoke
-		 * ofono_network_remove callback which unreferences
-		 * the network and resets the pointer.
-		 */
-		GASSERT(!md->network);
+		if (md->network) {
+			connman_network_unref(md->network);
+			md->network = NULL;
+		}
 	}
 }
 
@@ -435,7 +432,8 @@ static gboolean modem_can_create_network(struct modem_data *md)
 	 * Don't create the network if cellular technology is disabled,
 	 * otherwise connman will keep on trying to connect it.
 	 */
-	return md->enabled && md->device && md->connmgr->attached;
+	return md->enabled && md->device && md->connmgr->attached &&
+		ofono_connctx_valid(md->connctx);
 }
 
 static void modem_update_device(struct modem_data *md)
@@ -638,7 +636,7 @@ static void modem_update_country(struct modem_data *md)
 	}
 }
 
-static void object_valid_changed(OfonoObject *object, void *arg)
+static void connctx_valid_changed(OfonoConnCtx *connctx, void *arg)
 {
 	modem_update_network(arg);
 }
@@ -662,10 +660,12 @@ static void connctx_update_active(struct modem_data *md)
 				connctx_activate_cancel(md);
 				modem_connected(md);
 			}
-		} else if (md->network &&
-				connman_network_get_connected(md->network)) {
+		} else {
 			connctx_activate_cancel(md);
-			connman_network_set_connected(md->network, FALSE);
+			if (md->network) {
+				connman_network_set_connected(md->network,
+								FALSE);
+			}
 		}
 	}
 }
@@ -685,8 +685,9 @@ static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
 
 static void modem_update_context(struct modem_data *md)
 {
-	OfonoConnCtx *ctx = ofono_connmgr_get_context_for_type(md->connmgr,
-						OFONO_CONNCTX_TYPE_INTERNET);
+	OfonoConnCtx *ctx = ofono_connmgr_valid(md->connmgr) ?
+		ofono_connmgr_get_context_for_type(md->connmgr,
+					OFONO_CONNCTX_TYPE_INTERNET) : NULL;
 	const char *old_path = ofono_connctx_path(md->connctx);
 	const char *new_path = ofono_connctx_path(ctx);
 	if (g_strcmp0(old_path, new_path)) {
@@ -701,9 +702,9 @@ static void modem_update_context(struct modem_data *md)
 		if (md->connctx) {
 			DBG("%s", ofono_connctx_path(md->connctx));
 			md->connctx_handler_id[CONNCTX_HANDLER_VALID] =
-				ofono_object_add_valid_changed_handler(
-					ofono_connctx_object(md->connctx),
-					object_valid_changed, md);
+				ofono_connctx_add_valid_changed_handler(
+					md->connctx, connctx_valid_changed,
+					md);
 			md->connctx_handler_id[CONNCTX_HANDLER_ACTIVE] =
 				ofono_connctx_add_active_changed_handler(
 					md->connctx, connctx_active_changed,
@@ -800,6 +801,11 @@ static void netreg_network_changed(OfonoNetReg *netreg, void *arg)
 	modem_update_country(arg);
 }
 
+static void connmgr_valid_changed(OfonoConnMgr *connmgr, void *arg)
+{
+	modem_update_context(arg);
+}
+
 static void connmgr_attached_changed(OfonoConnMgr *connmgr, void *arg)
 {
 	modem_update_network(arg);
@@ -852,9 +858,8 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 
 	md->connmgr = ofono_connmgr_new(path);
 	md->connmgr_handler_id[CONNMGR_HANDLER_VALID] =
-		ofono_object_add_valid_changed_handler(
-			ofono_connmgr_object(md->connmgr),
-			object_valid_changed, md);
+		ofono_connmgr_add_valid_changed_handler(md->connmgr,
+					connmgr_valid_changed, md);
 	md->connmgr_handler_id[CONNMGR_HANDLER_ATTACHED] =
 		ofono_connmgr_add_attached_changed_handler(md->connmgr,
 					connmgr_attached_changed, md);
@@ -871,6 +876,9 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 	if (ofono_modem_valid(modem)) {
 		ofono_modem_set_powered(modem, TRUE);
 		modem_online_check(md);
+	}
+	if (ofono_connmgr_valid(md->connmgr)) {
+		modem_update_context(md);
 	}
 	modem_update_network(md);
 	modem_update_roaming(md);
