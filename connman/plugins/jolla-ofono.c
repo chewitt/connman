@@ -725,9 +725,17 @@ static void modem_update_context(struct modem_data *md)
 	modem_update_network(md);
 }
 
-static void connmgr_contexts_changed(OfonoConnMgr *connmgr,
+static void connmgr_contexts_added(OfonoConnMgr *connmgr,
 					OfonoConnCtx *context, void *arg)
 {
+	DBG("%s", ofono_connctx_path(context));
+	modem_update_context(arg);
+}
+
+static void connmgr_contexts_removed(OfonoConnMgr *connmgr,
+					const char *path, void *arg)
+{
+	DBG("%s", path);
 	modem_update_context(arg);
 }
 
@@ -803,11 +811,13 @@ static void netreg_network_changed(OfonoNetReg *netreg, void *arg)
 
 static void connmgr_valid_changed(OfonoConnMgr *connmgr, void *arg)
 {
+	DBG("%s %d", ofono_connmgr_path(connmgr), ofono_connmgr_valid(connmgr));
 	modem_update_context(arg);
 }
 
 static void connmgr_attached_changed(OfonoConnMgr *connmgr, void *arg)
 {
+	DBG("%s %d", ofono_connmgr_path(connmgr), connmgr->attached);
 	modem_update_network(arg);
 }
 
@@ -865,10 +875,10 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 					connmgr_attached_changed, md);
 	md->connmgr_handler_id[CONNMGR_HANDLER_CONTEXT_ADDED] =
 		ofono_connmgr_add_context_added_handler(md->connmgr,
-					connmgr_contexts_changed, md);
+					connmgr_contexts_added, md);
 	md->connmgr_handler_id[CONNMGR_HANDLER_CONTEXT_REMOVED] =
 		ofono_connmgr_add_context_removed_handler(md->connmgr,
-					connmgr_contexts_changed, md);
+					connmgr_contexts_removed, md);
 
 	md->imsi = g_strdup(md->simmgr->imsi);
 	g_hash_table_replace(plugin->modems, g_strdup(path), md);
@@ -942,8 +952,6 @@ static void manager_valid(struct plugin_data *plugin)
 		DBG("modem %s", modem->object.path);
 		modem_create(plugin, modem);
 	}
-
-	g_ptr_array_unref(modems);
 }
 
 static void manager_valid_changed(OfonoManager *manager, void *arg)

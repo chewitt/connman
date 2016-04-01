@@ -17,6 +17,7 @@ Requires:   connman-configs
 Requires:   systemd
 Requires:   libiphb
 Requires:   bluez-libs
+Requires:   libgofono >= 2.0.0
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -32,8 +33,9 @@ BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  libiphb-devel
 BuildRequires:  bluez-libs-devel
-BuildRequires:  libgofono-devel
-BuildRequires:  libgofonoext-devel
+BuildRequires:  pkgconfig(libgofono) >= 2.0.0
+BuildRequires:  pkgconfig(libgofonoext)
+BuildRequires:  pkgconfig(libglibutil)
 
 %description
 Connection Manager provides a daemon for managing Internet connections
