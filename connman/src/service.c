@@ -1356,6 +1356,9 @@ static int nameserver_add_all(struct connman_service *service,
 		}
 	}
 
+	if (!i)
+		__connman_resolver_append_fallback_nameservers();
+
 	searchdomain_add_all(service);
 
 	return 0;
