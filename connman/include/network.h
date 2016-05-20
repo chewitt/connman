@@ -103,6 +103,11 @@ bool connman_network_get_connected(struct connman_network *network);
 
 bool connman_network_get_associating(struct connman_network *network);
 
+bool connman_network_get_connectable(struct connman_network *network);
+
+int connman_network_set_connectable(struct connman_network *network,
+		bool connectable);
+
 bool connman_network_is_configured(struct connman_network *network,
 					enum connman_ipconfig_type type);
 
