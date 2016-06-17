@@ -22,6 +22,8 @@
 #ifndef __CONNMAN_LOG_H
 #define __CONNMAN_LOG_H
 
+#include <stdarg.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -58,7 +60,8 @@ struct connman_debug_desc {
 	const char *file;
 #define CONNMAN_DEBUG_FLAG_DEFAULT (0)
 #define CONNMAN_DEBUG_FLAG_PRINT   (1 << 0)
-#define CONNMAN_DEBUG_FLAG_ALIAS   (1 << 1)
+//#define CONNMAN_DEBUG_FLAG_ALIAS   (1 << 1)
+//#define CONNMAN_DEBUG_FLAG_HIDE_NAME (1 << 2)
 	unsigned int flags;
 	void (*notify)(struct connman_debug_desc* desc);
 } __attribute__((aligned(CONNMAN_DEBUG_ALIGN)));
@@ -83,9 +86,19 @@ struct connman_debug_desc {
 		.file = __FILE__, .flags = CONNMAN_DEBUG_FLAG_DEFAULT, \
 	}; \
 	if (__connman_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) \
-		connman_debug("%s:%s() " fmt, \
-					__FILE__, __FUNCTION__ , ## arg); \
+		__connman_dbg(&__connman_debug_desc, "%s() " fmt, \
+					 __FUNCTION__ , ## arg); \
 } while (0)
+
+void __connman_dbg(const struct connman_debug_desc *desc, const char *fmt, ...)
+				__attribute__((format(printf, 2, 3)));
+
+typedef void (*connman_log_hook_cb_t)(const struct connman_debug_desc *desc,
+			int priority, const char *format, va_list va);
+
+extern connman_log_hook_cb_t connman_log_hook;
+extern struct connman_debug_desc __start___debug[];
+extern struct connman_debug_desc __stop___debug[];
 
 #ifdef __cplusplus
 }

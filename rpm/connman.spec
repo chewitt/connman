@@ -18,6 +18,7 @@ Requires:   systemd
 Requires:   libiphb
 Requires:   bluez-libs
 Requires:   libgofono >= 2.0.0
+Requires:   libglibutil >= 1.0.10
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -35,7 +36,8 @@ BuildRequires:  libiphb-devel
 BuildRequires:  bluez-libs-devel
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
-BuildRequires:  pkgconfig(libglibutil)
+BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
+BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -115,7 +117,7 @@ Documentation for connman.
     --enable-jolla-rfkill=builtin \
     --enable-client \
     --enable-test \
-    --enable-logcontrol \
+    --enable-debuglog \
     --enable-jolla-signalpoll \
     --enable-jolla-usb \
     --enable-jolla-ofono \
