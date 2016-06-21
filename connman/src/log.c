@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013-2016  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -35,6 +36,9 @@
 
 #include "connman.h"
 
+connman_log_hook_cb_t connman_log_hook;
+static GString *connman_debug_str;
+
 static const char *program_exec;
 static const char *program_path;
 
@@ -53,6 +57,12 @@ void connman_info(const char *format, ...)
 	vprintf(format, ap);
 
 	va_end(ap);
+
+	if (connman_log_hook) {
+		va_start(ap, format);
+		connman_log_hook(NULL, LOG_INFO, format, ap);
+		va_end(ap);
+	}
 }
 
 /**
@@ -71,6 +81,12 @@ void connman_warn(const char *format, ...)
 	vsyslog(LOG_WARNING, format, ap);
 
 	va_end(ap);
+
+	if (connman_log_hook) {
+		va_start(ap, format);
+		connman_log_hook(NULL, LOG_WARNING, format, ap);
+		va_end(ap);
+	}
 }
 
 /**
@@ -89,6 +105,12 @@ void connman_error(const char *format, ...)
 	vsyslog(LOG_ERR, format, ap);
 
 	va_end(ap);
+
+	if (connman_log_hook) {
+		va_start(ap, format);
+		connman_log_hook(NULL, LOG_ERR, format, ap);
+		va_end(ap);
+	}
 }
 
 /**
@@ -107,6 +129,38 @@ void connman_debug(const char *format, ...)
 	vsyslog(LOG_DEBUG, format, ap);
 
 	va_end(ap);
+
+	if (connman_log_hook) {
+		va_start(ap, format);
+		connman_log_hook(NULL, LOG_DEBUG, format, ap);
+		va_end(ap);
+	}
+}
+
+void __connman_dbg(const struct connman_debug_desc *desc,
+						const char *format, ...)
+{
+	va_list ap;
+
+	if (!(desc->flags & CONNMAN_DEBUG_FLAG_PRINT))
+		return;
+
+	va_start(ap, format);
+
+	if (connman_debug_str) {
+		g_string_vprintf(connman_debug_str, format, ap);
+		syslog(LOG_DEBUG, "%s:%s", desc->file, connman_debug_str->str);
+	} else {
+		vsyslog(LOG_DEBUG, format, ap);
+ 	}
+
+	va_end(ap);
+
+	if (connman_log_hook) {
+		va_start(ap, format);
+		connman_log_hook(desc, LOG_DEBUG, format, ap);
+		va_end(ap);
+	}
 }
 
 static void print_backtrace(unsigned int offset)
@@ -281,11 +335,13 @@ void __connman_log_enable(struct connman_debug_desc *start,
 		return;
 
 	for (desc = start; desc < stop; desc++) {
+#ifdef CONNMAN_DEBUG_FLAG_ALIAS
 		if (desc->flags & CONNMAN_DEBUG_FLAG_ALIAS) {
 			file = desc->file;
 			name = desc->name;
 			continue;
 		}
+#endif
 
 		if (file || name) {
 			if (g_strcmp0(desc->file, file) == 0) {
@@ -314,6 +370,7 @@ int __connman_log_init(const char *program, const char *debug,
 
 	program_exec = program;
 	program_path = getcwd(path, sizeof(path));
+	connman_debug_str = g_string_sized_new(127);
 
 	if (debug)
 		enabled = g_strsplit_set(debug, ":, ", 0);
@@ -343,4 +400,6 @@ void __connman_log_cleanup(gboolean backtrace)
 		signal_setup(SIG_DFL);
 
 	g_strfreev(enabled);
+	g_string_free(connman_debug_str, TRUE);
+	connman_debug_str = NULL;
 }

@@ -77,9 +77,9 @@ builtin_modules += dundee
 builtin_sources += plugins/dundee.c
 endif
 
-if LOGCONTROL
-builtin_modules += logcontrol
-builtin_sources += plugins/logcontrol.c
+if DEBUGLOG
+builtin_modules += debuglog
+builtin_sources += plugins/debuglog.c
 endif
 
 if JOLLA_USB
