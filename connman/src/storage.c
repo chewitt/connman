@@ -236,8 +236,11 @@ static void storage_subdir_append(const char *name)
 	storage.subdirs = g_list_prepend(storage.subdirs, subdir);
 
 	str = g_strdup_printf("%s/%s", STORAGEDIR, subdir->name);
-	connman_inotify_register(str, storage_inotify_subdir_cb, subdir,
-				storage_subdir_free);
+
+	if (connman_inotify_register(str, storage_inotify_subdir_cb, subdir,
+				storage_subdir_free) != 0)
+		storage_subdir_free(subdir);
+
 	g_free(str);
 }
 
@@ -395,8 +398,10 @@ static void keyfile_insert(const char *pathname, GKeyFile *keyfile)
 	record->pathname = g_strdup(pathname);
 	record->keyfile = g_key_file_ref(keyfile);
 	g_hash_table_insert(keyfile_hash, record->pathname, record);
-	connman_inotify_register(pathname, keyfile_inotify_cb, record,
-				keyfile_free);
+
+	if (connman_inotify_register(pathname, keyfile_inotify_cb, record,
+				keyfile_free) != 0)
+		keyfile_free(record);
 }
 
 static void keyfile_inotify_cb(struct inotify_event *event,
