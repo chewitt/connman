@@ -373,7 +373,7 @@ struct _GSupplicantCallbacks {
 	void (*peer_changed) (GSupplicantPeer *peer,
 					GSupplicantPeerState state);
 	void (*peer_request) (GSupplicantPeer *peer);
-	void (*debug) (const char *str);
+	void (*debug) (const char *function, const char *format, va_list va);
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;

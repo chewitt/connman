@@ -249,24 +249,20 @@ struct _GSupplicantGroup {
 	GSList *members;
 };
 
-static inline void debug(const char *format, ...)
+static void debug(const char *fn, const char *format, ...)
 {
-	char str[256];
 	va_list ap;
 
 	if (!callbacks_pointer || !callbacks_pointer->debug)
 		return;
 
 	va_start(ap, format);
-
-	if (vsnprintf(str, sizeof(str), format, ap) > 0)
-		callbacks_pointer->debug(str);
-
+	callbacks_pointer->debug(fn, format, ap);
 	va_end(ap);
 }
 
 #define SUPPLICANT_DBG(fmt, arg...) \
-	debug("%s:%s() " fmt, __FILE__, __FUNCTION__ , ## arg);
+	debug(__FUNCTION__ , fmt, ## arg)
 
 static GSupplicantMode string2mode(const char *mode)
 {
@@ -2327,7 +2323,7 @@ static void signal_name_owner_changed(const char *path, DBusMessageIter *iter)
 {
 	const char *name = NULL, *old = NULL, *new = NULL;
 
-	SUPPLICANT_DBG("");
+	SUPPLICANT_DBG("%s", path);
 
 	if (g_strcmp0(path, DBUS_PATH_DBUS) != 0)
 		return;

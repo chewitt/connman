@@ -173,6 +173,8 @@ static GList *pending_wifi_device = NULL;
 static GList *p2p_iface_list = NULL;
 bool wfd_service_registered = false;
 
+static GString *supplicant_debug_str;
+
 static void start_autoscan(struct connman_device *device);
 static int tech_set_tethering(struct connman_technology *technology,
 				const char *identifier, const char *passphrase,
@@ -3145,10 +3147,21 @@ static void peer_request(GSupplicantPeer *peer)
 	connman_peer_request_connection(connman_peer);
 }
 
-static void debug(const char *str)
+static void debug(const char *function, const char *format, va_list va)
 {
-	if (getenv("CONNMAN_SUPPLICANT_DEBUG"))
-		connman_debug("%s", str);
+	static struct connman_debug_desc desc CONNMAN_DEBUG_ATTR = {
+		.file = "gsupplicant",
+		.flags = CONNMAN_DEBUG_FLAG_DEFAULT,
+	};
+
+	if (desc.flags & CONNMAN_DEBUG_FLAG_PRINT) {
+		if (!supplicant_debug_str)
+			supplicant_debug_str = g_string_sized_new(127);
+
+		g_string_printf(supplicant_debug_str,  "%s() ", function);
+		g_string_append_vprintf(supplicant_debug_str, format, va);
+		__connman_dbg(&desc, "%s", supplicant_debug_str->str);
+	}
 }
 
 static const GSupplicantCallbacks callbacks = {
@@ -3590,6 +3603,11 @@ static void wifi_exit(void)
 	g_supplicant_unregister(&callbacks);
 
 	connman_network_driver_unregister(&network_driver);
+
+	if (supplicant_debug_str) {
+		g_string_free(supplicant_debug_str, TRUE);
+		supplicant_debug_str = NULL;
+	}
 }
 
 CONNMAN_PLUGIN_DEFINE(wifi, "WiFi interface plugin", VERSION,
