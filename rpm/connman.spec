@@ -173,7 +173,7 @@ systemctl daemon-reload || :
 /%{_lib}/systemd/system/connman.service
 /%{_lib}/systemd/system/network.target.wants/connman.service
 /%{_lib}/systemd/system/connman-vpn.service
-%exclude %{_datadir}/dbus-1/system-services/net.connman.vpn.service
+/%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 /%{_lib}/systemd/system/jolla-rfkill-hciwait.service
 /%{_lib}/systemd/system/network.target.wants/jolla-rfkill-hciwait.service
 
