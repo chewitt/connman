@@ -110,6 +110,7 @@ Documentation for connman.
     --enable-ofono=builtin \
     --enable-openconnect=builtin \
     --enable-openvpn=builtin \
+    --enable-vpnc=builtin \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
     --enable-jolla-gps=builtin \
