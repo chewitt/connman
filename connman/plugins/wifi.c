@@ -3242,9 +3242,12 @@ static void ap_start_callback(int result, GSupplicantInterface *interface,
 
 		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
 			connman_technology_tethering_notify(info->technology, false);
-			g_free(info->wifi->tethering_param->ssid);
-			g_free(info->wifi->tethering_param);
-			info->wifi->tethering_param = NULL;
+
+			if (info->wifi->tethering_param) {
+				g_free(info->wifi->tethering_param->ssid);
+				g_free(info->wifi->tethering_param);
+				info->wifi->tethering_param = NULL;
+			}
 		}
 	}
 
@@ -3269,10 +3272,12 @@ static void ap_create_callback(int result,
 
 		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
 			connman_technology_tethering_notify(info->technology, false);
-			g_free(info->wifi->tethering_param->ssid);
-			g_free(info->wifi->tethering_param);
-			info->wifi->tethering_param = NULL;
 
+			if (info->wifi->tethering_param) {
+				g_free(info->wifi->tethering_param->ssid);
+				g_free(info->wifi->tethering_param);
+				info->wifi->tethering_param = NULL;
+			}
 		}
 
 		g_free(info->ifname);
