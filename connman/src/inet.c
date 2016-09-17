@@ -237,7 +237,7 @@ char *connman_inet_ifname(int index)
 	close(sk);
 
 	if (err < 0) {
-		connman_error("%s: %s", __func__, strerror(-err));
+		DBG("%d: %s", index, strerror(-err));
 		return NULL;
 	}
 
