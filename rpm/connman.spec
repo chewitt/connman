@@ -147,7 +147,6 @@ ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.want
 %preun
 if [ "$1" -eq 0 ]; then
 systemctl stop connman.service || :
-systemctl stop jolla-rfkill-hciwait.service || :
 fi
 
 %post
