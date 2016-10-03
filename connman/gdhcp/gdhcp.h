@@ -127,6 +127,12 @@ typedef void (*GDHCPClientEventFunc) (GDHCPClient *client, gpointer user_data);
 
 typedef void (*GDHCPDebugFunc)(const char *str, gpointer user_data);
 
+struct connman_debug_desc;
+extern void (*gdhcp_client_log_hook)(const struct connman_debug_desc *desc,
+						const char *format, ...);
+extern void (*gdhcp_server_log_hook)(const struct connman_debug_desc *desc,
+						const char *format, ...);
+
 GDHCPClient *g_dhcp_client_new(GDHCPType type, int index,
 						GDHCPClientError *error);
 

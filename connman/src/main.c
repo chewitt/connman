@@ -39,6 +39,7 @@
 #include <gdbus.h>
 #include <gweb/gweb.h>
 #include <gweb/gresolv.h>
+#include <gdhcp/gdhcp.h>
 #ifdef SYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
@@ -730,6 +731,8 @@ int main(int argc, char *argv[])
 
 	gweb_log_hook = __connman_dbg;
 	gresolv_log_hook = __connman_dbg;
+	gdhcp_client_log_hook = __connman_dbg;
+	gdhcp_server_log_hook = __connman_dbg;
 
 	__connman_dbus_init(conn);
 
