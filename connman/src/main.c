@@ -38,6 +38,7 @@
 
 #include <gdbus.h>
 #include <gweb/gweb.h>
+#include <gweb/gresolv.h>
 #ifdef SYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
@@ -728,6 +729,7 @@ int main(int argc, char *argv[])
 			option_backtrace, "Connection Manager", VERSION);
 
 	gweb_log_hook = __connman_dbg;
+	gresolv_log_hook = __connman_dbg;
 
 	__connman_dbus_init(conn);
 
