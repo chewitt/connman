@@ -131,8 +131,22 @@ struct _GWeb {
 	gpointer debug_data;
 };
 
-#define debug(web, format, arg...)				\
-	_debug(web, __FILE__, __func__, format, ## arg)
+#include "log.h"
+
+static struct connman_debug_desc gweb_debug CONNMAN_DEBUG_ATTR = {
+	.file = "gweb",
+	.flags = CONNMAN_DEBUG_FLAG_DEFAULT
+};
+
+void (*gweb_log_hook)(const struct connman_debug_desc *desc,
+	const char *format, ...) __attribute__((format(printf, 2, 3)));
+
+#define debug(web, format, arg...) do { \
+	_debug(web, __FILE__, __func__, format, ## arg); \
+	if (gweb_log_hook && gweb_debug.flags & CONNMAN_DEBUG_FLAG_PRINT) \
+		gweb_log_hook(&gweb_debug, "%s() %p " format, \
+					__func__ , web, ## arg); \
+} while (0)
 
 static void _debug(GWeb *web, const char *file, const char *caller,
 						const char *format, ...)

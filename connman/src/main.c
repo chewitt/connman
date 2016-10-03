@@ -37,6 +37,7 @@
 #include <arpa/inet.h>
 
 #include <gdbus.h>
+#include <gweb/gweb.h>
 #ifdef SYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
@@ -725,6 +726,8 @@ int main(int argc, char *argv[])
 
 	__connman_log_init(argv[0], option_debug, option_detach,
 			option_backtrace, "Connection Manager", VERSION);
+
+	gweb_log_hook = __connman_dbg;
 
 	__connman_dbus_init(conn);
 

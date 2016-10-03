@@ -56,6 +56,10 @@ void g_web_unref(GWeb *web);
 
 void g_web_set_debug(GWeb *web, GWebDebugFunc func, gpointer user_data);
 
+struct connman_debug_desc;
+extern void (*gweb_log_hook)(const struct connman_debug_desc *desc,
+						const char *format, ...);
+
 bool g_web_supports_tls(void);
 
 bool g_web_set_proxy(GWeb *web, const char *proxy);
