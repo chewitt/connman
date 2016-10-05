@@ -159,7 +159,25 @@ struct _GDHCPClient {
 	bool request_bcast;
 };
 
-static inline void debug(GDHCPClient *client, const char *format, ...)
+#include "log.h"
+
+static struct connman_debug_desc gdhcp_client_debug CONNMAN_DEBUG_ATTR = {
+	.file = "gdhcp-client",
+	.flags = CONNMAN_DEBUG_FLAG_DEFAULT
+};
+
+void (*gdhcp_client_log_hook)(const struct connman_debug_desc *desc,
+	const char *format, ...) __attribute__((format(printf, 2, 3)));
+
+#define debug(client, format, arg...) do { \
+	_debug(client, __FILE__, __func__, format, ## arg); \
+	if (gdhcp_client_log_hook && \
+			gdhcp_client_debug.flags & CONNMAN_DEBUG_FLAG_PRINT) \
+		gdhcp_client_log_hook(&gdhcp_client_debug, "%s() %p " format, \
+				 __func__ , client, ## arg); \
+} while (0)
+
+static inline void _debug(GDHCPClient *client, const char *format, ...)
 {
 	char str[256];
 	va_list ap;

@@ -59,6 +59,10 @@ void g_resolv_unref(GResolv *resolv);
 void g_resolv_set_debug(GResolv *resolv,
 				GResolvDebugFunc func, gpointer user_data);
 
+struct connman_debug_desc;
+extern void (*gresolv_log_hook)(const struct connman_debug_desc *desc,
+						const char *format, ...);
+
 bool g_resolv_add_nameserver(GResolv *resolv, const char *address,
 					uint16_t port, unsigned long flags);
 void g_resolv_flush_nameservers(GResolv *resolv);

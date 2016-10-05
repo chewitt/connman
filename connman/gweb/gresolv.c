@@ -116,8 +116,23 @@ struct _GResolv {
 	gpointer debug_data;
 };
 
-#define debug(resolv, format, arg...)				\
-	_debug(resolv, __FILE__, __func__, format, ## arg)
+#include "log.h"
+
+static struct connman_debug_desc gresolv_debug CONNMAN_DEBUG_ATTR = {
+	.file = "gresolv",
+	.flags = CONNMAN_DEBUG_FLAG_DEFAULT
+};
+
+void (*gresolv_log_hook)(const struct connman_debug_desc *desc,
+	const char *format, ...) __attribute__((format(printf, 2, 3)));
+
+#define debug(resolv, format, arg...) do { \
+	_debug(resolv, __FILE__, __func__, format, ## arg); \
+	if (gresolv_log_hook && \
+			gresolv_debug.flags & CONNMAN_DEBUG_FLAG_PRINT) \
+		gresolv_log_hook(&gresolv_debug, "%s() %p " format, \
+				__func__ , resolv, ## arg); \
+} while (0)
 
 static void _debug(GResolv *resolv, const char *file, const char *caller,
 						const char *format, ...)
@@ -134,7 +149,7 @@ static void _debug(GResolv *resolv, const char *file, const char *caller,
 	if ((len = snprintf(str, sizeof(str), "%s:%s() resolv %p ",
 						file, caller, resolv)) > 0) {
 		if (vsnprintf(str + len, sizeof(str) - len, format, ap) > 0)
-			resolv->debug_func(str, resolv->debug_data);
+			resolv->debug_func(str, (void*)resolv->debug_data);
 	}
 
 	va_end(ap);

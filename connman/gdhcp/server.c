@@ -76,7 +76,25 @@ struct dhcp_lease {
 	uint8_t lease_mac[ETH_ALEN];
 };
 
-static inline void debug(GDHCPServer *server, const char *format, ...)
+#include "log.h"
+
+static struct connman_debug_desc gdhcp_server_debug CONNMAN_DEBUG_ATTR = {
+	.file = "gdhcp-server",
+	.flags = CONNMAN_DEBUG_FLAG_DEFAULT
+};
+
+void (*gdhcp_server_log_hook)(const struct connman_debug_desc *desc,
+	const char *format, ...) __attribute__((format(printf, 2, 3)));
+
+#define debug(server, format, arg...) do { \
+	_debug(server, __FILE__, __func__, format, ## arg); \
+	if (gdhcp_server_log_hook && \
+			gdhcp_server_debug.flags & CONNMAN_DEBUG_FLAG_PRINT) \
+		gdhcp_server_log_hook(&gdhcp_server_debug, "%s() %p " format, \
+				 __func__ , server, ## arg); \
+} while (0)
+
+static inline void _debug(GDHCPServer *server, const char *format, ...)
 {
 	char str[256];
 	va_list ap;
