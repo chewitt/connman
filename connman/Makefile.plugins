@@ -87,9 +87,9 @@ builtin_modules += jolla_usb
 builtin_sources += plugins/jolla-usb.c
 endif
 
-if JOLLA_SIGNALPOLL
-builtin_modules += jolla_signalpoll
-builtin_sources += plugins/jolla-signalpoll.c
+if SAILFISH_SIGNALPOLL
+builtin_modules += sailfish_signalpoll
+builtin_sources += plugins/sailfish-signalpoll.c
 endif
 
 if JOLLA_OFONO

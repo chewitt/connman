@@ -396,12 +396,12 @@ AC_ARG_ENABLE(jolla-usb,
 			[enable_jolla_usb=${enableval}], [enable_jolla_usb="no"])
 AM_CONDITIONAL(JOLLA_USB, test "${enable_jolla_usb}" != "no")
 
-AC_ARG_ENABLE(jolla-signalpoll,
-	AC_HELP_STRING([--enable-jolla-signalpoll], [enable Jolla signal poll plugin]),
-		[enable_jolla_signalpoll=${enableval}], [enable_jolla_signalpoll="no"])
-AM_CONDITIONAL(JOLLA_SIGNALPOLL, test "${enable_jolla_signalpoll}" != "no")
+AC_ARG_ENABLE(sailfish-signalpoll,
+	AC_HELP_STRING([--enable-sailfish-signalpoll], [enable Jolla signal poll plugin]),
+		[enable_sailfish_signalpoll=${enableval}], [enable_sailfish_signalpoll="no"])
+AM_CONDITIONAL(SAILFISH_SIGNALPOLL, test "${enable_sailfish_signalpoll}" != "no")
 
-if (test "${enable_jolla_signalpoll}" = "yes"); then
+if (test "${enable_sailfish_signalpoll}" = "yes"); then
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
 				AC_MSG_ERROR(libmce-glib is required))
 	CFLAGS="$CFLAGS $LIBMCE_CFLAGS"

@@ -227,5 +227,5 @@ static void signalpoll_exit()
 	display = NULL;
 }
 
-CONNMAN_PLUGIN_DEFINE(jolla_signalpoll, "Jolla signal poll plugin", VERSION,
+CONNMAN_PLUGIN_DEFINE(sailfish_signalpoll, "Signal poll plugin", VERSION,
 	CONNMAN_PLUGIN_PRIORITY_DEFAULT, signalpoll_init, signalpoll_exit)

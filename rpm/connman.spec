@@ -119,7 +119,7 @@ Documentation for connman.
     --enable-client \
     --enable-test \
     --enable-debuglog \
-    --enable-jolla-signalpoll \
+    --enable-sailfish-signalpoll \
     --enable-jolla-usb \
     --enable-jolla-ofono \
     --disable-ofono \
