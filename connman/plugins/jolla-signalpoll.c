@@ -26,21 +26,31 @@
 
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #include "connman.h"
-#include "gdbus.h"
 
-#include <mce/dbus-names.h>
-#include <mce/mode-names.h>
+#include <mce_display.h>
+#include <mce_log.h>
 
-#include <errno.h>
+#include <gutil_misc.h>
+#include <gutil_log.h>
+
+enum signalpoll_display_events {
+	DISPLAY_EVENT_VALID,
+	DISPLAY_EVENT_STATE,
+	DISPLAY_EVENT_COUNT
+};
 
 static GSList *poll_services;
-static DBusConnection *connection;
-static DBusPendingCall *get_display_status_call;
-static guint display_status_ind_watch;
 static guint signalpoll_timer;
-static gboolean display_on;
+static MceDisplay *display;
+static gulong display_event_id[DISPLAY_EVENT_COUNT];
 
 #define POLL_INTERVAL_SECS (2)
+
+static gboolean signalpoll_display_on(void)
+{
+	return display && display->valid &&
+				display->state != MCE_DISPLAY_STATE_OFF;
+}
 
 static void signalpoll_poll_service(gpointer service_ptr, gpointer data)
 {
@@ -67,7 +77,7 @@ static gboolean signalpoll_poll(gpointer data)
 
 static void signalpoll_update()
 {
-	if (display_on && poll_services) {
+	if (signalpoll_display_on() && poll_services) {
 		/* Need polling */
 		if (!signalpoll_timer) {
 			DBG("starting poll timer");
@@ -155,65 +165,27 @@ static void signalpoll_service_state_changed(struct connman_service *service,
 	}
 }
 
-static const char *signalpoll_get_string(DBusMessage *message)
+static void signalpoll_display_cb(MceDisplay *display, void *user_data)
 {
-	const char *str = NULL;
-	DBusMessageIter iter;
-
-	if (dbus_message_iter_init(message, &iter) &&
-		dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_STRING) {
-		dbus_message_iter_get_basic(&iter, &str);
-	}
-
-	return str;
-}
-
-static gboolean signalpoll_display_status_ind(DBusConnection *conn,
-				DBusMessage *message, void *user_data)
-{
-	const char* status = signalpoll_get_string(message);
-
-	DBG("\"%s\"", status);
-	if (status) {
-		display_on = !strcmp(status, MCE_DISPLAY_ON_STRING);
-		signalpoll_update();
-	}
-
-	return TRUE;
-}
-
-static void signalpoll_display_status_reply(DBusPendingCall *call,
-							void *user_data)
-{
-	DBusMessage *reply;
-	DBusError error;
-
-	dbus_error_init(&error);
-	reply = dbus_pending_call_steal_reply(call);
-
-	if (dbus_set_error_from_message(&error, reply)) {
-		connman_error("Failed to get display status: %s %s",
-						error.name, error.message);
-		dbus_error_free(&error);
-	} else {
-		const char* status = signalpoll_get_string(reply);
-
-		DBG("\"%s\"", status);
-		if (status) {
-			display_on = !strcmp(status, MCE_DISPLAY_ON_STRING);
-			signalpoll_update();
-		}
-	}
-
-	dbus_message_unref(reply);
-	dbus_pending_call_unref(get_display_status_call);
-	get_display_status_call = NULL;
+	signalpoll_update();
 }
 
 static void signalpoll_clean_services(gpointer service)
 {
 	connman_service_unref(service);
 }
+
+static void signalpoll_mce_debug_notify(struct connman_debug_desc *desc)
+{
+	mce_log.level = (desc->flags & CONNMAN_DEBUG_FLAG_PRINT) ?
+		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_INHERIT;
+}
+
+static struct connman_debug_desc mce_debug CONNMAN_DEBUG_ATTR = {
+	.name                   = "mce",
+	.flags                  = CONNMAN_DEBUG_FLAG_DEFAULT,
+	.notify                 = signalpoll_mce_debug_notify
+};
 
 static struct connman_notifier signalpoll_notifier = {
 	.name                   = "signalpoll",
@@ -224,29 +196,16 @@ static struct connman_notifier signalpoll_notifier = {
 
 static int signalpoll_init()
 {
-	DBusMessage *message;
-
 	DBG("");
-	connection = connman_dbus_get_connection();
-	if (!connection)
-		return -EIO;
+	display = mce_display_new();
+	display_event_id[DISPLAY_EVENT_VALID] =
+		mce_display_add_valid_changed_handler(display,
+				signalpoll_display_cb, NULL);
+	display_event_id[DISPLAY_EVENT_STATE] =
+		mce_display_add_state_changed_handler(display,
+				signalpoll_display_cb, NULL);
 
 	connman_notifier_register(&signalpoll_notifier);
-	display_status_ind_watch = g_dbus_add_signal_watch(connection,
-		MCE_SERVICE, MCE_SIGNAL_PATH, MCE_SIGNAL_IF, MCE_DISPLAY_SIG,
-		signalpoll_display_status_ind, NULL, NULL);
-	message = dbus_message_new_method_call(MCE_SERVICE, MCE_REQUEST_PATH,
-		MCE_REQUEST_IF, MCE_DISPLAY_STATUS_GET);
-
-	if (message) {
-		if (dbus_connection_send_with_reply(connection, message,
-			&get_display_status_call, DBUS_TIMEOUT_INFINITE)) {
-			dbus_pending_call_set_notify(get_display_status_call,
-				signalpoll_display_status_reply, NULL, NULL);
-		}
-		dbus_message_unref(message);
-	}
-
 	return 0;
 }
 
@@ -261,14 +220,11 @@ static void signalpoll_exit()
 		g_slist_free_full(poll_services, signalpoll_clean_services);
 		poll_services = NULL;
 	}
-	if (get_display_status_call) {
-		dbus_pending_call_cancel(get_display_status_call);
-		dbus_pending_call_unref(get_display_status_call);
-		get_display_status_call = NULL;
-	}
 	connman_notifier_unregister(&signalpoll_notifier);
-	dbus_connection_unref(connection);
-	connection = NULL;
+	gutil_disconnect_handlers(display, display_event_id,
+							DISPLAY_EVENT_COUNT);
+	mce_display_unref(display);
+	display = NULL;
 }
 
 CONNMAN_PLUGIN_DEFINE(jolla_signalpoll, "Jolla signal poll plugin", VERSION,

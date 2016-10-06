@@ -401,6 +401,14 @@ AC_ARG_ENABLE(jolla-signalpoll,
 		[enable_jolla_signalpoll=${enableval}], [enable_jolla_signalpoll="no"])
 AM_CONDITIONAL(JOLLA_SIGNALPOLL, test "${enable_jolla_signalpoll}" != "no")
 
+if (test "${enable_jolla_signalpoll}" = "yes"); then
+	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
+				AC_MSG_ERROR(libmce-glib is required))
+	CFLAGS="$CFLAGS $LIBMCE_CFLAGS"
+	LIBS="$LIBS $LIBMCE_LIBS"
+	need_glibutil=yes
+fi
+
 AC_ARG_ENABLE(jolla-ofono,
 	AC_HELP_STRING([--enable-jolla-ofono], [enable Jolla ofono plugin]),
 			[enable_jolla_ofono=${enableval}], [enable_jolla_ofono="no"])
@@ -411,10 +419,16 @@ if (test "${enable_jolla_ofono}" = "yes"); then
 				AC_MSG_ERROR(libgofono is required))
 	PKG_CHECK_MODULES(GOFONOEXT, libgofonoext, dummy=yes,
 				AC_MSG_ERROR(libgofonoext is required))
+	CFLAGS="$CFLAGS $GOFONO_CFLAGS $GOFONOEXT_CFLAGS"
+	LIBS="$LIBS $GOFONO_LIBS $GOFONOEXT_LIBS"
+	need_glibutil=yes
+fi
+
+if (test "${need_glibutil}" = "yes"); then
 	PKG_CHECK_MODULES(GLIBUTIL, libglibutil, dummy=yes,
 				AC_MSG_ERROR(libglibutil is required))
-	CFLAGS="$CFLAGS $GOFONO_CFLAGS $GOFONOEXT_CFLAGS $GLIBUTIL_CFLAGS"
-	LIBS="$LIBS $GOFONO_LIBS $GOFONOEXT_LIBS $GLIBUTIL_LIBS"
+	CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
+	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi
 
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],

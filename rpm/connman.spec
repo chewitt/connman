@@ -27,7 +27,6 @@ BuildRequires:  pkgconfig(glib-2.0) >= 2.28
 BuildRequires:  pkgconfig(gthread-2.0) >= 2.16
 BuildRequires:  pkgconfig(dbus-1) >= 1.4
 BuildRequires:  pkgconfig(gnutls)
-BuildRequires:  pkgconfig(mce)
 BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
@@ -38,6 +37,7 @@ BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
+BuildRequires:  pkgconfig(libmce-glib)
 
 %description
 Connection Manager provides a daemon for managing Internet connections
