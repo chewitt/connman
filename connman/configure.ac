@@ -396,10 +396,18 @@ AC_ARG_ENABLE(jolla-usb,
 			[enable_jolla_usb=${enableval}], [enable_jolla_usb="no"])
 AM_CONDITIONAL(JOLLA_USB, test "${enable_jolla_usb}" != "no")
 
-AC_ARG_ENABLE(jolla-signalpoll,
-	AC_HELP_STRING([--enable-jolla-signalpoll], [enable Jolla signal poll plugin]),
-		[enable_jolla_signalpoll=${enableval}], [enable_jolla_signalpoll="no"])
-AM_CONDITIONAL(JOLLA_SIGNALPOLL, test "${enable_jolla_signalpoll}" != "no")
+AC_ARG_ENABLE(sailfish-signalpoll,
+	AC_HELP_STRING([--enable-sailfish-signalpoll], [enable Jolla signal poll plugin]),
+		[enable_sailfish_signalpoll=${enableval}], [enable_sailfish_signalpoll="no"])
+AM_CONDITIONAL(SAILFISH_SIGNALPOLL, test "${enable_sailfish_signalpoll}" != "no")
+
+if (test "${enable_sailfish_signalpoll}" = "yes"); then
+	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
+				AC_MSG_ERROR(libmce-glib is required))
+	CFLAGS="$CFLAGS $LIBMCE_CFLAGS"
+	LIBS="$LIBS $LIBMCE_LIBS"
+	need_glibutil=yes
+fi
 
 AC_ARG_ENABLE(jolla-ofono,
 	AC_HELP_STRING([--enable-jolla-ofono], [enable Jolla ofono plugin]),
@@ -411,10 +419,16 @@ if (test "${enable_jolla_ofono}" = "yes"); then
 				AC_MSG_ERROR(libgofono is required))
 	PKG_CHECK_MODULES(GOFONOEXT, libgofonoext, dummy=yes,
 				AC_MSG_ERROR(libgofonoext is required))
+	CFLAGS="$CFLAGS $GOFONO_CFLAGS $GOFONOEXT_CFLAGS"
+	LIBS="$LIBS $GOFONO_LIBS $GOFONOEXT_LIBS"
+	need_glibutil=yes
+fi
+
+if (test "${need_glibutil}" = "yes"); then
 	PKG_CHECK_MODULES(GLIBUTIL, libglibutil, dummy=yes,
 				AC_MSG_ERROR(libglibutil is required))
-	CFLAGS="$CFLAGS $GOFONO_CFLAGS $GOFONOEXT_CFLAGS $GLIBUTIL_CFLAGS"
-	LIBS="$LIBS $GOFONO_LIBS $GOFONOEXT_LIBS $GLIBUTIL_LIBS"
+	CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
+	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi
 
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
