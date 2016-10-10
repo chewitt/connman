@@ -10,13 +10,11 @@ Source1:    connman.tracing
 Source2:    main.conf
 Requires:   dbus >= 1.4
 Requires:   wpa_supplicant >= 0.7.1
-Requires:   bluez
 Requires:   ofono
 Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
 Requires:   libiphb
-Requires:   bluez-libs
 Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.10
 Requires(preun): systemd
@@ -32,7 +30,6 @@ BuildRequires:  openvpn
 BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  libiphb-devel
-BuildRequires:  bluez-libs-devel
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
@@ -115,7 +112,6 @@ Documentation for connman.
     --enable-pacrunner=builtin \
     --enable-jolla-gps=builtin \
     --enable-jolla-wakeup-timer=builtin \
-    --enable-jolla-rfkill=builtin \
     --enable-client \
     --enable-test \
     --enable-debuglog \
@@ -147,12 +143,10 @@ cp -a %{SOURCE2} %{buildroot}%{_sysconfdir}/connman/
 
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/connman.service
-ln -s ../jolla-rfkill-hciwait.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/jolla-rfkill-hciwait.service
 
 %preun
 if [ "$1" -eq 0 ]; then
 systemctl stop connman.service || :
-systemctl stop jolla-rfkill-hciwait.service || :
 fi
 
 %post
@@ -175,8 +169,6 @@ systemctl daemon-reload || :
 /%{_lib}/systemd/system/network.target.wants/connman.service
 /%{_lib}/systemd/system/connman-vpn.service
 /%{_datadir}/dbus-1/system-services/net.connman.vpn.service
-/%{_lib}/systemd/system/jolla-rfkill-hciwait.service
-/%{_lib}/systemd/system/network.target.wants/jolla-rfkill-hciwait.service
 
 %files devel
 %defattr(-,root,root,-)
