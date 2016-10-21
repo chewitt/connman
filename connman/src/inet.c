@@ -3097,7 +3097,7 @@ char **__connman_inet_get_running_interfaces(void)
 		result = g_try_realloc(result, (count + 1) * sizeof(char *));
 		if (!result) {
 			g_free(prev_result);
-			goto error;
+			return NULL;
 		}
 	}
 
