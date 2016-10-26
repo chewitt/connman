@@ -890,23 +890,6 @@ int __connman_stats_service_register(struct connman_service *service)
 
 	DBG("service %p", service);
 
-	file = g_hash_table_lookup(stats_hash, service);
-	if (!file) {
-		file = g_try_new0(struct stats_file, 1);
-		if (!file)
-			return -ENOMEM;
-
-		/*
-		 * 0 is a valid file descriptor - fd needs to be initialized
-		 * to -1 to handle errors correctly
-		 */
-		file->fd = -1;
-
-		g_hash_table_insert(stats_hash, service, file);
-	} else {
-		return -EALREADY;
-	}
-
 	ident = connman_service_get_identifier(service);
 	storagedir = connman_storage_dir_for(ident);
 	dir = g_build_filename(storagedir, ident, NULL);
@@ -927,6 +910,22 @@ int __connman_stats_service_register(struct connman_service *service)
 	file->history_name = g_build_filename(dir, "history", NULL);
 
 	g_free(dir);
+	file = g_hash_table_lookup(stats_hash, service);
+	if (!file) {
+		file = g_try_new0(struct stats_file, 1);
+		if (!file)
+			return -ENOMEM;
+
+		/*
+		 * 0 is a valid file descriptor - fd needs to be initialized
+		 * to -1 to handle errors correctly
+		 */
+		file->fd = -1;
+
+		g_hash_table_insert(stats_hash, service, file);
+	} else {
+		return -EALREADY;
+	}
 
 	/* TODO: Use a global config file instead of hard coded value. */
 	file->account_period_offset = 1;
