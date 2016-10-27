@@ -39,8 +39,12 @@
 #include <connman/task.h>
 #include <connman/dbus.h>
 #include <connman/ipconfig.h>
+#include <connman/agent.h>
+#include <connman/setting.h>
+#include <connman/vpn-dbus.h>
 
 #include "../vpn-provider.h"
+#include "../vpn-agent.h"
 
 #include "vpn.h"
 
@@ -75,6 +79,20 @@ struct {
 	{ "OpenVPN.DeviceType", NULL, 1 },
 	{ "OpenVPN.Verb", "--verb", 1 },
 };
+
+struct ov_private_data {
+	struct vpn_provider *provider;
+	struct connman_task *task;
+	char *if_name;
+	vpn_provider_connect_cb_t cb;
+	void *user_data;
+};
+
+static void free_private_data(struct ov_private_data *data)
+{
+	g_free(data->if_name);
+	g_free(data);
+}
 
 struct nameserver_entry {
 	int id;
@@ -304,6 +322,10 @@ static int task_append_config_data(struct vpn_provider *provider,
 		if (!option)
 			continue;
 
+                /* If the AuthUserPass option is "-", provide the input via stdin */
+                if (!strcmp(ov_options[i].cm_opt, "OpenVPN.AuthUserPass") && !strcmp(option, "-"))
+                        option = NULL;
+
 		if (connman_task_add_argument(task,
 				ov_options[i].ov_opt,
 				ov_options[i].has_value ? option : NULL) < 0) {
@@ -354,22 +376,20 @@ static int setup_log_read(int stdout_fd, int stderr_fd)
 	return watch == 0? -EIO : 0;
 }
 
-static int ov_connect(struct vpn_provider *provider,
+static int run_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
-			vpn_provider_connect_cb_t cb, const char *dbus_sender,
-			void *user_data)
+			vpn_provider_connect_cb_t cb, void *user_data)
 {
 	const char *option;
-	int stdout_fd, stderr_fd;
-	int err = 0;
+	const char *credentials[2] = { NULL, NULL };
+	int stdin_fd, stdout_fd, stderr_fd;
+	int err = 0, i, len;
 
-	option = vpn_provider_get_string(provider, "Host");
-	if (!option) {
-		connman_error("Host not set; cannot enable VPN");
-		return -EINVAL;
-	}
-
-	task_append_config_data(provider, task);
+	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
+	if (option && !strcmp(option, "-")) {
+                credentials[0] = vpn_provider_get_string(provider, "OpenVPN.Username");
+                credentials[1] = vpn_provider_get_string(provider, "OpenVPN.Password");
+        }
 
 	option = vpn_provider_get_string(provider, "OpenVPN.ConfigFile");
 	if (!option) {
@@ -435,12 +455,26 @@ static int ov_connect(struct vpn_provider *provider,
 	connman_task_add_argument(task, "--ping-restart", "0");
 
 	err = connman_task_run(task, vpn_died, provider,
-			NULL, &stdout_fd, &stderr_fd);
+			&stdin_fd, &stdout_fd, &stderr_fd);
 	if (err < 0) {
 		connman_error("openvpn failed to start");
 		err = -EIO;
 		goto done;
-	}
+        }
+
+        if (credentials[0] && credentials[1]) {
+                for (i = 0; i < 2; ++i) {
+                        len = strlen(credentials[i]);
+                        if (write(stdin_fd, credentials[i], len) != (ssize_t)len ||
+                                write(stdin_fd, "\n", 1) != 1) {
+                                connman_error("openvpn failed to take credentials on stdin");
+                                err = -EIO;
+                                goto done;
+                        }
+                }
+        }
+
+        close(stdin_fd);
 
 	err = setup_log_read(stdout_fd, stderr_fd);
 done:
@@ -448,6 +482,203 @@ done:
 		cb(provider, user_data, err);
 
 	return err;
+}
+
+static void request_input_append_mandatory(DBusMessageIter *iter,
+		void *user_data)
+{
+	char *str = "string";
+
+	connman_dbus_dict_append_basic(iter, "Type",
+				DBUS_TYPE_STRING, &str);
+	str = "mandatory";
+	connman_dbus_dict_append_basic(iter, "Requirement",
+				DBUS_TYPE_STRING, &str);
+}
+
+static void request_input_append_password(DBusMessageIter *iter,
+		void *user_data)
+{
+	char *str = "password";
+
+	connman_dbus_dict_append_basic(iter, "Type",
+				DBUS_TYPE_STRING, &str);
+	str = "mandatory";
+	connman_dbus_dict_append_basic(iter, "Requirement",
+				DBUS_TYPE_STRING, &str);
+}
+
+static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
+{
+	struct ov_private_data *data = user_data;
+	char *password = NULL, *username = NULL;
+	char *key;
+	DBusMessageIter iter, dict;
+
+	DBG("provider %p", data->provider);
+
+	if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
+		goto err;
+
+	if (!vpn_agent_check_reply_has_dict(reply))
+		goto err;
+
+	dbus_message_iter_init(reply, &iter);
+	dbus_message_iter_recurse(&iter, &dict);
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			break;
+
+		dbus_message_iter_get_basic(&entry, &key);
+
+		if (g_str_equal(key, "OpenVPN.Password")) {
+			dbus_message_iter_next(&entry);
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
+				break;
+			dbus_message_iter_recurse(&entry, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_STRING)
+				break;
+			dbus_message_iter_get_basic(&value, &password);
+			vpn_provider_set_string_hide_value(data->provider,
+					key, password);
+
+		} else if (g_str_equal(key, "OpenVPN.Username")) {
+			dbus_message_iter_next(&entry);
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
+				break;
+			dbus_message_iter_recurse(&entry, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_STRING)
+				break;
+			dbus_message_iter_get_basic(&value, &username);
+			vpn_provider_set_string_hide_value(data->provider,
+					key, username);
+		}
+
+		dbus_message_iter_next(&dict);
+	}
+
+	if (!password || !username)
+		goto err;
+
+	run_connect(data->provider, data->task, data->if_name, data->cb,
+		data->user_data);
+
+	free_private_data(data);
+
+	return;
+
+err:
+	vpn_provider_indicate_error(data->provider,
+			VPN_PROVIDER_ERROR_AUTH_FAILED);
+
+	free_private_data(data);
+}
+
+static int request_credentials_input(struct vpn_provider *provider,
+				struct ov_private_data *data,
+				const char *dbus_sender)
+{
+	DBusMessage *message;
+	const char *path, *agent_sender, *agent_path;
+	DBusMessageIter iter;
+	DBusMessageIter dict;
+	int err;
+	void *agent;
+
+	agent = connman_agent_get_info(dbus_sender, &agent_sender,
+							&agent_path);
+	if (!provider || !agent || !agent_path)
+		return -ESRCH;
+
+	message = dbus_message_new_method_call(agent_sender, agent_path,
+					VPN_AGENT_INTERFACE,
+					"RequestInput");
+	if (!message)
+		return -ENOMEM;
+
+	dbus_message_iter_init_append(message, &iter);
+
+	path = vpn_provider_get_path(provider);
+	dbus_message_iter_append_basic(&iter,
+				DBUS_TYPE_OBJECT_PATH, &path);
+
+	connman_dbus_dict_open(&iter, &dict);
+
+        /* Request temporary properties to pass on to openvpn */
+	connman_dbus_dict_append_dict(&dict, "OpenVPN.Username",
+			request_input_append_mandatory, NULL);
+
+	connman_dbus_dict_append_dict(&dict, "OpenVPN.Password",
+			request_input_append_password, NULL);
+
+	vpn_agent_append_host_and_name(&dict, provider);
+
+	connman_dbus_dict_close(&iter, &dict);
+
+	err = connman_agent_queue_message(provider, message,
+			connman_timeout_input_request(),
+			request_input_credentials_reply, data, agent);
+
+	if (err < 0 && err != -EBUSY) {
+		DBG("error %d sending agent request", err);
+		dbus_message_unref(message);
+
+		return err;
+	}
+
+	dbus_message_unref(message);
+
+	return -EINPROGRESS;
+}
+
+static int ov_connect(struct vpn_provider *provider,
+			struct connman_task *task, const char *if_name,
+			vpn_provider_connect_cb_t cb, const char *dbus_sender,
+			void *user_data)
+{
+	const char *option;
+	int err = 0;
+
+	option = vpn_provider_get_string(provider, "Host");
+	if (!option) {
+		connman_error("Host not set; cannot enable VPN");
+		return -EINVAL;
+	}
+
+	task_append_config_data(provider, task);
+
+	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
+	if (option && !strcmp(option, "-")) {
+                /* Ask user for auth information before proceeding */
+		struct ov_private_data *data;
+
+		data = g_try_new0(struct ov_private_data, 1);
+		if (!data)
+			return -ENOMEM;
+
+		data->provider = provider;
+		data->task = task;
+		data->if_name = g_strdup(if_name);
+		data->cb = cb;
+		data->user_data = user_data;
+
+		err = request_credentials_input(provider, data, dbus_sender);
+		if (err != -EINPROGRESS) {
+			vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_LOGIN_FAILED);
+			free_private_data(data);
+		}
+		return err;
+	}
+
+	return run_connect(provider, task, if_name, cb, user_data);
 }
 
 static int ov_device_flags(struct vpn_provider *provider)
