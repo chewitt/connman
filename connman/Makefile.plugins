@@ -31,6 +31,11 @@ builtin_modules += sailfish_wifi
 builtin_sources += plugins/sailfish_wifi.c plugins/sailfish_signalpoll.c
 endif
 
+if IWD
+builtin_modules += iwd
+builtin_sources += plugins/iwd.c
+endif
+
 if BLUETOOTH
 builtin_modules += bluetooth_legacy
 builtin_sources += plugins/bluetooth_legacy.c
