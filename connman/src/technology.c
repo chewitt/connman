@@ -280,10 +280,8 @@ static int set_tethering(struct connman_technology *technology,
 		if (result == -EINPROGRESS)
 			continue;
 
-		if (err == -EINPROGRESS || err == 0) {
+		if (err == -EINPROGRESS || err == 0)
 			result = err;
-			continue;
-		}
 	}
 
 	return result;
