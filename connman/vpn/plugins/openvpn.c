@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <net/if.h>
+#include <linux/if_tun.h>
 
 #include <glib.h>
 
@@ -71,6 +72,8 @@ struct {
 	{ "OpenVPN.CompLZO", "--comp-lzo", 0 },
 	{ "OpenVPN.RemoteCertTls", "--remote-cert-tls", 1 },
 	{ "OpenVPN.ConfigFile", "--config", 1 },
+	{ "OpenVPN.DeviceType", NULL, 1 },
+	{ "OpenVPN.Verb", "--verb", 1 },
 };
 
 struct nameserver_entry {
@@ -156,7 +159,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 {
 	DBusMessageIter iter, dict;
 	const char *reason, *key, *value;
-	char *address = NULL, *gateway = NULL, *peer = NULL;
+	char *address = NULL, *gateway = NULL, *peer = NULL, *netmask = NULL;
 	struct connman_ipaddress *ipaddress;
 	GSList *nameserver_list = NULL;
 
@@ -192,6 +195,9 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		if (!strcmp(key, "ifconfig_local"))
 			address = g_strdup(value);
 
+		if (!strcmp(key, "ifconfig_netmask"))
+			netmask = g_strdup(value);
+
 		if (!strcmp(key, "ifconfig_remote"))
 			peer = g_strdup(value);
 
@@ -218,11 +224,12 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		g_free(address);
 		g_free(gateway);
 		g_free(peer);
+		g_free(netmask);
 
 		return VPN_STATE_FAILURE;
 	}
 
-	connman_ipaddress_set_ipv4(ipaddress, address, NULL, gateway);
+	connman_ipaddress_set_ipv4(ipaddress, address, netmask, gateway);
 	connman_ipaddress_set_peer(ipaddress, peer);
 	vpn_provider_set_ipaddress(provider, ipaddress);
 
@@ -256,6 +263,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	g_free(address);
 	g_free(gateway);
 	g_free(peer);
+	g_free(netmask);
 	connman_ipaddress_free(ipaddress);
 
 	return VPN_STATE_CONNECT;
@@ -306,13 +314,54 @@ static int task_append_config_data(struct vpn_provider *provider,
 	return 0;
 }
 
+static gboolean can_read_data(GIOChannel *chan,
+                                GIOCondition cond, gpointer data)
+{
+	void (*cbf)(const char *format, ...) = data;
+	gchar *str;
+	gsize size;
+
+	if (cond == G_IO_HUP) {
+		g_io_channel_unref(chan);
+		return FALSE;
+	}
+
+	g_io_channel_read_line(chan, &str, &size, NULL, NULL);
+	cbf(str);
+	g_free(str);
+
+	return TRUE;
+}
+
+static int setup_log_read(int stdout_fd, int stderr_fd)
+{
+	GIOChannel *chan;
+	int watch;
+
+	chan = g_io_channel_unix_new(stdout_fd);
+	g_io_channel_set_close_on_unref(chan, TRUE);
+	watch = g_io_add_watch(chan, G_IO_IN, can_read_data, connman_debug);
+	g_io_channel_unref(chan);
+
+	if (watch == 0)
+		return -EIO;
+
+	chan = g_io_channel_unix_new(stderr_fd);
+	g_io_channel_set_close_on_unref(chan, TRUE);
+	watch = g_io_add_watch(chan, G_IO_IN, can_read_data, connman_error);
+	g_io_channel_unref(chan);
+
+	return watch == 0? -EIO : 0;
+}
+
 static int ov_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,
 			void *user_data)
 {
 	const char *option;
-	int err = 0, fd;
+	int stdout_fd, stderr_fd;
+	int err = 0;
 
 	option = vpn_provider_get_string(provider, "Host");
 	if (!option) {
@@ -341,8 +390,6 @@ static int ov_connect(struct vpn_provider *provider,
 		connman_task_add_argument(task, "--client", NULL);
 	}
 
-	connman_task_add_argument(task, "--syslog", NULL);
-
 	connman_task_add_argument(task, "--script-security", "2");
 
 	connman_task_add_argument(task, "--up",
@@ -362,7 +409,15 @@ static int ov_connect(struct vpn_provider *provider,
 					connman_task_get_path(task));
 
 	connman_task_add_argument(task, "--dev", if_name);
-	connman_task_add_argument(task, "--dev-type", "tun");
+	option = vpn_provider_get_string(provider, "OpenVPN.DeviceType");
+	if (option) {
+		connman_task_add_argument(task, "--dev-type", option);
+	} else {
+		/*
+		 * Default to tun for backwards compatibility.
+		 */
+		connman_task_add_argument(task, "--dev-type", "tun");
+	}
 
 	connman_task_add_argument(task, "--persist-tun", NULL);
 
@@ -379,15 +434,15 @@ static int ov_connect(struct vpn_provider *provider,
 	 */
 	connman_task_add_argument(task, "--ping-restart", "0");
 
-	fd = fileno(stderr);
 	err = connman_task_run(task, vpn_died, provider,
-			NULL, &fd, &fd);
+			NULL, &stdout_fd, &stderr_fd);
 	if (err < 0) {
 		connman_error("openvpn failed to start");
 		err = -EIO;
 		goto done;
 	}
 
+	err = setup_log_read(stdout_fd, stderr_fd);
 done:
 	if (cb)
 		cb(provider, user_data, err);
@@ -395,10 +450,31 @@ done:
 	return err;
 }
 
+static int ov_device_flags(struct vpn_provider *provider)
+{
+	const char *option;
+
+	option = vpn_provider_get_string(provider, "OpenVPN.DeviceType");
+	if (!option) {
+		return IFF_TUN;
+	}
+
+	if (g_str_equal(option, "tap")) {
+		return IFF_TAP;
+	}
+
+	if (!g_str_equal(option, "tun")) {
+		connman_warn("bad OpenVPN.DeviceType value, falling back to tun");
+	}
+
+	return IFF_TUN;
+}
+
 static struct vpn_driver vpn_driver = {
 	.notify	= ov_notify,
 	.connect	= ov_connect,
 	.save		= ov_save,
+	.device_flags = ov_device_flags,
 };
 
 static int openvpn_init(void)
