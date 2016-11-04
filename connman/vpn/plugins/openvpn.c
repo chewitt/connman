@@ -336,53 +336,13 @@ static int task_append_config_data(struct vpn_provider *provider,
 	return 0;
 }
 
-static gboolean can_read_data(GIOChannel *chan,
-                                GIOCondition cond, gpointer data)
-{
-	void (*cbf)(const char *format, ...) = data;
-	gchar *str;
-	gsize size;
-
-	if (cond == G_IO_HUP) {
-		g_io_channel_unref(chan);
-		return FALSE;
-	}
-
-	g_io_channel_read_line(chan, &str, &size, NULL, NULL);
-	cbf(str);
-	g_free(str);
-
-	return TRUE;
-}
-
-static int setup_log_read(int stdout_fd, int stderr_fd)
-{
-	GIOChannel *chan;
-	int watch;
-
-	chan = g_io_channel_unix_new(stdout_fd);
-	g_io_channel_set_close_on_unref(chan, TRUE);
-	watch = g_io_add_watch(chan, G_IO_IN, can_read_data, connman_debug);
-	g_io_channel_unref(chan);
-
-	if (watch == 0)
-		return -EIO;
-
-	chan = g_io_channel_unix_new(stderr_fd);
-	g_io_channel_set_close_on_unref(chan, TRUE);
-	watch = g_io_add_watch(chan, G_IO_IN, can_read_data, connman_error);
-	g_io_channel_unref(chan);
-
-	return watch == 0? -EIO : 0;
-}
-
 static int run_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
 			vpn_provider_connect_cb_t cb, void *user_data)
 {
 	const char *option;
 	const char *credentials[2] = { NULL, NULL };
-	int stdin_fd, stdout_fd, stderr_fd;
+	int stdin_fd, fd;
 	int err = 0, i, len;
 
 	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
@@ -409,6 +369,8 @@ static int run_connect(struct vpn_provider *provider,
 		connman_task_add_argument(task, "--persist-key", NULL);
 		connman_task_add_argument(task, "--client", NULL);
 	}
+
+	connman_task_add_argument(task, "--syslog", NULL);
 
 	connman_task_add_argument(task, "--script-security", "2");
 
@@ -454,8 +416,9 @@ static int run_connect(struct vpn_provider *provider,
 	 */
 	connman_task_add_argument(task, "--ping-restart", "0");
 
+	fd = fileno(stderr);
 	err = connman_task_run(task, vpn_died, provider,
-			&stdin_fd, &stdout_fd, &stderr_fd);
+			&stdin_fd, &fd, &fd);
 	if (err < 0) {
 		connman_error("openvpn failed to start");
 		err = -EIO;
@@ -476,7 +439,6 @@ static int run_connect(struct vpn_provider *provider,
 
         close(stdin_fd);
 
-	err = setup_log_read(stdout_fd, stderr_fd);
 done:
 	if (cb)
 		cb(provider, user_data, err);
