@@ -197,3 +197,4 @@ systemctl daemon-reload || :
 %{_datadir}/man/man5/connman.conf.5.gz
 %{_datadir}/man/man8/connman.8.gz
 %{_datadir}/man/man1/connmanctl.1.gz
+
