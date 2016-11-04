@@ -322,6 +322,7 @@ struct connman_service {
 	char **nameservers;
 	char **nameservers_config;
 	char **nameservers_auto;
+	int nameservers_timeout;
 	char **domains;
 	char *hostname;
 	char *domainname;
@@ -387,6 +388,7 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 		int index, enum connman_ipconfig_method method);
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
+static void dns_changed(struct connman_service *service);
 
 static void vpn_auto_connect(void);
 static bool is_connecting(struct connman_service *service);
@@ -1496,6 +1498,24 @@ static bool is_connected_state(const struct connman_service *service,
 	return false;
 }
 
+static bool is_idle(struct connman_service *service)
+{
+	switch (service->state) {
+	case CONNMAN_SERVICE_STATE_IDLE:
+	case CONNMAN_SERVICE_STATE_DISCONNECT:
+	case CONNMAN_SERVICE_STATE_FAILURE:
+		return true;
+	case CONNMAN_SERVICE_STATE_UNKNOWN:
+	case CONNMAN_SERVICE_STATE_ASSOCIATION:
+	case CONNMAN_SERVICE_STATE_CONFIGURATION:
+	case CONNMAN_SERVICE_STATE_READY:
+	case CONNMAN_SERVICE_STATE_ONLINE:
+		break;
+	}
+
+	return false;
+}
+
 static bool is_connecting(struct connman_service *service)
 {
 	return is_connecting_state(service, service->state);
@@ -1504,6 +1524,29 @@ static bool is_connecting(struct connman_service *service)
 static bool is_connected(struct connman_service *service)
 {
 	return is_connected_state(service, service->state);
+}
+
+
+static int nameservers_changed_cb(void *user_data)
+{
+	struct connman_service *service = user_data;
+
+	DBG("service %p", service);
+
+	service->nameservers_timeout = 0;
+	if ((is_idle(service) && !service->nameservers) ||
+			is_connected(service))
+		dns_changed(service);
+
+	return FALSE;
+}
+
+static void nameservers_changed(struct connman_service *service)
+{
+	if (!service->nameservers_timeout)
+		service->nameservers_timeout = g_timeout_add_seconds(0,
+							nameservers_changed_cb,
+							service);
 }
 
 static bool nameserver_available(struct connman_service *service,
@@ -1585,7 +1628,7 @@ static int nameserver_add(struct connman_service *service,
 			enum connman_ipconfig_type type,
 			const char *nameserver)
 {
-	int index;
+	int index, ret;
 
 	if (!nameserver_available(service, type, nameserver))
 		return 0;
@@ -1594,7 +1637,11 @@ static int nameserver_add(struct connman_service *service,
 	if (index < 0)
 		return -ENXIO;
 
-	return connman_resolver_append(index, NULL, nameserver);
+	ret = connman_resolver_append(index, NULL, nameserver);
+	if (ret >= 0)
+		nameservers_changed(service);
+
+	return ret;
 }
 
 static int nameserver_add_all(struct connman_service *service,
@@ -1628,7 +1675,7 @@ static int nameserver_remove(struct connman_service *service,
 			enum connman_ipconfig_type type,
 			const char *nameserver)
 {
-	int index;
+	int index, ret;
 
 	if (!nameserver_available(service, type, nameserver))
 		return 0;
@@ -1637,7 +1684,11 @@ static int nameserver_remove(struct connman_service *service,
 	if (index < 0)
 		return -ENXIO;
 
-	return connman_resolver_remove(index, NULL, nameserver);
+	ret = connman_resolver_remove(index, NULL, nameserver);
+	if (ret >= 0)
+		nameservers_changed(service);
+
+	return ret;
 }
 
 static int nameserver_remove_all(struct connman_service *service,
@@ -1712,6 +1763,8 @@ int __connman_service_nameserver_append(struct connman_service *service,
 		service->nameservers = nameservers;
 		nameserver_add(service, CONNMAN_IPCONFIG_TYPE_ALL, nameserver);
 	}
+
+	nameservers_changed(service);
 
 	searchdomain_add_all(service);
 
@@ -6427,6 +6480,11 @@ static void service_free(gpointer user_data)
 
 	reply_pending(service, ENOENT);
 
+	if (service->nameservers_timeout) {
+		g_source_remove(service->nameservers_timeout);
+		dns_changed(service);
+	}
+
 	__connman_notifier_service_remove(service);
 	/* In our fork, service_schedule_removed() is called by
 	 * service_removed() when the service is being removed
@@ -7530,7 +7588,6 @@ static int service_indicate_state(struct connman_service *service)
 		update_modified(service);
 		service_save(service);
 
-		dns_changed(service);
 		domain_changed(service);
 		proxy_changed(service);
 
@@ -7564,7 +7621,6 @@ static int service_indicate_state(struct connman_service *service)
 
 		__connman_wpad_stop(service);
 
-		dns_changed(service);
 		domain_changed(service);
 		proxy_changed(service);
 
