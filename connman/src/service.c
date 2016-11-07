@@ -2476,8 +2476,6 @@ static void append_nameservers(DBusMessageIter *iter,
 						CONNMAN_IPCONFIG_TYPE_ALL,
 						servers[i]);
 
-		DBG("servers[%d] %s available %d", i, servers[i], available);
-
 		if (available)
 			dbus_message_iter_append_basic(iter,
 					DBUS_TYPE_STRING, &servers[i]);
@@ -6725,10 +6723,8 @@ static bool allow_property_changed(struct connman_service *service)
 		return false;
 
 	if (g_hash_table_lookup_extended(services_notify->add, service->path,
-					NULL, NULL)) {
-		DBG("no property updates for service %p", service);
+					NULL, NULL))
 		return false;
-	}
 
 	return true;
 }
