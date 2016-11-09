@@ -44,7 +44,6 @@ within embedded devices running the Linux operating system.
 %package devel
 Summary:    Development files for Connection Manager
 Group:      Development/Libraries
-Requires:   %{name} = %{version}-%{release}
 
 %description devel
 connman-devel contains development files for use with connman.
