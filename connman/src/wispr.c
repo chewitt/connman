@@ -1012,8 +1012,8 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 	int err = 0;
 	int i;
 
-	DBG("wispr/portal context %p", wp_context);
-	DBG("service %p", wp_context->service);
+	DBG("wispr/portal context %p service %p", wp_context,
+		wp_context->service);
 
 	interface = connman_service_get_interface(wp_context->service);
 	if (!interface)
