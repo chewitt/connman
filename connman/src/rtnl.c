@@ -1476,8 +1476,6 @@ static int process_response(guint32 seq)
 
 static void rtnl_message(void *buf, size_t len)
 {
-	DBG("buf %p len %zd", buf, len);
-
 	while (len > 0) {
 		struct nlmsghdr *hdr = buf;
 		struct nlmsgerr *err;
