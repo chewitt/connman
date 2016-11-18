@@ -61,7 +61,7 @@ struct {
 	{ "OpenVPN.CACert", "--ca", 1 },
 	{ "OpenVPN.Cert", "--cert", 1 },
 	{ "OpenVPN.Key", "--key", 1 },
-	{ "OpenVPN.MTU", "--mtu", 1 },
+	{ "OpenVPN.MTU", "--tun-mtu", 1 },
 	{ "OpenVPN.NSCertType", "--ns-cert-type", 1 },
 	{ "OpenVPN.Proto", "--proto", 1 },
 	{ "OpenVPN.Port", "--port", 1 },
