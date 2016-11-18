@@ -3,6 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2010-2014  BMW Car IT GmbH.
+ *  Copyright (C) 2016 Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -336,9 +337,14 @@ static int task_append_config_data(struct vpn_provider *provider,
 		if (!option)
 			continue;
 
-		/* If the AuthUserPass option is "-", provide the input via management interface */
-		if (!strcmp(ov_options[i].cm_opt, "OpenVPN.AuthUserPass") && !strcmp(option, "-"))
+		/*
+		 * If the AuthUserPass option is "-", provide the input
+		 * via management interface
+		 */
+		if (!strcmp(ov_options[i].cm_opt, "OpenVPN.AuthUserPass") &&
+						!strcmp(option, "-")) {
 			option = NULL;
+		}
 
 		if (connman_task_add_argument(task,
 				ov_options[i].ov_opt,
@@ -354,7 +360,8 @@ static void close_management_interface(struct ov_private_data *data)
 {
 	if (data->mgmt_path) {
 		if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
-			connman_warn("Unable to unlink management socket %s: %d", data->mgmt_path, errno);
+			connman_warn("Unable to unlink management socket %s: %d",
+						data->mgmt_path, errno);
 		}
 		g_free(data->mgmt_path);
 		data->mgmt_path = NULL;
@@ -424,7 +431,8 @@ static int run_connect(struct ov_private_data *data,
 		connman_task_add_argument(task, "--management", NULL);
 		connman_task_add_argument(task, data->mgmt_path, NULL);
 		connman_task_add_argument(task, "unix", NULL);
-		connman_task_add_argument(task, "--management-query-passwords", NULL);
+		connman_task_add_argument(task, "--management-query-passwords",
+								NULL);
 		connman_task_add_argument(task, "--auth-retry", "interact");
 	}
 
@@ -490,27 +498,27 @@ done:
 	return err;
 }
 
-static char *ov_quote_credential(char *pos, const char *credential)
+static char *ov_quote_credential(char *pos, const char *cred)
 {
 	*pos++ = '\"';
-	while (*credential != '\0') {
-		if (*credential == ' ' || *credential == '"' || *credential == '\\') {
+	while (*cred != '\0') {
+		if (*cred == ' ' || *cred == '"' || *cred == '\\') {
 			*pos++ = '\\';
 		}
-		*pos++ = *credential++;
+		*pos++ = *cred++;
 	}
 	*pos++ = '\"';
-
 	return pos;
 }
 
-static void ov_return_credentials(struct ov_private_data *data, const char *username, const char *password)
+static void ov_return_credentials(struct ov_private_data *data,
+				const char *username, const char *password)
 {
 	char *fmt[2] = { "username \"Auth\" ", "password \"Auth\" " };
 	char *reply, *pos;
 
 	pos = reply = g_malloc0((strlen(username) + strlen(password)) * 2
-        + strlen(fmt[0]) + strlen(fmt[1]) + 7);
+				+ strlen(fmt[0]) + strlen(fmt[1]) + 7);
 	pos += sprintf(pos, fmt[0], NULL);
 	pos = ov_quote_credential(pos, username);
 	pos += sprintf(pos, "\n");
@@ -518,7 +526,8 @@ static void ov_return_credentials(struct ov_private_data *data, const char *user
 	pos = ov_quote_credential(pos, password);
 	pos += sprintf(pos, "\n");
 
-	g_io_channel_write_chars(data->mgmt_channel, reply, strlen(reply), NULL, NULL);
+	g_io_channel_write_chars(data->mgmt_channel, reply, strlen(reply),
+								NULL, NULL);
 	g_io_channel_flush(data->mgmt_channel, NULL);
 
 	memset(reply, 0, strlen(reply));
@@ -690,19 +699,21 @@ static int request_credentials_input(struct ov_private_data *data)
 }
 
 
-static gboolean ov_management_handle_input(GIOChannel *source, GIOCondition condition, gpointer user_data)
+static gboolean ov_management_handle_input(GIOChannel *source,
+				GIOCondition condition, gpointer user_data)
 {
-	struct ov_private_data *data = (struct ov_private_data *)user_data;
+	struct ov_private_data *data = user_data;
 	char *str = NULL;
 	int err = 0;
 	gboolean close = FALSE;
 
 	if ((condition & G_IO_IN) &&
-            g_io_channel_read_line(source, &str, NULL, NULL, NULL) == G_IO_STATUS_NORMAL) {
+		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
+							G_IO_STATUS_NORMAL) {
 		str[strlen(str) - 1] = '\0';
 		connman_warn("openvpn request '%s'", str);
 
-		if (g_str_has_prefix(str, ">PASSWORD:Need 'Auth'") == TRUE) {
+		if (g_str_has_prefix(str, ">PASSWORD:Need 'Auth'")) {
 			/*
 			 * Request credentials from the user
 			 */
@@ -712,8 +723,8 @@ static gboolean ov_management_handle_input(GIOChannel *source, GIOCondition cond
 					VPN_PROVIDER_ERROR_LOGIN_FAILED);
 				close = TRUE;
 			}
-		}
-		if (g_str_has_prefix(str, ">PASSWORD:Verification Failed: 'Auth'") == TRUE) {
+		} else if (g_str_has_prefix(str,
+				">PASSWORD:Verification Failed: 'Auth'")) {
 			++data->failed_attempts;
 		}
 
@@ -732,7 +743,7 @@ static gboolean ov_management_handle_input(GIOChannel *source, GIOCondition cond
 
 static int ov_management_connect_timer_cb(gpointer user_data)
 {
-	struct ov_private_data *data = (struct ov_private_data *)user_data;
+	struct ov_private_data *data = user_data;
 	struct sockaddr_un remote;
 	int err = 0;
 
@@ -746,13 +757,17 @@ static int ov_management_connect_timer_cb(gpointer user_data)
 	if (data->mgmt_socket_fd != -1) {
 		memset(&remote, 0, sizeof(remote));
 		remote.sun_family = AF_UNIX;
-		g_strlcpy(remote.sun_path, data->mgmt_path, sizeof(remote.sun_path));
+		g_strlcpy(remote.sun_path, data->mgmt_path,
+						sizeof(remote.sun_path));
 
-		if ((err = connect(data->mgmt_socket_fd, (struct sockaddr *)&remote,
-				sizeof(remote))) == 0) {
-			data->mgmt_channel = g_io_channel_unix_new(data->mgmt_socket_fd);
+		err = connect(data->mgmt_socket_fd, (struct sockaddr *)&remote,
+							sizeof(remote));
+		if (err == 0) {
+			data->mgmt_channel =
+				g_io_channel_unix_new(data->mgmt_socket_fd);
 			data->mgmt_event_id = g_io_add_watch(data->mgmt_channel,
-				G_IO_IN | G_IO_ERR | G_IO_HUP, ov_management_handle_input, data);
+					G_IO_IN | G_IO_ERR | G_IO_HUP,
+					ov_management_handle_input, data);
 
 			connman_warn("Connected management socket");
 			data->mgmt_timer_id = 0;
@@ -806,17 +821,21 @@ static int ov_connect(struct vpn_provider *provider,
 
 	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
 	if (option && !strcmp(option, "-")) {
-		/* We need to use the management interface to provide the user credentials */
+		/*
+		 * We need to use the management interface to provide
+		 * the user credentials
+		 */
 
 		/* Set up the path for the management interface */
 		data->mgmt_path = g_strconcat("/tmp/connman-vpn-management-",
 			__vpn_provider_get_ident(provider), NULL);
 		if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
 			connman_warn("Unable to unlink management socket %s: %d",
-				data->mgmt_path, errno);
+						data->mgmt_path, errno);
 		}
 
-		data->mgmt_timer_id = g_timeout_add(200, ov_management_connect_timer_cb, data);
+		data->mgmt_timer_id = g_timeout_add(200,
+					ov_management_connect_timer_cb, data);
 	}
 
 	task_append_config_data(provider, task);
