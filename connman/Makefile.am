@@ -267,23 +267,23 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 endif
 
 noinst_PROGRAMS += unit/test-ippool \
-			unit/test-jolla-wakeup-timer unit/test-dnsproxy
+			unit/test-sailfish_wakeup_timer unit/test-dnsproxy
 
 unit_test_ippool_SOURCES = src/log.c src/dbus.c src/error.c \
 					src/ippool.c unit/test-ippool.c
 unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
-unit_test_jolla_wakeup_timer_SOURCES = unit/test-jolla-wakeup-timer.c \
+unit_test_sailfish_wakeup_timer_SOURCES = unit/test-sailfish_wakeup_timer.c \
 				src/log.c src/wakeup_timer.c \
-				plugins/jolla_wakeup_timer.c
-unit_test_jolla_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
+				plugins/sailfish_wakeup_timer.c
+unit_test_sailfish_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 
 unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c
 unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
 TESTS = unit/test-ippool \
-		unit/test-jolla-wakeup-timer unit/test-dnsproxy
+		unit/test-sailfish_wakeup_timer unit/test-dnsproxy
 
 if WISPR
 noinst_PROGRAMS += tools/wispr

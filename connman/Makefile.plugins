@@ -50,9 +50,9 @@ builtin_modules += jolla_gps
 builtin_sources += plugins/jolla-gps.c
 endif
 
-if JOLLA_WAKEUP_TIMER
-builtin_modules += jolla_wakeup_timer
-builtin_sources += plugins/jolla_wakeup_timer.c
+if SAILFISH_WAKEUP_TIMER
+builtin_modules += sailfish_wakeup_timer
+builtin_sources += plugins/sailfish_wakeup_timer.c
 endif
 
 if OFONO

@@ -1,8 +1,7 @@
 /*
- *
  *  Connection Manager
  *
- *  Copyright (C) 2014 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2014-2016 Jolla Ltd. All rights reserved.
  *  Contact: Hannu Mallat <hannu.mallat@jollamobile.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -13,11 +12,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -40,7 +34,7 @@
 
 static GMainLoop *main_loop = NULL;
 
-extern struct connman_plugin_desc __connman_builtin_jolla_wakeup_timer;
+extern struct connman_plugin_desc __connman_builtin_sailfish_wakeup_timer;
 
 extern int __connman_log_init(const char *program, const char *debug,
 			gboolean detach, gboolean backtrace,
@@ -104,7 +98,7 @@ static gboolean create_timeout_within_callback_cb(gpointer user_data)
 
 	for (i = 0; i < CHUNK && timeouts_scheduled < MAX_COUNT; i++) {
 		timeouts_scheduled++;
-		g_assert(connman_wakeup_timer
+		g_assert(connman_wakeup_timer_add_full
 				(G_PRIORITY_DEFAULT,
 					g_test_rand_int_range(0, MAX_DELAY),
 					create_timeout_within_callback_cb,
@@ -127,7 +121,7 @@ static gboolean create_timeout_within_callback_seed(gpointer user_data)
 
 	for (i = 0; i < CHUNK && timeouts_scheduled < MAX_COUNT; i++) {
 		timeouts_scheduled++;
-		g_assert(connman_wakeup_timer
+		g_assert(connman_wakeup_timer_add_full
 				(G_PRIORITY_DEFAULT,
 					g_test_rand_int_range(0, MAX_DELAY),
 					create_timeout_within_callback_cb,
@@ -144,16 +138,16 @@ static void create_timeout_within_callback(void)
 	timeouts_handled = 0;
 
 	main_loop = g_main_loop_new(NULL, FALSE);
-	__connman_log_init("test-jolla-wakeup-timer",
+	__connman_log_init("test-sailfish-wakeup-timer",
 				g_test_verbose() ? "*" : NULL,
 				FALSE, FALSE,
-				"test-jolla-wakeup-timer", "1");
-	g_assert((__connman_builtin_jolla_wakeup_timer.init)() == 0);
+				"test-sailfish-wakeup-timer", "1");
+	g_assert((__connman_builtin_sailfish_wakeup_timer.init)() == 0);
 
 	g_timeout_add(0, create_timeout_within_callback_seed, NULL);
 	g_main_loop_run(main_loop);
 
-	(__connman_builtin_jolla_wakeup_timer.exit)();
+	(__connman_builtin_sailfish_wakeup_timer.exit)();
 	g_main_loop_unref(main_loop);
 }
 

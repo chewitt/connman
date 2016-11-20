@@ -580,7 +580,7 @@ static gboolean send_probe_packet(gpointer dhcp_data)
 	} else
 		timeout = (ANNOUNCE_WAIT * 1000);
 
-	dhcp_client->timeout = connman_wakeup_timer(G_PRIORITY_HIGH,
+	dhcp_client->timeout = connman_wakeup_timer_add_full(G_PRIORITY_HIGH,
 						 timeout,
 						 ipv4ll_probe_timeout,
 						 dhcp_client,
@@ -608,7 +608,7 @@ static gboolean send_announce_packet(gpointer dhcp_data)
 
 	if (dhcp_client->state == IPV4LL_DEFEND) {
 		dhcp_client->timeout =
-			connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+			connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 						DEFEND_INTERVAL,
 						ipv4ll_defend_timeout,
 						dhcp_client,
@@ -616,7 +616,7 @@ static gboolean send_announce_packet(gpointer dhcp_data)
 		return TRUE;
 	} else
 		dhcp_client->timeout =
-			connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+			connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 						ANNOUNCE_INTERVAL,
 						ipv4ll_announce_timeout,
 						dhcp_client,
@@ -1395,7 +1395,7 @@ static void ipv4ll_start(GDHCPClient *dhcp_client)
 	timeout = ipv4ll_random_delay_ms(PROBE_WAIT);
 
 	dhcp_client->retry_times++;
-	dhcp_client->timeout = connman_wakeup_timer(G_PRIORITY_HIGH,
+	dhcp_client->timeout = connman_wakeup_timer_add_full(G_PRIORITY_HIGH,
 						timeout,
 						send_probe_packet,
 						dhcp_client,
@@ -1478,7 +1478,7 @@ static int ipv4ll_recv_arp_packet(GDHCPClient *dhcp_client)
 		/*restart whole state machine*/
 		dhcp_client->retry_times++;
 		dhcp_client->timeout =
-			connman_wakeup_timer(G_PRIORITY_HIGH,
+			connman_wakeup_timer_add_full(G_PRIORITY_HIGH,
 					ipv4ll_random_delay_ms(PROBE_WAIT),
 					send_probe_packet,
 					dhcp_client,
@@ -1627,7 +1627,8 @@ static void start_request(GDHCPClient *dhcp_client)
 
 	send_request(dhcp_client);
 
-	dhcp_client->timeout = connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+	dhcp_client->timeout =
+		connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 							REQUEST_TIMEOUT,
 							request_timeout,
 							dhcp_client,
@@ -1700,7 +1701,7 @@ static gboolean continue_rebound(gpointer user_data)
 	if (dhcp_client->T2 > 60) {
 		dhcp_get_random(&rand);
 		dhcp_client->t2_timeout =
-			connman_wakeup_timer(G_PRIORITY_HIGH,
+			connman_wakeup_timer_add_full(G_PRIORITY_HIGH,
 					dhcp_client->T2 * 1000 + (rand % 2000) - 1000,
 					continue_rebound,
 					dhcp_client,
@@ -1747,7 +1748,8 @@ static gboolean continue_renew (gpointer user_data)
 
 	if (dhcp_client->T1 > 60) {
 		dhcp_get_random(&rand);
-		dhcp_client->t1_timeout = connman_wakeup_timer(G_PRIORITY_HIGH,
+		dhcp_client->t1_timeout =
+			connman_wakeup_timer_add_full(G_PRIORITY_HIGH,
 				dhcp_client->T1 * 1000 + (rand % 2000) - 1000,
 				continue_renew,
 				dhcp_client,
@@ -1789,17 +1791,20 @@ static void start_bound(GDHCPClient *dhcp_client)
 	dhcp_client->T2 = dhcp_client->lease_seconds * 0.875;
 	dhcp_client->expire = dhcp_client->lease_seconds;
 
-	dhcp_client->t1_timeout = connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+	dhcp_client->t1_timeout =
+		connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 					dhcp_client->T1,
 					start_renew, dhcp_client,
 							NULL);
 
-	dhcp_client->t2_timeout = connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+	dhcp_client->t2_timeout =
+		connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 					dhcp_client->T2,
 					start_rebound, dhcp_client,
 							NULL);
 
-	dhcp_client->lease_timeout= connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+	dhcp_client->lease_timeout =
+		connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 					dhcp_client->expire,
 					start_expire, dhcp_client,
 							NULL);
@@ -2445,7 +2450,8 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 
 			remove_timeouts(dhcp_client);
 
-			dhcp_client->timeout = connman_wakeup_timer_seconds(
+			dhcp_client->timeout =
+				connman_wakeup_timer_add_seconds_full(
 							G_PRIORITY_HIGH, 3,
 							restart_dhcp_timeout,
 							dhcp_client,
@@ -2868,8 +2874,8 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 		dhcp_client->state = REBOOTING;
 		send_request(dhcp_client);
 
-		dhcp_client->timeout = connman_wakeup_timer_seconds(
-								G_PRIORITY_HIGH,
+		dhcp_client->timeout =
+			connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 								REQUEST_TIMEOUT,
 								reboot_timeout,
 								dhcp_client,
@@ -2878,7 +2884,8 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 	}
 	send_discover(dhcp_client, addr);
 
-	dhcp_client->timeout = connman_wakeup_timer_seconds(G_PRIORITY_HIGH,
+	dhcp_client->timeout =
+		connman_wakeup_timer_add_seconds_full(G_PRIORITY_HIGH,
 							DISCOVER_TIMEOUT,
 							discover_timeout,
 							dhcp_client,

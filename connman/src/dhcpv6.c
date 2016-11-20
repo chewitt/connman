@@ -758,11 +758,8 @@ static int dhcpv6_decline(GDHCPClient *dhcp_client, int ifindex,
 	data->ifindex = ifindex;
 	data->callback = callback;
 	data->dhcp_client = g_dhcp_client_ref(dhcp_client);
-	data->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					DEC_TIMEOUT,
-					decline_timeout,
-					data,
-					NULL);
+	data->timeout = connman_wakeup_timer_add(DEC_TIMEOUT,
+					decline_timeout, data);
 
 	g_dhcp_client_register_event(dhcp_client, G_DHCP_CLIENT_EVENT_DECLINE,
 				decline_cb, data);
@@ -1008,11 +1005,8 @@ static gboolean timeout_request_resend(gpointer user_data)
 
 	dhcp->RT = calc_delay(dhcp->RT, REQ_MAX_RT);
 	DBG("request resend RT timeout %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_request_resend,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_request_resend, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -1029,11 +1023,8 @@ static gboolean request_resend(gpointer user_data)
 
 	dhcp->RT = calc_delay(dhcp->RT, REQ_MAX_RT);
 	DBG("request resend RT timeout %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_request_resend,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_request_resend, dhcp);
 
 	dhcpv6_request(dhcp, true);
 
@@ -1055,11 +1046,8 @@ static void do_resend_request(struct connman_dhcpv6 *dhcp)
 
 	dhcp->RT = calc_delay(dhcp->RT, REQ_MAX_RT);
 	DBG("resending request after %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					request_resend,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					request_resend, dhcp);
 }
 
 static void re_cb(enum request_type req_type, GDHCPClient *dhcp_client,
@@ -1215,11 +1203,7 @@ static int check_restart(struct connman_dhcpv6 *dhcp)
 	if (current >= expired) {
 		DBG("expired by %d secs", (int)(current - expired));
 
-		connman_wakeup_timer(G_PRIORITY_DEFAULT,
-				0,
-				dhcpv6_restart,
-				dhcp,
-				NULL);
+		connman_wakeup_timer_add(0, dhcpv6_restart, dhcp);
 
 		return -ETIMEDOUT;
 	}
@@ -1238,11 +1222,8 @@ static gboolean timeout_rebind(gpointer user_data)
 
 	DBG("rebind RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_rebind,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_rebind, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -1262,11 +1243,8 @@ static gboolean start_rebind(gpointer user_data)
 
 	DBG("rebind initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_rebind,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_rebind, dhcp);
 
 	dhcpv6_rebind(dhcp);
 
@@ -1337,11 +1315,8 @@ static gboolean timeout_request(gpointer user_data)
 
 	dhcp->RT = calc_delay(dhcp->RT, REQ_MAX_RT);
 	DBG("request RT timeout %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_request,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_request, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -1420,11 +1395,8 @@ static gboolean timeout_renew(gpointer user_data)
 
 	DBG("renew RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_renew,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_renew, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -1441,11 +1413,8 @@ static gboolean start_renew(gpointer user_data)
 
 	DBG("renew initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_renew,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_renew, dhcp);
 
 	dhcpv6_renew(dhcp);
 
@@ -1499,32 +1468,23 @@ int __connman_dhcpv6_start_renew(struct connman_network *network,
 			DBG("start rebind immediately");
 
 			dhcp->timeout =
-				connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-							0,
-							start_rebind,
-							dhcp,
-							NULL);
+				connman_wakeup_timer_add_seconds(0,
+					start_rebind, dhcp);
 
 		} else if ((unsigned)current < (unsigned)started + T1) {
 			delta = started + T1 - current;
 			DBG("renew after %d secs", delta);
 
 			dhcp->timeout =
-				connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-							delta,
-							start_renew,
-							dhcp,
-							NULL);
+				connman_wakeup_timer_add_seconds(delta,
+					start_renew, dhcp);
 		} else {
 			delta = started + T2 - current;
 			DBG("rebind after %d secs", delta);
 
 			dhcp->timeout =
-				connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-							delta,
-							start_rebind,
-							dhcp,
-							NULL);
+				connman_wakeup_timer_add_seconds(delta,
+					start_rebind, dhcp);
 		}
 	}
 
@@ -1637,11 +1597,8 @@ static gboolean timeout_info_req(gpointer user_data)
 
 	DBG("info RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_info_req,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_info_req, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -1659,11 +1616,8 @@ static gboolean start_info_req(gpointer user_data)
 
 	DBG("info initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_info_req,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_info_req, dhcp);
 
 	dhcpv6_info_request(dhcp);
 
@@ -1704,11 +1658,8 @@ int __connman_dhcpv6_start_info(struct connman_network *network,
 	__connman_util_get_random(&rand);
 	delay = rand % 1000;
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					delay,
-					start_info_req,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(delay,
+					start_info_req, dhcp);
 
 	return 0;
 }
@@ -1732,11 +1683,8 @@ static void advertise_cb(GDHCPClient *dhcp_client, gpointer user_data)
 
 	dhcp->RT = initial_rt(REQ_TIMEOUT);
 	DBG("request initial RT timeout %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_request,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_request, dhcp);
 
 	dhcp->request_count = 1;
 
@@ -1772,11 +1720,8 @@ static gboolean timeout_solicitation(gpointer user_data)
 
 	DBG("solicit RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_solicitation,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_solicitation, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -1860,11 +1805,8 @@ static gboolean start_solicitation(gpointer user_data)
 
 	DBG("solicit initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_solicitation,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_solicitation, dhcp);
 
 	dhcpv6_solicitation(dhcp);
 
@@ -2237,11 +2179,7 @@ static int check_pd_restart(struct connman_dhcpv6 *dhcp)
 	if (current > expired) {
 		DBG("expired by %d secs", (int)(current - expired));
 
-		connman_wakeup_timer(G_PRIORITY_DEFAULT,
-				0,
-				dhcpv6_restart,
-				dhcp,
-				NULL);
+		connman_wakeup_timer_add(0, dhcpv6_restart, dhcp);
 
 		return -ETIMEDOUT;
 	}
@@ -2260,11 +2198,8 @@ static gboolean timeout_pd_rebind(gpointer user_data)
 
 	DBG("rebind RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_rebind,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_rebind, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -2284,11 +2219,8 @@ static gboolean start_pd_rebind(gpointer user_data)
 
 	DBG("rebind initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_rebind,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_rebind, dhcp);
 
 	dhcpv6_pd_rebind(dhcp);
 
@@ -2303,11 +2235,8 @@ static gboolean timeout_pd_rebind_confirm(gpointer user_data)
 
 	DBG("rebind with confirm RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_rebind_confirm,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_rebind_confirm, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -2343,16 +2272,10 @@ static gboolean start_pd_rebind_with_confirm(gpointer user_data)
 
 	DBG("rebind with confirm initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_rebind_confirm,
-					dhcp,
-					NULL);
-	dhcp->MRD = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					CNF_MAX_RD,
-					timeout_pd_max_confirm,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_rebind_confirm, dhcp);
+	dhcp->MRD = connman_wakeup_timer_add(CNF_MAX_RD,
+					timeout_pd_max_confirm, dhcp);
 
 	dhcpv6_pd_rebind(dhcp);
 
@@ -2370,11 +2293,8 @@ static gboolean timeout_pd_renew(gpointer user_data)
 
 	DBG("renew RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_renew,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_renew, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -2391,11 +2311,8 @@ static gboolean start_pd_renew(gpointer user_data)
 
 	DBG("renew initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_renew,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_renew, dhcp);
 
 	dhcpv6_pd_renew(dhcp);
 
@@ -2447,30 +2364,21 @@ int __connman_dhcpv6_start_pd_renew(struct connman_network *network,
 			DBG("rebind after %d secs", T2);
 
 			dhcp->timeout =
-				connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-							T2,
-							start_pd_rebind,
-							dhcp,
-							NULL);
+				connman_wakeup_timer_add_seconds(T2,
+						start_pd_rebind, dhcp);
 
 		} else if ((unsigned)current < (unsigned)started + T1) {
 			DBG("renew after %d secs", T1);
 
 			dhcp->timeout =
-				connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-							T1,
-							start_pd_renew,
-							dhcp,
-							NULL);
+				connman_wakeup_timer_add_seconds(T1,
+						start_pd_renew, dhcp);
 		} else {
 			DBG("rebind after %d secs", T2 - T1);
 
 			dhcp->timeout =
-				connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-							T2 - T1,
-							start_pd_rebind,
-							dhcp,
-							NULL);
+				connman_wakeup_timer_add_seconds(T2 - T1,
+						start_pd_rebind, dhcp);
 		}
 	}
 
@@ -2542,11 +2450,8 @@ static gboolean timeout_pd_request(gpointer user_data)
 
 	dhcp->RT = calc_delay(dhcp->RT, REQ_MAX_RT);
 	DBG("request RT timeout %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_request,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_request, dhcp);
 
 	g_dhcpv6_client_set_retransmit(dhcp->dhcp_client);
 
@@ -2622,11 +2527,8 @@ static void advertise_pd_cb(GDHCPClient *dhcp_client, gpointer user_data)
 
 	dhcp->RT = initial_rt(REQ_TIMEOUT);
 	DBG("request initial RT timeout %d msec", dhcp->RT);
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_pd_request,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_pd_request, dhcp);
 
 	dhcp->request_count = 1;
 
@@ -2683,11 +2585,8 @@ static gboolean start_pd_solicitation(gpointer user_data)
 
 	DBG("solicit initial RT timeout %d msec", dhcp->RT);
 
-	dhcp->timeout = connman_wakeup_timer(G_PRIORITY_DEFAULT,
-					dhcp->RT,
-					timeout_solicitation,
-					dhcp,
-					NULL);
+	dhcp->timeout = connman_wakeup_timer_add(dhcp->RT,
+					timeout_solicitation, dhcp);
 
 	dhcpv6_pd_solicitation(dhcp);
 

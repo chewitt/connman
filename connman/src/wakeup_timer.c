@@ -1,5 +1,4 @@
 /*
- *
  *  Connection Manager
  *
  *  Copyright (C) 2014 Jolla Ltd. All rights reserved.
@@ -13,20 +12,15 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 #include <errno.h>
 
 #include "wakeup_timer.h"
 
-static struct connman_wakeup_timer *timer = NULL;
+static const struct connman_wakeup_timer *timer = NULL;
 
-int connman_wakeup_timer_register(struct connman_wakeup_timer *t)
+int connman_wakeup_timer_register(const struct connman_wakeup_timer *t)
 {
 	if (!t)
 		return -EINVAL;
@@ -39,17 +33,25 @@ int connman_wakeup_timer_register(struct connman_wakeup_timer *t)
 	return 0;
 }
 
-void connman_wakeup_timer_unregister(struct connman_wakeup_timer *t)
+void connman_wakeup_timer_unregister(const struct connman_wakeup_timer *t)
 {
 	if (timer && t && g_strcmp0(timer->name, t->name) == 0)
 		timer = NULL;
 }
 
-int connman_wakeup_timer(gint priority,
-				guint interval,
+guint connman_wakeup_timer_add(guint interval,
 				GSourceFunc function,
-				gpointer data,
-				GDestroyNotify notify)
+				gpointer data)
+{
+	return connman_wakeup_timer_add_full(G_PRIORITY_DEFAULT,
+					interval, function, data, NULL);
+}
+
+guint connman_wakeup_timer_add_full(gint priority,
+					guint interval,
+					GSourceFunc function,
+					gpointer data,
+					GDestroyNotify notify)
 {
 	if (!timer)
 		return g_timeout_add_full(priority, interval, function,
@@ -59,7 +61,15 @@ int connman_wakeup_timer(gint priority,
 						notify);
 }
 
-int connman_wakeup_timer_seconds(gint priority,
+guint connman_wakeup_timer_add_seconds(guint interval,
+					GSourceFunc function,
+					gpointer data)
+{
+	return connman_wakeup_timer_add_seconds_full(G_PRIORITY_DEFAULT,
+					interval, function, data, NULL);
+}
+
+guint connman_wakeup_timer_add_seconds_full(gint priority,
 					guint interval,
 					GSourceFunc function,
 					gpointer data,

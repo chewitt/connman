@@ -260,11 +260,9 @@ static void no_lease_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	DBG("No lease available ipv4ll %d client %p", ipv4ll_running,
 		dhcp->ipv4ll_client);
 
-	dhcp->timeout = connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-						RATE_LIMIT_INTERVAL,
+	dhcp->timeout = connman_wakeup_timer_add_seconds(RATE_LIMIT_INTERVAL,
 						dhcp_retry_cb,
-						dhcp,
-						NULL);
+						dhcp);
 	if (ipv4ll_running)
 		return;
 
