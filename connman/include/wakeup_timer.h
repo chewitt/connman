@@ -1,8 +1,7 @@
 /*
- *
  *  Connection Manager
  *
- *  Copyright (C) 2014 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2014-2016 Jolla Ltd. All rights reserved.
  *  Contact: Hannu Mallat <hannu.mallat@jollamobile.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -13,11 +12,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 #ifndef __CONNMAN_WAKEUP_TIMER_H
@@ -25,9 +19,7 @@
 
 #include <glib.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+G_BEGIN_DECLS
 
 struct connman_wakeup_timer {
 	const char *name;
@@ -43,23 +35,26 @@ struct connman_wakeup_timer {
 					GDestroyNotify notify);
 };
 
-int connman_wakeup_timer_register(struct connman_wakeup_timer *wakeup_timer);
-void connman_wakeup_timer_unregister(struct connman_wakeup_timer *t);
+int connman_wakeup_timer_register(const struct connman_wakeup_timer *timer);
+void connman_wakeup_timer_unregister(const struct connman_wakeup_timer *timer);
 
-int connman_wakeup_timer(gint priority,
-				guint interval,
+guint connman_wakeup_timer_add(guint interval,
 				GSourceFunc function,
-				gpointer data,
-				GDestroyNotify notify);
-int connman_wakeup_timer_seconds(gint priority,
+				gpointer data);
+guint connman_wakeup_timer_add_full(gint priority,
+					guint interval,
+					GSourceFunc function,
+					gpointer data,
+					GDestroyNotify notify);
+guint connman_wakeup_timer_add_seconds(guint interval,
+					GSourceFunc function,
+					gpointer data);
+guint connman_wakeup_timer_add_seconds_full(gint priority,
 					guint interval,
 					GSourceFunc function,
 					gpointer data,
 					GDestroyNotify notify);
 
-
-#ifdef __cplusplus
-}
-#endif
+G_END_DECLS
 
 #endif /* __CONNMAN_WAKEUP_TIMER_H */

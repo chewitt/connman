@@ -110,7 +110,7 @@ Documentation for connman.
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
     --enable-jolla-gps=builtin \
-    --enable-jolla-wakeup-timer=builtin \
+    --enable-sailfish-wakeup-timer=builtin \
     --enable-client \
     --enable-test \
     --enable-debuglog \

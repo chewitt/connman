@@ -1,8 +1,7 @@
 /*
- *
  *  Connection Manager
  *
- *  Copyright (C) 2014 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2014-2016 Jolla Ltd. All rights reserved.
  *  Contact: Hannu Mallat <hannu.mallat@jollamobile.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -13,11 +12,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 /*
@@ -522,11 +516,13 @@ static guint wakeup_timeout_add_seconds(gint priority,
 				TRUE);
 }
 
-static struct connman_wakeup_timer timer = {
-	"Jolla wakeup timer", wakeup_timeout_add, wakeup_timeout_add_seconds
+static const struct connman_wakeup_timer sailfish_wakeup_timer = {
+	"Jolla wakeup timer",
+	wakeup_timeout_add,
+	wakeup_timeout_add_seconds
 };
 
-static int jolla_wakeup_timer_init(void)
+static int sailfish_wakeup_timer_init(void)
 {
 	struct timespec now;
 	int r;
@@ -549,7 +545,7 @@ static int jolla_wakeup_timer_init(void)
 	if (r < 0)
 		goto error;
 
-	r = connman_wakeup_timer_register(&timer);
+	r = connman_wakeup_timer_register(&sailfish_wakeup_timer);
 	if (r < 0)
 		goto error;
 
@@ -562,11 +558,11 @@ error:
 	return r;
 }
 
-static void jolla_wakeup_timer_exit(void)
+static void sailfish_wakeup_timer_exit(void)
 {
 	DBG("");
 
-	connman_wakeup_timer_unregister(&timer);
+	connman_wakeup_timer_unregister(&sailfish_wakeup_timer);
 
 	if (context.timeouts) {
 		g_list_free(context.timeouts);
@@ -578,6 +574,6 @@ static void jolla_wakeup_timer_exit(void)
 	context.initialized = FALSE;
 }
 
-CONNMAN_PLUGIN_DEFINE(jolla_wakeup_timer, "Jolla wakeup timer", VERSION,
+CONNMAN_PLUGIN_DEFINE(sailfish_wakeup_timer, "Sailfish wakeup timer", VERSION,
 			CONNMAN_PLUGIN_PRIORITY_DEFAULT,
-			jolla_wakeup_timer_init, jolla_wakeup_timer_exit)
+			sailfish_wakeup_timer_init, sailfish_wakeup_timer_exit)

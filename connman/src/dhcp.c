@@ -26,6 +26,11 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <net/ethernet.h>
+
+#ifndef IPV6_MIN_MTU
+#define IPV6_MIN_MTU 1280
+#endif
 
 #include <connman/ipconfig.h>
 #include <include/setting.h>
@@ -260,11 +265,12 @@ static void no_lease_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	DBG("No lease available ipv4ll %d client %p", ipv4ll_running,
 		dhcp->ipv4ll_client);
 
-	dhcp->timeout = connman_wakeup_timer_seconds(G_PRIORITY_DEFAULT,
-						RATE_LIMIT_INTERVAL,
+	if (dhcp->timeout > 0)
+		g_source_remove(dhcp->timeout);
+
+	dhcp->timeout = connman_wakeup_timer_add_seconds(RATE_LIMIT_INTERVAL,
 						dhcp_retry_cb,
-						dhcp,
-						NULL);
+						dhcp);
 	if (ipv4ll_running)
 		return;
 
@@ -336,6 +342,20 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 	if (!service) {
 		connman_error("Can not lookup service");
 		return false;
+	}
+
+	option = g_dhcp_client_get_option(dhcp_client, G_DHCP_MTU);
+	if (option && option->data) {
+		int mtu, index, err;
+
+		mtu = atoi(option->data);
+
+		if (mtu >= IPV6_MIN_MTU && mtu <= ETH_DATA_LEN) {
+			index = __connman_ipconfig_get_index(dhcp->ipconfig);
+			err = connman_inet_set_mtu(index, mtu);
+
+			DBG("MTU %d index %d err %d", mtu, index, err);
+		}
 	}
 
 	option = g_dhcp_client_get_option(dhcp_client, 252);
@@ -427,7 +447,7 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 	char *address, *netmask = NULL, *gateway = NULL;
 	const char *c_address, *c_gateway;
 	unsigned char prefixlen, c_prefixlen;
-	bool ip_change;
+	bool ip_change = false;
 
 	DBG("Lease available");
 
@@ -459,14 +479,21 @@ static void lease_available_cb(GDHCPClient *dhcp_client, gpointer user_data)
 
 	DBG("c_address %s", c_address);
 
-	if (g_strcmp0(address, c_address))
+	if (g_strcmp0(address, c_address)) {
 		ip_change = true;
-	else if (g_strcmp0(gateway, c_gateway))
+		if (c_address) {
+			/* Remove old ip address */
+			__connman_ipconfig_address_remove(dhcp->ipconfig);
+		}
+	}
+	if (g_strcmp0(gateway, c_gateway)) {
 		ip_change = true;
-	else if (prefixlen != c_prefixlen)
+		if (c_gateway) {
+			/* Remove gateway ip address */
+			__connman_ipconfig_gateway_remove(dhcp->ipconfig);
+		}
+	} else if (prefixlen != c_prefixlen)
 		ip_change = true;
-	else
-		ip_change = false;
 
 	__connman_ipconfig_set_method(dhcp->ipconfig,
 						CONNMAN_IPCONFIG_METHOD_DHCP);
@@ -555,10 +582,11 @@ static int dhcp_initialize(struct connman_dhcp *dhcp)
 		g_dhcp_client_set_request(dhcp_client, G_DHCP_DOMAIN_NAME);
 		g_dhcp_client_set_request(dhcp_client, G_DHCP_NTP_SERVER);
 		g_dhcp_client_set_request(dhcp_client, 252);
+		g_dhcp_client_set_request(dhcp_client, G_DHCP_MTU);
 	}
 
-	g_dhcp_client_set_request(dhcp_client, G_DHCP_SUBNET);
 	g_dhcp_client_set_request(dhcp_client, G_DHCP_ROUTER);
+	g_dhcp_client_set_request(dhcp_client, G_DHCP_SUBNET);
 
 	g_dhcp_client_register_event(dhcp_client,
 			G_DHCP_CLIENT_EVENT_LEASE_AVAILABLE,

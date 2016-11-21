@@ -1,3 +1,4 @@
+*~
 *.o
 *.a
 *.lo
@@ -60,6 +61,9 @@ tools/session-test
 tools/netlink-test
 unit/test-ippool
 unit/test-nat
+unit/test-nat
+unit/test-dnsproxy
+unit/test-sailfish_wakeup_timer
 
 doc/*.bak
 doc/*.stamp
