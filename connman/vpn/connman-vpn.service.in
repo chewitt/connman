@@ -4,7 +4,7 @@ Description=ConnMan VPN service
 [Service]
 Type=dbus
 BusName=net.connman.vpn
-ExecStart=@sbindir@/connman-vpnd -n -d
+ExecStart=@sbindir@/connman-vpnd -n
 StandardOutput=null
 
 [Install]
