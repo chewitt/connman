@@ -116,7 +116,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
-			src/wakeup_timer.c src/jolla-stats.c
+			src/wakeup_timer.c src/jolla-stats.c src/fsid.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -145,7 +145,7 @@ vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) \
 			vpn/vpn-ipconfig.c src/inet.c vpn/vpn-rtnl.c \
 			src/dbus.c src/storage.c src/ipaddress.c src/agent.c \
 			vpn/vpn-agent.c vpn/vpn-agent.h src/inotify.c \
-			vpn/vpn-config.c
+			vpn/vpn-config.c src/fsid.c
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ \
@@ -174,8 +174,7 @@ plugindir = $(libdir)/connman/plugins
 
 scriptdir = $(libdir)/connman/scripts
 
-storagedir = $(localstatedir)/lib/connman
-vpn_storagedir = $(localstatedir)/lib/connman-vpn
+storageroot = $(localstatedir)/lib
 
 configdir = ${sysconfdir}/connman
 
@@ -196,12 +195,9 @@ endif
 AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
-				-DSTATEDIR=\""$(statedir)"\" \
-				-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
-				-DSTORAGEDIR=\""$(storagedir)\"" \
-				-DVPN_STORAGEDIR=\""$(vpn_storagedir)\"" \
+				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 				-DCONFIGDIR=\""$(configdir)\""
 
 if VPN
@@ -217,8 +213,7 @@ src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-DSTATEDIR=\""$(statedir)"\" \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
-				-DSTORAGEDIR=\""$(storagedir)\"" \
-				-DVPN_STORAGEDIR=\""$(vpn_storagedir)\"" \
+				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 				-DCONFIGDIR=\""$(configdir)\"" \
 				-I$(builddir)/src
 
@@ -230,11 +225,10 @@ if VPN
 vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
 				$(builtin_vpn_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
-				-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
+				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-DPLUGINDIR=\""$(build_vpn_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
-				-DSTORAGEDIR=\""$(storagedir)\"" \
-				-DVPN_STORAGEDIR=\""$(vpn_storagedir)\"" \
+				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 				-DCONFIGDIR=\""$(configdir)\"" \
 				-I$(builddir)/vpn
 

@@ -250,7 +250,12 @@ int __connman_resolvfile_append(int index, const char *domain, const char *serve
 int __connman_resolvfile_remove(int index, const char *domain, const char *server);
 int __connman_resolver_redo_servers(int index);
 
-int __connman_storage_init(void);
+#define STORAGEDIR __connman_storage_dir()
+#define VPN_STORAGEDIR __connman_vpn_storage_dir()
+
+const char *__connman_storage_dir(void);
+const char *__connman_vpn_storage_dir(void);
+int __connman_storage_init(const char *storageroot);
 void __connman_storage_cleanup(void);
 GKeyFile *__connman_storage_open_global(void);
 GKeyFile *__connman_storage_load_global(void);
@@ -1053,3 +1058,5 @@ void __connman_machine_cleanup(void);
 int __connman_util_get_random(uint64_t *val);
 int __connman_util_init(void);
 void __connman_util_cleanup(void);
+
+void __connman_set_fsid(const char *fs_identity);

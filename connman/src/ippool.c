@@ -435,7 +435,7 @@ int __connman_ippool_init(void)
 	subnet_mask_24 = ntohl(inet_addr("255.255.255.0"));
 
 	starting_block = ntohl(inet_addr(connman_option_get_string(
-						"TetheringSubnetBlock")));
+						CONF_TETHERING_SUBNET_BLOCK)));
 
 	if (!is_private_address(starting_block))
 		starting_block = block_16_bits;
