@@ -5494,6 +5494,7 @@ static void disconnect_on_last_session(enum connman_service_type type)
 }
 
 static int active_sessions[MAX_CONNMAN_SERVICE_TYPES] = {};
+static int always_connect[MAX_CONNMAN_SERVICE_TYPES] = {};
 static int active_count = 0;
 
 void __connman_service_set_active_session(bool enable, GSList *list)
@@ -5602,6 +5603,15 @@ static GList *preferred_tech_list_get(void)
 
 static int service_indicate_state(struct connman_service *service);
 
+static void set_always_connecting_technologies()
+{
+	unsigned int *always_connected_techs =
+		connman_setting_get_uint_list("AlwaysConnectedTechnologies");
+	int i;
+	for (i = 0; always_connected_techs && always_connected_techs[i]; i++)
+		always_connect[always_connected_techs[i]] = 1;
+}
+
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
 				bool preferred)
@@ -5677,7 +5687,7 @@ static bool auto_connect_service(GList *services,
 		}
 
 		if (busy[service->type]) {
-			if (!active_count)
+			if (!active_count && !always_connect[service->type])
 				return true;
 
 			ignore[service->type] = true;
@@ -5714,7 +5724,9 @@ static bool auto_connect_service(GList *services,
 			continue;
 		}
 
-		if (autoconnecting && !active_sessions[service->type]) {
+		if (autoconnecting &&
+				!active_sessions[service->type] &&
+				!always_connect[service->type]) {
 			DBG("service %p type %s has no users", service,
 				__connman_service_type2string(service->type));
 			continue;
@@ -5734,7 +5746,7 @@ static bool auto_connect_service(GList *services,
 		 * WLAN network and a mobile data connection that is in idle
 		 * state  should be connected. 
 		 */
-		if (!active_count) {
+		if (!active_count && !always_connect[service->type]) {
 			if (!preferred || preferred_found) {
 				DBG("active_count %d preferred %s found %s",
 					active_count,
@@ -10330,6 +10342,8 @@ int __connman_service_init(void)
 						agent_driver.name);
 		return err;
 	}
+
+	set_always_connecting_technologies();
 
 	connection = connman_dbus_get_connection();
 
