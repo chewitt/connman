@@ -5612,6 +5612,34 @@ static void set_always_connecting_technologies()
 		always_connect[always_connected_techs[i]] = 1;
 }
 
+static bool autoconnect_no_session_active(struct connman_service *service)
+{
+	/*
+	 * Test active_count to see if there are no sessions set up and
+	 * stop autoconnecting, but continue connecting if the service
+	 * belongs to a technology which should always autoconnect.
+	 */
+	if (!active_count && !always_connect[service->type])
+		return true;
+
+	return false;
+}
+
+static bool autoconnect_already_connecting(struct connman_service *service,
+					   bool autoconnecting)
+{
+	/*
+	 * If another service is already connecting and this service type has
+	 * not been marked as always connecting, stop the connecting procedure.
+	 */
+	if (autoconnecting &&
+			!active_sessions[service->type] &&
+			!always_connect[service->type])
+		return true;
+
+	return false;
+}
+
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
 				bool preferred)
@@ -5687,7 +5715,8 @@ static bool auto_connect_service(GList *services,
 		}
 
 		if (busy[service->type]) {
-			if (!active_count && !always_connect[service->type])
+			if (autoconnect_no_session_active(service))
+
 				return true;
 
 			ignore[service->type] = true;
@@ -5724,9 +5753,7 @@ static bool auto_connect_service(GList *services,
 			continue;
 		}
 
-		if (autoconnecting &&
-				!active_sessions[service->type] &&
-				!always_connect[service->type]) {
+		if (autoconnect_already_connecting(service, autoconnecting)) {
 			DBG("service %p type %s has no users", service,
 				__connman_service_type2string(service->type));
 			continue;
@@ -5746,7 +5773,7 @@ static bool auto_connect_service(GList *services,
 		 * WLAN network and a mobile data connection that is in idle
 		 * state  should be connected. 
 		 */
-		if (!active_count && !always_connect[service->type]) {
+		if (autoconnect_no_session_active(service)) {
 			if (!preferred || preferred_found) {
 				DBG("active_count %d preferred %s found %s",
 					active_count,
