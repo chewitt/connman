@@ -32,7 +32,7 @@
 
 #include "session-test.h"
 
-#define POLICYDIR STORAGEDIR "/session_policy_local"
+#define POLICYDIR DEFAULT_STORAGE_ROOT "/connman/session_policy_local"
 
 enum test_session_state {
 	TEST_SESSION_STATE_0 = 0,

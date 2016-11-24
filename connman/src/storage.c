@@ -863,9 +863,26 @@ gchar **__connman_storage_get_providers(void)
 	return result;
 }
 
-int __connman_storage_init(void)
+static char *storage_dir = NULL;
+static char *vpn_storage_dir = NULL;
+
+const char *__connman_storage_dir(void)
 {
-	DBG("");
+	return storage_dir;
+}
+
+const char *__connman_vpn_storage_dir(void)
+{
+	return vpn_storage_dir;
+}
+
+int __connman_storage_init(const char *dir)
+{
+	const char *root = dir ? dir : DEFAULT_STORAGE_ROOT;
+
+	DBG("%s", root);
+	storage_dir = g_strconcat(root, "/connman", NULL);
+	vpn_storage_dir = g_strconcat(root, "/connman-vpn", NULL);
 	keyfile_init();
 	return 0;
 }
@@ -875,4 +892,6 @@ void __connman_storage_cleanup(void)
 	DBG("");
 	storage_dir_cleanup();
 	keyfile_cleanup();
+	g_free(storage_dir);
+	g_free(vpn_storage_dir);
 }

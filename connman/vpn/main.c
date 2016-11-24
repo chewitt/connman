@@ -52,9 +52,18 @@ static unsigned int __terminated = 0;
 
 static struct {
 	unsigned int timeout_inputreq;
+	char *fs_identity;
+	char *storage_root;
+	char *state_dir;
 } connman_vpn_settings  = {
 	.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT,
 };
+
+static char *get_string(GKeyFile *file, const char *group, const char *key)
+{
+	char *str = g_key_file_get_string(file, group, key, NULL);
+	return str ? g_strchomp(str) : NULL;
+}
 
 static GKeyFile *load_config(const char *file)
 {
@@ -81,6 +90,7 @@ static GKeyFile *load_config(const char *file)
 
 static void parse_config(GKeyFile *config, const char *file)
 {
+	const char *group = "General";
 	GError *error = NULL;
 	int timeout;
 
@@ -95,6 +105,13 @@ static void parse_config(GKeyFile *config, const char *file)
 		connman_vpn_settings.timeout_inputreq = timeout * 1000;
 
 	g_clear_error(&error);
+
+	connman_vpn_settings.fs_identity = get_string(config, group,
+						"FileSystemIdentity");
+	connman_vpn_settings.storage_root = get_string(config, group,
+						"StorageRoot");
+	connman_vpn_settings.state_dir = get_string(config, group,
+						"StateDirectory");
 }
 
 static int config_init(const char *file)
@@ -203,6 +220,13 @@ static bool parse_debug(const char *key, const char *value,
 	return true;
 }
 
+const char *__vpn_state_dir()
+{
+	return connman_vpn_settings.state_dir ?
+		connman_vpn_settings.state_dir :
+		DEFAULT_VPN_STATEDIR;
+}
+
 static GOptionEntry options[] = {
 	{ "config", 'c', 0, G_OPTION_ARG_STRING, &option_config,
 				"Load the specified configuration file "
@@ -267,20 +291,19 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	__connman_log_init(argv[0], option_debug, option_detach, false,
+			"Connection Manager VPN daemon", VERSION);
+
+	if (connman_vpn_settings.fs_identity)
+		__connman_set_fsid(connman_vpn_settings.fs_identity);
+
+	__connman_inotify_init();
+	__connman_storage_init(connman_vpn_settings.storage_root);
+
 	if (mkdir(VPN_STATEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
 				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
 		if (errno != EEXIST)
 			perror("Failed to create state directory");
-	}
-
-	/*
-	 * At some point the VPN stuff is migrated into VPN_STORAGEDIR
-	 * and this mkdir() call can be removed.
-	 */
-	if (mkdir(STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
-				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
-		if (errno != EEXIST)
-			perror("Failed to create storage directory");
 	}
 
 	if (mkdir(VPN_STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
@@ -309,12 +332,7 @@ int main(int argc, char *argv[])
 
 	g_dbus_set_disconnect_function(conn, disconnect_callback, NULL, NULL);
 
-	__connman_log_init(argv[0], option_debug, option_detach, false,
-			"Connection Manager VPN daemon", VERSION);
 	__connman_dbus_init(conn);
-
-	__connman_inotify_init();
-	__connman_storage_init();
 
 	if (!option_config)
 		config_init(CONFIGMAINFILE);
@@ -355,6 +373,10 @@ int main(int argc, char *argv[])
 	dbus_connection_unref(conn);
 
 	g_main_loop_unref(main_loop);
+
+	g_free(connman_vpn_settings.fs_identity);
+	g_free(connman_vpn_settings.storage_root);
+	g_free(connman_vpn_settings.state_dir);
 
 	g_free(option_debug);
 

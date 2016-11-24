@@ -84,6 +84,8 @@ static struct {
 	char *ipv4_status_url;
 	char *tethering_subnet_block;
 	char **dont_bring_down_at_startup;
+	char *storage_root;
+	char *fs_identity;
 	bool enable_6to4;
 } connman_settings  = {
 	.bg_scan = true,
@@ -98,10 +100,6 @@ static struct {
 	.single_tech = false,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
-	.ipv4_status_url = NULL,
-	.ipv6_status_url = NULL,
-	.tethering_subnet_block = NULL,
-	.dont_bring_down_at_startup = NULL,
 	.enable_6to4 = false,
 };
 
@@ -118,11 +116,8 @@ static struct {
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
 #define CONF_DONT_BRING_DOWN_AT_STARTUP "DontBringDownAtStartup"
-
-#define CONF_STATUS_URL_IPV6            "Ipv6StatusUrl"
-#define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
-
-#define CONF_TETHERING_SUBNET_BLOCK	"TetheringSubnetBlock"
+#define CONF_STORAGE_ROOT               "StorageRoot"
+#define CONF_FILE_SYSTEM_IDENTITY       "FileSystemIdentity"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 
 static const char *supported_options[] = {
@@ -138,6 +133,8 @@ static const char *supported_options[] = {
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
+	CONF_STORAGE_ROOT,
+	CONF_FILE_SYSTEM_IDENTITY,
 	CONF_STATUS_URL_IPV4,
 	CONF_STATUS_URL_IPV6,
 	CONF_TETHERING_SUBNET_BLOCK,
@@ -145,6 +142,11 @@ static const char *supported_options[] = {
 	CONF_ENABLE_6TO4,
 	NULL
 };
+
+/* Default values */
+#define CONF_STATUS_URL_IPV4_DEF "http://ipv4.connman.net/online/status.html"
+#define CONF_STATUS_URL_IPV6_DEF "http://ipv6.connman.net/online/status.html"
+#define CONF_TETHERING_SUBNET_BLOCK_DEF "192.168.0.0"
 
 static GKeyFile *load_config(const char *file)
 {
@@ -265,10 +267,8 @@ static void parse_config(GKeyFile *config)
 	char **interfaces;
 	char **str_list;
 	char **tethering;
-	char *ipv4url;
-	char *ipv6url;
-	char *tetheringsubnet;
-	char **dontbringdown;
+	char *str;
+	const char *group = "General";
 	struct in_addr ip;
 	gsize len;
 	int timeout;
@@ -381,14 +381,6 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	dontbringdown = __connman_config_get_string_list(config, "General",
-			CONF_DONT_BRING_DOWN_AT_STARTUP, &len, &error);
-
-	if (!error)
-		connman_settings.dont_bring_down_at_startup = dontbringdown;
-
-	g_clear_error(&error);
-
 	boolean = __connman_config_get_bool(config, "General",
 					CONF_PERSISTENT_TETHERING_MODE,
 					&error);
@@ -397,31 +389,30 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	ipv4url = __connman_config_get_string(config, "General", CONF_STATUS_URL_IPV4, &error);
-	if (!error)
-		connman_settings.ipv4_status_url = ipv4url;
-	else
-		connman_settings.ipv4_status_url = "http://ipv4.connman.net/online/status.html";
+	connman_settings.dont_bring_down_at_startup =
+		__connman_config_get_string_list(config, group,
+			CONF_DONT_BRING_DOWN_AT_STARTUP, &len, NULL);
 
-        g_clear_error(&error);
+	connman_settings.storage_root = __connman_config_get_string(config,
+				group, CONF_STORAGE_ROOT, NULL);
 
-	ipv6url = __connman_config_get_string(config, "General", CONF_STATUS_URL_IPV6, &error);
-	if (!error)
-		connman_settings.ipv6_status_url = ipv6url;
-	else
-		connman_settings.ipv6_status_url = "http://ipv6.connman.net/online/status.html";
+	connman_settings.fs_identity = __connman_config_get_string(config,
+				group, CONF_FILE_SYSTEM_IDENTITY, NULL);
 
-	g_clear_error(&error);
+	connman_settings.ipv4_status_url = __connman_config_get_string(config,
+					group, CONF_STATUS_URL_IPV4, &error);
 
-	tetheringsubnet = __connman_config_get_string(config, "General",
-						CONF_TETHERING_SUBNET_BLOCK, &error);
-	if (!error && inet_pton(AF_INET, tetheringsubnet, &ip) == 1 &&
-		(ntohl(ip.s_addr) & 0xff) == 0)
-		connman_settings.tethering_subnet_block = tetheringsubnet;
-	else
-		connman_settings.tethering_subnet_block = "192.168.0.0";
+	connman_settings.ipv6_status_url = __connman_config_get_string(config,
+					group, CONF_STATUS_URL_IPV6, NULL);
 
-	g_clear_error(&error);
+	str = __connman_config_get_string(config, group,
+					CONF_TETHERING_SUBNET_BLOCK, NULL);
+	if (str && inet_pton(AF_INET, str, &ip) == 1 &&
+					(ntohl(ip.s_addr) & 0xff) == 0) {
+		connman_settings.tethering_subnet_block = str;
+	} else {
+		g_free(str);
+	}
 
 	boolean = __connman_config_get_bool(config, "General",
 					CONF_ENABLE_6TO4, &error);
@@ -593,14 +584,20 @@ const char *connman_option_get_string(const char *key)
 			return option_wifi;
 	}
 
-	if (g_str_equal(key, CONF_STATUS_URL_IPV4) == TRUE) {
- 		return connman_settings.ipv4_status_url;
-	}
-	if (g_str_equal(key, CONF_STATUS_URL_IPV6) == TRUE)
-		return connman_settings.ipv6_status_url;
+	if (g_str_equal(key, CONF_STATUS_URL_IPV4))
+		return connman_settings.ipv4_status_url ?
+			connman_settings.ipv4_status_url :
+			CONF_STATUS_URL_IPV4_DEF;
 
-	if (g_str_equal(key, CONF_TETHERING_SUBNET_BLOCK) == TRUE)
-		return connman_settings.tethering_subnet_block;
+	if (g_str_equal(key, CONF_STATUS_URL_IPV6))
+		return connman_settings.ipv6_status_url ?
+			connman_settings.ipv6_status_url :
+			CONF_STATUS_URL_IPV6_DEF;
+
+	if (g_str_equal(key, CONF_TETHERING_SUBNET_BLOCK))
+		return connman_settings.tethering_subnet_block ?
+			connman_settings.tethering_subnet_block :
+			CONF_TETHERING_SUBNET_BLOCK_DEF;
 
 	return NULL;
 }
@@ -700,13 +697,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (mkdir(STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
-				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
-		if (errno != EEXIST)
-			perror("Failed to create storage directory");
-	}
-
-	umask(0077);
+	gweb_log_hook = __connman_dbg;
+	gresolv_log_hook = __connman_dbg;
+	gdhcp_client_log_hook = __connman_dbg;
+	gdhcp_server_log_hook = __connman_dbg;
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 
@@ -729,20 +723,26 @@ int main(int argc, char *argv[])
 	__connman_log_init(argv[0], option_debug, option_detach,
 			option_backtrace, "Connection Manager", VERSION);
 
-	gweb_log_hook = __connman_dbg;
-	gresolv_log_hook = __connman_dbg;
-	gdhcp_client_log_hook = __connman_dbg;
-	gdhcp_server_log_hook = __connman_dbg;
-
 	__connman_dbus_init(conn);
-
-	__connman_inotify_init();
-	__connman_storage_init();
 
 	if (!option_config)
 		config_init(CONFIGMAINFILE);
 	else
 		config_init(option_config);
+
+	if (connman_settings.fs_identity)
+		__connman_set_fsid(connman_settings.fs_identity);
+
+	__connman_inotify_init();
+	__connman_storage_init(connman_settings.storage_root);
+
+	if (mkdir(STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
+				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
+		if (errno != EEXIST)
+			perror("Failed to create storage directory");
+	}
+
+	umask(0077);
 
 	__connman_util_init();
 	__connman_technology_init();
@@ -861,6 +861,11 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.blacklisted_interfaces);
 	g_strfreev(connman_settings.tethering_technologies);
 	g_strfreev(connman_settings.dont_bring_down_at_startup);
+	g_free(connman_settings.ipv6_status_url);
+	g_free(connman_settings.ipv4_status_url);
+	g_free(connman_settings.tethering_subnet_block);
+	g_free(connman_settings.storage_root);
+	g_free(connman_settings.fs_identity);
 
 	g_free(option_debug);
 	g_free(option_wifi);
