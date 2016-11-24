@@ -629,7 +629,7 @@ static int run_connect(struct vpn_provider *provider,
 			vpn_provider_connect_cb_t cb, void *user_data,
 			const char *username, const char *password)
 {
-	char *l2tp_name, *pppd_name;
+	char *l2tp_name, *ctrl_name, *pppd_name;
 	int l2tp_fd, pppd_fd;
 	int err;
 
@@ -652,12 +652,24 @@ static int run_connect(struct vpn_provider *provider,
 		goto done;
 	}
 
+	ctrl_name = g_strconcat(VPN_STATEDIR, "/connman-xl2tpd-control", NULL);
+
+	if (mkfifo(ctrl_name, S_IRUSR|S_IWUSR) != 0 && errno != EEXIST) {
+		connman_error("Error creating xl2tp control pipe");
+		g_free(l2tp_name);
+		g_free(ctrl_name);
+		close(l2tp_fd);
+		err = -EIO;
+		goto done;
+	}
+
 	pppd_name = g_strconcat(VPN_STATEDIR, "/connman-ppp-option.conf", NULL);
 
 	pppd_fd = open(pppd_name, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
 	if (pppd_fd < 0) {
 		connman_error("Error writing pppd config");
 		g_free(l2tp_name);
+		g_free(ctrl_name);
 		g_free(pppd_name);
 		close(l2tp_fd);
 		err = -EIO;
@@ -669,9 +681,11 @@ static int run_connect(struct vpn_provider *provider,
 	write_pppd_option(provider, pppd_fd);
 
 	connman_task_add_argument(task, "-D", NULL);
+	connman_task_add_argument(task, "-C", ctrl_name);
 	connman_task_add_argument(task, "-c", l2tp_name);
 
 	g_free(l2tp_name);
+	g_free(ctrl_name);
 	g_free(pppd_name);
 	close(l2tp_fd);
 	close(pppd_fd);
