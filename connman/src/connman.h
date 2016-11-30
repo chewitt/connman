@@ -261,6 +261,9 @@ int __connman_inet_add_ipv6_neigbour_proxy(int index, const char *ipv6_address,
 int __connman_inet_del_ipv6_neigbour_proxy(int index, const char *ipv6_address,
 						unsigned char ipv6_prefixlen);
 
+bool __connman_inet_isrootnfs_device(const char *devname);
+char **__connman_inet_get_pnp_nameservers(const char *pnp_file);
+
 #include <connman/resolver.h>
 
 int __connman_resolver_init(gboolean dnsproxy);
