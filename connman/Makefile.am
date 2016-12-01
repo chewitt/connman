@@ -263,11 +263,17 @@ endif
 noinst_PROGRAMS += unit/test-ippool \
 			unit/test-sailfish_wakeup_timer unit/test-dnsproxy
 
+if TEST_COVERAGE
+COVERAGE_OPT = --coverage
+endif
+
 unit_test_ippool_SOURCES = src/log.c src/dbus.c src/error.c \
 					src/ippool.c unit/test-ippool.c
+unit_test_ippool_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sailfish_wakeup_timer_SOURCES = unit/test-sailfish_wakeup_timer.c \
 				src/log.c src/wakeup_timer.c \
 				plugins/sailfish_wakeup_timer.c

@@ -65,6 +65,11 @@ unit/test-nat
 unit/test-dnsproxy
 unit/test-sailfish_wakeup_timer
 
+*.gcda
+*.gcno
+unit/html
+unit/*.gcov
+
 doc/*.bak
 doc/*.stamp
 doc/connman.*

@@ -417,6 +417,11 @@ if (test "${need_glibutil}" = "yes"); then
 	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi
 
+AC_ARG_ENABLE(test-coverage,
+	AC_HELP_STRING([--enable-test-coverage], [enable test code coverage]),
+		[enable_test_coverage=${enableval}], [enable_test_coverage="no"])
+AM_CONDITIONAL(TEST_COVERAGE, test "${enable_test_coverage}" != "no")
+
 AC_ARG_ENABLE(tools, AC_HELP_STRING([--disable-tools],
 				[disable testing tools]),
 					[enable_tools=${enableval}])
