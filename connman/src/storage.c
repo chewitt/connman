@@ -485,6 +485,8 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 	gsize length = 0;
 	GError *error = NULL;
 	int ret = 0;
+	const mode_t perm = STORAGE_FILE_MODE;
+	const mode_t old_mask = umask(~perm & 0777);
 
 	data = g_key_file_to_data(keyfile, &length, NULL);
 
@@ -494,7 +496,17 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 		ret = -EIO;
 	}
 
+	if (ret == 0) {
+		ret = chmod(pathname, perm);
+		if (ret < 0) {
+			ret = -errno;
+			DBG("Failed to set permissions 0%o on %s: %s",
+					perm, pathname, strerror(errno));
+		}
+	}
+
 	g_free(data);
+	umask(old_mask);
 
 	return ret;
 }
@@ -672,7 +684,7 @@ int __connman_storage_save_service(GKeyFile *keyfile, const char *service_id)
 
 	/* If the dir doesn't exist, create it */
 	if (!g_file_test(dirname, G_FILE_TEST_IS_DIR)) {
-		if (mkdir(dirname, MODE) < 0) {
+		if (mkdir(dirname, STORAGE_DIR_MODE) < 0) {
 			if (errno != EEXIST) {
 				g_free(dirname);
 				return -errno;
@@ -865,6 +877,8 @@ gchar **__connman_storage_get_providers(void)
 
 static char *storage_dir = NULL;
 static char *vpn_storage_dir = NULL;
+static int storage_dir_mode;
+static int storage_file_mode;
 
 const char *__connman_storage_dir(void)
 {
@@ -876,13 +890,25 @@ const char *__connman_vpn_storage_dir(void)
 	return vpn_storage_dir;
 }
 
-int __connman_storage_init(const char *dir)
+int __connman_storage_dir_mode(void)
+{
+	return storage_dir_mode;
+}
+
+int __connman_storage_file_mode(void)
+{
+	return storage_file_mode;
+}
+
+int __connman_storage_init(const char *dir, int dir_mode, int file_mode)
 {
 	const char *root = dir ? dir : DEFAULT_STORAGE_ROOT;
 
-	DBG("%s", root);
+	DBG("%s 0%o 0%o", root, dir_mode, file_mode);
 	storage_dir = g_strconcat(root, "/connman", NULL);
 	vpn_storage_dir = g_strconcat(root, "/connman-vpn", NULL);
+	storage_dir_mode = dir_mode;
+	storage_file_mode = file_mode;
 	keyfile_init();
 	return 0;
 }
