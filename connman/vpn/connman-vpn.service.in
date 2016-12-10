@@ -1,5 +1,7 @@
 [Unit]
 Description=ConnMan VPN service
+Requires=dbus.socket oneshot-root.service
+After=dbus.socket oneshot-root.service
 
 [Service]
 Type=dbus

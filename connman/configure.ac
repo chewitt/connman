@@ -89,8 +89,8 @@ AC_ARG_ENABLE(systemd,
 			CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
 fi])
 
-CONNMAN_SERVICE_REQUIRES="dbus.socket oneshot-root"
-CONNMAN_SERVICE_AFTER="dbus.socket oneshot-root"
+CONNMAN_SERVICE_REQUIRES="dbus.socket oneshot-root.service"
+CONNMAN_SERVICE_AFTER="dbus.socket oneshot-root.service"
 
 AC_SUBST(CONNMAN_SERVICE_REQUIRES)
 AC_SUBST(CONNMAN_SERVICE_AFTER)
