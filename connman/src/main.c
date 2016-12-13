@@ -48,6 +48,9 @@
 
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
+#define DEFAULT_STORAGE_DIR_PERMISSIONS (0700)
+#define DEFAULT_STORAGE_FILE_PERMISSIONS (0600)
+#define DEFAULT_UMASK (0077)
 
 #define MAINFILE "main.conf"
 #define CONFIGMAINFILE CONFIGDIR "/" MAINFILE
@@ -84,8 +87,11 @@ static struct {
 	char *ipv4_status_url;
 	char *tethering_subnet_block;
 	char **dont_bring_down_at_startup;
-	char *storage_root;
 	char *fs_identity;
+	char *storage_root;
+	mode_t storage_dir_permissions;
+	mode_t storage_file_permissions;
+	mode_t umask;
 	bool enable_6to4;
 } connman_settings  = {
 	.bg_scan = true,
@@ -100,6 +106,9 @@ static struct {
 	.single_tech = false,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
+	.storage_dir_permissions = DEFAULT_STORAGE_DIR_PERMISSIONS,
+	.storage_file_permissions = DEFAULT_STORAGE_FILE_PERMISSIONS,
+	.umask = DEFAULT_UMASK,
 	.enable_6to4 = false,
 };
 
@@ -116,8 +125,11 @@ static struct {
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
 #define CONF_DONT_BRING_DOWN_AT_STARTUP "DontBringDownAtStartup"
-#define CONF_STORAGE_ROOT               "StorageRoot"
 #define CONF_FILE_SYSTEM_IDENTITY       "FileSystemIdentity"
+#define CONF_STORAGE_ROOT               "StorageRoot"
+#define CONF_STORAGE_DIR_PERMISSIONS    "StorageDirPermissions"
+#define CONF_STORAGE_FILE_PERMISSIONS   "StorageFilePermissions"
+#define CONF_UMASK                      "Umask"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 
 static const char *supported_options[] = {
@@ -133,8 +145,11 @@ static const char *supported_options[] = {
 	CONF_SINGLE_TECH,
 	CONF_TETHERING_TECHNOLOGIES,
 	CONF_PERSISTENT_TETHERING_MODE,
-	CONF_STORAGE_ROOT,
 	CONF_FILE_SYSTEM_IDENTITY,
+	CONF_STORAGE_ROOT,
+	CONF_STORAGE_DIR_PERMISSIONS,
+	CONF_STORAGE_FILE_PERMISSIONS,
+	CONF_UMASK,
 	CONF_STATUS_URL_IPV4,
 	CONF_STATUS_URL_IPV6,
 	CONF_TETHERING_SUBNET_BLOCK,
@@ -257,6 +272,29 @@ static void check_config(GKeyFile *config)
 	}
 
 	g_strfreev(keys);
+}
+
+static gboolean parse_perm(GKeyFile *config, const char *group,
+					const char *key, mode_t *perm)
+{
+	gboolean ok = FALSE;
+	char *str = g_key_file_get_string(config, group, key, NULL);
+	if (str) {
+		/*
+		 * Some people are thinking that # is a comment
+		 * anywhere on the line, not just at the beginning
+		 */
+		unsigned long val;
+		char *comment = strchr(str, '#');
+		if (comment) *comment = 0;
+		val = strtoul(g_strstrip(str), NULL, 0);
+		if (val > 0 && !(val & ~0777UL)) {
+			*perm = (mode_t)val;
+			ok = TRUE;
+		}
+		g_free(str);
+	}
+	return ok;
 }
 
 static void parse_config(GKeyFile *config)
@@ -398,6 +436,14 @@ static void parse_config(GKeyFile *config)
 
 	connman_settings.fs_identity = __connman_config_get_string(config,
 				group, CONF_FILE_SYSTEM_IDENTITY, NULL);
+
+	parse_perm(config, group, CONF_STORAGE_DIR_PERMISSIONS,
+				&connman_settings.storage_dir_permissions);
+
+	parse_perm(config, group, CONF_STORAGE_FILE_PERMISSIONS,
+				&connman_settings.storage_file_permissions);
+
+	parse_perm(config, group, CONF_UMASK, &connman_settings.umask);
 
 	connman_settings.ipv4_status_url = __connman_config_get_string(config,
 					group, CONF_STATUS_URL_IPV4, &error);
@@ -734,15 +780,17 @@ int main(int argc, char *argv[])
 		__connman_set_fsid(connman_settings.fs_identity);
 
 	__connman_inotify_init();
-	__connman_storage_init(connman_settings.storage_root);
+	__connman_storage_init(connman_settings.storage_root,
+				connman_settings.storage_dir_permissions,
+				connman_settings.storage_file_permissions);
 
-	if (mkdir(STORAGEDIR, S_IRUSR | S_IWUSR | S_IXUSR |
-				S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) < 0) {
+	if (g_mkdir_with_parents(STORAGEDIR,
+			connman_settings.storage_dir_permissions) < 0) {
 		if (errno != EEXIST)
 			perror("Failed to create storage directory");
 	}
 
-	umask(0077);
+	umask(connman_settings.umask);
 
 	__connman_util_init();
 	__connman_technology_init();
