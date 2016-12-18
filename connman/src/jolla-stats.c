@@ -75,6 +75,8 @@ struct connman_stats {
 	struct connman_stats_data last;
 };
 
+#define llu_(x) ((long long unsigned int)(x))
+
 static void stats_save(struct connman_stats *stats);
 
 static gboolean stats_file_read(const char *path,
@@ -89,11 +91,11 @@ static gboolean stats_file_read(const char *path,
 			if (buf.version == STATS_FILE_VERSION) {
 				DBG("%s", path);
 				DBG("[RX] %llu packets %llu bytes",
-					buf.total.rx_packets,
-					buf.total.rx_bytes);
+					llu_(buf.total.rx_packets),
+					llu_(buf.total.rx_bytes));
 				DBG("[TX] %llu packets %llu bytes",
-					buf.total.tx_packets,
-					buf.total.tx_bytes);
+					llu_(buf.total.tx_packets),
+					llu_(buf.total.tx_bytes));
 				*contents = buf;
 				ok = true;
 			} else {
@@ -169,10 +171,12 @@ static void stats_delete_obsolete_files(const char* dir)
 }
 
 /** Creates file if it doesn't exist */
-struct connman_stats *__connman_stats_new(const char *ident, gboolean roaming)
+struct connman_stats *__connman_stats_new(struct connman_service *service,
+							gboolean roaming)
 {
 	int err = 0;
 	struct connman_stats *stats = NULL;
+	const char *ident = connman_service_get_identifier(service);
 	char *dir = g_strconcat(STORAGEDIR, "/", ident, NULL);
 
 	DBG("%s %d", ident, roaming);
@@ -199,23 +203,54 @@ struct connman_stats *__connman_stats_new(const char *ident, gboolean roaming)
 }
 
 /** Returns NULL if the file doesn't exist */
-struct connman_stats *__connman_stats_new_existing(const char *identifier,
-							gboolean roaming)
+struct connman_stats *__connman_stats_new_existing(
+			struct connman_service *service, gboolean roaming)
 {
 	struct connman_stats *stats = NULL;
 	struct stats_file_contents contents;
 	const char* file = stats_file(roaming);
-	char *dir = g_strconcat(STORAGEDIR, "/", identifier, NULL);
+	const char *ident = connman_service_get_identifier(service);
+	char *dir = g_strconcat(STORAGEDIR, "/", ident, NULL);
 	char *path = g_strconcat(dir, "/", file, NULL);
 
 	if (stats_file_read(path, &contents)) {
-		stats = stats_new(identifier, dir, file);
+		stats = stats_new(ident, dir, file);
 		stats->contents = contents;
 	}
 
 	g_free(dir);
 	g_free(path);
 	return stats;
+}
+
+static char *stats_path(const char *identifier, gboolean roaming)
+{
+	return g_strconcat(STORAGEDIR, G_DIR_SEPARATOR_S, identifier,
+			G_DIR_SEPARATOR_S, stats_file(roaming), NULL);
+}
+
+void __connman_stats_read(const char *identifier, gboolean roaming,
+				struct connman_stats_data *data)
+{
+	char *path = stats_path(identifier, roaming);
+	struct stats_file_contents contents;
+	if (stats_file_read(path, &contents)) {
+		*data = contents.total;
+	} else {
+		memset(data, 0, sizeof(*data));
+	}
+	g_free(path);
+}
+
+void __connman_stats_clear(const char *identifier, gboolean roaming)
+{
+	char *path = stats_path(identifier, roaming);
+	struct stats_file_contents contents;
+	if (stats_file_read(path, &contents)) {
+		memset(&contents.total, 0, sizeof(contents.total));
+		stats_file_write(path, &contents);
+	}
+	g_free(path);
 }
 
 void __connman_stats_free(struct connman_stats *stats)
@@ -302,7 +337,7 @@ static inline void stats_fix32(uint64_t *newval, uint64_t oldval)
 		if (G_UNLIKELY(*newval < oldval))
 			*newval += (1ull << STATS_UPPER_BITS_SHIFT);
 
-		DBG("0x%08llx -> 0x%llx", prev, *newval);
+		DBG("0x%08llx -> 0x%llx", llu_(prev), llu_(*newval));
 	}
 }
 
@@ -366,9 +401,9 @@ void __connman_stats_update(struct connman_stats *stats,
 	}
 
 	DBG("%s [RX] %llu packets %llu bytes", stats->name,
-					data->rx_packets, data->rx_bytes);
+			llu_(data->rx_packets), llu_(data->rx_bytes));
 	DBG("%s [TX] %llu packets %llu bytes", stats->name,
-					data->tx_packets, data->tx_bytes);
+			llu_(data->tx_packets), llu_(data->tx_bytes));
 
 	/* Update the total counters */
 	total->rx_packets += (data->rx_packets - last->rx_packets);
@@ -420,9 +455,9 @@ void __connman_stats_rebase(struct connman_stats *stats,
 
 		if (data) {
 			DBG("%s [RX] %llu packets %llu bytes", stats->name,
-					data->rx_packets, data->rx_bytes);
+				llu_(data->rx_packets), llu_(data->rx_bytes));
 			DBG("%s [TX] %llu packets %llu bytes", stats->name,
-					data->tx_packets, data->tx_bytes);
+				llu_(data->tx_packets), llu_(data->tx_bytes));
 			*last = *data;
 		} else {
 			DBG("%s", stats->name);
@@ -439,7 +474,7 @@ void __connman_stats_get(struct connman_stats *stats,
 	if (stats) {
 		*data = stats->contents.total;
 	} else {
-		bzero(data, sizeof(*data));
+		memset(data, 0, sizeof(*data));
 	}
 }
 

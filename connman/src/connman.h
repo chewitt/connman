@@ -855,7 +855,6 @@ void __connman_service_notify(struct connman_service *service,
 
 int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
-void __connman_service_counter_send_initial(const char *counter);
 void __connman_service_counter_reset_all(const char *type);
 
 #include <connman/peer.h>
@@ -938,10 +937,10 @@ void __connman_session_cleanup(void);
 int __connman_stats_init(void);
 void __connman_stats_cleanup(void);
 
-struct connman_stats *__connman_stats_new(const char *identifier,
+struct connman_stats *__connman_stats_new(struct connman_service *service,
 							gboolean roaming);
-struct connman_stats *__connman_stats_new_existing(const char *identifier,
-							gboolean roaming);
+struct connman_stats *__connman_stats_new_existing(
+			struct connman_service *service, gboolean roaming);
 void __connman_stats_free(struct connman_stats *stats);
 void __connman_stats_reset(struct connman_stats *stats);
 void __connman_stats_update(struct connman_stats *stats,
@@ -950,6 +949,9 @@ void __connman_stats_rebase(struct connman_stats *stats,
 				const struct connman_stats_data *data);
 void __connman_stats_get(struct connman_stats *stats,
 				struct connman_stats_data *data);
+void __connman_stats_read(const char *identifier, gboolean roaming,
+				struct connman_stats_data *data);
+void __connman_stats_clear(const char *identifier, gboolean roaming);
 
 int __connman_iptables_dump(int type,
 				const char *table_name);
