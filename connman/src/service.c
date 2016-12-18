@@ -267,15 +267,15 @@ struct connman_service {
 	bool wps;
 	int online_check_count_ipv4;
 	int online_check_count_ipv6;
+	guint online_check_timer_ipv4;
+	guint online_check_timer_ipv6;
+	guint connect_retry_timer;
+	guint connect_retry_timeout;
 	bool do_split_routing;
 	bool new_service;
 	bool hidden_service;
 	char *config_file;
 	char *config_entry;
-	guint online_check_timer_ipv4;
-	guint online_check_timer_ipv6;
-	guint connect_retry_timer;
-	guint connect_retry_timeout;
 	GBytes *ssid;
 	struct connman_access_service_policy *policy;
 	char *access;
@@ -3936,8 +3936,6 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	DBusMessage *reply;
 	DBusMessageIter array, dict;
 
-	//DBG("service %p", service);
-
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
 		return NULL;
@@ -4564,9 +4562,9 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		if (is_connecting(service) || is_connected(service)) {
 			__connman_network_enable_ipconfig(service->network,
-							service->ipconfig_ipv4);
+								service->ipconfig_ipv4);
 			__connman_network_enable_ipconfig(service->network,
-							service->ipconfig_ipv6);
+								service->ipconfig_ipv6);
 		}
 
 		service_save(service);
@@ -5792,7 +5790,7 @@ static void service_append_added_foreach(gpointer data, gpointer user_data)
 		append_struct(service, iter);
 		g_hash_table_remove(services_notify->add, service->path);
 	} else {
-        //DBG("changed %s", service->path);
+		DBG("changed %s", service->path);
 
 		append_struct_service(iter, NULL, service);
 	}
