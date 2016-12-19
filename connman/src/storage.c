@@ -745,25 +745,29 @@ static bool remove_dir(const char *service_id)
 
 bool __connman_storage_remove_service(const char *service_id)
 {
-	bool removed;
+	bool removed = false;
+	gchar *pathname = g_strdup_printf("%s/%s", STORAGEDIR, service_id);
+	DIR *dir = opendir(pathname);
 
-	/* Remove service configuration file */
-	removed = remove_file(service_id, SETTINGS);
-	if (!removed)
-		return false;
+	if (dir) {
+		struct dirent *d;
 
-	/* Remove the statistics file also */
-	removed = remove_file(service_id, "data");
-	if (!removed)
-		return false;
+		/* Remove the configuration files */
+		while ((d = readdir(dir)) != NULL) {
+			if (strcmp(d->d_name, ".") != 0 &&
+					strcmp(d->d_name, "..") != 0) {
+				remove_file(service_id, d->d_name);
+			}
+		}
 
-	removed = remove_dir(service_id);
-	if (!removed)
-		return false;
+		closedir(dir);
+		remove_dir(service_id);
+		DBG("Removed service dir %s", pathname);
+		removed = true;
+	}
 
-	DBG("Removed service dir %s/%s", STORAGEDIR, service_id);
-
-	return true;
+	g_free(pathname);
+	return removed;
 }
 
 GKeyFile *__connman_storage_load_provider(const char *identifier)

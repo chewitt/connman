@@ -2680,64 +2680,6 @@ bool __connman_service_is_hidden(struct connman_service *service)
 	return service->hidden;
 }
 
-bool connman_service_remove(const char *identifier)
-{
-    gchar **services = connman_storage_get_services();
-    if (services == NULL)
-        return false;
-
-    int i;
-    for (i = 0; services[i] != NULL; ++i) {
-        if (g_strcmp0(services[i], identifier) != 0)
-            continue;
-
-        GSequenceIter *iter = g_hash_table_lookup(service_hash, identifier);
-        if (iter != NULL) {
-            struct connman_service *service = g_sequence_get(iter);
-            if (service != NULL) {
-                __connman_service_remove(service);
-                return true;
-            }
-        }
-
-        struct connman_service *service = connman_service_create();
-        if (service == NULL)
-            return false;
-
-        service->identifier = g_strdup(services[i]);
-        service->path = g_strdup_printf("%s/service/%s", CONNMAN_PATH, service->identifier);
-        service->type = __connman_service_string2type(service->identifier);
-
-        service_load(service);
-
-        g_free(service->passphrase);
-        service->passphrase = NULL;
-
-        g_free(service->identity);
-        service->identity = NULL;
-
-        g_free(service->agent_identity);
-        service->agent_identity = NULL;
-
-        g_free(service->eap);
-        service->eap = NULL;
-
-        service->favorite = false;
-
-	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
-
-        service_save(service);
-
-        service_destroy(service);
-        g_strfreev(services);
-
-        return true;
-    }
-
-    g_strfreev(services);
-    return false;
-}
-
 bool
 __connman_service_is_split_routing(struct connman_service *service)
 {

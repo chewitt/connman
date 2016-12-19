@@ -237,16 +237,33 @@ static DBusMessage *get_saved_services(DBusConnection *conn,
 	return reply;
 }
 
-static DBusMessage *remove_saved_service(DBusConnection *conn, DBusMessage *msg, void *data)
+static gboolean remove_service(const char *ident)
 {
-    gchar *identifier;
- 
-    dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &identifier, DBUS_TYPE_INVALID);
+	struct connman_service *service;
 
-    if (!connman_service_remove(identifier))
-        return __connman_error_failed(msg, EINVAL);
+	if (!ident)
+		return FALSE;
 
-    return dbus_message_new_method_return(msg);
+	service = __connman_service_lookup_from_ident(ident);
+
+	if (service != NULL)
+		return __connman_service_remove(service);
+
+	return __connman_storage_remove_service(ident);
+}
+
+static DBusMessage *remove_saved_service(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	gchar *ident;
+
+	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &ident,
+							DBUS_TYPE_INVALID);
+
+	if (!remove_service(ident))
+		return __connman_error_failed(msg, EINVAL);
+
+	return dbus_message_new_method_return(msg);
 }
 
 static DBusMessage *connect_provider(DBusConnection *conn,
