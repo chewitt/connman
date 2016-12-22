@@ -35,6 +35,7 @@ BuildRequires:  pkgconfig(libgofonoext)
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libmce-glib)
+BuildRequires:  ppp-devel
 
 %description
 Connection Manager provides a daemon for managing Internet connections
