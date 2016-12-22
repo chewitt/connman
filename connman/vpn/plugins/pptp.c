@@ -72,11 +72,13 @@ struct {
 	{ "PPPD.RefuseMSCHAP", "refuse-mschap", NULL, OPT_BOOL },
 	{ "PPPD.RefuseMSCHAP2", "refuse-mschapv2", NULL, OPT_BOOL },
 	{ "PPPD.NoBSDComp", "nobsdcomp", NULL, OPT_BOOL },
+	{ "PPPD.NoPcomp", "nopcomp", NULL, OPT_BOOL },
+	{ "PPPD.UseAccomp", "noaccomp", NULL, OPT_BOOL },
 	{ "PPPD.NoDeflate", "nodeflate", NULL, OPT_BOOL },
-	{ "PPPD.RequirMPPE", "require-mppe", NULL, OPT_BOOL },
-	{ "PPPD.RequirMPPE40", "require-mppe-40", NULL, OPT_BOOL },
-	{ "PPPD.RequirMPPE128", "require-mppe-128", NULL, OPT_BOOL },
-	{ "PPPD.RequirMPPEStateful", "mppe-stateful", NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPE", "require-mppe", NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPE40", "require-mppe-40", NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPE128", "require-mppe-128", NULL, OPT_BOOL },
+	{ "PPPD.ReqMPPEStateful", "mppe-stateful", NULL, OPT_BOOL },
 	{ "PPPD.NoVJ", "novj", NULL, OPT_BOOL },
 };
 

@@ -107,6 +107,8 @@ Documentation for connman.
     --enable-openconnect=builtin \
     --enable-openvpn=builtin \
     --enable-vpnc=builtin \
+    --enable-l2tp=builtin \
+    --enable-pptp=builtin \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
     --enable-jolla-gps=builtin \
