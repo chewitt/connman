@@ -382,7 +382,6 @@ static int write_pppd_option(struct vpn_provider *provider, int fd)
 	const char *opt_s;
 
 	l2tp_write_option(fd, "nodetach", NULL);
-	l2tp_write_option(fd, "lock", NULL);
 	l2tp_write_option(fd, "usepeerdns", NULL);
 	l2tp_write_option(fd, "noipdefault", NULL);
 	l2tp_write_option(fd, "noauth", NULL);
@@ -409,6 +408,10 @@ static int write_pppd_option(struct vpn_provider *provider, int fd)
 			l2tp_write_bool_option(fd,
 				pppd_options[i].pppd_opt, opt_s);
 	}
+
+	opt_s = vpn_provider_get_string(provider, "L2TP.Password");
+	if (opt_s)
+		l2tp_write_option(fd, "password", opt_s);
 
 	l2tp_write_option(fd, "plugin",
 				SCRIPTDIR "/libppp-plugin.so");
