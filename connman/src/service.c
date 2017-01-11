@@ -1957,6 +1957,18 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 		nameserver_del_routes(index, service->nameservers, type);
 }
 
+static void address_updated(struct connman_service *service,
+			enum connman_ipconfig_type type)
+{
+	if (is_connected_state(service, service->state) &&
+			service == connman_service_get_default()) {
+		nameserver_remove_all(service, type);
+		nameserver_add_all(service, type);
+
+		__connman_timeserver_sync(service);
+	}
+}
+
 static struct connman_stats *stats_get_roaming(struct connman_service *service,
 							gboolean create)
 {
@@ -4653,6 +4665,7 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 			*new_state = service->state_ipv6;
 
 		settings_changed(service, new_ipconfig);
+		address_updated(service, new_method);
 
 		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
@@ -8819,6 +8832,7 @@ static void service_ip_bound(struct connman_ipconfig *ipconfig,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 
 	settings_changed(service, ipconfig);
+	address_updated(service, type);
 }
 
 static void service_ip_release(struct connman_ipconfig *ipconfig,
