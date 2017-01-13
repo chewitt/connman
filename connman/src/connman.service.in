@@ -10,7 +10,7 @@ Type=notify
 Restart=always
 EnvironmentFile=-/etc/tracing/connman/connman.tracing
 EnvironmentFile=-/etc/sysconfig/connman
-ExecStart=@sbindir@/connmand -n --nobacktrace --systemd $TRACING $SYSCONF_ARGS
+ExecStart=@sbindir@/connmand -n -W nl80211 --nobacktrace --systemd $TRACING $SYSCONF_ARGS
 StandardOutput=null
 
 [Install]
