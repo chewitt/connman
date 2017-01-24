@@ -1406,8 +1406,7 @@ static guint do_request(GWeb *web, const char *url,
 			g_free(session->address);
 			session->address = g_strdup(host);
 		}
-		session->address_action = g_timeout_add(0, already_resolved,
-							session);
+		session->address_action = g_idle_add(already_resolved, session);
 	} else {
 		int err = call_dns_route_func(session, true);
 		if (err && err != -EALREADY)
