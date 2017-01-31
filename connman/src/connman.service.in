@@ -2,8 +2,8 @@
 Description=Connection service
 Requires=@CONNMAN_SERVICE_REQUIRES@
 After=@CONNMAN_SERVICE_AFTER@ network-pre.target
-Before=network.target remote-fs-pre.target
-Wants=network.target remote-fs-pre.target
+Before=network.target
+Wants=network.target
 
 [Service]
 Type=notify

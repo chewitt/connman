@@ -1,6 +1,6 @@
 Name:       connman
 Summary:    Connection Manager
-Version:    1.30
+Version:    1.31
 Release:    1
 Group:      Communications/ConnMan
 License:    GPLv2
@@ -41,6 +41,13 @@ BuildRequires:  ppp-devel
 Connection Manager provides a daemon for managing Internet connections
 within embedded devices running the Linux operating system.
 
+%package wait-online
+Summary:    Wait for network to be configured by ConnMan
+Group:      Communications/ConnMan
+
+%description wait-online
+A systemd service that can be enabled so that the system waits until a
+network connection is established before reaching network-online.target.
 
 %package devel
 Summary:    Development files for Connection Manager
@@ -163,14 +170,19 @@ systemctl daemon-reload || :
 %files
 %defattr(-,root,root,-)
 %doc AUTHORS COPYING ChangeLog README
-%{_sbindir}/*
-%{_bindir}/*
+%{_sbindir}/connman-vpnd
+%{_sbindir}/connmand
+%{_bindir}/connmanctl
 %{_libdir}/%{name}/scripts/*
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{_lib}/systemd/system/connman.service
 /%{_lib}/systemd/system/network.target.wants/connman.service
 /%{_lib}/systemd/system/connman-vpn.service
 /%{_datadir}/dbus-1/system-services/net.connman.vpn.service
+
+%files wait-online
+%{_sbindir}/connmand-wait-online
+/%{_lib}/systemd/system/connman-wait-online.service
 
 %files devel
 %defattr(-,root,root,-)
@@ -197,6 +209,9 @@ systemctl daemon-reload || :
 %files docs
 %defattr(-,root,root,-)
 %{_datadir}/man/man5/connman.conf.5.gz
+%{_datadir}/man/man5/connman-service.config.5.gz
+%{_datadir}/man/man5/connman-vpn-provider.config.5.gz
+%{_datadir}/man/man5/connman-vpn.conf.5.gz
 %{_datadir}/man/man8/connman.8.gz
+%{_datadir}/man/man8/connman-vpn.8.gz
 %{_datadir}/man/man1/connmanctl.1.gz
-

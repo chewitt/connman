@@ -1254,13 +1254,12 @@ static gboolean rs_timeout_cb(gpointer user_data)
 	return FALSE;
 }
 
-static int icmpv6_recv(int fd, gpointer user_data)
+static int icmpv6_recv(int fd, struct xs_cb_data *data)
 {
 	struct msghdr mhdr;
 	struct iovec iov;
 	unsigned char chdr[CMSG_BUF_LEN];
 	unsigned char buf[1540];
-	struct xs_cb_data *data = user_data;
 	struct nd_router_advert *hdr;
 	struct sockaddr_in6 saddr;
 	ssize_t len;
@@ -1282,7 +1281,6 @@ static int icmpv6_recv(int fd, gpointer user_data)
 	len = recvmsg(fd, &mhdr, 0);
 	if (len < 0) {
 		cb(NULL, 0, data->user_data);
-		xs_cleanup(data);
 		return -errno;
 	}
 
@@ -1293,7 +1291,6 @@ static int icmpv6_recv(int fd, gpointer user_data)
 		return 0;
 
 	cb(hdr, len, data->user_data);
-	xs_cleanup(data);
 
 	return len;
 }
@@ -1301,17 +1298,21 @@ static int icmpv6_recv(int fd, gpointer user_data)
 static gboolean icmpv6_event(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
 	int fd, ret;
+	struct xs_cb_data *xs_data = data;
 
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		return FALSE;
+		goto remove;
 
 	fd = g_io_channel_unix_get_fd(chan);
-	ret = icmpv6_recv(fd, data);
+	ret = icmpv6_recv(fd, xs_data);
 	if (ret == 0)
 		return TRUE;
 
+remove:
+	xs_data->watch_id = 0;
+	xs_cleanup(xs_data);
 	return FALSE;
 }
 
@@ -1669,13 +1670,12 @@ void __connman_inet_ipv6_stop_recv_rs(void *context)
 	xs_cleanup(context);
 }
 
-static int icmpv6_rs_recv(int fd, gpointer user_data)
+static int icmpv6_rs_recv(int fd, struct xs_cb_data *data)
 {
 	struct msghdr mhdr;
 	struct iovec iov;
 	unsigned char chdr[CMSG_BUF_LEN];
 	unsigned char buf[1540];
-	struct xs_cb_data *data = user_data;
 	struct nd_router_solicit *hdr;
 	struct sockaddr_in6 saddr;
 	ssize_t len;
@@ -1714,17 +1714,20 @@ static gboolean icmpv6_rs_event(GIOChannel *chan, GIOCondition cond,
 								gpointer data)
 {
 	int fd, ret;
+	struct xs_cb_data *xs_data = data;
 
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		return FALSE;
+		goto remove;
 
 	fd = g_io_channel_unix_get_fd(chan);
-	ret = icmpv6_rs_recv(fd, data);
+	ret = icmpv6_rs_recv(fd, xs_data);
 	if (ret == 0)
 		return TRUE;
 
+remove:
+	xs_data->watch_id = 0;
 	return FALSE;
 }
 
@@ -1799,13 +1802,12 @@ static gboolean ns_timeout_cb(gpointer user_data)
 	return FALSE;
 }
 
-static int icmpv6_nd_recv(int fd, gpointer user_data)
+static int icmpv6_nd_recv(int fd, struct xs_cb_data *data)
 {
 	struct msghdr mhdr;
 	struct iovec iov;
 	unsigned char chdr[CMSG_BUF_LEN];
 	unsigned char buf[1540];
-	struct xs_cb_data *data = user_data;
 	struct nd_neighbor_advert *hdr;
 	struct sockaddr_in6 saddr;
 	ssize_t len;
@@ -1827,7 +1829,6 @@ static int icmpv6_nd_recv(int fd, gpointer user_data)
 	len = recvmsg(fd, &mhdr, 0);
 	if (len < 0) {
 		cb(NULL, 0, &data->addr.sin6_addr, data->user_data);
-		xs_cleanup(data);
 		return -errno;
 	}
 
@@ -1846,7 +1847,6 @@ static int icmpv6_nd_recv(int fd, gpointer user_data)
 		return 0;
 
 	cb(hdr, len, &data->addr.sin6_addr, data->user_data);
-	xs_cleanup(data);
 
 	return len;
 }
@@ -1855,17 +1855,21 @@ static gboolean icmpv6_nd_event(GIOChannel *chan, GIOCondition cond,
 								gpointer data)
 {
 	int fd, ret;
+	struct xs_cb_data *xs_data = data;
 
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		return FALSE;
+		goto remove;
 
 	fd = g_io_channel_unix_get_fd(chan);
-	ret = icmpv6_nd_recv(fd, data);
+	ret = icmpv6_nd_recv(fd, xs_data);
 	if (ret == 0)
 		return TRUE;
 
+remove:
+	xs_data->watch_id = 0;
+	xs_cleanup(xs_data);
 	return FALSE;
 }
 
@@ -2190,9 +2194,8 @@ static gboolean inet_rtnl_timeout_cb(gpointer user_data)
 	return FALSE;
 }
 
-static int inet_rtnl_recv(GIOChannel *chan, gpointer user_data)
+static int inet_rtnl_recv(GIOChannel *chan, struct inet_rtnl_cb_data *rtnl_data)
 {
-	struct inet_rtnl_cb_data *rtnl_data = user_data;
 	struct __connman_inet_rtnl_handle *rth = rtnl_data->rtnl;
 	struct nlmsghdr *h = NULL;
 	struct sockaddr_nl nladdr;
@@ -2274,16 +2277,20 @@ static gboolean inet_rtnl_event(GIOChannel *chan, GIOCondition cond,
 							gpointer user_data)
 {
 	int ret;
+	struct inet_rtnl_cb_data *rtnl_data = user_data;
 
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		return FALSE;
+		goto remove;
 
-	ret = inet_rtnl_recv(chan, user_data);
+	ret = inet_rtnl_recv(chan, rtnl_data);
 	if (ret != 0)
 		return TRUE;
 
+remove:
+	rtnl_data->watch_id = 0;
+	inet_rtnl_cleanup(rtnl_data);
 	return FALSE;
 }
 
@@ -2312,7 +2319,6 @@ int __connman_inet_rtnl_talk(struct __connman_inet_rtnl_handle *rtnl,
 						inet_rtnl_timeout_cb, data);
 
 		data->channel = g_io_channel_unix_new(rtnl->fd);
-		g_io_channel_set_close_on_unref(data->channel, TRUE);
 
 		g_io_channel_set_encoding(data->channel, NULL, NULL);
 		g_io_channel_set_buffered(data->channel, FALSE);
