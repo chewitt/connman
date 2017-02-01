@@ -1303,17 +1303,16 @@ static gboolean icmpv6_event(GIOChannel *chan, GIOCondition cond, gpointer data)
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		goto remove;
+		goto cleanup;
 
 	fd = g_io_channel_unix_get_fd(chan);
 	ret = icmpv6_recv(fd, xs_data);
 	if (ret == 0)
 		return TRUE;
 
-remove:
-	xs_data->watch_id = 0;
+cleanup:
 	xs_cleanup(xs_data);
-	return FALSE;
+	return TRUE;
 }
 
 /* Adapted from RFC 1071 "C" Implementation Example */
@@ -1719,14 +1718,14 @@ static gboolean icmpv6_rs_event(GIOChannel *chan, GIOCondition cond,
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		goto remove;
+		goto cleanup;
 
 	fd = g_io_channel_unix_get_fd(chan);
 	ret = icmpv6_rs_recv(fd, xs_data);
 	if (ret == 0)
 		return TRUE;
 
-remove:
+cleanup:
 	xs_data->watch_id = 0;
 	return FALSE;
 }
@@ -1860,17 +1859,16 @@ static gboolean icmpv6_nd_event(GIOChannel *chan, GIOCondition cond,
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		goto remove;
+		goto cleanup;
 
 	fd = g_io_channel_unix_get_fd(chan);
 	ret = icmpv6_nd_recv(fd, xs_data);
 	if (ret == 0)
 		return TRUE;
 
-remove:
-	xs_data->watch_id = 0;
+cleanup:
 	xs_cleanup(xs_data);
-	return FALSE;
+	return TRUE;
 }
 
 int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
@@ -2282,16 +2280,15 @@ static gboolean inet_rtnl_event(GIOChannel *chan, GIOCondition cond,
 	DBG("");
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
-		goto remove;
+		goto cleanup;
 
 	ret = inet_rtnl_recv(chan, rtnl_data);
-	if (ret != 0)
+	if (ret == 0)
 		return TRUE;
 
-remove:
-	rtnl_data->watch_id = 0;
+cleanup:
 	inet_rtnl_cleanup(rtnl_data);
-	return FALSE;
+	return TRUE;
 }
 
 int __connman_inet_rtnl_talk(struct __connman_inet_rtnl_handle *rtnl,
