@@ -284,7 +284,8 @@ static int init_firewall_session(struct connman_session *session)
 	err =__connman_firewall_enable_marking(fw,
 					session->policy_config->id_type,
 					session->policy_config->id,
-					addr, session->mark);
+					NULL,
+					session->mark);
 	if (err < 0) {
 		__connman_firewall_destroy(fw);
 		return err;
