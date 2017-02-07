@@ -407,12 +407,12 @@ if (test "${enable_sailfish_signalpoll}" = "yes"); then
 	need_glibutil=yes
 fi
 
-AC_ARG_ENABLE(jolla-ofono,
-	AC_HELP_STRING([--enable-jolla-ofono], [enable Jolla ofono plugin]),
-			[enable_jolla_ofono=${enableval}], [enable_jolla_ofono="no"])
-AM_CONDITIONAL(JOLLA_OFONO, test "${enable_jolla_ofono}" != "no")
+AC_ARG_ENABLE(sailfish-ofono,
+	AC_HELP_STRING([--enable-sailfish-ofono], [enable Sailfish oFono plugin]),
+		[enable_sailfish_ofono=${enableval}], [enable_sailfish_ofono="no"])
+AM_CONDITIONAL(SAILFISH_OFONO, test "${enable_sailfish_ofono}" != "no")
 
-if (test "${enable_jolla_ofono}" = "yes"); then
+if (test "${enable_sailfish_ofono}" = "yes"); then
 	PKG_CHECK_MODULES(GOFONO, libgofono, dummy=yes,
 				AC_MSG_ERROR(libgofono is required))
 	PKG_CHECK_MODULES(GOFONOEXT, libgofonoext, dummy=yes,

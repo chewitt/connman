@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2015-2016 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2015-2017 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -1099,7 +1099,7 @@ static struct connman_technology_driver ofono_tech_driver = {
 	.set_offline    = ofono_tech_set_offline
 };
 
-static int jolla_ofono_init(void)
+static int sailfish_ofono_init(void)
 {
 	int err;
 	static struct connman_debug_desc ofono_debug_desc CONNMAN_DEBUG_ATTR = {
@@ -1136,7 +1136,7 @@ static int jolla_ofono_init(void)
 	return err;
 }
 
-static void jolla_ofono_exit(void)
+static void sailfish_ofono_exit(void)
 {
 	DBG("");
 	GASSERT(ofono_plugin);
@@ -1148,8 +1148,9 @@ static void jolla_ofono_exit(void)
 	connman_network_driver_unregister(&ofono_network_driver);
 }
 
-CONNMAN_PLUGIN_DEFINE(jolla_ofono, "Jolla oFono plugin", VERSION,
-	CONNMAN_PLUGIN_PRIORITY_DEFAULT, jolla_ofono_init, jolla_ofono_exit)
+CONNMAN_PLUGIN_DEFINE(sailfish_ofono, "Sailfish oFono plugin",
+		VERSION, CONNMAN_PLUGIN_PRIORITY_DEFAULT,
+		sailfish_ofono_init, sailfish_ofono_exit)
 
 /*
  * Local Variables:

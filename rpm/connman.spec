@@ -111,7 +111,6 @@ Documentation for connman.
     --enable-ethernet=builtin \
     --enable-wifi=builtin \
     --enable-bluetooth=builtin \
-    --enable-ofono=builtin \
     --enable-openconnect=builtin \
     --enable-openvpn=builtin \
     --enable-vpnc=builtin \
@@ -124,10 +123,9 @@ Documentation for connman.
     --enable-client \
     --enable-test \
     --enable-debuglog \
+    --enable-sailfish-ofono \
     --enable-sailfish-signalpoll \
     --enable-jolla-usb \
-    --enable-jolla-ofono \
-    --disable-ofono \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \

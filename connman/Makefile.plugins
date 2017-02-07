@@ -55,9 +55,14 @@ builtin_modules += sailfish_wakeup_timer
 builtin_sources += plugins/sailfish_wakeup_timer.c
 endif
 
+if SAILFISH_OFONO
+builtin_modules += sailfish_ofono
+builtin_sources += plugins/sailfish_ofono.c
+else
 if OFONO
 builtin_modules += ofono
 builtin_sources += plugins/mcc.h plugins/ofono.c
+endif
 endif
 
 if DUNDEE
@@ -78,11 +83,6 @@ endif
 if SAILFISH_SIGNALPOLL
 builtin_modules += sailfish_signalpoll
 builtin_sources += plugins/sailfish-signalpoll.c
-endif
-
-if JOLLA_OFONO
-builtin_modules += jolla_ofono
-builtin_sources += plugins/jolla-ofono.c
 endif
 
 if VPN
