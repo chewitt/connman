@@ -364,6 +364,22 @@ https://git.sailfishos.org/mer-core/openvpn/blob/
 4f4b4af116292a207416c8a990392e35a6fc41af/rpm/privatekey-passphrase-
 handling.diff
 
+GnuTLS
+======
+
+When using GnuTLS be aware that depending on the configuration of
+GnuTLS does either an lazy or eager initialization of an internal
+entropy pool using /dev/urandom. On eager initialization the loading
+of ConnMan will be delayed by the link loader until the entropy pool
+is filled. On smaller system this can easily delay the startup of
+ConnMan by several seconds (we had reports of 25 seconds and more
+delay).
+
+GnuTLS allows to switch back to lazy evaluation when the environment
+variable GNUTLS_NO_EXPLICIT_INIT. For more details please read
+the man page to gnutls_global_init(3).
+
+
 Online check
 ============
 
