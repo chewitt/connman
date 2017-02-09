@@ -765,6 +765,7 @@ void __connman_service_set_config(struct connman_service *service,
 const char *__connman_service_type2string(enum connman_service_type type);
 enum connman_service_type __connman_service_string2type(const char *str);
 enum connman_service_security __connman_service_string2security(const char *str);
+const char *__connman_service_security2string(enum connman_service_security security);
 
 int __connman_service_nameserver_append(struct connman_service *service,
 				const char *nameserver, bool is_auto);

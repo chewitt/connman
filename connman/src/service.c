@@ -327,7 +327,7 @@ enum connman_service_security __connman_service_string2security(const char *str)
 	return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
 
-static const char *security2string(enum connman_service_security security)
+const char *__connman_service_security2string(enum connman_service_security security)
 {
 	switch (security) {
 	case CONNMAN_SERVICE_SECURITY_UNKNOWN:
@@ -1621,7 +1621,7 @@ static void append_security(DBusMessageIter *iter, void *user_data)
 	struct connman_service *service = user_data;
 	const char *str;
 
-	str = security2string(service->security);
+	str = __connman_service_security2string(service->security);
 	if (str)
 		dbus_message_iter_append_basic(iter,
 				DBUS_TYPE_STRING, &str);
@@ -3145,7 +3145,7 @@ static int check_passphrase(enum connman_service_security security,
 	case CONNMAN_SERVICE_SECURITY_RSN:
 
 		DBG("service security '%s' (%d) not handled",
-				security2string(security), security);
+			__connman_service_security2string(security), security);
 
 		return -EOPNOTSUPP;
 
