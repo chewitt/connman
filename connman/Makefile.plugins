@@ -82,7 +82,7 @@ endif
 
 if SAILFISH_SIGNALPOLL
 builtin_modules += sailfish_signalpoll
-builtin_sources += plugins/sailfish-signalpoll.c
+builtin_sources += plugins/sailfish_signalpoll.c
 endif
 
 if VPN
