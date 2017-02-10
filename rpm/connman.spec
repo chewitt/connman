@@ -167,7 +167,7 @@ systemctl daemon-reload || :
 
 %files
 %defattr(-,root,root,-)
-%doc AUTHORS COPYING ChangeLog README
+%doc COPYING
 %{_sbindir}/connman-vpnd
 %{_sbindir}/connmand
 %{_bindir}/connmanctl
@@ -184,7 +184,7 @@ systemctl daemon-reload || :
 
 %files devel
 %defattr(-,root,root,-)
-%doc AUTHORS COPYING
+%doc AUTHORS COPYING ChangeLog README
 %{_includedir}/%{name}/*.h
 %{_libdir}/pkgconfig/*.pc
 
