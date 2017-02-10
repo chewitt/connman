@@ -14,7 +14,6 @@ Requires:   ofono
 Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
-Requires:   libiphb
 Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.10
 Requires(preun): systemd
@@ -29,7 +28,7 @@ BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
-BuildRequires:  libiphb-devel
+BuildRequires:  pkgconfig(libiphb)
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
