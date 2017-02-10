@@ -14,7 +14,6 @@ Requires:   ofono
 Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
-Requires:   libiphb
 Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.10
 Requires(preun): systemd
@@ -29,7 +28,7 @@ BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd-daemon)
-BuildRequires:  libiphb-devel
+BuildRequires:  pkgconfig(libiphb)
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
 BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
@@ -129,6 +128,7 @@ Documentation for connman.
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
+    --with-tmpfilesdir=%{_libdir}/tmpfiles.d
 
 make %{?jobs:-j%jobs}
 
@@ -141,7 +141,6 @@ cp -a tools/stats-tool %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/*-test %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/iptables-unit %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
-
 
 mkdir -p %{buildroot}%{_sysconfdir}/tracing/connman/
 cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/tracing/connman/
@@ -157,12 +156,27 @@ systemctl stop connman.service || :
 fi
 
 %post
+# These should match connman_resolvconf.conf rules
+%define connman_run_dir /var/run/connman
+%define run_resolv_conf %{connman_run_dir}/resolv.conf
+%define etc_resolv_conf %{_sysconfdir}/resolv.conf
+
+mkdir -p %{connman_run_dir} || :
+if [ -f %{etc_resolv_conf} -a ! -f %{run_resolv_conf} ]; then
+cp %{etc_resolv_conf} %{run_resolv_conf} || :
+fi
+rm -f %{etc_resolv_conf} || :
+ln -s %{run_resolv_conf} %{etc_resolv_conf} || :
+
 systemctl daemon-reload || :
 # Do not restart connman here or network breaks.
 # We can't reload it either as connman doesn't
 # support that feature.
 
 %postun
+if [ "$1" -eq 0 -a -L %{etc_resolv_conf} ]; then
+rm %{etc_resolv_conf} || :
+fi
 systemctl daemon-reload || :
 
 %files
@@ -172,6 +186,7 @@ systemctl daemon-reload || :
 %{_sbindir}/connmand
 %{_bindir}/connmanctl
 %{_libdir}/%{name}/scripts/*
+%{_libdir}/tmpfiles.d/connman_resolvconf.conf
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{_lib}/systemd/system/connman.service
 /%{_lib}/systemd/system/network.target.wants/connman.service
