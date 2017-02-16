@@ -46,7 +46,7 @@ AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug],
 			[enable compiling with debugging information]), [
 	if (test "${enableval}" = "yes" &&
 				test "${ac_cv_prog_cc_g}" = "yes"); then
-		CFLAGS="$CFLAGS -g"
+		CFLAGS="$CFLAGS -g -DDEBUG"
 	fi
 ])
 

@@ -150,7 +150,7 @@ static void connctx_activate_failed(OfonoConnCtx *ctx, const GError *err,
 {
 	struct modem_data *md = arg;
 	DBG("%s failed", ofono_modem_path(md->modem));
-	GASSERT(data->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
+	GASSERT(md->connctx_handler_id[CONNCTX_HANDLER_FAILED]);
 	connctx_update_active(md);
 }
 
@@ -944,7 +944,7 @@ static void manager_valid(struct plugin_data *plugin)
 	GPtrArray *modems = ofono_manager_get_modems(plugin->manager);
 	guint i;
 
-	GASSERT(plugin->manager->object.valid);
+	GASSERT(plugin->manager->valid);
 	GASSERT(!g_hash_table_size(plugin->modems));
 
 	for (i=0; i<modems->len; i++) {
