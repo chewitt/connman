@@ -24,6 +24,7 @@ gsupplicant_sources = gsupplicant/gsupplicant.h gsupplicant/dbus.h \
 if WIFI
 builtin_modules += wifi
 builtin_sources += plugins/wifi.c $(gsupplicant_sources)
+src_connmand_CFLAGS += -DWIFI_PLUGIN
 endif
 
 if BLUETOOTH
