@@ -103,6 +103,20 @@ static bool check_plugin(struct connman_plugin_desc *desc,
 	return true;
 }
 
+bool __connman_plugin_enabled(const char *name)
+{
+	GSList *list;
+
+	for (list = plugins; list; list = list->next) {
+		struct connman_plugin *plugin = list->data;
+
+		if (!g_strcmp0(plugin->desc->name, name))
+			return true;
+	}
+
+	return false;
+}
+
 #include <builtin.h>
 
 int __connman_plugin_init(const char *pattern, const char *exclude)
