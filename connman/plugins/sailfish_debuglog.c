@@ -1,8 +1,7 @@
 /*
- *
  *  Connection Manager
  *
- *  Copyright (C) 2015-2016 Jolla Ltd.
+ *  Copyright (C) 2015-2017 Jolla Ltd.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -191,7 +190,7 @@ static guint debuglog_translate_flags(unsigned int connman_flags)
 	return flags;
 }
 
-static int debuglog_init(void)
+static int sailfish_debuglog_init(void)
 {
 	const struct connman_debug_desc *start = __start___debug;
 	const struct connman_debug_desc *stop = __stop___debug;
@@ -249,7 +248,7 @@ static int debuglog_init(void)
 	return 0;
 }
 
-static void debuglog_exit(void)
+static void sailfish_debuglog_exit(void)
 {
 	gutil_log_func2 = debuglog_default_log_proc;
 	dbus_log_server_remove_handlers(debuglog_server, debuglog_event_id,
@@ -258,6 +257,15 @@ static void debuglog_exit(void)
 	debuglog_server = NULL;
 }
 
-CONNMAN_PLUGIN_DEFINE(debuglog, "Debug log interface",
+CONNMAN_PLUGIN_DEFINE(sailfish_debuglog, "Sailfish debug log",
 			VERSION, CONNMAN_PLUGIN_PRIORITY_DEFAULT,
-			debuglog_init, debuglog_exit)
+			sailfish_debuglog_init, sailfish_debuglog_exit)
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 8
+ * tab-width: 8
+ * indent-tabs-mode: t
+ * End:
+ */

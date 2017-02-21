@@ -70,9 +70,9 @@ builtin_modules += dundee
 builtin_sources += plugins/dundee.c
 endif
 
-if DEBUGLOG
-builtin_modules += debuglog
-builtin_sources += plugins/debuglog.c
+if SAILFISH_DEBUGLOG
+builtin_modules += sailfish_debuglog
+builtin_sources += plugins/sailfish_debuglog.c
 endif
 
 if JOLLA_USB

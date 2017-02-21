@@ -378,11 +378,11 @@ AC_ARG_ENABLE(wispr, AC_HELP_STRING([--disable-wispr],
 					[enable_wispr=${enableval}])
 AM_CONDITIONAL(WISPR, test "${enable_wispr}" != "no")
 
-AC_ARG_ENABLE(debuglog,
-	AC_HELP_STRING([--enable-debuglog], [enable log control plugin]),
-			[enable_debuglog=${enableval}], [enable_debuglog="no"])
-AM_CONDITIONAL(DEBUGLOG, test "${enable_debuglog}" != "no")
-if (test "${enable_debuglog}" = "yes"); then
+AC_ARG_ENABLE(sailfish-debuglog,
+	AC_HELP_STRING([--enable-sailfish-debuglog], [enable Sailfish logging plugin]),
+		[enable_sailfish_debuglog=${enableval}], [enable_sailfish_debuglog="no"])
+AM_CONDITIONAL(SAILFISH_DEBUGLOG, test "${enable_sailfish_debuglog}" != "no")
+if (test "${enable_sailfish_debuglog}" = "yes"); then
 	PKG_CHECK_MODULES(DBUSLOG, libdbuslogserver-dbus, dummy=yes,
 				AC_MSG_ERROR(libdbuslogserver-dbus is required))
 	CFLAGS="$CFLAGS $DBUSLOG_CFLAGS"
@@ -395,7 +395,7 @@ AC_ARG_ENABLE(jolla-usb,
 AM_CONDITIONAL(JOLLA_USB, test "${enable_jolla_usb}" != "no")
 
 AC_ARG_ENABLE(sailfish-signalpoll,
-	AC_HELP_STRING([--enable-sailfish-signalpoll], [enable Jolla signal poll plugin]),
+	AC_HELP_STRING([--enable-sailfish-signalpoll], [enable Sailfish signal poll plugin]),
 		[enable_sailfish_signalpoll=${enableval}], [enable_sailfish_signalpoll="no"])
 AM_CONDITIONAL(SAILFISH_SIGNALPOLL, test "${enable_sailfish_signalpoll}" != "no")
 

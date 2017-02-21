@@ -121,7 +121,7 @@ Documentation for connman.
     --enable-sailfish-wakeup-timer=builtin \
     --enable-client \
     --enable-test \
-    --enable-debuglog \
+    --enable-sailfish-debuglog \
     --enable-sailfish-ofono \
     --enable-sailfish-signalpoll \
     --enable-jolla-usb \
