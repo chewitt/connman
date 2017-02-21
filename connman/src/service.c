@@ -4423,6 +4423,9 @@ bool __connman_service_remove(struct connman_service *service)
                                                 CONNMAN_SERVICE_STATE_FAILURE)
                 return false;
 
+        /* We don't want the service files to stay around forever */
+        __connman_storage_remove_service(service->identifier);
+
         __connman_service_disconnect(service);
 
         g_free(service->passphrase);
@@ -4459,8 +4462,6 @@ bool __connman_service_remove(struct connman_service *service)
 			autoconnect_changed(service);
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
-
-        service_save(service);
 
         return true;
 }
