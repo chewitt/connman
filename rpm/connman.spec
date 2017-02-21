@@ -124,7 +124,7 @@ Documentation for connman.
     --enable-sailfish-debuglog \
     --enable-sailfish-ofono \
     --enable-sailfish-signalpoll \
-    --enable-jolla-usb \
+    --enable-sailfish-usb-tethering \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \

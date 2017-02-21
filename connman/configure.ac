@@ -389,10 +389,10 @@ if (test "${enable_sailfish_debuglog}" = "yes"); then
 	LIBS="$LIBS $DBUSLOG_LIBS"
 fi
 
-AC_ARG_ENABLE(jolla-usb,
-	AC_HELP_STRING([--enable-jolla-usb], [enable Jolla USB plugin]),
-			[enable_jolla_usb=${enableval}], [enable_jolla_usb="no"])
-AM_CONDITIONAL(JOLLA_USB, test "${enable_jolla_usb}" != "no")
+AC_ARG_ENABLE(sailfish-usb-tethering,
+	AC_HELP_STRING([--enable-sailfish-usb], [enable Sailfish USB tethering plugin]),
+			[enable_sailfish_usb=${enableval}], [enable_sailfish_usb="no"])
+AM_CONDITIONAL(SAILFISH_USB_TETHERING, test "${enable_sailfish_usb_tethering}" != "no")
 
 AC_ARG_ENABLE(sailfish-signalpoll,
 	AC_HELP_STRING([--enable-sailfish-signalpoll], [enable Sailfish signal poll plugin]),

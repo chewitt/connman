@@ -75,9 +75,9 @@ builtin_modules += sailfish_debuglog
 builtin_sources += plugins/sailfish_debuglog.c
 endif
 
-if JOLLA_USB
-builtin_modules += jolla_usb
-builtin_sources += plugins/jolla-usb.c
+if SAILFISH_USB_TETHERING
+builtin_modules += sailfish_usb_tethering
+builtin_sources += plugins/sailfish_usb_tethering.c
 endif
 
 if SAILFISH_SIGNALPOLL
