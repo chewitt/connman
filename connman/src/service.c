@@ -160,6 +160,7 @@ static struct connman_ipconfig *create_ip6config(struct connman_service *service
 
 static void service_destroy(struct connman_service *service);
 static int service_disconnect(struct connman_service *service);
+static void service_saved_schedule_changed(void);
 
 struct find_data {
 	const char *path;
@@ -670,8 +671,6 @@ done:
 	return err;
 }
 
-static void service_saved_schedule_changed(void);
-
 static int service_save(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -862,8 +861,8 @@ done:
 	g_key_file_unref(keyfile);
 
 	if (err == 0) {
-	  service_saved_schedule_changed();
-        }
+		service_saved_schedule_changed();
+	}
 
 	return err;
 }
@@ -2531,10 +2530,10 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_dict(dict, "Ethernet",
 						append_ethernet, service);
 
-        val = service->hidden_service;
-        connman_dbus_dict_append_basic(dict, "Hidden",
-                        DBUS_TYPE_BOOLEAN, &val);
-        break;
+		val = service->hidden_service;
+		connman_dbus_dict_append_basic(dict, "Hidden",
+						DBUS_TYPE_BOOLEAN, &val);
+		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -2676,7 +2675,6 @@ void __connman_saved_service_list_struct(DBusMessageIter *iter)
 
 bool __connman_service_is_hidden(struct connman_service *service)
 {
-
 	return service->hidden;
 }
 
@@ -4684,11 +4682,10 @@ static DBusMessage *reset_counters(DBusConnection *conn,
 
 static struct _services_notify {
 	int id;
+	guint saved_id;
 	GHashTable *add;
 	GHashTable *remove;
 } *services_notify;
-
-static int _saved_services_notify_id = 0;
 
 static void service_append_added_foreach(gpointer data, gpointer user_data)
 {
@@ -4763,26 +4760,6 @@ static gboolean service_send_changed(gpointer data)
 	return FALSE;
 }
 
-static gboolean saved_service_send_changed(gpointer data)
-{
-        DBusMessage *signal;
-
-        _saved_services_notify_id = 0;
-
-        signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
-                        CONNMAN_MANAGER_INTERFACE, "SavedServicesChanged");
-        if (signal == NULL)
-                return FALSE;
-
-        __connman_dbus_append_objpath_dict_array(signal,
-                        saved_service_append_ordered, NULL);
-
-        dbus_connection_send(connection, signal, NULL);
-        dbus_message_unref(signal);
-
-        return FALSE;
-}
-
 static void service_schedule_changed(void)
 {
 	if (services_notify->id != 0)
@@ -4817,14 +4794,37 @@ static void service_schedule_removed(struct connman_service *service)
 	service_schedule_changed();
 }
 
-static void service_saved_schedule_changed(void)
+static gboolean saved_service_send_changed(gpointer data)
 {
-        if (_saved_services_notify_id != 0)
-                return;
+	DBusMessage *signal;
 
-        _saved_services_notify_id = g_timeout_add(100, saved_service_send_changed, NULL);
+	services_notify->saved_id = 0;
+
+	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+			CONNMAN_MANAGER_INTERFACE, "SavedServicesChanged");
+
+	__connman_dbus_append_objpath_dict_array(signal,
+				saved_service_append_ordered, NULL);
+
+	dbus_connection_send(connection, signal, NULL);
+	dbus_message_unref(signal);
+
+	return G_SOURCE_REMOVE;
 }
 
+static void service_saved_schedule_changed(void)
+{
+	if (services_notify->saved_id != 0)
+		return;
+
+	services_notify->saved_id = g_timeout_add(100,
+					saved_service_send_changed, NULL);
+}
+
+void __connman_service_removed(const char *ident)
+{
+	service_saved_schedule_changed();
+}
 
 static bool allow_property_changed(struct connman_service *service)
 {
@@ -7652,6 +7652,9 @@ void __connman_service_cleanup(void)
 		g_source_remove(services_notify->id);
 		service_send_changed(NULL);
 	}
+
+	if (services_notify->saved_id != 0)
+		g_source_remove(services_notify->saved_id);
 
 	g_hash_table_destroy(services_notify->remove);
 	g_hash_table_destroy(services_notify->add);
