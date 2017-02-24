@@ -135,9 +135,6 @@ void connman_service_create_ip4config(struct connman_service *service,
 								int index);
 void connman_service_create_ip6config(struct connman_service *service,
 								int index);
-
-void update_failure_interval();
-
 #ifdef __cplusplus
 }
 #endif
