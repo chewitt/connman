@@ -263,6 +263,7 @@ static DBusMessage *remove_saved_service(DBusConnection *conn,
 	if (!remove_service(ident))
 		return __connman_error_failed(msg, EINVAL);
 
+	__connman_service_removed(ident);
 	return dbus_message_new_method_return(msg);
 }
 
