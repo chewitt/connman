@@ -6420,8 +6420,14 @@ static int service_connect(struct connman_service *service)
 			break;
 
 		case CONNMAN_SERVICE_SECURITY_8021X:
-			if (!service->eap)
-				return -EINVAL;
+			if (!service->eap) {
+				/* Give WPS a chance */
+				if (!service->wps ||
+					!connman_network_get_bool(service->network, "WiFi.UseWPS"))
+					return -EINVAL;
+
+				break;
+			}
 
 			/*
 			 * never request credentials if using EAP-TLS
@@ -6438,8 +6444,14 @@ static int service_connect(struct connman_service *service)
 			if (((!service->identity &&
 					!service->agent_identity) ||
 					!service->passphrase) ||
-					service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
-				return -ENOKEY;
+					service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY) {
+				/* Give WPS a chance */
+				if (!service->wps ||
+					!connman_network_get_bool(service->network, "WiFi.UseWPS"))
+					return -ENOKEY;
+
+				break;
+			}
 
 			break;
 		}
