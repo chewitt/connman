@@ -83,15 +83,22 @@ else
 	IPHB_CFLAGS=""
 	IPHB_LIBS=""
 fi
+
 AC_SUBST(IPHB_CFLAGS)
 AC_SUBST(IPHB_LIBS)
 
 AC_ARG_ENABLE(systemd, 
 	AC_HELP_STRING([--enable-systemd],
-			[enable systemd notify on start]), [
-				if (test "${enableval}" = "yes"); then
-			CFLAGS="$CFLAGS -DSYSTEMD -lsystemd-daemon"
-fi])
+			[enable systemd notify on start]),
+				[enable_systemd=${enableval}],
+				[enable_systemd="no"])
+
+if (test "${enable_systemd}" = "yes"); then
+	PKG_CHECK_MODULES(LIBSYSTEMD, libsystemd, dummy=yes,
+				AC_MSG_ERROR(libsystemd is required))
+	CFLAGS="$CFLAGS $LIBSYSTEMD_CFLAGS"
+	LIBS="$LIBS $LIBSYSTEMD_LIBS"
+fi
 
 CONNMAN_SERVICE_REQUIRES="dbus.socket oneshot-root.service"
 CONNMAN_SERVICE_AFTER="dbus.socket oneshot-root.service"

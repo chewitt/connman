@@ -27,7 +27,7 @@ BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  openconnect
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
-BuildRequires:  pkgconfig(libsystemd-daemon)
+BuildRequires:  pkgconfig(libsystemd)
 BuildRequires:  pkgconfig(libiphb)
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
