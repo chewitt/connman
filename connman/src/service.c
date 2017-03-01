@@ -7216,6 +7216,26 @@ static void update_from_network(struct connman_service *service,
 	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
 		service->wps = connman_network_get_bool(network, "WiFi.WPS");
 
+	/*
+	 * Reset the ignore flag if there was no network associated with
+	 * this service. As a side effect of some sort of a ref-counting
+	 * bug, the service may not be freed after it's been removed from
+	 * the network (because something is holding the reference) and
+	 * then later re-associated with the new network with the same
+	 * name. In that case service->ignore would be true (because it
+	 * was set by __connman_service_remove_from_network) so we need
+	 * to reset it back to false.
+	 *
+	 * This is quite a common situation at the edge of the wifi area
+	 * where networks are coming and going quite often.
+	 *
+	 * The ref-counting bug should be fixed too because it's likely
+	 * to cause memory leaks. But in any case it won't hurt to have
+	 * this check here.
+	 */
+	if (!service->network)
+		service->ignore = false;
+
 	if (service->strength > strength && service->network) {
 		connman_network_unref(service->network);
 		service->network = connman_network_ref(network);
