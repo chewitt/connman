@@ -4409,28 +4409,28 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 
 bool __connman_service_remove(struct connman_service *service)
 {
-        if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET ||
-                        service->type == CONNMAN_SERVICE_TYPE_GADGET)
-                return false;
+	if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET ||
+			service->type == CONNMAN_SERVICE_TYPE_GADGET)
+		return false;
 
-        if (service->immutable || service->hidden ||
-                        __connman_provider_is_immutable(service->provider))
-                return false;
+	if (service->immutable || service->hidden ||
+			__connman_provider_is_immutable(service->provider))
+		return false;
 
-        if (!service->favorite && service->state !=
-                                                CONNMAN_SERVICE_STATE_FAILURE)
-                return false;
+	if (!service->favorite && service->state !=
+						CONNMAN_SERVICE_STATE_FAILURE)
+		return false;
 
-        /* We don't want the service files to stay around forever */
-        __connman_storage_remove_service(service->identifier);
+	/* We don't want the service files to stay around forever */
+	__connman_storage_remove_service(service->identifier);
 
-        __connman_service_disconnect(service);
+	__connman_service_disconnect(service);
 
-        g_free(service->passphrase);
-        service->passphrase = NULL;
+	g_free(service->passphrase);
+	service->passphrase = NULL;
 
-        g_free(service->identity);
-        service->identity = NULL;
+	g_free(service->identity);
+	service->identity = NULL;
 
 	g_free(service->anonymous_identity);
 	service->anonymous_identity = NULL;
@@ -4450,14 +4450,11 @@ bool __connman_service_remove(struct connman_service *service)
 	g_free(service->agent_identity);
 	service->agent_identity = NULL;
 
-        g_free(service->eap);
-        service->eap = NULL;
+	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
-        service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
-
-        __connman_service_set_favorite(service, false);
-		if (service->autoconnect)
-			autoconnect_changed(service);
+	__connman_service_set_favorite(service, false);
+	if (service->autoconnect)
+		autoconnect_changed(service);
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
 
@@ -4880,62 +4877,66 @@ static void stats_destroy(struct connman_service *service)
 
 static void service_destroy(struct connman_service *service)
 {
-        if (service->path != NULL)
-                g_free(service->path);
+	if (service->path != NULL)
+		g_free(service->path);
 
-        g_hash_table_destroy(service->counter_table);
+	g_hash_table_destroy(service->counter_table);
 
-        if (service->network != NULL) {
-                __connman_network_disconnect(service->network);
-                connman_network_unref(service->network);
-                service->network = NULL;
-        }
+	if (service->network != NULL) {
+		__connman_network_disconnect(service->network);
+		connman_network_unref(service->network);
+		service->network = NULL;
+	}
 
-        if (service->provider != NULL)
-                connman_provider_unref(service->provider);
+	if (service->provider != NULL)
+		connman_provider_unref(service->provider);
 
-        if (service->ipconfig_ipv4 != NULL) {
-                __connman_ipconfig_set_ops(service->ipconfig_ipv4, NULL);
-                __connman_ipconfig_set_data(service->ipconfig_ipv4, NULL);
-                __connman_ipconfig_unref(service->ipconfig_ipv4);
-                service->ipconfig_ipv4 = NULL;
-        }
+	if (service->ipconfig_ipv4 != NULL) {
+		__connman_ipconfig_set_ops(service->ipconfig_ipv4, NULL);
+		__connman_ipconfig_set_data(service->ipconfig_ipv4, NULL);
+		__connman_ipconfig_unref(service->ipconfig_ipv4);
+		service->ipconfig_ipv4 = NULL;
+	}
 
-        if (service->ipconfig_ipv6 != NULL) {
-                __connman_ipconfig_set_ops(service->ipconfig_ipv6, NULL);
-                __connman_ipconfig_set_data(service->ipconfig_ipv6, NULL);
-                __connman_ipconfig_unref(service->ipconfig_ipv6);
-                service->ipconfig_ipv6 = NULL;
-        }
+	if (service->ipconfig_ipv6 != NULL) {
+		__connman_ipconfig_set_ops(service->ipconfig_ipv6, NULL);
+		__connman_ipconfig_set_data(service->ipconfig_ipv6, NULL);
+		__connman_ipconfig_unref(service->ipconfig_ipv6);
+		service->ipconfig_ipv6 = NULL;
+	}
 
-        g_strfreev(service->timeservers);
-        g_strfreev(service->timeservers_config);
-        g_strfreev(service->nameservers);
-        g_strfreev(service->nameservers_config);
-        g_strfreev(service->nameservers_auto);
-        g_strfreev(service->domains);
-        g_strfreev(service->proxies);
-        g_strfreev(service->excludes);
+	g_strfreev(service->timeservers);
+	g_strfreev(service->timeservers_config);
+	g_strfreev(service->nameservers);
+	g_strfreev(service->nameservers_config);
+	g_strfreev(service->nameservers_auto);
+	g_strfreev(service->domains);
+	g_strfreev(service->proxies);
+	g_strfreev(service->excludes);
 
 	g_free(service->hostname);
-        g_free(service->domainname);
-        g_free(service->pac);
-        g_free(service->name);
-        g_free(service->passphrase);
-        g_free(service->identifier);
-        g_free(service->eap);
-        g_free(service->identity);
+	g_free(service->domainname);
+	g_free(service->pac);
+	g_free(service->name);
+	g_free(service->passphrase);
+	g_free(service->identifier);
+	g_free(service->eap);
+	g_free(service->identity);
 	g_free(service->anonymous_identity);
-        g_free(service->agent_identity);
-        g_free(service->ca_cert_file);
-        g_free(service->client_cert_file);
-        g_free(service->private_key_file);
-        g_free(service->private_key_passphrase);
-        g_free(service->phase2);
-        g_free(service->config_file);
-        g_free(service->config_entry);
+	g_free(service->agent_identity);
+	g_free(service->ca_cert_file);
+	g_free(service->subject_match);
+	g_free(service->altsubject_match);
+	g_free(service->domain_suffix_match);
+	g_free(service->domain_match);
+	g_free(service->client_cert_file);
+	g_free(service->private_key_file);
+	g_free(service->private_key_passphrase);
+	g_free(service->phase2);
+	g_free(service->config_file);
+	g_free(service->config_entry);
 
-        stats_destroy(service);
+	stats_destroy(service);
 
 	if (current_default == service)
 		current_default = NULL;
@@ -4944,7 +4945,7 @@ static void service_destroy(struct connman_service *service)
 	if (service->connect_retry_timer)
 		g_source_remove(service->connect_retry_timer);
 
-        g_free(service);
+	g_free(service);
 }
 
 static void service_free(gpointer user_data)
