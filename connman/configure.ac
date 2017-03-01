@@ -96,7 +96,7 @@ AC_ARG_ENABLE(systemd,
 if (test "${enable_systemd}" = "yes"); then
 	PKG_CHECK_MODULES(LIBSYSTEMD, libsystemd, dummy=yes,
 				AC_MSG_ERROR(libsystemd is required))
-	CFLAGS="$CFLAGS $LIBSYSTEMD_CFLAGS"
+	CFLAGS="$CFLAGS -DSYSTEMD $LIBSYSTEMD_CFLAGS"
 	LIBS="$LIBS $LIBSYSTEMD_LIBS"
 fi
 
