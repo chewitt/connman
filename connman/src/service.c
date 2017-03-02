@@ -486,6 +486,25 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	return 0;
 }
 
+static void get_config_string(GKeyFile *keyfile, const char *group,
+					const char *key, char **value)
+{
+	char *str = g_key_file_get_string(keyfile, group, key, NULL);
+	if (str) {
+		g_free(*value);
+		*value = str;
+	}
+}
+
+static void set_config_string(GKeyFile *keyfile, const char *group,
+					const char *key, const char *value)
+{
+	if (value)
+		g_key_file_set_string(keyfile, group, key, value);
+	else
+		g_key_file_remove_key(keyfile, group, key, NULL);
+}
+
 static int service_load(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -597,6 +616,31 @@ static int service_load(struct connman_service *service)
 		g_time_val_from_iso8601(str, &service->modified);
 		g_free(str);
 	}
+
+	get_config_string(keyfile, service->identifier, "EAP",
+					&service->eap);
+	get_config_string(keyfile, service->identifier, "Identity",
+					&service->identity);
+	get_config_string(keyfile, service->identifier, "AnonymousIdentity",
+					&service->anonymous_identity);
+	get_config_string(keyfile, service->identifier, "CACertFile",
+					&service->ca_cert_file);
+	get_config_string(keyfile, service->identifier, "SubjectMatch",
+					&service->subject_match);
+	get_config_string(keyfile, service->identifier, "AltSubjectMatch",
+					&service->altsubject_match);
+	get_config_string(keyfile, service->identifier, "DomainSuffixMatch",
+					&service->domain_suffix_match);
+	get_config_string(keyfile, service->identifier, "DomainMatch",
+					&service->domain_match);
+	get_config_string(keyfile, service->identifier, "ClientCertFile",
+					&service->client_cert_file);
+	get_config_string(keyfile, service->identifier, "PrivateKeyFile",
+					&service->private_key_file);
+	get_config_string(keyfile, service->identifier, "PrivateKeyPassphrase",
+					&service->private_key_passphrase);
+	get_config_string(keyfile, service->identifier, "Phase2",
+					&service->phase2);
 
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Passphrase", NULL);
@@ -738,6 +782,30 @@ static int service_save(struct connman_service *service)
 			g_key_file_set_integer(keyfile, service->identifier,
 						"Frequency", freq);
 		}
+		set_config_string(keyfile, service->identifier,
+			"EAP", service->eap);
+		set_config_string(keyfile, service->identifier,
+			"Identity", service->identity);
+		set_config_string(keyfile, service->identifier,
+			"AnonymousIdentity", service->anonymous_identity);
+		set_config_string(keyfile, service->identifier,
+			"CACertFile", service->ca_cert_file);
+		set_config_string(keyfile, service->identifier,
+			"SubjectMatch", service->subject_match);
+		set_config_string(keyfile, service->identifier,
+			"AltSubjectMatch", service->altsubject_match);
+		set_config_string(keyfile, service->identifier,
+			"DomainSuffixMatch", service->domain_suffix_match);
+		set_config_string(keyfile, service->identifier,
+			"DomainMatch", service->domain_match);
+		set_config_string(keyfile, service->identifier,
+			"ClientCertFile", service->client_cert_file);
+		set_config_string(keyfile, service->identifier,
+			"PrivateKeyFile", service->private_key_file);
+		set_config_string(keyfile, service->identifier,
+			"PrivateKeyPassphrase", service->private_key_passphrase);
+		set_config_string(keyfile, service->identifier,
+			"Phase2", service->phase2);
 		/* fall through */
 
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -5411,14 +5479,36 @@ int __connman_service_set_ignore(struct connman_service *service,
 	return 0;
 }
 
+/* Only allows valid values */
+static bool set_eap_method(struct connman_service *service, const char *method)
+{
+	if (method && method[0]) {
+		if (!g_strcmp0(service->eap, method)) {
+			return false;
+		} else if (!g_strcmp0(method, "peap") ||
+				!g_strcmp0(method, "tls") ||
+				!g_strcmp0(method, "ttls")) {
+			g_free(service->eap);
+			service->eap = g_strdup(method);
+			return true;
+		}
+		DBG("invalid EAP method %s", method);
+	}
+	if (service->eap) {
+		g_free(service->eap);
+		service->eap = NULL;
+		return true;
+	}
+	return false;
+}
+
 void __connman_service_set_string(struct connman_service *service,
 				  const char *key, const char *value)
 {
 	if (service->hidden)
 		return;
 	if (g_str_equal(key, "EAP")) {
-		g_free(service->eap);
-		service->eap = g_strdup(value);
+		set_eap_method(service, value);
 	} else if (g_str_equal(key, "Identity")) {
 		g_free(service->identity);
 		service->identity = g_strdup(value);
@@ -7175,6 +7265,43 @@ static enum connman_service_security convert_wifi_security(const char *security)
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
 
+static bool update_string_from_network(struct connman_network *network,
+					const char *key, char **value)
+{
+	const char *network_value = connman_network_get_string(network, key);
+
+	if (g_strcmp0(*value, network_value)) {
+		g_free(*value);
+		*value = g_strdup(network_value);
+		return true;
+	}
+	return false;
+}
+
+/* Return true if service has been updated */
+bool __connman_service_update_value_from_network(
+			struct connman_service *service,
+			struct connman_network *network, const char *key)
+{
+	if (!service || !network || !key) {
+		return false;
+	} else if (!g_strcmp0(key, "WiFi.EAP")) {
+		const char *value = connman_network_get_string(network, key);
+
+		if (value && !value[0]) {
+			/* Substitute default (empty) value with "peap" */
+			value = service->eap ? service->eap : "peap";
+			connman_network_set_string(network, key, value);
+		}
+		return set_eap_method(service, value);
+	} else if (!g_strcmp0(key, "WiFi.Identity")) {
+		return update_string_from_network(network, key,
+							&service->identity);
+	} else {
+		return false;
+	}
+}
+
 static void update_from_network(struct connman_service *service,
 					struct connman_network *network)
 {
@@ -7214,8 +7341,11 @@ static void update_from_network(struct connman_service *service,
 	str = connman_network_get_string(network, "WiFi.Security");
 	service->security = convert_wifi_security(str);
 
-	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI) {
+		__connman_service_update_value_from_network(service, network,
+								"WiFi.EAP");
 		service->wps = connman_network_get_bool(network, "WiFi.WPS");
+	}
 
 	/*
 	 * Reset the ignore flag if there was no network associated with

@@ -659,19 +659,6 @@ int __connman_device_disconnect(struct connman_device *device)
 	return 0;
 }
 
-bool connman_device_supports_signal_poll(struct connman_device *device)
-{
-	return device && device->driver && device->driver->signal_poll;
-}
-
-int connman_device_signal_poll(struct connman_device *device)
-{
-	if (!device->driver || !device->driver->signal_poll)
-		return -EOPNOTSUPP;
-
-	return device->driver->signal_poll(device);
-}
-
 int connman_device_reconnect_service(struct connman_device *device)
 {
 	DBG("device %p", device);

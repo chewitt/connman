@@ -401,16 +401,18 @@ AC_ARG_ENABLE(sailfish-usb-tethering,
 			[enable_sailfish_usb=${enableval}], [enable_sailfish_usb="no"])
 AM_CONDITIONAL(SAILFISH_USB_TETHERING, test "${enable_sailfish_usb_tethering}" != "no")
 
-AC_ARG_ENABLE(sailfish-signalpoll,
-	AC_HELP_STRING([--enable-sailfish-signalpoll], [enable Sailfish signal poll plugin]),
-		[enable_sailfish_signalpoll=${enableval}], [enable_sailfish_signalpoll="no"])
-AM_CONDITIONAL(SAILFISH_SIGNALPOLL, test "${enable_sailfish_signalpoll}" != "no")
+AC_ARG_ENABLE(sailfish-wifi,
+	AC_HELP_STRING([--enable-sailfish-wifi], [enable Sailfish WiFi plugin]),
+		[enable_sailfish_wifi=${enableval}], [enable_sailfish_wifi="no"])
+AM_CONDITIONAL(SAILFISH_WIFI, test "${enable_sailfish_wifi}" != "no")
 
-if (test "${enable_sailfish_signalpoll}" = "yes"); then
+if (test "${enable_sailfish_wifi}" = "yes"); then
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
 				AC_MSG_ERROR(libmce-glib is required))
-	CFLAGS="$CFLAGS $LIBMCE_CFLAGS"
-	LIBS="$LIBS $LIBMCE_LIBS"
+	PKG_CHECK_MODULES(GSUPPLICANT, libgsupplicant, dummy=yes,
+				AC_MSG_ERROR(libgsupplicant is required))
+	CFLAGS="$CFLAGS $GSUPPLICANT_CFLAGS $LIBMCE_CFLAGS"
+	LIBS="$LIBS $GSUPPLICANT_LIBS $LIBMCE_LIBS"
 	need_glibutil=yes
 fi
 
@@ -420,8 +422,8 @@ AC_ARG_ENABLE(sailfish-ofono,
 AM_CONDITIONAL(SAILFISH_OFONO, test "${enable_sailfish_ofono}" != "no")
 
 if (test "${enable_sailfish_ofono}" = "yes"); then
-	PKG_CHECK_MODULES(GOFONO, libgofono, dummy=yes,
-				AC_MSG_ERROR(libgofono is required))
+	PKG_CHECK_MODULES(GOFONO, libgofono >= 2.0.0, dummy=yes,
+				AC_MSG_ERROR(libgofono >= 2.0.0 is required))
 	PKG_CHECK_MODULES(GOFONOEXT, libgofonoext, dummy=yes,
 				AC_MSG_ERROR(libgofonoext is required))
 	CFLAGS="$CFLAGS $GOFONO_CFLAGS $GOFONOEXT_CFLAGS"
@@ -430,8 +432,8 @@ if (test "${enable_sailfish_ofono}" = "yes"); then
 fi
 
 if (test "${need_glibutil}" = "yes"); then
-	PKG_CHECK_MODULES(GLIBUTIL, libglibutil, dummy=yes,
-				AC_MSG_ERROR(libglibutil is required))
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.20, dummy=yes,
+				AC_MSG_ERROR(libglibutil >= 1.0.20 is required))
 	CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
 	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi

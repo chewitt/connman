@@ -1,4 +1,3 @@
-
 plugin_cflags = -fvisibility=hidden -I$(srcdir)/gdbus \
 					@DBUS_CFLAGS@ @GLIB_CFLAGS@
 plugin_ldflags = -no-undefined -module -avoid-version
@@ -25,6 +24,11 @@ if WIFI
 builtin_modules += wifi
 builtin_sources += plugins/wifi.c $(gsupplicant_sources)
 src_connmand_CFLAGS += -DWIFI_PLUGIN
+endif
+
+if SAILFISH_WIFI
+builtin_modules += sailfish_wifi
+builtin_sources += plugins/sailfish_wifi.c plugins/sailfish_signalpoll.c
 endif
 
 if BLUETOOTH
@@ -79,11 +83,6 @@ endif
 if SAILFISH_USB_TETHERING
 builtin_modules += sailfish_usb_tethering
 builtin_sources += plugins/sailfish_usb_tethering.c
-endif
-
-if SAILFISH_SIGNALPOLL
-builtin_modules += sailfish_signalpoll
-builtin_sources += plugins/sailfish_signalpoll.c
 endif
 
 if VPN

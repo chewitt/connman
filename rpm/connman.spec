@@ -15,7 +15,7 @@ Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
 Requires:   libgofono >= 2.0.0
-Requires:   libglibutil >= 1.0.10
+Requires:   libglibutil >= 1.0.20
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -31,9 +31,10 @@ BuildRequires:  pkgconfig(libsystemd)
 BuildRequires:  pkgconfig(libiphb)
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
-BuildRequires:  pkgconfig(libglibutil) >= 1.0.10
+BuildRequires:  pkgconfig(libglibutil) >= 1.0.20
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libmce-glib)
+BuildRequires:  pkgconfig(libgsupplicant)
 BuildRequires:  ppp-devel
 
 %description
@@ -125,6 +126,7 @@ Documentation for connman.
     --enable-sailfish-ofono \
     --enable-sailfish-signalpoll \
     --enable-sailfish-usb-tethering \
+    --enable-sailfish-wifi \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \

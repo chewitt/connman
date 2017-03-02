@@ -761,6 +761,9 @@ void __connman_service_return_error(struct connman_service *service,
 int __connman_service_provision_changed(const char *ident);
 void __connman_service_set_config(struct connman_service *service,
 				const char *file_id, const char *section);
+bool __connman_service_update_value_from_network(
+			struct connman_service *service,
+			struct connman_network *network, const char *key);
 
 const char *__connman_service_type2string(enum connman_service_type type);
 enum connman_service_type __connman_service_string2type(const char *str);

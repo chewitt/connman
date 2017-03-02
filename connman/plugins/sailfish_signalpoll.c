@@ -14,18 +14,16 @@
  *  GNU General Public License for more details.
  */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "sailfish_signalpoll.h"
+#include "log.h"
 
-#define CONNMAN_API_SUBJECT_TO_CHANGE
-#include "connman.h"
-
+#include <gsupplicant_interface.h>
+#include <gutil_history.h>
 #include <mce_display.h>
-#include <mce_log.h>
 
-#include <gutil_misc.h>
-#include <gutil_log.h>
+#define SIGNALPOLL_HISTORY_SIZE  (10)  /* Number of history entries */
+#define SIGNALPOLL_HISTORY_SECS  (10)  /* Max history depth in seconds */
+#define SIGNALPOLL_INTERVAL_SECS (2)   /* Interval between polls */
 
 enum signalpoll_display_events {
 	DISPLAY_EVENT_VALID,
@@ -33,193 +31,214 @@ enum signalpoll_display_events {
 	DISPLAY_EVENT_COUNT
 };
 
-static GSList *poll_services;
-static guint signalpoll_timer;
-static MceDisplay *display;
-static gulong display_event_id[DISPLAY_EVENT_COUNT];
+struct signalpoll_priv {
+	GSupplicantInterface *iface;    /* Interface we are polling */
+	GCancellable *pending;          /* To cancel the D-Bus call */
+	guint timer_id;                 /* Timer ID */
+	GUtilIntHistory *history;       /* Signal strength history */
+	MceDisplay *display;
+	gulong display_event_id[DISPLAY_EVENT_COUNT];
+	signalpoll_rssi_to_strength_func fn_strength;
+};
 
-#define POLL_INTERVAL_SECS (2)
+typedef GObjectClass SignalPollClass;
+G_DEFINE_TYPE(SignalPoll, signalpoll, G_TYPE_OBJECT)
+#define SIGNALPOLL_TYPE (signalpoll_get_type())
+#define SIGNALPOLL(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
+        SIGNALPOLL_TYPE, SignalPoll))
 
-static gboolean signalpoll_display_on(void)
+enum signalpoll_signal {
+	SIGNAL_AVERAGE_CHANGED,
+	SIGNAL_COUNT
+};
+
+#define SIGNAL_AVERAGE_CHANGED_NAME "signalpoll-average-changed"
+
+static guint signalpoll_signals[SIGNAL_COUNT];
+
+static void signalpoll_update(struct signalpoll *self, guint8 strength)
+{
+	struct signalpoll_priv *priv = self->priv;
+	/* It's actually a median but it doesn't really matter */
+	guint average = gutil_int_history_add(priv-> history, strength);
+
+	DBG("%u", average);
+	if (self->average != average) {
+		self->average = average;
+		g_signal_emit(self, signalpoll_signals
+					[SIGNAL_AVERAGE_CHANGED], 0);
+	}
+}
+
+static void signalpoll_done(GSupplicantInterface *iface, GCancellable *cancel,
+	const GError *error, const GSupplicantSignalPoll *poll, void *data)
+{
+	struct signalpoll *self = SIGNALPOLL(data);
+	struct signalpoll_priv *priv = self->priv;
+
+	priv->pending = NULL;
+	if (poll) {
+		DBG("rssi %d linkspeed %d noise %d frequency %u", poll->rssi,
+			poll->linkspeed, poll->noise, poll->frequency);
+		if (poll->rssi > 1000 || poll->rssi < -1000) {
+			DBG("ignoring bogus rssi value");
+		} else {
+			signalpoll_update(self, priv->fn_strength(poll->rssi));
+		}
+	} else {
+		DBG("error %s", error ? error->message : "????");
+	}
+}
+
+static void signalpoll_poll(struct signalpoll *self)
+{
+	struct signalpoll_priv *priv = self->priv;
+
+	if (priv->pending) {
+		DBG("SignalPoll is already pending");
+		g_cancellable_cancel(priv->pending);
+	}
+	priv->pending = gsupplicant_interface_signal_poll(priv->iface,
+						signalpoll_done, self);
+}
+
+static gboolean signalpoll_poll_timer(gpointer data)
+{
+	signalpoll_poll(SIGNALPOLL(data));
+	return G_SOURCE_CONTINUE;
+}
+
+static gboolean signalpoll_display_on(MceDisplay *display)
 {
 	return display && display->valid &&
 				display->state != MCE_DISPLAY_STATE_OFF;
 }
 
-static void signalpoll_poll_service(gpointer service_ptr, gpointer data)
+static void signalpoll_check(struct signalpoll *self)
 {
-	struct connman_service *service = service_ptr;
-	struct connman_network *network;
+	struct signalpoll_priv *priv = self->priv;
 
-	network = __connman_service_get_network(service);
-	if (network) {
-		struct connman_device *device;
-
-		device = connman_network_get_device(network);
-		if (device) {
-			DBG("%s", __connman_service_get_ident(service));
-			connman_device_signal_poll(device);
-		}
-	}
-}
-
-static gboolean signalpoll_poll(gpointer data)
-{
-	g_slist_foreach(poll_services, signalpoll_poll_service, NULL);
-	return TRUE;
-}
-
-static void signalpoll_update()
-{
-	if (signalpoll_display_on() && poll_services) {
+	if (signalpoll_display_on(priv->display)) {
 		/* Need polling */
-		if (!signalpoll_timer) {
+		if (!priv->timer_id) {
 			DBG("starting poll timer");
-			signalpoll_timer = g_timeout_add_seconds(
-				POLL_INTERVAL_SECS, signalpoll_poll, NULL);
-			signalpoll_poll(NULL);
+			priv->timer_id =
+				g_timeout_add_seconds(SIGNALPOLL_INTERVAL_SECS,
+						signalpoll_poll_timer, self);
+			signalpoll_poll(self);
 		}
 	} else {
 		/* Stop poll timer */
-		if (signalpoll_timer) {
+		if (priv->timer_id) {
 			DBG("stopping poll timer");
-			g_source_remove(signalpoll_timer);
-			signalpoll_timer = 0;
+			g_source_remove(priv->timer_id);
+			priv->timer_id = 0;
 		}
 	}
 }
 
-static gboolean signalpoll_service_needs_poll(struct connman_service *service,
-					enum connman_service_state state)
+static void signalpoll_display_event(MceDisplay *display, void *data)
 {
-	gboolean needs_poll = FALSE;
-	struct connman_network *network;
-
-	network = __connman_service_get_network(service);
-	if (network) {
-		struct connman_device *device;
-
-		device = connman_network_get_device(network);
-		if (device && connman_device_supports_signal_poll(device)) {
-			switch (state) {
-			case CONNMAN_SERVICE_STATE_ASSOCIATION:
-			case CONNMAN_SERVICE_STATE_CONFIGURATION:
-			case CONNMAN_SERVICE_STATE_READY:
-			case CONNMAN_SERVICE_STATE_ONLINE:
-			case CONNMAN_SERVICE_STATE_DISCONNECT:
-				needs_poll = TRUE;
-				break;
-
-			case CONNMAN_SERVICE_STATE_IDLE:
-			case CONNMAN_SERVICE_STATE_UNKNOWN:
-			case CONNMAN_SERVICE_STATE_FAILURE:
-				break;
-			}
-		}
-	}
-
-	return needs_poll;
+	signalpoll_check(SIGNALPOLL(data));
 }
 
-static void signalpoll_add_poll_service(struct connman_service *service)
+struct signalpoll *signalpoll_new(GSupplicantInterface *iface,
+					signalpoll_rssi_to_strength_func fn)
 {
-	DBG("%s", __connman_service_get_ident(service));
-	if (!g_slist_find(poll_services, service)) {
-		DBG("adding %s", __connman_service_get_ident(service));
-		poll_services = g_slist_prepend(poll_services, service);
-		connman_service_ref(service);
-		signalpoll_update();
+	if (iface && fn) {
+		struct signalpoll *self = g_object_new(SIGNALPOLL_TYPE, NULL);
+		struct signalpoll_priv *priv = self->priv;
+
+		priv->fn_strength = fn;
+		priv->iface = gsupplicant_interface_ref(iface);
+		signalpoll_check(self);
+		return self;
+	}
+	return NULL;
+}
+
+struct signalpoll *signalpoll_ref(struct signalpoll *self)
+{
+	if (self) {
+		g_object_ref(SIGNALPOLL(self));
+		return self;
+	}
+	return NULL;
+}
+
+void signalpoll_unref(struct signalpoll *self)
+{
+	if (self) {
+		g_object_unref(SIGNALPOLL(self));
 	}
 }
 
-static void signalpoll_remove_poll_service(struct connman_service *service)
+gulong signalpoll_add_average_changed_handler(struct signalpoll *self,
+				signalpoll_event_func fn, void *data)
 {
-	GSList* found = g_slist_find(poll_services, service);
+	return self && fn ? g_signal_connect(self,
+		SIGNAL_AVERAGE_CHANGED_NAME, G_CALLBACK(fn), data) : 0;
+}
 
-	DBG("%s (%sfound)", __connman_service_get_ident(service),
-							found ? "" : "not ");
-	if (found) {
-		poll_services = g_slist_delete_link(poll_services, found);
-		connman_service_unref(service);
-		if (!poll_services) {
-			signalpoll_update();
-		}
+void signalpoll_remove_handler(struct signalpoll *self, gulong id)
+{
+	if (self && id) {
+		g_signal_handler_disconnect(self, id);
 	}
 }
 
-static void signalpoll_service_state_changed(struct connman_service *service,
-					enum connman_service_state state)
+static void signalpoll_init(struct signalpoll *self)
 {
-	DBG("%s %d", __connman_service_get_ident(service), state);
+	struct signalpoll_priv *priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
+			SIGNALPOLL_TYPE, struct signalpoll_priv);
 
-	if (signalpoll_service_needs_poll(service, state)) {
-		signalpoll_add_poll_service(service);
-	} else {
-		signalpoll_remove_poll_service(service);
+	self->priv = priv;
+	priv->history = gutil_int_history_new(SIGNALPOLL_HISTORY_SIZE,
+				SIGNALPOLL_HISTORY_SECS * GUTIL_HISTORY_SEC);
+	priv->display = mce_display_new();
+	priv->display_event_id[DISPLAY_EVENT_VALID] =
+		mce_display_add_valid_changed_handler(priv->display,
+				signalpoll_display_event, self);
+	priv->display_event_id[DISPLAY_EVENT_STATE] =
+		mce_display_add_state_changed_handler(priv->display,
+				signalpoll_display_event, self);
+}
+
+static void signalpoll_finalize(GObject *object)
+{
+	struct signalpoll *self = SIGNALPOLL(object);
+	struct signalpoll_priv *priv = self->priv;
+
+	if (priv->timer_id) {
+		g_source_remove(priv->timer_id);
 	}
-}
-
-static void signalpoll_display_cb(MceDisplay *display, void *user_data)
-{
-	signalpoll_update();
-}
-
-static void signalpoll_clean_services(gpointer service)
-{
-	connman_service_unref(service);
-}
-
-static void signalpoll_mce_debug_notify(struct connman_debug_desc *desc)
-{
-	mce_log.level = (desc->flags & CONNMAN_DEBUG_FLAG_PRINT) ?
-		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_INHERIT;
-}
-
-static struct connman_debug_desc mce_debug CONNMAN_DEBUG_ATTR = {
-	.name                   = "mce",
-	.flags                  = CONNMAN_DEBUG_FLAG_DEFAULT,
-	.notify                 = signalpoll_mce_debug_notify
-};
-
-static struct connman_notifier signalpoll_notifier = {
-	.name                   = "signalpoll",
-	.priority               = CONNMAN_NOTIFIER_PRIORITY_DEFAULT,
-	.service_state_changed  = signalpoll_service_state_changed,
-	.service_remove         = signalpoll_remove_poll_service
-};
-
-static int signalpoll_init()
-{
-	DBG("");
-	display = mce_display_new();
-	display_event_id[DISPLAY_EVENT_VALID] =
-		mce_display_add_valid_changed_handler(display,
-				signalpoll_display_cb, NULL);
-	display_event_id[DISPLAY_EVENT_STATE] =
-		mce_display_add_state_changed_handler(display,
-				signalpoll_display_cb, NULL);
-
-	connman_notifier_register(&signalpoll_notifier);
-	return 0;
-}
-
-static void signalpoll_exit()
-{
-	DBG("");
-	if (signalpoll_timer) {
-		g_source_remove(signalpoll_timer);
-		signalpoll_timer = 0;
+	if (priv->pending) {
+		g_cancellable_cancel(priv->pending);
 	}
-	if (poll_services) {
-		g_slist_free_full(poll_services, signalpoll_clean_services);
-		poll_services = NULL;
-	}
-	connman_notifier_unregister(&signalpoll_notifier);
-	gutil_disconnect_handlers(display, display_event_id,
-							DISPLAY_EVENT_COUNT);
-	mce_display_unref(display);
-	display = NULL;
+	gsupplicant_interface_unref(priv->iface);
+	mce_display_remove_handlers(priv->display, priv->display_event_id,
+				G_N_ELEMENTS(priv->display_event_id));
+	mce_display_unref(priv->display);
+	gutil_int_history_unref(priv->history);
+	G_OBJECT_CLASS(signalpoll_parent_class)->finalize(object);
 }
 
-CONNMAN_PLUGIN_DEFINE(sailfish_signalpoll, "Signal poll plugin", VERSION,
-	CONNMAN_PLUGIN_PRIORITY_DEFAULT, signalpoll_init, signalpoll_exit)
+static void signalpoll_class_init(SignalPollClass *klass)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS(klass);
+	object_class->finalize = signalpoll_finalize;
+	g_type_class_add_private(klass, sizeof(struct signalpoll_priv));
+        signalpoll_signals[SIGNAL_AVERAGE_CHANGED] =
+		g_signal_new(SIGNAL_AVERAGE_CHANGED_NAME,
+			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
+			0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+}
+
+/*
+ * Local Variables:
+ * mode: C
+ * c-basic-offset: 8
+ * tab-width: 8
+ * indent-tabs-mode: t
+ * End:
+ */
