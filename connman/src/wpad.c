@@ -185,18 +185,29 @@ int __connman_wpad_start(struct connman_service *service)
 
 void __connman_wpad_stop(struct connman_service *service)
 {
-	int index;
+	GHashTableIter it;
+	gpointer value;
 
 	DBG("service %p", service);
 
 	if (!wpad_list)
 		return;
 
-	index = __connman_service_get_index(service);
-	if (index < 0)
-		return;
+	/*
+	 * When this function is called, the service may have no index
+	 * any more or its index may change. Just find it in the list,
+	 * luckily it's not that long.
+	 */
+	g_hash_table_iter_init(&it, wpad_list);
+	while (g_hash_table_iter_next(&it, NULL, &value))  {
+		struct connman_wpad *wpad = value;
 
-	g_hash_table_remove(wpad_list, GINT_TO_POINTER(index));
+		if (wpad->service == service) {
+			g_hash_table_iter_remove(&it);
+			DBG("service %p is removed from wpad_list", service);
+			return;
+		}
+	}
 }
 
 int __connman_wpad_init(void)

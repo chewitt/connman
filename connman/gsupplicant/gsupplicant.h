@@ -173,13 +173,6 @@ struct _GSupplicantScanParams {
 	uint16_t *freqs;
 };
 
-typedef struct _GSupplicantSignalPoll {
-	int rssi;
-	int linkspeed;
-	int noise;
-	unsigned int frequency;
-} GSupplicantSignalPoll;
-
 typedef struct _GSupplicantScanParams GSupplicantScanParams;
 
 struct _GSupplicantPeerParams {
@@ -221,10 +214,6 @@ typedef struct _GSupplicantPeer GSupplicantPeer;
 
 typedef void (*GSupplicantInterfaceCallback) (int result,
 					GSupplicantInterface *interface,
-							void *user_data);
-
-typedef void (*GSupplicantSignalPollCallback) (int result,
-						const GSupplicantSignalPoll *data,
 							void *user_data);
 
 void g_supplicant_interface_cancel(GSupplicantInterface *interface);
@@ -302,9 +291,6 @@ int g_supplicant_interface_enable_selected_network(GSupplicantInterface *interfa
 int g_supplicant_interface_set_country(GSupplicantInterface *interface,
 					GSupplicantCountryCallback callback,
 							const char *alpha2,
-							void *user_data);
-int g_supplicant_interface_signal_poll(GSupplicantInterface *interface,
-					GSupplicantSignalPollCallback callback,
 							void *user_data);
 bool g_supplicant_interface_has_p2p(GSupplicantInterface *interface);
 int g_supplicant_interface_set_p2p_device_config(GSupplicantInterface *interface,

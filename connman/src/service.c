@@ -327,7 +327,7 @@ enum connman_service_security __connman_service_string2security(const char *str)
 	return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
 
-static const char *security2string(enum connman_service_security security)
+const char *__connman_service_security2string(enum connman_service_security security)
 {
 	switch (security) {
 	case CONNMAN_SERVICE_SECURITY_UNKNOWN:
@@ -486,6 +486,25 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	return 0;
 }
 
+static void get_config_string(GKeyFile *keyfile, const char *group,
+					const char *key, char **value)
+{
+	char *str = g_key_file_get_string(keyfile, group, key, NULL);
+	if (str) {
+		g_free(*value);
+		*value = str;
+	}
+}
+
+static void set_config_string(GKeyFile *keyfile, const char *group,
+					const char *key, const char *value)
+{
+	if (value)
+		g_key_file_set_string(keyfile, group, key, value);
+	else
+		g_key_file_remove_key(keyfile, group, key, NULL);
+}
+
 static int service_load(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -597,6 +616,31 @@ static int service_load(struct connman_service *service)
 		g_time_val_from_iso8601(str, &service->modified);
 		g_free(str);
 	}
+
+	get_config_string(keyfile, service->identifier, "EAP",
+					&service->eap);
+	get_config_string(keyfile, service->identifier, "Identity",
+					&service->identity);
+	get_config_string(keyfile, service->identifier, "AnonymousIdentity",
+					&service->anonymous_identity);
+	get_config_string(keyfile, service->identifier, "CACertFile",
+					&service->ca_cert_file);
+	get_config_string(keyfile, service->identifier, "SubjectMatch",
+					&service->subject_match);
+	get_config_string(keyfile, service->identifier, "AltSubjectMatch",
+					&service->altsubject_match);
+	get_config_string(keyfile, service->identifier, "DomainSuffixMatch",
+					&service->domain_suffix_match);
+	get_config_string(keyfile, service->identifier, "DomainMatch",
+					&service->domain_match);
+	get_config_string(keyfile, service->identifier, "ClientCertFile",
+					&service->client_cert_file);
+	get_config_string(keyfile, service->identifier, "PrivateKeyFile",
+					&service->private_key_file);
+	get_config_string(keyfile, service->identifier, "PrivateKeyPassphrase",
+					&service->private_key_passphrase);
+	get_config_string(keyfile, service->identifier, "Phase2",
+					&service->phase2);
 
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Passphrase", NULL);
@@ -738,6 +782,30 @@ static int service_save(struct connman_service *service)
 			g_key_file_set_integer(keyfile, service->identifier,
 						"Frequency", freq);
 		}
+		set_config_string(keyfile, service->identifier,
+			"EAP", service->eap);
+		set_config_string(keyfile, service->identifier,
+			"Identity", service->identity);
+		set_config_string(keyfile, service->identifier,
+			"AnonymousIdentity", service->anonymous_identity);
+		set_config_string(keyfile, service->identifier,
+			"CACertFile", service->ca_cert_file);
+		set_config_string(keyfile, service->identifier,
+			"SubjectMatch", service->subject_match);
+		set_config_string(keyfile, service->identifier,
+			"AltSubjectMatch", service->altsubject_match);
+		set_config_string(keyfile, service->identifier,
+			"DomainSuffixMatch", service->domain_suffix_match);
+		set_config_string(keyfile, service->identifier,
+			"DomainMatch", service->domain_match);
+		set_config_string(keyfile, service->identifier,
+			"ClientCertFile", service->client_cert_file);
+		set_config_string(keyfile, service->identifier,
+			"PrivateKeyFile", service->private_key_file);
+		set_config_string(keyfile, service->identifier,
+			"PrivateKeyPassphrase", service->private_key_passphrase);
+		set_config_string(keyfile, service->identifier,
+			"Phase2", service->phase2);
 		/* fall through */
 
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -1621,7 +1689,7 @@ static void append_security(DBusMessageIter *iter, void *user_data)
 	struct connman_service *service = user_data;
 	const char *str;
 
-	str = security2string(service->security);
+	str = __connman_service_security2string(service->security);
 	if (str)
 		dbus_message_iter_append_basic(iter,
 				DBUS_TYPE_STRING, &str);
@@ -3145,7 +3213,7 @@ static int check_passphrase(enum connman_service_security security,
 	case CONNMAN_SERVICE_SECURITY_RSN:
 
 		DBG("service security '%s' (%d) not handled",
-				security2string(security), security);
+			__connman_service_security2string(security), security);
 
 		return -EOPNOTSUPP;
 
@@ -4409,28 +4477,28 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 
 bool __connman_service_remove(struct connman_service *service)
 {
-        if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET ||
-                        service->type == CONNMAN_SERVICE_TYPE_GADGET)
-                return false;
+	if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET ||
+			service->type == CONNMAN_SERVICE_TYPE_GADGET)
+		return false;
 
-        if (service->immutable || service->hidden ||
-                        __connman_provider_is_immutable(service->provider))
-                return false;
+	if (service->immutable || service->hidden ||
+			__connman_provider_is_immutable(service->provider))
+		return false;
 
-        if (!service->favorite && service->state !=
-                                                CONNMAN_SERVICE_STATE_FAILURE)
-                return false;
+	if (!service->favorite && service->state !=
+						CONNMAN_SERVICE_STATE_FAILURE)
+		return false;
 
-        /* We don't want the service files to stay around forever */
-        __connman_storage_remove_service(service->identifier);
+	/* We don't want the service files to stay around forever */
+	__connman_storage_remove_service(service->identifier);
 
-        __connman_service_disconnect(service);
+	__connman_service_disconnect(service);
 
-        g_free(service->passphrase);
-        service->passphrase = NULL;
+	g_free(service->passphrase);
+	service->passphrase = NULL;
 
-        g_free(service->identity);
-        service->identity = NULL;
+	g_free(service->identity);
+	service->identity = NULL;
 
 	g_free(service->anonymous_identity);
 	service->anonymous_identity = NULL;
@@ -4450,14 +4518,11 @@ bool __connman_service_remove(struct connman_service *service)
 	g_free(service->agent_identity);
 	service->agent_identity = NULL;
 
-        g_free(service->eap);
-        service->eap = NULL;
+	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
-        service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
-
-        __connman_service_set_favorite(service, false);
-		if (service->autoconnect)
-			autoconnect_changed(service);
+	__connman_service_set_favorite(service, false);
+	if (service->autoconnect)
+		autoconnect_changed(service);
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
 
@@ -4880,62 +4945,66 @@ static void stats_destroy(struct connman_service *service)
 
 static void service_destroy(struct connman_service *service)
 {
-        if (service->path != NULL)
-                g_free(service->path);
+	if (service->path != NULL)
+		g_free(service->path);
 
-        g_hash_table_destroy(service->counter_table);
+	g_hash_table_destroy(service->counter_table);
 
-        if (service->network != NULL) {
-                __connman_network_disconnect(service->network);
-                connman_network_unref(service->network);
-                service->network = NULL;
-        }
+	if (service->network != NULL) {
+		__connman_network_disconnect(service->network);
+		connman_network_unref(service->network);
+		service->network = NULL;
+	}
 
-        if (service->provider != NULL)
-                connman_provider_unref(service->provider);
+	if (service->provider != NULL)
+		connman_provider_unref(service->provider);
 
-        if (service->ipconfig_ipv4 != NULL) {
-                __connman_ipconfig_set_ops(service->ipconfig_ipv4, NULL);
-                __connman_ipconfig_set_data(service->ipconfig_ipv4, NULL);
-                __connman_ipconfig_unref(service->ipconfig_ipv4);
-                service->ipconfig_ipv4 = NULL;
-        }
+	if (service->ipconfig_ipv4 != NULL) {
+		__connman_ipconfig_set_ops(service->ipconfig_ipv4, NULL);
+		__connman_ipconfig_set_data(service->ipconfig_ipv4, NULL);
+		__connman_ipconfig_unref(service->ipconfig_ipv4);
+		service->ipconfig_ipv4 = NULL;
+	}
 
-        if (service->ipconfig_ipv6 != NULL) {
-                __connman_ipconfig_set_ops(service->ipconfig_ipv6, NULL);
-                __connman_ipconfig_set_data(service->ipconfig_ipv6, NULL);
-                __connman_ipconfig_unref(service->ipconfig_ipv6);
-                service->ipconfig_ipv6 = NULL;
-        }
+	if (service->ipconfig_ipv6 != NULL) {
+		__connman_ipconfig_set_ops(service->ipconfig_ipv6, NULL);
+		__connman_ipconfig_set_data(service->ipconfig_ipv6, NULL);
+		__connman_ipconfig_unref(service->ipconfig_ipv6);
+		service->ipconfig_ipv6 = NULL;
+	}
 
-        g_strfreev(service->timeservers);
-        g_strfreev(service->timeservers_config);
-        g_strfreev(service->nameservers);
-        g_strfreev(service->nameservers_config);
-        g_strfreev(service->nameservers_auto);
-        g_strfreev(service->domains);
-        g_strfreev(service->proxies);
-        g_strfreev(service->excludes);
+	g_strfreev(service->timeservers);
+	g_strfreev(service->timeservers_config);
+	g_strfreev(service->nameservers);
+	g_strfreev(service->nameservers_config);
+	g_strfreev(service->nameservers_auto);
+	g_strfreev(service->domains);
+	g_strfreev(service->proxies);
+	g_strfreev(service->excludes);
 
 	g_free(service->hostname);
-        g_free(service->domainname);
-        g_free(service->pac);
-        g_free(service->name);
-        g_free(service->passphrase);
-        g_free(service->identifier);
-        g_free(service->eap);
-        g_free(service->identity);
+	g_free(service->domainname);
+	g_free(service->pac);
+	g_free(service->name);
+	g_free(service->passphrase);
+	g_free(service->identifier);
+	g_free(service->eap);
+	g_free(service->identity);
 	g_free(service->anonymous_identity);
-        g_free(service->agent_identity);
-        g_free(service->ca_cert_file);
-        g_free(service->client_cert_file);
-        g_free(service->private_key_file);
-        g_free(service->private_key_passphrase);
-        g_free(service->phase2);
-        g_free(service->config_file);
-        g_free(service->config_entry);
+	g_free(service->agent_identity);
+	g_free(service->ca_cert_file);
+	g_free(service->subject_match);
+	g_free(service->altsubject_match);
+	g_free(service->domain_suffix_match);
+	g_free(service->domain_match);
+	g_free(service->client_cert_file);
+	g_free(service->private_key_file);
+	g_free(service->private_key_passphrase);
+	g_free(service->phase2);
+	g_free(service->config_file);
+	g_free(service->config_entry);
 
-        stats_destroy(service);
+	stats_destroy(service);
 
 	if (current_default == service)
 		current_default = NULL;
@@ -4944,7 +5013,7 @@ static void service_destroy(struct connman_service *service)
 	if (service->connect_retry_timer)
 		g_source_remove(service->connect_retry_timer);
 
-        g_free(service);
+	g_free(service);
 }
 
 static void service_free(gpointer user_data)
@@ -5410,14 +5479,36 @@ int __connman_service_set_ignore(struct connman_service *service,
 	return 0;
 }
 
+/* Only allows valid values */
+static bool set_eap_method(struct connman_service *service, const char *method)
+{
+	if (method && method[0]) {
+		if (!g_strcmp0(service->eap, method)) {
+			return false;
+		} else if (!g_strcmp0(method, "peap") ||
+				!g_strcmp0(method, "tls") ||
+				!g_strcmp0(method, "ttls")) {
+			g_free(service->eap);
+			service->eap = g_strdup(method);
+			return true;
+		}
+		DBG("invalid EAP method %s", method);
+	}
+	if (service->eap) {
+		g_free(service->eap);
+		service->eap = NULL;
+		return true;
+	}
+	return false;
+}
+
 void __connman_service_set_string(struct connman_service *service,
 				  const char *key, const char *value)
 {
 	if (service->hidden)
 		return;
 	if (g_str_equal(key, "EAP")) {
-		g_free(service->eap);
-		service->eap = g_strdup(value);
+		set_eap_method(service, value);
 	} else if (g_str_equal(key, "Identity")) {
 		g_free(service->identity);
 		service->identity = g_strdup(value);
@@ -6420,8 +6511,14 @@ static int service_connect(struct connman_service *service)
 			break;
 
 		case CONNMAN_SERVICE_SECURITY_8021X:
-			if (!service->eap)
-				return -EINVAL;
+			if (!service->eap) {
+				/* Give WPS a chance */
+				if (!service->wps ||
+					!connman_network_get_bool(service->network, "WiFi.UseWPS"))
+					return -EINVAL;
+
+				break;
+			}
 
 			/*
 			 * never request credentials if using EAP-TLS
@@ -6438,8 +6535,14 @@ static int service_connect(struct connman_service *service)
 			if (((!service->identity &&
 					!service->agent_identity) ||
 					!service->passphrase) ||
-					service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
-				return -ENOKEY;
+					service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY) {
+				/* Give WPS a chance */
+				if (!service->wps ||
+					!connman_network_get_bool(service->network, "WiFi.UseWPS"))
+					return -ENOKEY;
+
+				break;
+			}
 
 			break;
 		}
@@ -7162,6 +7265,43 @@ static enum connman_service_security convert_wifi_security(const char *security)
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
 
+static bool update_string_from_network(struct connman_network *network,
+					const char *key, char **value)
+{
+	const char *network_value = connman_network_get_string(network, key);
+
+	if (g_strcmp0(*value, network_value)) {
+		g_free(*value);
+		*value = g_strdup(network_value);
+		return true;
+	}
+	return false;
+}
+
+/* Return true if service has been updated */
+bool __connman_service_update_value_from_network(
+			struct connman_service *service,
+			struct connman_network *network, const char *key)
+{
+	if (!service || !network || !key) {
+		return false;
+	} else if (!g_strcmp0(key, "WiFi.EAP")) {
+		const char *value = connman_network_get_string(network, key);
+
+		if (value && !value[0]) {
+			/* Substitute default (empty) value with "peap" */
+			value = service->eap ? service->eap : "peap";
+			connman_network_set_string(network, key, value);
+		}
+		return set_eap_method(service, value);
+	} else if (!g_strcmp0(key, "WiFi.Identity")) {
+		return update_string_from_network(network, key,
+							&service->identity);
+	} else {
+		return false;
+	}
+}
+
 static void update_from_network(struct connman_service *service,
 					struct connman_network *network)
 {
@@ -7201,8 +7341,31 @@ static void update_from_network(struct connman_service *service,
 	str = connman_network_get_string(network, "WiFi.Security");
 	service->security = convert_wifi_security(str);
 
-	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI) {
+		__connman_service_update_value_from_network(service, network,
+								"WiFi.EAP");
 		service->wps = connman_network_get_bool(network, "WiFi.WPS");
+	}
+
+	/*
+	 * Reset the ignore flag if there was no network associated with
+	 * this service. As a side effect of some sort of a ref-counting
+	 * bug, the service may not be freed after it's been removed from
+	 * the network (because something is holding the reference) and
+	 * then later re-associated with the new network with the same
+	 * name. In that case service->ignore would be true (because it
+	 * was set by __connman_service_remove_from_network) so we need
+	 * to reset it back to false.
+	 *
+	 * This is quite a common situation at the edge of the wifi area
+	 * where networks are coming and going quite often.
+	 *
+	 * The ref-counting bug should be fixed too because it's likely
+	 * to cause memory leaks. But in any case it won't hurt to have
+	 * this check here.
+	 */
+	if (!service->network)
+		service->ignore = false;
 
 	if (service->strength > strength && service->network) {
 		connman_network_unref(service->network);

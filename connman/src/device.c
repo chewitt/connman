@@ -659,19 +659,6 @@ int __connman_device_disconnect(struct connman_device *device)
 	return 0;
 }
 
-bool connman_device_supports_signal_poll(struct connman_device *device)
-{
-	return device && device->driver && device->driver->signal_poll;
-}
-
-int connman_device_signal_poll(struct connman_device *device)
-{
-	if (!device->driver || !device->driver->signal_poll)
-		return -EOPNOTSUPP;
-
-	return device->driver->signal_poll(device);
-}
-
 int connman_device_reconnect_service(struct connman_device *device)
 {
 	DBG("device %p", device);
@@ -1449,7 +1436,9 @@ static void cleanup_devices(void)
 	g_strfreev(interfaces);
 }
 
+#ifdef WIFI_PLUGIN
 extern void wifi_cleanup(void);
+#endif
 
 int __connman_device_init(const char *device, const char *nodevice)
 {
@@ -1461,10 +1450,13 @@ int __connman_device_init(const char *device, const char *nodevice)
 	if (nodevice)
 		nodevice_filter = g_strsplit(nodevice, ",", -1);
 
+#ifdef WIFI_PLUGIN
 	/* wpa_supplicant interfaces must be removed prior to bringing wifi
 	 * interfaces down. Otherwise supplicant gets into INTERFACE_DISABLED
 	 * state and wifi won't work. */
-	wifi_cleanup();
+	if (__connman_plugin_enabled("wifi"))
+		wifi_cleanup();
+#endif
 	cleanup_devices();
 
 	return 0;

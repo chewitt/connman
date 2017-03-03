@@ -84,8 +84,6 @@ int connman_device_set_scanning(struct connman_device *device,
 				enum connman_service_type type, bool scanning);
 bool connman_device_get_scanning(struct connman_device *device);
 void connman_device_reset_scanning(struct connman_device *device);
-bool connman_device_supports_signal_poll(struct connman_device *device);
-int connman_device_signal_poll(struct connman_device *device);
 
 int connman_device_set_string(struct connman_device *device,
 					const char *key, const char *value);
@@ -128,7 +126,6 @@ struct connman_device_driver {
 			const char *security, void *user_data);
 	int (*set_regdom) (struct connman_device *device,
 						const char *alpha2);
-	int (*signal_poll) (struct connman_device *device);
 };
 
 int connman_device_driver_register(struct connman_device_driver *driver);
