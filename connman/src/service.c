@@ -48,6 +48,8 @@
 
 #define WIFI_BSSID_STR_LEN	18
 
+#define PASSPHRASE_ACCESS CONNMAN_ACCESS_DENY
+
 static DBusConnection *connection = NULL;
 
 static GList *service_list = NULL;
@@ -2537,7 +2539,38 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_STRING, &enc_mode);
 }
 
-static void append_string_with_access_control(DBusMessageIter *dict,
+static void restricted_string_changed(struct connman_service *service,
+				const char *name, const char *value,
+				enum connman_access default_access)
+{
+	if (service->path) {
+		DBusMessage *signal;
+		DBusMessageIter iter;
+
+		if (connman_access_service_get_property(service->policy,
+			NULL, name, default_access) == CONNMAN_ACCESS_ALLOW) {
+			/* Access is wide open, send the value */
+			signal = dbus_message_new_signal(service->path,
+						CONNMAN_SERVICE_INTERFACE,
+						"PropertyChanged");
+			dbus_message_iter_init_append(signal, &iter);
+			connman_dbus_property_append_basic(&iter, name,
+						DBUS_TYPE_STRING, &value);
+		} else {
+			/* We can only broadcast the name */
+			signal = dbus_message_new_signal(service->path,
+						CONNMAN_SERVICE_INTERFACE,
+						"RestrictedPropertyChanged");
+			dbus_message_iter_init_append(signal, &iter);
+			dbus_message_iter_append_basic(&iter,
+						DBUS_TYPE_STRING, &name);
+		}
+
+		g_dbus_send_message(connection, signal);
+	}
+}
+
+static void append_restricted_string(DBusMessageIter *dict,
 		struct connman_access_service_policy *policy, const char *name,
 		const char *str, enum connman_access default_access)
 {
@@ -2550,6 +2583,49 @@ static void append_string_with_access_control(DBusMessageIter *dict,
 		return;
 
 	connman_dbus_dict_append_basic(dict, name, DBUS_TYPE_STRING, &str);
+}
+
+static DBusMessage *get_property(DBusConnection *conn,
+					DBusMessage *msg, void *user_data)
+{
+	struct connman_service *service = user_data;
+	const char *sender = g_dbus_get_current_sender();
+	const char *name;
+	DBusMessageIter iter, value;
+
+	if (!dbus_message_iter_init(msg, &iter))
+		return __connman_error_invalid_arguments(msg);
+
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING)
+		return __connman_error_invalid_arguments(msg);
+
+	dbus_message_iter_get_basic(&iter, &name);
+
+	if (!g_strcmp0(name, "Passphrase")) {
+		const char *passphrase;
+		DBusMessage *reply;
+
+		if (connman_access_service_get_property(service->policy,
+					sender, name, PASSPHRASE_ACCESS) !=
+						CONNMAN_ACCESS_ALLOW) {
+			DBG("%s has no access to %s", sender, name);
+			return __connman_error_permission_denied(msg);
+		}
+
+		reply = dbus_message_new_method_return(msg);
+		passphrase = service->passphrase ? service->passphrase : "";
+		dbus_message_iter_init_append(reply, &iter);
+		dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT,
+					DBUS_TYPE_STRING_AS_STRING, &value);
+		dbus_message_iter_append_basic(&value, DBUS_TYPE_STRING,
+								&passphrase);
+		dbus_message_iter_close_container(&iter, &value);
+		DBG("sending %s to %s", name, sender);
+		return reply;
+	}
+
+	DBG("%s requested %s - why?", sender, name);
+	return __connman_error_invalid_arguments(msg);
 }
 
 static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
@@ -2627,9 +2703,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "Hidden",
 						DBUS_TYPE_BOOLEAN, &val);
 
-		append_string_with_access_control(dict, service->policy,
+		append_restricted_string(dict, service->policy,
 					"Passphrase", service->passphrase,
-					CONNMAN_ACCESS_DENY);
+					PASSPHRASE_ACCESS);
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -3291,6 +3367,9 @@ int __connman_service_set_passphrase(struct connman_service *service,
 			service->security != CONNMAN_SERVICE_SECURITY_8021X)
 		return -EINVAL;
 
+	if (!g_strcmp0(service->passphrase, passphrase))
+		return 0;
+
 	err = check_passphrase(service->security, passphrase);
 
 	if (err < 0)
@@ -3299,6 +3378,8 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	g_free(service->passphrase);
 	service->passphrase = g_strdup(passphrase);
 
+	restricted_string_changed(service, "Passphrase", service->passphrase,
+							PASSPHRASE_ACCESS);
 	if (service->network)
 		connman_network_set_string(service->network, "WiFi.Passphrase",
 				service->passphrase);
@@ -3924,7 +4005,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		if (connman_access_service_set_property(service->policy,
 				g_dbus_get_current_sender(), name,
-				CONNMAN_ACCESS_DENY) != CONNMAN_ACCESS_ALLOW)
+				PASSPHRASE_ACCESS) != CONNMAN_ACCESS_ALLOW)
 			return __connman_error_permission_denied(msg);
 
 		if (g_strcmp0(str, service->passphrase)) {
@@ -4984,6 +5065,9 @@ static const GDBusMethodTable service_methods[] = {
 	{ GDBUS_DEPRECATED_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			get_properties) },
+	{ GDBUS_METHOD("GetProperty",
+			GDBUS_ARGS({ "name", "s" }),
+			GDBUS_ARGS({ "value", "v" }), get_property) },
 	{ GDBUS_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
@@ -5008,6 +5092,8 @@ static const GDBusMethodTable service_methods[] = {
 static const GDBusSignalTable service_signals[] = {
 	{ GDBUS_SIGNAL("PropertyChanged",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
+	{ GDBUS_SIGNAL("RestrictedPropertyChanged",
+			GDBUS_ARGS({ "name", "s" })) },
 	{ },
 };
 

@@ -16,6 +16,7 @@ Requires:   connman-configs
 Requires:   systemd
 Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.20
+Requires:   libdbusaccess >= 1.0.1
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
