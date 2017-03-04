@@ -49,6 +49,7 @@
 #define WIFI_BSSID_STR_LEN	18
 
 #define PASSPHRASE_ACCESS CONNMAN_ACCESS_DENY
+#define ACCESS_ACCESS CONNMAN_ACCESS_DENY
 
 static DBusConnection *connection = NULL;
 
@@ -2585,13 +2586,45 @@ static void append_restricted_string(DBusMessageIter *dict,
 	connman_dbus_dict_append_basic(dict, name, DBUS_TYPE_STRING, &str);
 }
 
+static DBusMessage *reply_string(DBusMessage *msg, const char *str)
+{
+	DBusMessage *reply = dbus_message_new_method_return(msg);
+	DBusMessageIter iter, value;
+
+	if (!str)
+		str = "";
+
+	dbus_message_iter_init_append(reply, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT,
+					DBUS_TYPE_STRING_AS_STRING, &value);
+	dbus_message_iter_append_basic(&value, DBUS_TYPE_STRING, &str);
+	dbus_message_iter_close_container(&iter, &value);
+	return reply;
+}
+
+static DBusMessage *check_and_reply_string(DBusMessage *msg,
+		struct connman_access_service_policy *policy, const char *name,
+		const char *value, enum connman_access default_access)
+{
+	const char *sender = g_dbus_get_current_sender();
+
+	if (connman_access_service_get_property(policy, sender, name,
+				default_access) == CONNMAN_ACCESS_ALLOW) {
+		DBG("sending %s to %s", name, sender);
+		return reply_string(msg, value);
+	} else {
+		DBG("%s has no access to %s", sender, name);
+		return __connman_error_permission_denied(msg);
+	}
+}
+
 static DBusMessage *get_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
 	struct connman_service *service = user_data;
 	const char *sender = g_dbus_get_current_sender();
 	const char *name;
-	DBusMessageIter iter, value;
+	DBusMessageIter iter;
 
 	if (!dbus_message_iter_init(msg, &iter))
 		return __connman_error_invalid_arguments(msg);
@@ -2602,26 +2635,11 @@ static DBusMessage *get_property(DBusConnection *conn,
 	dbus_message_iter_get_basic(&iter, &name);
 
 	if (!g_strcmp0(name, "Passphrase")) {
-		const char *passphrase;
-		DBusMessage *reply;
-
-		if (connman_access_service_get_property(service->policy,
-					sender, name, PASSPHRASE_ACCESS) !=
-						CONNMAN_ACCESS_ALLOW) {
-			DBG("%s has no access to %s", sender, name);
-			return __connman_error_permission_denied(msg);
-		}
-
-		reply = dbus_message_new_method_return(msg);
-		passphrase = service->passphrase ? service->passphrase : "";
-		dbus_message_iter_init_append(reply, &iter);
-		dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT,
-					DBUS_TYPE_STRING_AS_STRING, &value);
-		dbus_message_iter_append_basic(&value, DBUS_TYPE_STRING,
-								&passphrase);
-		dbus_message_iter_close_container(&iter, &value);
-		DBG("sending %s to %s", name, sender);
-		return reply;
+		return check_and_reply_string(msg, service->policy, name,
+				service->passphrase, PASSPHRASE_ACCESS);
+	} else if (!g_strcmp0(name, "Access")) {
+		return check_and_reply_string(msg, service->policy, name,
+				service->access, ACCESS_ACCESS);
 	}
 
 	DBG("%s requested %s - why?", sender, name);
@@ -2758,7 +2776,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 	connman_dbus_dict_append_dict(dict, "Provider",
 						append_provider, service);
-    
+
+	append_restricted_string(dict, service->policy, "Access",
+				service->access, PASSPHRASE_ACCESS);
 }
 
 static void append_struct_service(DBusMessageIter *iter,
@@ -4022,6 +4042,45 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 				return __connman_error_failed(msg, -err);
 			}
+
+			service_save(service);
+		}
+	} else if (g_str_equal(name, "Access")) {
+		const char *str = NULL;
+		const char *sender = g_dbus_get_current_sender();
+
+		if (type != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &str);
+
+		if (connman_access_service_set_property(service->policy,
+					sender, name, ACCESS_ACCESS) !=
+						CONNMAN_ACCESS_ALLOW)
+			return __connman_error_permission_denied(msg);
+
+		if (g_strcmp0(str, service->access)) {
+			/* Check the syntax */
+			struct connman_access_service_policy *policy =
+				connman_access_service_policy_create(str);
+
+			if (str && !policy)
+				return __connman_error_invalid_arguments(msg);
+
+			/* Don't allow the user to shoot self in the foot */
+			if (connman_access_service_set_property(policy,
+					sender, name, ACCESS_ACCESS) !=
+						CONNMAN_ACCESS_ALLOW) {
+				DBG("self-shooting prevented");
+				connman_access_service_policy_free(policy);
+				return __connman_error_invalid_arguments(msg);
+			}
+
+			DBG("%s access \"%s\"", service->identifier, str);
+			g_free(service->access);
+			connman_access_service_policy_free(service->policy);
+			service->policy = policy;
+			service->access = g_strdup(str);
 
 			service_save(service);
 		}
