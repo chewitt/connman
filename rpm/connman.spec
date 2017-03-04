@@ -124,7 +124,6 @@ Documentation for connman.
     --enable-test \
     --enable-sailfish-debuglog \
     --enable-sailfish-ofono \
-    --enable-sailfish-signalpoll \
     --enable-sailfish-usb-tethering \
     --enable-sailfish-wifi \
     --disable-gadget \
