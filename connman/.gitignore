@@ -69,6 +69,7 @@ unit/test-nat
 unit/test-nat
 unit/test-dnsproxy
 unit/test-access
+unit/test-sailfish_access
 unit/test-sailfish_wakeup_timer
 
 *.gcda

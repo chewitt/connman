@@ -385,6 +385,18 @@ AC_ARG_ENABLE(wispr, AC_HELP_STRING([--disable-wispr],
 					[enable_wispr=${enableval}])
 AM_CONDITIONAL(WISPR, test "${enable_wispr}" != "no")
 
+AC_ARG_ENABLE(sailfish-access,
+	AC_HELP_STRING([--enable-sailfish-access], [enable Sailfish access control plugin]),
+		[enable_sailfish_access=${enableval}], [enable_sailfish_access="no"])
+AM_CONDITIONAL(SAILFISH_ACCESS, test "${enable_sailfish_access}" != "no")
+if (test "${enable_sailfish_access}" = "yes"); then
+	PKG_CHECK_MODULES(DBUSACCESS, libdbusaccess, dummy=yes,
+				AC_MSG_ERROR(libdbusaccess is required))
+	CFLAGS="$CFLAGS $DBUSACCESS_CFLAGS"
+	LIBS="$LIBS $DBUSACCESS_LIBS"
+	need_glibutil=yes
+fi
+
 AC_ARG_ENABLE(sailfish-debuglog,
 	AC_HELP_STRING([--enable-sailfish-debuglog], [enable Sailfish logging plugin]),
 		[enable_sailfish_debuglog=${enableval}], [enable_sailfish_debuglog="no"])

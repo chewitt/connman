@@ -55,6 +55,11 @@ builtin_modules += jolla_gps
 builtin_sources += plugins/jolla-gps.c
 endif
 
+if SAILFISH_ACCESS
+builtin_modules += sailfish_access
+builtin_sources += plugins/sailfish_access.c
+endif
+
 if SAILFISH_WAKEUP_TIMER
 builtin_modules += sailfish_wakeup_timer
 builtin_sources += plugins/sailfish_wakeup_timer.c

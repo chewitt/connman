@@ -8,6 +8,7 @@
 # Tests with coverage enabled:
 TESTS="test-access \
 test-ippool \
+test-sailfish_access \
 test-sailfish_wakeup_timer"
 
 pushd `dirname $0` > /dev/null
