@@ -34,6 +34,7 @@
 #include <connman/storage.h>
 #include <connman/setting.h>
 #include <connman/agent.h>
+#include <connman/access.h>
 
 #include "connman.h"
 
@@ -149,6 +150,8 @@ struct connman_service {
 	guint online_check_timer_ipv6;
 	guint connect_retry_timer;
 	guint connect_retry_timeout;
+	struct connman_access_service_policy *policy;
+	char *access;
 };
 
 static bool allow_property_changed(struct connman_service *service);
@@ -647,6 +650,13 @@ static int service_load(struct connman_service *service)
 	if (str) {
 		g_free(service->passphrase);
 		service->passphrase = str;
+	}
+
+	str = g_key_file_get_string(keyfile,
+				service->identifier, "Access", NULL);
+	if (str) {
+		__connman_service_set_access(service, str);
+		g_free(str);
 	}
 
 	if (service->ipconfig_ipv4)
@@ -2527,6 +2537,21 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_STRING, &enc_mode);
 }
 
+static void append_string_with_access_control(DBusMessageIter *dict,
+		struct connman_access_service_policy *policy, const char *name,
+		const char *str, enum connman_access default_access)
+{
+	if (!str)
+		return;
+
+	if (connman_access_service_get_property(policy,
+				g_dbus_get_current_sender(), name,
+				default_access) != CONNMAN_ACCESS_ALLOW)
+		return;
+
+	connman_dbus_dict_append_basic(dict, name, DBUS_TYPE_STRING, &str);
+}
+
 static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 					struct connman_service *service)
 {
@@ -2601,6 +2626,10 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		val = service->hidden_service;
 		connman_dbus_dict_append_basic(dict, "Hidden",
 						DBUS_TYPE_BOOLEAN, &val);
+
+		append_string_with_access_control(dict, service->policy,
+					"Passphrase", service->passphrase,
+					CONNMAN_ACCESS_DENY);
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -3285,6 +3314,23 @@ const char *__connman_service_get_passphrase(struct connman_service *service)
 	return service->passphrase;
 }
 
+void __connman_service_set_access(struct connman_service *service,
+							const char *access)
+{
+	if (!service)
+		return;
+
+	if (!g_strcmp0(service->access, access))
+		return;
+
+	g_free(service->access);
+	connman_access_service_policy_free(service->policy);
+
+	/* NULL parameter initializes the default access policy */
+	service->policy = connman_access_service_policy_create(access);
+	service->access = g_strdup(access);
+}
+
 static DBusMessage *get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -3868,6 +3914,36 @@ static DBusMessage *set_property(DBusConnection *conn,
 		}
 
 		service_save(service);
+	} else if (g_str_equal(name, "Passphrase")) {
+		const char *str = NULL;
+
+		if (type != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &str);
+
+		if (connman_access_service_set_property(service->policy,
+				g_dbus_get_current_sender(), name,
+				CONNMAN_ACCESS_DENY) != CONNMAN_ACCESS_ALLOW)
+			return __connman_error_permission_denied(msg);
+
+		if (g_strcmp0(str, service->passphrase)) {
+			int err;
+
+			err = __connman_service_set_passphrase(service, str);
+			if (err) {
+				/*
+				 * InvalidArguments is more appropriate here
+				 * than PassphraseRequired
+				 */
+				if (err == -ENOKEY)
+					err = -EINVAL;
+
+				return __connman_error_failed(msg, -err);
+			}
+
+			service_save(service);
+		}
 	} else
 		return __connman_error_invalid_property(msg);
 
@@ -5006,6 +5082,9 @@ static void service_destroy(struct connman_service *service)
 
 	stats_destroy(service);
 
+	connman_access_service_policy_free(service->policy);
+	g_free(service->access);
+
 	if (current_default == service)
 		current_default = NULL;
 
@@ -5074,6 +5153,7 @@ static void service_initialize(struct connman_service *service)
 
 	service->online_check_timer_ipv4 = 0;
 	service->online_check_timer_ipv6 = 0;
+	service->policy = connman_access_service_policy_create(NULL);
 }
 
 /**
