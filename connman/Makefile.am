@@ -12,7 +12,8 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/storage.h include/provision.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h \
-			include/technology.h include/wakeup_timer.h
+			include/technology.h include/wakeup_timer.h \
+			include/access.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -120,7 +121,8 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
-			src/wakeup_timer.c src/jolla-stats.c src/fsid.c
+			src/wakeup_timer.c src/jolla-stats.c src/fsid.c \
+			src/access.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -268,8 +270,8 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl
 endif
 
-noinst_PROGRAMS += unit/test-ippool \
-			unit/test-sailfish_wakeup_timer unit/test-dnsproxy
+noinst_PROGRAMS += unit/test-access unit/test-dnsproxy unit/test-ippool \
+	unit/test-sailfish_access unit/test-sailfish_wakeup_timer
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -281,6 +283,15 @@ unit_test_ippool_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+unit_test_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_access_SOURCES = unit/test-access.c src/access.c src/log.c
+unit_test_access_LDADD = @GLIB_LIBS@ -ldl
+
+unit_test_sailfish_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
+			src/log.c src/access.c plugins/sailfish_access.c
+unit_test_sailfish_access_LDADD = @GLIB_LIBS@ -ldl
+
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sailfish_wakeup_timer_SOURCES = unit/test-sailfish_wakeup_timer.c \
 				src/log.c src/wakeup_timer.c \
@@ -290,8 +301,8 @@ unit_test_sailfish_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c
 unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
-TESTS = unit/test-ippool \
-		unit/test-sailfish_wakeup_timer unit/test-dnsproxy
+TESTS = unit/test-access unit/test-ippool unit/test-dnsproxy \
+	unit/test-sailfish_access unit/test-sailfish_wakeup_timer
 
 if WISPR
 noinst_PROGRAMS += tools/wispr

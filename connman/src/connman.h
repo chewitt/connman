@@ -832,6 +832,8 @@ void __connman_service_counter_unregister(const char *counter);
 void __connman_service_counter_send_initial(const char *counter);
 void __connman_service_counter_reset_all(const char *type);
 void __connman_service_removed(const char *ident);
+void __connman_service_set_access(struct connman_service *service,
+							const char *access);
 
 #include <connman/peer.h>
 

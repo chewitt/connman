@@ -93,6 +93,15 @@ static void process_properties_from_interface(struct generic_data *data,
 						struct interface_data *iface);
 static void process_property_changes(struct generic_data *data);
 
+static GPrivate current_message;
+
+const char *g_dbus_get_current_sender()
+{
+	DBusMessage *message = g_private_get(&current_message);
+
+	return message ? dbus_message_get_sender(message) : NULL;
+}
+
 static void print_arguments(GString *gstr, const GDBusArgInfo *args,
 						const char *direction)
 {
@@ -256,7 +265,9 @@ static DBusHandlerResult process_message(DBusConnection *connection,
 {
 	DBusMessage *reply;
 
+	g_private_set(&current_message, message);
 	reply = method->function(connection, message, iface_user_data);
+	g_private_set(&current_message, NULL);
 
 	if (method->flags & G_DBUS_METHOD_FLAG_NOREPLY ||
 					dbus_message_get_no_reply(message)) {

@@ -315,6 +315,8 @@ gboolean g_dbus_get_properties(DBusConnection *connection, const char *path,
 gboolean g_dbus_attach_object_manager(DBusConnection *connection);
 gboolean g_dbus_detach_object_manager(DBusConnection *connection);
 
+const char *g_dbus_get_current_sender(void);
+
 typedef struct GDBusClient GDBusClient;
 typedef struct GDBusProxy GDBusProxy;
 
