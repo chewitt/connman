@@ -1693,6 +1693,10 @@ static void wifi_device_remove_bss_from_network2(struct wifi_device *dev,
 		if (data->bss == bss) {
 			net->bss_list = g_list_delete_link(net->bss_list, l);
 			wifi_bss_free(data);
+			if (net->bss_list) {
+				/* Best BSS may be gone, update the strength */
+				wifi_network_update_strength(net);
+			}
 			break;
 		}
 	}
