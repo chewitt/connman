@@ -48,8 +48,14 @@
 
 #define WIFI_BSSID_STR_LEN	18
 
-#define PASSPHRASE_ACCESS CONNMAN_ACCESS_DENY
-#define ACCESS_ACCESS CONNMAN_ACCESS_DENY
+#define PASSPHRASE_GET_ACCESS CONNMAN_ACCESS_DENY
+#define PASSPHRASE_SET_ACCESS CONNMAN_ACCESS_DENY
+#define ACCESS_GET_ACCESS     CONNMAN_ACCESS_DENY
+#define ACCESS_SET_ACCESS     CONNMAN_ACCESS_DENY
+#define IDENTITY_GET_ACCESS   CONNMAN_ACCESS_DENY
+#define IDENTITY_SET_ACCESS   CONNMAN_ACCESS_DENY
+#define EAP_GET_ACCESS        CONNMAN_ACCESS_ALLOW
+#define EAP_SET_ACCESS        CONNMAN_ACCESS_DENY
 
 static DBusConnection *connection = NULL;
 
@@ -2542,22 +2548,22 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 
 static void restricted_string_changed(struct connman_service *service,
 				const char *name, const char *value,
-				enum connman_access default_access)
+				enum connman_access default_get_access)
 {
-	if (service->path) {
-		DBusMessage *signal;
-		DBusMessageIter iter;
+	if (allow_property_changed(service)) {
+		if (connman_access_service_get_property(service->policy, NULL,
+			name, default_get_access) == CONNMAN_ACCESS_ALLOW) {
+			if (!value)
+				value = "";
 
-		if (connman_access_service_get_property(service->policy,
-			NULL, name, default_access) == CONNMAN_ACCESS_ALLOW) {
 			/* Access is wide open, send the value */
-			signal = dbus_message_new_signal(service->path,
-						CONNMAN_SERVICE_INTERFACE,
-						"PropertyChanged");
-			dbus_message_iter_init_append(signal, &iter);
-			connman_dbus_property_append_basic(&iter, name,
-						DBUS_TYPE_STRING, &value);
+			connman_dbus_property_changed_basic(service->path,
+					CONNMAN_SERVICE_INTERFACE, name,
+					DBUS_TYPE_STRING, &value);
 		} else {
+			DBusMessage *signal;
+			DBusMessageIter iter;
+
 			/* We can only broadcast the name */
 			signal = dbus_message_new_signal(service->path,
 						CONNMAN_SERVICE_INTERFACE,
@@ -2565,9 +2571,8 @@ static void restricted_string_changed(struct connman_service *service,
 			dbus_message_iter_init_append(signal, &iter);
 			dbus_message_iter_append_basic(&iter,
 						DBUS_TYPE_STRING, &name);
+			g_dbus_send_message(connection, signal);
 		}
-
-		g_dbus_send_message(connection, signal);
 	}
 }
 
@@ -2636,10 +2641,16 @@ static DBusMessage *get_property(DBusConnection *conn,
 
 	if (!g_strcmp0(name, "Passphrase")) {
 		return check_and_reply_string(msg, service->policy, name,
-				service->passphrase, PASSPHRASE_ACCESS);
+				service->passphrase, PASSPHRASE_GET_ACCESS);
 	} else if (!g_strcmp0(name, "Access")) {
 		return check_and_reply_string(msg, service->policy, name,
-				service->access, ACCESS_ACCESS);
+				service->access, ACCESS_GET_ACCESS);
+	} else if (!g_strcmp0(name, "Identity")) {
+		return check_and_reply_string(msg, service->policy, name,
+				service->identity, IDENTITY_GET_ACCESS);
+	} else if (!g_strcmp0(name, "EAP")) {
+		return check_and_reply_string(msg, service->policy, name,
+				service->eap, EAP_GET_ACCESS);
 	}
 
 	DBG("%s requested %s - why?", sender, name);
@@ -2721,9 +2732,12 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "Hidden",
 						DBUS_TYPE_BOOLEAN, &val);
 
-		append_restricted_string(dict, service->policy,
-					"Passphrase", service->passphrase,
-					PASSPHRASE_ACCESS);
+		append_restricted_string(dict, service->policy, "Passphrase",
+				service->passphrase, PASSPHRASE_GET_ACCESS);
+		append_restricted_string(dict, service->policy, "Identity",
+				service->identity, IDENTITY_GET_ACCESS);
+		append_restricted_string(dict, service->policy, "EAP",
+				service->eap, IDENTITY_GET_ACCESS);
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -2778,7 +2792,7 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 						append_provider, service);
 
 	append_restricted_string(dict, service->policy, "Access",
-				service->access, PASSPHRASE_ACCESS);
+				service->access, ACCESS_GET_ACCESS);
 }
 
 static void append_struct_service(DBusMessageIter *iter,
@@ -3216,19 +3230,31 @@ void __connman_service_set_pac(struct connman_service *service,
 	proxy_changed(service);
 }
 
+static gboolean set_identity(struct connman_service *service,
+					const char *identity)
+{
+	if (!g_strcmp0(service->identity, identity))
+		return FALSE;
+
+	g_free(service->identity);
+	service->identity = g_strdup(identity);
+
+	restricted_string_changed(service, "Identity", service->identity,
+							IDENTITY_GET_ACCESS);
+	if (service->network)
+		connman_network_set_string(service->network,
+					"WiFi.Identity",
+					service->identity);
+	return TRUE;
+}
+
 void __connman_service_set_identity(struct connman_service *service,
 					const char *identity)
 {
 	if (service->immutable || service->hidden)
 		return;
 
-	g_free(service->identity);
-	service->identity = g_strdup(identity);
-
-	if (service->network)
-		connman_network_set_string(service->network,
-					"WiFi.Identity",
-					service->identity);
+	set_identity(service, identity);
 }
 
 void __connman_service_set_anonymous_identity(struct connman_service *service,
@@ -3399,7 +3425,7 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	service->passphrase = g_strdup(passphrase);
 
 	restricted_string_changed(service, "Passphrase", service->passphrase,
-							PASSPHRASE_ACCESS);
+						PASSPHRASE_GET_ACCESS);
 	if (service->network)
 		connman_network_set_string(service->network, "WiFi.Passphrase",
 				service->passphrase);
@@ -3430,6 +3456,58 @@ void __connman_service_set_access(struct connman_service *service,
 	/* NULL parameter initializes the default access policy */
 	service->policy = connman_access_service_policy_create(access);
 	service->access = g_strdup(access);
+}
+
+/* Only allows valid values */
+static gboolean set_eap_method(struct connman_service *service,
+							const char *method)
+{
+	if (method && method[0]) {
+		if (!g_strcmp0(service->eap, method)) {
+			return FALSE;
+		} else if (!g_strcmp0(method, "peap") ||
+				!g_strcmp0(method, "tls") ||
+				!g_strcmp0(method, "ttls")) {
+			g_free(service->eap);
+			service->eap = g_strdup(method);
+			restricted_string_changed(service, "EAP",
+					service->eap, EAP_GET_ACCESS);
+			return TRUE;
+		}
+		DBG("invalid EAP method %s", method);
+	}
+	if (service->eap) {
+		g_free(service->eap);
+		service->eap = NULL;
+		restricted_string_changed(service, "EAP",
+				service->eap, EAP_GET_ACCESS);
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static DBusMessage *set_restricted_string(struct connman_service *service,
+		const char *name, DBusMessageIter *value, DBusMessage *msg,
+		gboolean (*set)(struct connman_service *, const char *),
+		enum connman_access default_set_access)
+{
+	/* Name has already been read from the iterator and checked */
+	const char *str = NULL;
+
+	if (dbus_message_iter_get_arg_type(value) != DBUS_TYPE_STRING)
+		return __connman_error_invalid_arguments(msg);
+
+	dbus_message_iter_get_basic(value, &str);
+
+	if (connman_access_service_set_property(service->policy,
+				g_dbus_get_current_sender(), name,
+				default_set_access) != CONNMAN_ACCESS_ALLOW)
+		return __connman_error_permission_denied(msg);
+
+	if (set(service, str))
+		service_save(service);
+
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
 static DBusMessage *get_properties(DBusConnection *conn,
@@ -4025,7 +4103,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		if (connman_access_service_set_property(service->policy,
 				g_dbus_get_current_sender(), name,
-				PASSPHRASE_ACCESS) != CONNMAN_ACCESS_ALLOW)
+				PASSPHRASE_SET_ACCESS) != CONNMAN_ACCESS_ALLOW)
 			return __connman_error_permission_denied(msg);
 
 		if (g_strcmp0(str, service->passphrase)) {
@@ -4055,7 +4133,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		dbus_message_iter_get_basic(&value, &str);
 
 		if (connman_access_service_set_property(service->policy,
-					sender, name, ACCESS_ACCESS) !=
+				sender, name, ACCESS_SET_ACCESS) !=
 						CONNMAN_ACCESS_ALLOW)
 			return __connman_error_permission_denied(msg);
 
@@ -4069,7 +4147,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 			/* Don't allow the user to shoot self in the foot */
 			if (connman_access_service_set_property(policy,
-					sender, name, ACCESS_ACCESS) !=
+					sender, name, ACCESS_SET_ACCESS) !=
 						CONNMAN_ACCESS_ALLOW) {
 				DBG("self-shooting prevented");
 				connman_access_service_policy_free(policy);
@@ -4084,6 +4162,12 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 			service_save(service);
 		}
+	} else if (g_str_equal(name, "Identity")) {
+		return set_restricted_string(service, name, &value, msg,
+					set_identity, IDENTITY_SET_ACCESS);
+	} else if (g_str_equal(name, "EAP")) {
+		return set_restricted_string(service, name, &value, msg,
+					set_eap_method, EAP_SET_ACCESS);
 	} else
 		return __connman_error_invalid_property(msg);
 
@@ -5704,29 +5788,6 @@ int __connman_service_set_ignore(struct connman_service *service,
 	return 0;
 }
 
-/* Only allows valid values */
-static bool set_eap_method(struct connman_service *service, const char *method)
-{
-	if (method && method[0]) {
-		if (!g_strcmp0(service->eap, method)) {
-			return false;
-		} else if (!g_strcmp0(method, "peap") ||
-				!g_strcmp0(method, "tls") ||
-				!g_strcmp0(method, "ttls")) {
-			g_free(service->eap);
-			service->eap = g_strdup(method);
-			return true;
-		}
-		DBG("invalid EAP method %s", method);
-	}
-	if (service->eap) {
-		g_free(service->eap);
-		service->eap = NULL;
-		return true;
-	}
-	return false;
-}
-
 void __connman_service_set_string(struct connman_service *service,
 				  const char *key, const char *value)
 {
@@ -5735,8 +5796,7 @@ void __connman_service_set_string(struct connman_service *service,
 	if (g_str_equal(key, "EAP")) {
 		set_eap_method(service, value);
 	} else if (g_str_equal(key, "Identity")) {
-		g_free(service->identity);
-		service->identity = g_strdup(value);
+		set_identity(service, value);
 	} else if (g_str_equal(key, "AnonymousIdentity")) {
 		g_free(service->anonymous_identity);
 		service->anonymous_identity = g_strdup(value);
@@ -7490,19 +7550,6 @@ static enum connman_service_security convert_wifi_security(const char *security)
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
 
-static bool update_string_from_network(struct connman_network *network,
-					const char *key, char **value)
-{
-	const char *network_value = connman_network_get_string(network, key);
-
-	if (g_strcmp0(*value, network_value)) {
-		g_free(*value);
-		*value = g_strdup(network_value);
-		return true;
-	}
-	return false;
-}
-
 /* Return true if service has been updated */
 bool __connman_service_update_value_from_network(
 			struct connman_service *service,
@@ -7520,8 +7567,8 @@ bool __connman_service_update_value_from_network(
 		}
 		return set_eap_method(service, value);
 	} else if (!g_strcmp0(key, "WiFi.Identity")) {
-		return update_string_from_network(network, key,
-							&service->identity);
+		return set_identity(service,
+				connman_network_get_string(network, key));
 	} else {
 		return false;
 	}
