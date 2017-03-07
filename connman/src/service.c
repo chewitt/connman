@@ -46,8 +46,6 @@
 // Maximum time between failed online checks is ONLINE_CHECK_RETRY_COUNT^2 seconds
 #define ONLINE_CHECK_RETRY_COUNT 12
 
-#define WIFI_BSSID_STR_LEN	18
-
 #define PASSPHRASE_GET_ACCESS CONNMAN_ACCESS_DENY
 #define PASSPHRASE_SET_ACCESS CONNMAN_ACCESS_DENY
 #define ACCESS_GET_ACCESS     CONNMAN_ACCESS_DENY
@@ -2520,24 +2518,18 @@ int __connman_service_iterate_services(service_iterate_cb cb, void *user_data)
 static void append_wifi_ext_info(DBusMessageIter *dict,
 					struct connman_network *network)
 {
-	char bssid_buff[WIFI_BSSID_STR_LEN] = {0,};
-	char *bssid_str = bssid_buff;
-	unsigned char *bssid;
 	unsigned int maxrate;
 	uint16_t frequency;
 	const char *enc_mode;
+	const char *bssid;
 
-	bssid = connman_network_get_bssid(network);
+	bssid = connman_network_get_bssid_str(network);
 	maxrate = connman_network_get_maxrate(network);
 	frequency = connman_network_get_frequency(network);
 	enc_mode = connman_network_get_enc_mode(network);
 
-	snprintf(bssid_str, WIFI_BSSID_STR_LEN, "%02x:%02x:%02x:%02x:%02x:%02x",
-				bssid[0], bssid[1], bssid[2],
-				bssid[3], bssid[4], bssid[5]);
-
 	connman_dbus_dict_append_basic(dict, "BSSID",
-					DBUS_TYPE_STRING, &bssid_str);
+					DBUS_TYPE_STRING, &bssid);
 	connman_dbus_dict_append_basic(dict, "MaxRate",
 					DBUS_TYPE_UINT32, &maxrate);
 	connman_dbus_dict_append_basic(dict, "Frequency",
@@ -2546,33 +2538,88 @@ static void append_wifi_ext_info(DBusMessageIter *dict,
 					DBUS_TYPE_STRING, &enc_mode);
 }
 
+/*
+ * Emits ProperyChanged events for those properties that are stored in
+ * struct connman_network (i.e. not copied to struct connman_service).
+ */
+int __connman_service_network_property_changed(struct connman_service *service,
+							const char *name)
+{
+	int type;
+	dbus_int16_t u16;
+	dbus_int32_t u32;
+	const char *str = NULL;
+	void *value = NULL;
+
+	if (!allow_property_changed(service))
+		return -EACCES;
+
+	if (!service->network)
+		return -ENOLINK;
+
+	if (!g_strcmp0(name, "BSSID")) {
+		type = DBUS_TYPE_STRING;
+		str = connman_network_get_bssid_str(service->network);
+		value = &str;
+	} else if (!g_strcmp0(name, "MaxRate")) {
+		type = DBUS_TYPE_UINT32;
+		u32 = connman_network_get_maxrate(service->network);
+		value = &u32;
+	} else if (!g_strcmp0(name, "Frequency")) {
+		service_save(service); /* Why are we saving the frequency? */
+		type = DBUS_TYPE_UINT16;
+		u16 = connman_network_get_frequency(service->network);
+		value = &u16;
+	} else if (!g_strcmp0(name, "EncryptionMode")) {
+		type = DBUS_TYPE_STRING;
+		str = connman_network_get_enc_mode(service->network);
+		value = &str;
+	} else {
+		DBG("unsupported network property %s", name);
+		return -EINVAL;
+	}
+
+	if (type == DBUS_TYPE_STRING && !str)
+		str = "";
+
+	connman_dbus_property_changed_basic(service->path,
+			CONNMAN_SERVICE_INTERFACE, name, type, value);
+	return 0;
+}
+
+static void string_changed(struct connman_service *service,
+				const char *name, const char *value)
+{
+	if (!allow_property_changed(service))
+		return;
+
+	if (!value)
+		value = "";
+
+	connman_dbus_property_changed_basic(service->path,
+				CONNMAN_SERVICE_INTERFACE, name,
+				DBUS_TYPE_STRING, &value);
+}
+
 static void restricted_string_changed(struct connman_service *service,
 				const char *name, const char *value,
 				enum connman_access default_get_access)
 {
-	if (allow_property_changed(service)) {
-		if (connman_access_service_get_property(service->policy, NULL,
+	if (connman_access_service_get_property(service->policy, NULL,
 			name, default_get_access) == CONNMAN_ACCESS_ALLOW) {
-			if (!value)
-				value = "";
+		/* Access is wide open, send the value */
+		string_changed(service, name, value);
+	} else if (allow_property_changed(service)) {
+		DBusMessage *signal;
+		DBusMessageIter it;
 
-			/* Access is wide open, send the value */
-			connman_dbus_property_changed_basic(service->path,
-					CONNMAN_SERVICE_INTERFACE, name,
-					DBUS_TYPE_STRING, &value);
-		} else {
-			DBusMessage *signal;
-			DBusMessageIter iter;
-
-			/* We can only broadcast the name */
-			signal = dbus_message_new_signal(service->path,
-						CONNMAN_SERVICE_INTERFACE,
-						"RestrictedPropertyChanged");
-			dbus_message_iter_init_append(signal, &iter);
-			dbus_message_iter_append_basic(&iter,
-						DBUS_TYPE_STRING, &name);
-			g_dbus_send_message(connection, signal);
-		}
+		/* We can only broadcast the name */
+		signal = dbus_message_new_signal(service->path,
+					CONNMAN_SERVICE_INTERFACE,
+					"RestrictedPropertyChanged");
+		dbus_message_iter_init_append(signal, &it);
+		dbus_message_iter_append_basic(&it, DBUS_TYPE_STRING, &name);
+		g_dbus_send_message(connection, signal);
 	}
 }
 
@@ -7551,12 +7598,12 @@ static enum connman_service_security convert_wifi_security(const char *security)
 }
 
 /* Return true if service has been updated */
-bool __connman_service_update_value_from_network(
+gboolean __connman_service_update_value_from_network(
 			struct connman_service *service,
 			struct connman_network *network, const char *key)
 {
 	if (!service || !network || !key) {
-		return false;
+		return FALSE;
 	} else if (!g_strcmp0(key, "WiFi.EAP")) {
 		const char *value = connman_network_get_string(network, key);
 
@@ -7570,7 +7617,7 @@ bool __connman_service_update_value_from_network(
 		return set_identity(service,
 				connman_network_get_string(network, key));
 	} else {
-		return false;
+		return TRUE;
 	}
 }
 
@@ -7796,11 +7843,7 @@ void __connman_service_update_from_network(struct connman_network *network)
 	if (g_strcmp0(service->name, name) != 0) {
 		g_free(service->name);
 		service->name = g_strdup(name);
-
-		if (allow_property_changed(service))
-			connman_dbus_property_changed_basic(service->path,
-					CONNMAN_SERVICE_INTERFACE, "Name",
-					DBUS_TYPE_STRING, &service->name);
+		string_changed(service, "Name", name);
 	}
 
 	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)

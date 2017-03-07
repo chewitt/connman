@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "connman.h"
 
@@ -41,8 +42,8 @@
  */
 #define RS_REFRESH_TIMEOUT	3
 
-#define WIFI_ENCYPTION_MODE_LEN_MAX 6
-#define WIFI_BSSID_LEN_MAX 6
+#define WIFI_BSSID_LEN 6
+#define WIFI_BSSID_STR_LEN	18
 
 static GSList *network_list = NULL;
 static GSList *driver_list = NULL;
@@ -95,8 +96,9 @@ struct connman_network {
 		bool wps;
 		bool use_wps;
 		char *pin_wps;
-		char encryption_mode[WIFI_ENCYPTION_MODE_LEN_MAX];
-		unsigned char bssid[WIFI_BSSID_LEN_MAX];
+		char* encryption_mode;
+		unsigned char bssid[WIFI_BSSID_LEN];
+		char bssid_str[WIFI_BSSID_STR_LEN];
 		unsigned int maxrate;
 	} wifi;
 
@@ -480,6 +482,7 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 		if (reply->nd_ra_flags_reserved & ND_RA_FLAG_OTHER)
 			__connman_dhcpv6_start_info(network,
 							dhcpv6_info_callback);
+
 		g_slist_free_full(prefixes, g_free);
 		network->connecting = false;
 	}
@@ -903,6 +906,7 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->wifi.private_key_passphrase);
 	g_free(network->wifi.phase2_auth);
 	g_free(network->wifi.pin_wps);
+	g_free(network->wifi.encryption_mode);
 
 	g_free(network->path);
 	g_free(network->group);
@@ -1656,33 +1660,43 @@ int connman_network_set_ipaddress(struct connman_network *network,
 int connman_network_set_bssid(struct connman_network *network,
 				const unsigned char *bssid)
 {
-	int i = 0;
+	static const unsigned char dummy_bssid[WIFI_BSSID_LEN];
 
 	if (!bssid)
-		return -EINVAL;
+		bssid = dummy_bssid;
 
-//	DBG("network %p bssid %02x:%02x:%02x:%02x:%02x:%02x", network,
-//			bssid[0], bssid[1], bssid[2],
-//			bssid[3], bssid[4], bssid[5]);
+	if (!memcmp(network->wifi.bssid, bssid, WIFI_BSSID_LEN))
+		return -EALREADY;
 
-	for (;i < WIFI_BSSID_LEN_MAX;i++)
-		network->wifi.bssid[i] = bssid[i];
-
+	memcpy(network->wifi.bssid, bssid, WIFI_BSSID_LEN);
+	snprintf(network->wifi.bssid_str, WIFI_BSSID_STR_LEN,
+					"%02x:%02x:%02x:%02x:%02x:%02x",
+					bssid[0], bssid[1], bssid[2],
+					bssid[3], bssid[4], bssid[5]);
+	DBG("network %p bssid %s", network, network->wifi.bssid_str);
+	__connman_service_network_property_changed(
+		connman_service_lookup_from_network(network), "BSSID");
 	return 0;
 }
 
-unsigned char *connman_network_get_bssid(struct connman_network *network)
+const unsigned char *connman_network_get_bssid(struct connman_network *network)
 {
-	return (unsigned char *)network->wifi.bssid;
+	return network->wifi.bssid;
+}
+
+const char *connman_network_get_bssid_str(struct connman_network *network)
+{
+	return network->wifi.bssid_str;
 }
 
 int connman_network_set_maxrate(struct connman_network *network,
 				unsigned int maxrate)
 {
-//	DBG("network %p maxrate %d", network, maxrate);
+	if (network->wifi.maxrate == maxrate)
+		return -EALREADY;
 
+	DBG("network %p maxrate %d", network, maxrate);
 	network->wifi.maxrate = maxrate;
-
 	return 0;
 }
 
@@ -1695,21 +1709,23 @@ int connman_network_set_enc_mode(struct connman_network *network,
 				const char *encryption_mode)
 {
 	if (!encryption_mode)
-		return -EINVAL;
+		encryption_mode = "";
 
-//	DBG("network %p encryption mode %s", network, encryption_mode);
+	if (!g_strcmp0(network->wifi.encryption_mode, encryption_mode))
+		return -EALREADY;
 
-	g_strlcpy(network->wifi.encryption_mode, encryption_mode,
-					WIFI_ENCYPTION_MODE_LEN_MAX);
+	DBG("network %p encryption mode %s", network, encryption_mode);
 
+	g_free(network->wifi.encryption_mode);
+	network->wifi.encryption_mode = g_strdup(encryption_mode);
 	return 0;
 }
 
 const char *connman_network_get_enc_mode(struct connman_network *network)
 {
-	return (const char *)network->wifi.encryption_mode;
+	return network->wifi.encryption_mode ?
+				network->wifi.encryption_mode : "";
 }
-
 
 int connman_network_set_nameservers(struct connman_network *network,
 				const char *nameservers)
@@ -1786,9 +1802,13 @@ int connman_network_set_name(struct connman_network *network,
 int connman_network_set_strength(struct connman_network *network,
 						uint8_t strength)
 {
-//	DBG("network %p strengh %d", network, strength);
+	if (network->strength == strength)
+		return -EALREADY;
+
+	DBG("network %p strengh %d", network, strength);
 
 	network->strength = strength;
+	connman_service_update_strength_from_network(network);
 
 	return 0;
 }
@@ -1801,9 +1821,14 @@ uint8_t connman_network_get_strength(struct connman_network *network)
 int connman_network_set_frequency(struct connman_network *network,
 						uint16_t frequency)
 {
-//	DBG("network %p frequency %d", network, frequency);
+	if (network->frequency == frequency)
+		return -EALREADY;
+
+	DBG("network %p frequency %d", network, frequency);
 
 	network->frequency = frequency;
+	__connman_service_network_property_changed(
+		connman_service_lookup_from_network(network), "Frequency");
 
 	return 0;
 }
