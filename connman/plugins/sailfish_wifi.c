@@ -247,6 +247,7 @@ struct wifi_plugin {
 #define NDBG(n,fmt,args...) DBG("%p %s " fmt, (n)->network, (n)->ident, ##args)
 
 static void wifi_device_autoscan_check(struct wifi_device *dev);
+static void wifi_device_connect_next_schedule(struct wifi_device *dev);
 
 /*==========================================================================*
  * Logging
@@ -546,10 +547,12 @@ static void wifi_network_set_state(struct wifi_network *net,
 						WIFI_NETWORK_STATE state)
 {
 	if (net->state != state) {
+		struct wifi_device *dev = net->dev;
+
 		NDBG(net, "%s -> %s", wifi_network_state_name(net->state),
 					wifi_network_state_name(state));
 		net->state = state;
-		wifi_device_autoscan_check(net->dev);
+		wifi_device_autoscan_check(dev);
 		if (wifi_network_state_connecting(state)) {
 			/*
 			 * Cancel the disconnect timeout when entering
@@ -604,6 +607,10 @@ static void wifi_network_set_state(struct wifi_network *net,
 			gsupplicant_interface_remove_all_networks(net->iface,
 								NULL, NULL);
 			wifi_network_drop_interface(net);
+			if (dev->selected == net) {
+				dev->selected = NULL;
+				wifi_device_connect_next_schedule(dev);
+			}
 			connman_network_set_associating(net->network, FALSE);
 			connman_network_set_connected(net->network, FALSE);
 			break;
@@ -986,7 +993,8 @@ static int wifi_network_connect(struct wifi_network *net)
 	if (net->state == WIFI_NETWORK_CONNECTED) {
 		NDBG(net, "already connected");
 		return 0;
-	} else if (wifi_network_connecting(net)) {
+	} else if (net->state == WIFI_NETWORK_CONNECTING ||
+			net->state == WIFI_NETWORK_WAITING_FOR_COMPLETE) {
 		NDBG(net, "already connecting");
 		GASSERT(net->pending);
 		return (-EINPROGRESS);
@@ -995,18 +1003,17 @@ static int wifi_network_connect(struct wifi_network *net)
 		GSupplicantBSS *bss = bss_data->bss;
 		int err = (-EFAULT);
 
+		/* Cleanup after the previous state */
 		if (net->pending) {
 			GASSERT(net->state == WIFI_NETWORK_DISCONNECTING);
 			g_cancellable_cancel(net->pending);
 			net->pending = NULL;
 		}
 
-		/* Start the connection sequence */
-		if (net->iface != bss->iface) {
-			gsupplicant_interface_unref(net->iface);
-			net->iface = gsupplicant_interface_ref(bss->iface);
-		}
+		wifi_network_drop_interface(net);
+		net->iface = gsupplicant_interface_ref(bss->iface);
 
+		/* Start the connection sequence */
 		wifi_network_update_wps_caps_from_bss(net, bss);
 		if ((bss->wps_caps & GSUPPLICANT_WPS_CONFIGURED) &&
 			(bss->wps_caps & GSUPPLICANT_WPS_PUSH_BUTTON) &&
@@ -1320,6 +1327,7 @@ static int wifi_device_connect_next(struct wifi_device *dev)
 		}
 	} else {
 		DBG("nothing to connect");
+		wifi_device_autoscan_check(dev);
 		return (-EINVAL);
 	}
 }
@@ -1331,6 +1339,15 @@ static gboolean wifi_device_connect_next_proc(gpointer data)
 	dev->connect_next_id = 0;
 	wifi_device_connect_next(dev);
 	return G_SOURCE_REMOVE;
+}
+
+static void wifi_device_connect_next_schedule(struct wifi_device *dev)
+{
+	/* Schedule wifi_device_connect_next() on the fresh stack */
+	if (!dev->connect_next_id) {
+		dev->connect_next_id =
+			g_idle_add(wifi_device_connect_next_proc, dev);
+	}
 }
 
 static void wifi_device_reset(struct wifi_device *dev)
@@ -1346,11 +1363,7 @@ static void wifi_device_delete_network(struct wifi_device *dev,
 	}
 	if (dev->selected == net) {
 		dev->selected = NULL;
-		/* Schedule wifi_device_connect_next() on the fresh stack */
-		if (!dev->connect_next_id) {
-			dev->connect_next_id =
-				g_idle_add(wifi_device_connect_next_proc, dev);
-		}
+		wifi_device_connect_next_schedule(dev);
 	}
 	wifi_network_delete(net);
 }
@@ -2937,6 +2950,8 @@ static int wifi_network_driver_connect(struct connman_network *network)
 					}
 				}
 				dev->connect_next = net;
+				wifi_network_set_state(net,
+					WIFI_NETWORK_PREPARING_TO_CONNECT);
 				return wifi_device_connect_next(dev);
 			}
 		}
@@ -2954,11 +2969,8 @@ static int wifi_network_driver_disconnect(struct connman_network *network)
 		struct wifi_network *net = connman_network_get_data(network);
 		if (dev && net) {
 			if (dev->connect_next == net) {
+				/* It never actually started to connect */
 				dev->connect_next = NULL;
-			}
-			if (dev->selected == net) {
-				dev->selected = NULL;
-				wifi_device_autoscan_check(dev);
 			}
 			return wifi_network_disconnect(net);
 		}
