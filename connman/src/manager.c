@@ -177,9 +177,7 @@ static struct connman_notifier technology_notifier = {
 };
 
 static void append_service_structs(DBusMessageIter *iter, void *user_data)
-{int __connman_agent_request_connection( /*struct connman_service *service,
-        authentication_cb_t callback, */void *user_data);
-
+{
 	__connman_service_list_struct(iter);
 }
 

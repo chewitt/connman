@@ -103,6 +103,7 @@ enum network_interface_events {
 	NETWORK_INTERFACE_EVENT_VALID,
 	NETWORK_INTERFACE_EVENT_PRESENT,
 	NETWORK_INTERFACE_EVENT_STATE,
+	NETWORK_INTERFACE_EVENT_BSS,
 	NETWORK_INTERFACE_EVENT_COUNT
 };
 
@@ -165,10 +166,10 @@ struct wifi_network {
 	char *ident;
 	GSupplicantInterface *iface;    /* Interface we are connected to */
 	GSupplicantBSS *connecting_to;  /* BSS we are connecting to */
+	GSupplicantBSS *current_bss;    /* BSS we are connected to */
 	gulong iface_event_id[NETWORK_INTERFACE_EVENT_COUNT];
 	GSUPPLICANT_INTERFACE_STATE interface_states[3];
 	GList *bss_list;                /* Contains wifi_bss */
-	unsigned int strength;          /* Last known best strength */
 	int remove_in_process;          /* See wifi_device_remove_network */
 	GCancellable *pending;          /* Pending call */
 	WIFI_NETWORK_STATE state;
@@ -247,6 +248,7 @@ struct wifi_plugin {
 #define NDBG(n,fmt,args...) DBG("%p %s " fmt, (n)->network, (n)->ident, ##args)
 
 static void wifi_device_autoscan_check(struct wifi_device *dev);
+static void wifi_device_connect_next_schedule(struct wifi_device *dev);
 
 /*==========================================================================*
  * Logging
@@ -495,18 +497,11 @@ static void wifi_network_drop_interface(struct wifi_network *net)
 	wifi_network_disconnect_timeout_cancel(net);
 }
 
-static void wifi_network_set_strength(struct wifi_network *net, guint strength)
-{
-	if (net->strength != strength) {
-		net->strength = strength;
-		connman_network_set_strength(net->network, strength);
-		connman_service_update_strength_from_network(net->network);
-	}
-}
-
 static void wifi_network_signalpoll(struct signalpoll *poll, void *data)
 {
-	wifi_network_set_strength((struct wifi_network *)data, poll->average);
+	struct wifi_network *net = data;
+
+	connman_network_set_strength(net->network, poll->average);
 }
 
 static inline gboolean wifi_network_state_connecting(WIFI_NETWORK_STATE state)
@@ -546,10 +541,12 @@ static void wifi_network_set_state(struct wifi_network *net,
 						WIFI_NETWORK_STATE state)
 {
 	if (net->state != state) {
+		struct wifi_device *dev = net->dev;
+
 		NDBG(net, "%s -> %s", wifi_network_state_name(net->state),
 					wifi_network_state_name(state));
 		net->state = state;
-		wifi_device_autoscan_check(net->dev);
+		wifi_device_autoscan_check(dev);
 		if (wifi_network_state_connecting(state)) {
 			/*
 			 * Cancel the disconnect timeout when entering
@@ -604,6 +601,10 @@ static void wifi_network_set_state(struct wifi_network *net,
 			gsupplicant_interface_remove_all_networks(net->iface,
 								NULL, NULL);
 			wifi_network_drop_interface(net);
+			if (dev->selected == net) {
+				dev->selected = NULL;
+				wifi_device_connect_next_schedule(dev);
+			}
 			connman_network_set_associating(net->network, FALSE);
 			connman_network_set_connected(net->network, FALSE);
 			break;
@@ -765,8 +766,10 @@ static void wifi_network_interface_changed(GSupplicantInterface *iface,
 
 static GSupplicantBSS *wifi_network_current_bss(struct wifi_network *net)
 {
-	if (net->connecting_to) {
+	if (net->connecting_to && net->connecting_to->valid) {
 		return net->connecting_to;
+	} else if (net->current_bss && net->current_bss->valid) {
+		return net->current_bss;
 	} else {
 		struct wifi_bss *best = net->bss_list->data;
 
@@ -774,10 +777,61 @@ static GSupplicantBSS *wifi_network_current_bss(struct wifi_network *net)
 	}
 }
 
+static void wifi_network_update_bssid(struct wifi_network *net)
+{
+	GBytes* bssid = wifi_network_current_bss(net)->bssid;
+	gsize bssid_len;
+	const void *bssid_data = g_bytes_get_data(bssid, &bssid_len);
+
+	if (bssid_len == WIFI_BSSID_LEN) {
+		connman_network_set_bssid(net->network, bssid_data);
+	}
+}
+
 static void wifi_network_update_frequency(struct wifi_network *net)
 {
 	connman_network_set_frequency(net->network,
 				wifi_network_current_bss(net)->frequency);
+}
+
+static gboolean wifi_network_update_current_bss(struct wifi_network *net)
+{
+	gboolean changed = FALSE;
+
+	if (net->iface && net->iface->current_bss) {
+		const char *path = net->iface->current_bss;
+
+		if (!net->current_bss) {
+			/* There was no current BSS */
+			net->current_bss = gsupplicant_bss_new(path);
+			changed = TRUE;
+		} else if (strcmp(net->current_bss->path, path)) {
+			/* Current BSS has changed */
+			gsupplicant_bss_unref(net->current_bss);
+			net->current_bss = gsupplicant_bss_new(path);
+			changed = TRUE;
+		}
+	} else if (net->current_bss) {
+		/* No more current BSS */
+		gsupplicant_bss_unref(net->current_bss);
+		net->current_bss = NULL;
+		changed = TRUE;
+	}
+
+	if (changed) {
+		wifi_network_update_bssid(net);
+		wifi_network_update_frequency(net);
+	}
+
+	return changed;
+}
+
+static void wifi_network_current_bss_changed(GSupplicantInterface *iface,
+								void *data)
+{
+	struct wifi_network *net = data;
+
+	wifi_network_update_current_bss(net);
 }
 
 static void wifi_network_update_wps_caps_from_bss(struct wifi_network *net,
@@ -986,7 +1040,8 @@ static int wifi_network_connect(struct wifi_network *net)
 	if (net->state == WIFI_NETWORK_CONNECTED) {
 		NDBG(net, "already connected");
 		return 0;
-	} else if (wifi_network_connecting(net)) {
+	} else if (net->state == WIFI_NETWORK_CONNECTING ||
+			net->state == WIFI_NETWORK_WAITING_FOR_COMPLETE) {
 		NDBG(net, "already connecting");
 		GASSERT(net->pending);
 		return (-EINPROGRESS);
@@ -995,18 +1050,17 @@ static int wifi_network_connect(struct wifi_network *net)
 		GSupplicantBSS *bss = bss_data->bss;
 		int err = (-EFAULT);
 
+		/* Cleanup after the previous state */
 		if (net->pending) {
 			GASSERT(net->state == WIFI_NETWORK_DISCONNECTING);
 			g_cancellable_cancel(net->pending);
 			net->pending = NULL;
 		}
 
-		/* Start the connection sequence */
-		if (net->iface != bss->iface) {
-			gsupplicant_interface_unref(net->iface);
-			net->iface = gsupplicant_interface_ref(bss->iface);
-		}
+		wifi_network_drop_interface(net);
+		net->iface = gsupplicant_interface_ref(bss->iface);
 
+		/* Start the connection sequence */
 		wifi_network_update_wps_caps_from_bss(net, bss);
 		if ((bss->wps_caps & GSUPPLICANT_WPS_CONFIGURED) &&
 			(bss->wps_caps & GSUPPLICANT_WPS_PUSH_BUTTON) &&
@@ -1046,6 +1100,7 @@ static int wifi_network_connect(struct wifi_network *net)
 			wifi_network_set_state(net, WIFI_NETWORK_CONNECTING);
 			wifi_network_reset_interface_states(net);
 			wifi_network_update_interface_state(net);
+			wifi_network_update_current_bss(net);
 
 			/*
 			 * Start watching the interface state changes.
@@ -1064,6 +1119,12 @@ static int wifi_network_connect(struct wifi_network *net)
 				gsupplicant_interface_add_handler(net->iface,
 					GSUPPLICANT_INTERFACE_PROPERTY_STATE,
 					wifi_network_interface_changed, net);
+
+			/* And watch the current BSS too */
+			net->iface_event_id[NETWORK_INTERFACE_EVENT_BSS] =
+				gsupplicant_interface_add_handler(net->iface,
+				GSUPPLICANT_INTERFACE_PROPERTY_CURRENT_BSS,
+				wifi_network_current_bss_changed, net);
 
 			return (-EINPROGRESS);
 		} else {
@@ -1158,7 +1219,7 @@ static void wifi_network_update_strength(struct wifi_network *net)
 	best = net->bss_list->data;
 	NDBG(net, "best bss %s", best->bss->path);
 	GASSERT(best->bss->valid && best->bss->present);
-	wifi_network_set_strength(net, best->strength);
+	connman_network_set_strength(net->network, best->strength);
 }
 
 static void wifi_network_init(struct wifi_network *net, GSupplicantBSS *bss)
@@ -1238,6 +1299,7 @@ static void wifi_network_delete(struct wifi_network *net)
 	signalpoll_unref(net->signalpoll);
 	connman_network_unref(net->network);
 	gsupplicant_bss_unref(net->connecting_to);
+	gsupplicant_bss_unref(net->current_bss);
 	g_list_free_full(net->bss_list, wifi_bss_free_1);
 	g_free(net->ident);
 	g_free(net->last_passphrase);
@@ -1320,6 +1382,7 @@ static int wifi_device_connect_next(struct wifi_device *dev)
 		}
 	} else {
 		DBG("nothing to connect");
+		wifi_device_autoscan_check(dev);
 		return (-EINVAL);
 	}
 }
@@ -1331,6 +1394,15 @@ static gboolean wifi_device_connect_next_proc(gpointer data)
 	dev->connect_next_id = 0;
 	wifi_device_connect_next(dev);
 	return G_SOURCE_REMOVE;
+}
+
+static void wifi_device_connect_next_schedule(struct wifi_device *dev)
+{
+	/* Schedule wifi_device_connect_next() on the fresh stack */
+	if (!dev->connect_next_id) {
+		dev->connect_next_id =
+			g_idle_add(wifi_device_connect_next_proc, dev);
+	}
 }
 
 static void wifi_device_reset(struct wifi_device *dev)
@@ -1346,11 +1418,7 @@ static void wifi_device_delete_network(struct wifi_device *dev,
 	}
 	if (dev->selected == net) {
 		dev->selected = NULL;
-		/* Schedule wifi_device_connect_next() on the fresh stack */
-		if (!dev->connect_next_id) {
-			dev->connect_next_id =
-				g_idle_add(wifi_device_connect_next_proc, dev);
-		}
+		wifi_device_connect_next_schedule(dev);
 	}
 	wifi_network_delete(net);
 }
@@ -1680,6 +1748,10 @@ static void wifi_device_remove_bss_from_network2(struct wifi_device *dev,
 		if (data->bss == bss) {
 			net->bss_list = g_list_delete_link(net->bss_list, l);
 			wifi_bss_free(data);
+			if (net->bss_list && !net->signalpoll) {
+				/* Best BSS may be gone, update the strength */
+				wifi_network_update_strength(net);
+			}
 			break;
 		}
 	}
@@ -1906,7 +1978,13 @@ static void wifi_device_bss_add_2(struct wifi_device *dev,
 		g_hash_table_replace(dev->bss_net, g_strdup(bss->path), net);
 		net->bss_list = g_list_append(net->bss_list, bss_data);
 		wifi_device_cleanup_bss_list(dev, net, bss_data);
-		wifi_network_update_strength(net);
+		if (!wifi_network_update_current_bss(net)) {
+			wifi_network_update_bssid(net);
+			wifi_network_update_frequency(net);
+		}
+		if (!net->signalpoll) {
+			wifi_network_update_strength(net);
+		}
 
 		/*
 		 * Check if this is the hidden network we are
@@ -2937,6 +3015,8 @@ static int wifi_network_driver_connect(struct connman_network *network)
 					}
 				}
 				dev->connect_next = net;
+				wifi_network_set_state(net,
+					WIFI_NETWORK_PREPARING_TO_CONNECT);
 				return wifi_device_connect_next(dev);
 			}
 		}
@@ -2954,11 +3034,8 @@ static int wifi_network_driver_disconnect(struct connman_network *network)
 		struct wifi_network *net = connman_network_get_data(network);
 		if (dev && net) {
 			if (dev->connect_next == net) {
+				/* It never actually started to connect */
 				dev->connect_next = NULL;
-			}
-			if (dev->selected == net) {
-				dev->selected = NULL;
-				wifi_device_autoscan_check(dev);
 			}
 			return wifi_network_disconnect(net);
 		}
