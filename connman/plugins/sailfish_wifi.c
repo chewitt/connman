@@ -83,7 +83,7 @@
 #define NETWORK_KEY_WIFI_PRIVATE_KEY_PASSPHRASE "WiFi.PrivateKeyPassphrase"
 #define NETWORK_KEY_WIFI_PHASE2                 "WiFi.Phase2"
 
-#define NETWORK_EAP_DEFAULT                     ""
+#define NETWORK_EAP_DEFAULT                     "default"
 
 enum supplicant_events {
 	SUPPLICANT_EVENT_VALID,

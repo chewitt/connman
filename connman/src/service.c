@@ -2627,13 +2627,13 @@ static void append_restricted_string(DBusMessageIter *dict,
 		struct connman_access_service_policy *policy, const char *name,
 		const char *str, enum connman_access default_access)
 {
-	if (!str)
-		return;
-
 	if (connman_access_service_get_property(policy,
 				g_dbus_get_current_sender(), name,
 				default_access) != CONNMAN_ACCESS_ALLOW)
 		return;
+
+	if (!str)
+		str = "";
 
 	connman_dbus_dict_append_basic(dict, name, DBUS_TYPE_STRING, &str);
 }
@@ -7607,8 +7607,8 @@ gboolean __connman_service_update_value_from_network(
 	} else if (!g_strcmp0(key, "WiFi.EAP")) {
 		const char *value = connman_network_get_string(network, key);
 
-		if (value && !value[0]) {
-			/* Substitute default (empty) value with "peap" */
+		if (!g_strcmp0(value, "default")) {
+			/* Substitute default value with "peap" */
 			value = service->eap ? service->eap : "peap";
 			connman_network_set_string(network, key, value);
 		}
