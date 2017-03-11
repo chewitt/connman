@@ -15,7 +15,7 @@ Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
 Requires:   libgofono >= 2.0.0
-Requires:   libglibutil >= 1.0.20
+Requires:   libglibutil >= 1.0.21
 Requires:   libdbusaccess >= 1.0.1
 Requires(preun): systemd
 Requires(post): systemd
@@ -32,7 +32,7 @@ BuildRequires:  pkgconfig(libsystemd)
 BuildRequires:  pkgconfig(libiphb)
 BuildRequires:  pkgconfig(libgofono) >= 2.0.0
 BuildRequires:  pkgconfig(libgofonoext)
-BuildRequires:  pkgconfig(libglibutil) >= 1.0.20
+BuildRequires:  pkgconfig(libglibutil) >= 1.0.21
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libdbusaccess)
 BuildRequires:  pkgconfig(libmce-glib)
