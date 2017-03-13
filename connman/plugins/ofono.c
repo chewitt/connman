@@ -144,6 +144,8 @@ struct network_context {
 	struct connman_ipaddress *ipv6_address;
 	char *ipv6_nameservers;
 
+	int refcount;
+
 	bool active;
 	bool valid_apn; /* APN is 'valid' if length > 0 */
 };
@@ -272,11 +274,25 @@ static struct network_context *network_context_alloc(const char *path)
 	context->ipv6_address = NULL;
 	context->ipv6_nameservers = NULL;
 
+	context->refcount = 1;
+
 	return context;
 }
 
-static void network_context_free(struct network_context *context)
+static void network_context_ref(struct network_context *context)
 {
+	DBG("%p ref %d", context, context->refcount + 1);
+
+	__sync_fetch_and_add(&context->refcount, 1);
+}
+
+static void network_context_unref(struct network_context *context)
+{
+	DBG("%p ref %d", context, context->refcount - 1);
+
+	if (__sync_fetch_and_sub(&context->refcount, 1) != 1)
+		return;
+
 	g_free(context->path);
 
 	connman_ipaddress_free(context->ipv4_address);
@@ -390,6 +406,16 @@ struct property_info {
 	get_properties_cb get_properties_cb;
 };
 
+static void free_property_info(void * memory)
+{
+	struct property_info * info = memory;
+
+	if (info->context)
+		network_context_unref(info->context);
+
+	g_free(info);
+}
+
 static void set_property_reply(DBusPendingCall *call, void *user_data)
 {
 	struct property_info *info = user_data;
@@ -477,8 +503,11 @@ static int set_property(struct modem_data *modem,
 	info->property = property;
 	info->set_property_cb = notify;
 
+	if (info->context)
+		network_context_ref(info->context);
+
 	dbus_pending_call_set_notify(modem->call_set_property,
-					set_property_reply, info, g_free);
+				set_property_reply, info, free_property_info);
 
 	dbus_message_unref(message);
 
@@ -1229,7 +1258,7 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 	}
 
 	if (g_strcmp0(context_type, "internet") != 0) {
-		network_context_free(context);
+		network_context_unref(context);
 		return -EINVAL;
 	}
 
@@ -1262,7 +1291,7 @@ static void remove_cm_context(struct modem_data *modem,
 		remove_network(modem, context);
 	modem->context_list = g_slist_remove(modem->context_list, context);
 
-	network_context_free(context);
+	network_context_unref(context);
 	context = NULL;
 }
 
