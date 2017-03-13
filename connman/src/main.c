@@ -106,6 +106,7 @@ static struct {
 	char *user_storage_dir;
 	bool enable_6to4;
 	char *vendor_class_id;
+	bool enable_online_check;
 	GHashTable *fallback_device_types;
 	bool enable_login_manager;
 	char *localtime;
@@ -132,6 +133,7 @@ static struct {
 	.umask = DEFAULT_UMASK,
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
+	.enable_online_check = true,
 	.fallback_device_types = NULL,
 	.enable_login_manager = false,
 	.localtime = NULL,
@@ -164,6 +166,7 @@ static struct {
 #define CONF_UMASK                      "Umask"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
+#define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
@@ -200,6 +203,7 @@ static const char *supported_options[] = {
 	CONF_DISABLE_PLUGINS,
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
+	CONF_ENABLE_ONLINE_CHECK,
 	CONF_FALLBACK_DEVICE_TYPES,
 	CONF_ENABLE_LOGIN_MANAGER,
 	CONF_LOCALTIME,
@@ -593,6 +597,16 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	boolean = __connman_config_get_bool(config, "General",
+					CONF_ENABLE_ONLINE_CHECK, &error);
+	if (!error) {
+		connman_settings.enable_online_check = boolean;
+		if (!boolean)
+			connman_info("Online check disabled by main config.");
+	}
+
+	g_clear_error(&error);
+
 	str_list = __connman_config_get_string_list(config, "General",
 			CONF_FALLBACK_DEVICE_TYPES, &len, &error);
 
@@ -878,6 +892,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_6TO4))
 		return connman_settings.enable_6to4;
+
+	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
+		return connman_settings.enable_online_check;
 
 	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
 		return connman_settings.enable_login_manager;
