@@ -125,6 +125,7 @@ static struct {
 #define CONF_TETHERING_TECHNOLOGIES      "TetheringTechnologies"
 #define CONF_PERSISTENT_TETHERING_MODE  "PersistentTetheringMode"
 #define CONF_DONT_BRING_DOWN_AT_STARTUP "DontBringDownAtStartup"
+#define CONF_DISABLE_PLUGINS            "DisablePlugins"
 #define CONF_FILE_SYSTEM_IDENTITY       "FileSystemIdentity"
 #define CONF_STORAGE_ROOT               "StorageRoot"
 #define CONF_STORAGE_DIR_PERMISSIONS    "StorageDirPermissions"
@@ -154,6 +155,7 @@ static const char *supported_options[] = {
 	CONF_STATUS_URL_IPV6,
 	CONF_TETHERING_SUBNET_BLOCK,
 	CONF_DONT_BRING_DOWN_AT_STARTUP,
+	CONF_DISABLE_PLUGINS,
 	CONF_ENABLE_6TO4,
 	NULL
 };
@@ -162,6 +164,8 @@ static const char *supported_options[] = {
 #define CONF_STATUS_URL_IPV4_DEF "http://ipv4.connman.net/online/status.html"
 #define CONF_STATUS_URL_IPV6_DEF "http://ipv6.connman.net/online/status.html"
 #define CONF_TETHERING_SUBNET_BLOCK_DEF "192.168.0.0"
+
+static void append_noplugin(const char *value);
 
 static GKeyFile *load_config(const char *file)
 {
@@ -427,6 +431,17 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	str_list = __connman_config_get_string_list(config, group,
+					CONF_DISABLE_PLUGINS, &len, NULL);
+	if (str_list) {
+		int i;
+
+		for (i = 0; str_list[i]; i++)
+			append_noplugin(str_list[i]);
+
+		g_strfreev(str_list);
+	}
+
 	connman_settings.dont_bring_down_at_startup =
 		__connman_config_get_string_list(config, group,
 			CONF_DONT_BRING_DOWN_AT_STARTUP, &len, NULL);
@@ -586,8 +601,7 @@ static bool parse_debug(const char *key, const char *value,
 	return true;
 }
 
-static bool parse_noplugin(const char *key, const char *value,
-					gpointer user_data, GError **error)
+static void append_noplugin(const char *value)
 {
 	if (option_noplugin) {
 		char *prev = option_noplugin;
@@ -597,7 +611,12 @@ static bool parse_noplugin(const char *key, const char *value,
 	} else {
 		option_noplugin = g_strdup(value);
 	}
+}
 
+static bool parse_noplugin(const char *key, const char *value,
+					gpointer user_data, GError **error)
+{
+	append_noplugin(value);
 	return true;
 }
 
