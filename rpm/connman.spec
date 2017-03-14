@@ -17,6 +17,7 @@ Requires:   systemd
 Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.21
 Requires:   libdbusaccess >= 1.0.1
+Requires:   libgsupplicant >= 1.0.4
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -36,7 +37,7 @@ BuildRequires:  pkgconfig(libglibutil) >= 1.0.21
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libdbusaccess)
 BuildRequires:  pkgconfig(libmce-glib)
-BuildRequires:  pkgconfig(libgsupplicant)
+BuildRequires:  pkgconfig(libgsupplicant) >= 1.0.4
 BuildRequires:  ppp-devel
 
 %description

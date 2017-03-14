@@ -28,6 +28,7 @@
 #include <gsupplicant_error.h>
 #include <gsupplicant_interface.h>
 #include <gsupplicant_network.h>
+#include <gsupplicant_util.h>
 
 #include <mce_display.h>
 #include <mce_tklock.h>
@@ -1375,9 +1376,7 @@ static void wifi_network_init(struct wifi_network *net, struct wifi_bss *data)
 	}
 
 	if (ssid && !network_name) {
-		gsize len = 0;
-		const void *data = g_bytes_get_data(ssid, &len);
-		network_name = tmp = g_strndup(data, len);
+		network_name = tmp = gsupplicant_utf8_from_bytes(ssid);
 	}
 
 	net->network = connman_network_create(net->ident,
