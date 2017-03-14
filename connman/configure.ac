@@ -444,8 +444,8 @@ if (test "${enable_sailfish_ofono}" = "yes"); then
 fi
 
 if (test "${need_glibutil}" = "yes"); then
-	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.20, dummy=yes,
-				AC_MSG_ERROR(libglibutil >= 1.0.20 is required))
+	PKG_CHECK_MODULES(GLIBUTIL, libglibutil >= 1.0.21, dummy=yes,
+				AC_MSG_ERROR(libglibutil >= 1.0.21 is required))
 	CFLAGS="$CFLAGS $GLIBUTIL_CFLAGS"
 	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi
