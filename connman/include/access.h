@@ -28,6 +28,8 @@ enum connman_access {
 
 struct connman_access_service_policy;
 struct connman_access_service_policy_impl;
+struct connman_access_tech_policy;
+struct connman_access_tech_policy_impl;
 
 struct connman_access_driver {
 	const char *name;
@@ -42,6 +44,14 @@ struct connman_access_driver {
 			enum connman_access default_access);
 	enum connman_access (*service_set_property)
 		(struct connman_access_service_policy_impl *policy,
+			const char *sender, const char *name,
+			enum connman_access default_access);
+	struct connman_access_tech_policy_impl *(*tech_policy_create)
+		(const char *spec);
+	void (*tech_policy_free)
+		(struct connman_access_tech_policy_impl *policy);
+	enum connman_access (*tech_set_property)
+		(struct connman_access_tech_policy_impl *policy,
 			const char *sender, const char *name,
 			enum connman_access default_access);
 };
@@ -59,6 +69,14 @@ enum connman_access connman_access_service_get_property(
 	const char *name, enum connman_access default_access);
 enum connman_access connman_access_service_set_property(
 	struct connman_access_service_policy *policy, const char *sender,
+	const char *name, enum connman_access default_access);
+
+struct connman_access_tech_policy *connman_access_tech_policy_create(
+							const char *spec);
+void connman_access_tech_policy_free(
+				struct connman_access_tech_policy *policy);
+enum connman_access connman_access_tech_set_property(
+	struct connman_access_tech_policy *policy, const char *sender,
 	const char *name, enum connman_access default_access);
 
 G_END_DECLS
