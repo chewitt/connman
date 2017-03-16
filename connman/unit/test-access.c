@@ -163,9 +163,9 @@ static void test_access_register()
 	g_assert(connman_access_driver_register(&test_inval) == -EINVAL);
 	g_assert(connman_access_driver_register(&test1_driver) == 0);
 	g_assert(connman_access_driver_register(&test1_driver) == -EALREADY);
-	connman_access_timer_unregister(&test1_driver);
-	connman_access_timer_unregister(&test1_driver);
-	connman_access_timer_unregister(NULL);
+	connman_access_driver_unregister(&test1_driver);
+	connman_access_driver_unregister(&test1_driver);
+	connman_access_driver_unregister(NULL);
 }
 
 static void test_access_default_policy()
@@ -183,13 +183,13 @@ static void test_access_default_policy()
 	g_assert(connman_access_driver_register(&test3_driver) == 0);
 	g_assert(!connman_access_default_service_policy());
 
-	connman_access_timer_unregister(&test3_driver);
+	connman_access_driver_unregister(&test3_driver);
 	g_assert(!g_strcmp0(def2, connman_access_default_service_policy()));
 
-	connman_access_timer_unregister(&test2_driver);
+	connman_access_driver_unregister(&test2_driver);
 	g_assert(!g_strcmp0(def1, connman_access_default_service_policy()));
 
-	connman_access_timer_unregister(&test1_driver);
+	connman_access_driver_unregister(&test1_driver);
 	g_assert(!connman_access_default_service_policy());
 }
 
@@ -204,12 +204,12 @@ static void test_access_service_policy()
 	/* test3_driver has no service_policy_create callback */
 	g_assert(connman_access_driver_register(&test3_driver) == 0);
 	g_assert(!connman_access_service_policy_create(NULL));
-	connman_access_timer_unregister(&test3_driver);
+	connman_access_driver_unregister(&test3_driver);
 
 	/* test4_driver has service_policy_create which returns NULL */
 	g_assert(connman_access_driver_register(&test4_driver) == 0);
 	g_assert(!connman_access_service_policy_create(NULL));
-	connman_access_timer_unregister(&test4_driver);
+	connman_access_driver_unregister(&test4_driver);
 
 	/*
 	 * test5_driver has service_policy_create but no service_policy_free.
@@ -227,7 +227,7 @@ static void test_access_service_policy()
 	g_assert(connman_access_service_set_property(policy, NULL, NULL,
 				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
 	connman_access_service_policy_free(policy);
-	connman_access_timer_unregister(&test5_driver);
+	connman_access_driver_unregister(&test5_driver);
 
 	/* Invalid driver name */
 	g_assert(!connman_access_service_policy_create("test:"));
@@ -248,8 +248,8 @@ static void test_access_service_policy()
 				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
 	connman_access_service_policy_free(policy);
 
-	connman_access_timer_unregister(&test1_driver);
-	connman_access_timer_unregister(&test2_driver);
+	connman_access_driver_unregister(&test1_driver);
+	connman_access_driver_unregister(&test2_driver);
 
 	/* It's OK to delete NULL */
 	connman_access_service_policy_free(NULL);

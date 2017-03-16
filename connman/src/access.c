@@ -68,7 +68,7 @@ int connman_access_driver_register(const struct connman_access_driver *drv)
 	return 0;
 }
 
-void connman_access_timer_unregister(const struct connman_access_driver *drv)
+void connman_access_driver_unregister(const struct connman_access_driver *drv)
 {
 	if (g_slist_find(access_drivers, drv)) {
 		DBG("\"%s\"", drv->name);

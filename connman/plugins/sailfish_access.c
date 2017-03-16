@@ -187,7 +187,7 @@ static int sailfish_access_init()
 static void sailfish_access_exit()
 {
 	DBG("");
-	connman_access_timer_unregister(&sailfish_connman_access_driver);
+	connman_access_driver_unregister(&sailfish_connman_access_driver);
 	da_peer_flush(SERVICE_ACCESS_BUS, NULL);
 	gutil_idle_pool_unref(service_policies_pool);
 	service_policies_pool = NULL;

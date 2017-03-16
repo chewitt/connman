@@ -47,7 +47,7 @@ struct connman_access_driver {
 };
 
 int connman_access_driver_register(const struct connman_access_driver *d);
-void connman_access_timer_unregister(const struct connman_access_driver *d);
+void connman_access_driver_unregister(const struct connman_access_driver *d);
 const char *connman_access_default_service_policy(void);
 
 struct connman_access_service_policy *connman_access_service_policy_create(
