@@ -65,10 +65,11 @@ AC_ARG_ENABLE(hh2serial-gps,
 AM_CONDITIONAL(HH2SERIAL_GPS, test "${enable_hh2serial_gps}" != "no")
 AM_CONDITIONAL(HH2SERIAL_GPS_BUILTIN, test "${enable_hh2serial_gps}" = "builtin")
 
-AC_ARG_ENABLE(jolla-gps,
-	AC_HELP_STRING([--enable-jolla-gps], [enable jolla GPS support]),
-			[enable_jolla_gps=${enableval}], [enable_jolla_gps="no"])
-AM_CONDITIONAL(JOLLA_GPS, test "${enable_jolla_gps}" != "no")
+AC_ARG_ENABLE(sailfish-gps,
+	AC_HELP_STRING([--enable-sailfish-gps], [enable Sailfish GPS support]),
+			[enable_sailfish_gps=${enableval}],
+				[enable_sailfish_gps="no"])
+AM_CONDITIONAL(SAILFISH_GPS, test "${enable_sailfish_gps}" != "no")
 
 AC_ARG_ENABLE(sailfish_wakeup_timer,
 	AC_HELP_STRING([--enable-sailfish-wakeup-timer],

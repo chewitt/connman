@@ -50,9 +50,9 @@ plugins_hh2serial_gps_la_LDFLAGS = $(plugin_ldflags)
 endif
 endif
 
-if JOLLA_GPS
-builtin_modules += jolla_gps
-builtin_sources += plugins/jolla-gps.c
+if SAILFISH_GPS
+builtin_modules += sailfish_gps
+builtin_sources += plugins/sailfish_gps.c
 endif
 
 if SAILFISH_ACCESS

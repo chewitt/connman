@@ -121,10 +121,10 @@ Documentation for connman.
     --enable-pptp=builtin \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
-    --enable-jolla-gps=builtin \
-    --enable-sailfish-wakeup-timer=builtin \
     --enable-client \
     --enable-test \
+    --enable-sailfish-gps \
+    --enable-sailfish-wakeup-timer \
     --enable-sailfish-debuglog \
     --enable-sailfish-ofono \
     --enable-sailfish-usb-tethering \
