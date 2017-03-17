@@ -29,8 +29,12 @@
 #include <gutil_log.h>
 
 struct connman_access_service_policy_impl {
+	DAPolicy *impl;
 	int ref_count;
 	char *spec;
+};
+
+struct connman_access_tech_policy_impl {
 	DAPolicy *impl;
 };
 
@@ -39,7 +43,11 @@ enum sailfish_service_access_action {
 	SERVICE_ACCESS_SET_PROPERTY
 };
 
-#define SERVICE_ACCESS_BUS DA_BUS_SYSTEM
+enum sailfish_tech_access_action {
+	TECH_ACCESS_SET_PROPERTY = 1
+};
+
+#define CONNMAN_BUS DA_BUS_SYSTEM
 #define DRIVER_NAME "sailfish"
 
 /* We assume that these match each other an we don't have to convert */
@@ -54,6 +62,13 @@ static const char *service_policy_default =
 static const DA_ACTION service_policy_actions [] = {
         { "get", SERVICE_ACCESS_GET_PROPERTY, 1 },
         { "set", SERVICE_ACCESS_SET_PROPERTY, 1 },
+        { NULL }
+    };
+
+static const char *tech_policy_default =
+	DA_POLICY_VERSION ";set(Powered)=deny;group(privileged)=allow";
+static const DA_ACTION tech_policy_actions [] = {
+        { "set", TECH_ACCESS_SET_PROPERTY, 1 },
         { NULL }
     };
 
@@ -138,7 +153,7 @@ static enum connman_access sailfish_access_service_check(
 	const char *name, enum connman_access default_access)
 {
 	/* Don't unref this one: */
-	DAPeer* peer = da_peer_get(SERVICE_ACCESS_BUS, sender);
+	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
 
 	return peer ? (enum connman_access)da_policy_check(policy->impl,
 		&peer->cred, action, name, (DA_ACCESS)default_access) :
@@ -163,12 +178,60 @@ static enum connman_access sailfish_access_service_set_property(
 			SERVICE_ACCESS_SET_PROPERTY, name, default_access);
 }
 
+static struct connman_access_tech_policy_impl *
+		sailfish_access_tech_policy_create(const char *spec)
+{
+	DAPolicy *impl;
+
+	if (!spec || !spec[0]) {
+		/* Empty policy = use default */
+		spec = tech_policy_default;
+	}
+
+	/* Parse the policy string */
+	impl = da_policy_new_full(spec, tech_policy_actions);
+	if (impl) {
+		/* String is usable */
+		struct connman_access_tech_policy_impl *p =
+			g_slice_new0(struct connman_access_tech_policy_impl);
+
+		p->impl = impl;
+		return p;
+	} else {
+		DBG("invalid spec \"%s\"", spec);
+		return NULL;
+	}
+}
+
+static void sailfish_access_tech_policy_free(
+			struct connman_access_tech_policy_impl *p)
+{
+	da_policy_unref(p->impl);
+	g_slice_free(struct connman_access_tech_policy_impl, p);
+}
+
+static enum connman_access sailfish_access_tech_set_property(
+			struct connman_access_tech_policy_impl *policy,
+			const char *sender, const char *name,
+			enum connman_access default_access)
+{
+	/* Don't unref this one: */
+	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
+
+	return peer ? (enum connman_access)da_policy_check(policy->impl,
+		&peer->cred, TECH_ACCESS_SET_PROPERTY, name, (DA_ACCESS)
+		default_access) : default_access;
+}
+
 static const struct connman_access_driver sailfish_connman_access_driver = {
 	.name                  = DRIVER_NAME,
 	.service_policy_create = sailfish_access_service_policy_create,
 	.service_policy_free   = sailfish_access_service_policy_free,
 	.service_get_property  = sailfish_access_service_get_property,
-	.service_set_property  = sailfish_access_service_set_property
+	.service_set_property  = sailfish_access_service_set_property,
+	.tech_policy_create    = sailfish_access_tech_policy_create,
+	.tech_policy_free      = sailfish_access_tech_policy_free,
+	.tech_set_property     = sailfish_access_tech_set_property
 };
 
 static int sailfish_access_init()
@@ -188,7 +251,7 @@ static void sailfish_access_exit()
 {
 	DBG("");
 	connman_access_driver_unregister(&sailfish_connman_access_driver);
-	da_peer_flush(SERVICE_ACCESS_BUS, NULL);
+	da_peer_flush(CONNMAN_BUS, NULL);
 	gutil_idle_pool_unref(service_policies_pool);
 	service_policies_pool = NULL;
 	if (service_policies) {

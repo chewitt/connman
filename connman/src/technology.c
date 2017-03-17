@@ -30,6 +30,12 @@
 
 #include "connman.h"
 
+#include <connman/access.h>
+
+#define POWERED_SET_ACCESS     CONNMAN_ACCESS_ALLOW
+
+struct connman_access_tech_policy *tech_access_policy;
+
 static DBusConnection *connection;
 
 static GSList *technology_list = NULL;
@@ -87,6 +93,18 @@ static GSList *driver_list = NULL;
 
 static int technology_enabled(struct connman_technology *technology);
 static int technology_disabled(struct connman_technology *technology);
+
+static struct connman_access_tech_policy *get_tech_access_policy()
+{
+	/* We can't initialize this variable in __connman_technology_init
+	 * because __connman_technology_init runs before sailfish access
+	 * plugin (or any other plugin) is loaded */
+	if (!tech_access_policy) {
+		/* Use the default policy */
+		tech_access_policy = connman_access_tech_policy_create(NULL);
+	}
+	return tech_access_policy;
+}
 
 static gint compare_priority(gconstpointer a, gconstpointer b)
 {
@@ -952,9 +970,17 @@ static DBusMessage *set_property(DBusConnection *conn,
 		}
 	} else if (g_str_equal(name, "Powered")) {
 		dbus_bool_t enable;
+		const char *sender = g_dbus_get_current_sender();
 
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
+
+		if (connman_access_tech_set_property(get_tech_access_policy(),
+				sender, name, POWERED_SET_ACCESS) !=
+						CONNMAN_ACCESS_ALLOW) {
+			DBG("access denied for %s", sender);
+			return __connman_error_permission_denied(msg);
+		}
 
 		dbus_message_iter_get_basic(&value, &enable);
 
@@ -1862,4 +1888,7 @@ void __connman_technology_cleanup(void)
 	g_hash_table_destroy(rfkill_list);
 
 	dbus_connection_unref(connection);
+
+	connman_access_tech_policy_free(tech_access_policy);
+	tech_access_policy = NULL;
 }
