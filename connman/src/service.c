@@ -6253,8 +6253,7 @@ bool __connman_service_remove(struct connman_service *service)
 		return false;
 
 	/* Not clear what was the meaning of this restriction: */
-//	if (!service->favorite && service->state !=
-//						CONNMAN_SERVICE_STATE_FAILURE)
+//	if (!service->favorite && !is_idle(service->state))
 //		return false;
 
 	/*
