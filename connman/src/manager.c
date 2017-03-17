@@ -216,55 +216,6 @@ static DBusMessage *get_peers(DBusConnection *conn,
 	return reply;
 }
 
-static void append_saved_service_structs(DBusMessageIter *iter, void *user_data)
-{
-	__connman_saved_service_list_struct(iter);
-}
-
-static DBusMessage *get_saved_services(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	DBusMessage *reply;
-	reply = dbus_message_new_method_return(msg);
-	if (!reply)
-		return NULL;
-
-	__connman_dbus_append_objpath_dict_array(reply,
-			append_saved_service_structs, NULL);
-
-	return reply;
-}
-
-static gboolean remove_service(const char *ident)
-{
-	struct connman_service *service;
-
-	if (!ident)
-		return FALSE;
-
-	service = __connman_service_lookup_from_ident(ident);
-
-	if (service != NULL)
-		return __connman_service_remove(service);
-
-	return __connman_storage_remove_service(ident);
-}
-
-static DBusMessage *remove_saved_service(DBusConnection *conn,
-					DBusMessage *msg, void *data)
-{
-	gchar *ident;
-
-	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &ident,
-							DBUS_TYPE_INVALID);
-
-	if (!remove_service(ident))
-		return __connman_error_failed(msg, EINVAL);
-
-	__connman_service_removed(ident);
-	return dbus_message_new_method_return(msg);
-}
-
 static DBusMessage *connect_provider(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -579,12 +530,6 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetServices",
 			NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
 			get_services) },
-	{ GDBUS_METHOD("GetSavedServices",
-                        NULL, GDBUS_ARGS({ "services", "a(oa{sv})" }),
-                        get_saved_services) },
-        { GDBUS_METHOD("RemoveSavedService",
-                        GDBUS_ARGS({ "identifier", "s" }), NULL,
-                        remove_saved_service) },
 	{ GDBUS_METHOD("GetPeers",
 			NULL, GDBUS_ARGS({ "peers", "a(oa{sv})" }),
 			get_peers) },
@@ -645,8 +590,6 @@ static const GDBusSignalTable manager_signals[] = {
 	{ GDBUS_SIGNAL("ServicesChanged",
 			GDBUS_ARGS({ "changed", "a(oa{sv})" },
 					{ "removed", "ao" })) },
-	{ GDBUS_SIGNAL("SavedServicesChanged",
-			GDBUS_ARGS({ "changed", "a(oa{sv})" })) },
 	{ GDBUS_SIGNAL("PeersChanged",
 			GDBUS_ARGS({ "changed", "a(oa{sv})" },
 					{ "removed", "ao" })) },
