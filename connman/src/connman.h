@@ -623,8 +623,6 @@ int __connman_config_init();
 void __connman_config_cleanup(void);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
-void __connman_saved_service_list_struct(DBusMessageIter *iter);
-
 
 int __connman_config_load_service(GKeyFile *keyfile, const char *group,
 				  bool persistent);
@@ -689,7 +687,7 @@ int __connman_service_compare(const struct connman_service *a,
 
 struct connman_service *__connman_service_lookup_from_index(int index);
 struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
-struct connman_service *__connman_service_create_from_network(struct connman_network *network);
+bool __connman_service_create_from_network(struct connman_network *network);
 struct connman_service *__connman_service_create_from_provider(struct connman_provider *provider);
 bool __connman_service_index_is_default(int index);
 struct connman_service *__connman_service_get_default(void);
@@ -833,7 +831,6 @@ int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
 void __connman_service_counter_send_initial(const char *counter);
 void __connman_service_counter_reset_all(const char *type);
-void __connman_service_removed(const char *ident);
 void __connman_service_set_access(struct connman_service *service,
 							const char *access);
 

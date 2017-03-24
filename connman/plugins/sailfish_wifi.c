@@ -2338,6 +2338,8 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 		DBG("adding %s to %s", bss->path, ident);
 		g_free(ident);
 	} else {
+		struct connman_service *service;
+
 		DBG("creating network %s for %s", ident, bss->path);
 		net = g_slice_new0(struct wifi_network);
 		net->ident = ident;
@@ -2346,6 +2348,17 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 		g_hash_table_replace(dev->ident_net, g_strdup(ident), net);
 		wifi_network_init(net, bss_data);
 		connman_device_add_network(dev->device, net->network);
+
+		/*
+		 * Make sure that the service has its ipconfig initialized,
+		 * otherwise autoconnect barfs.
+		 */
+		service = connman_service_lookup_from_network(net->network);
+		GASSERT(service);
+		if (service) {
+			connman_service_create_ip4config(service, dev->ifi);
+			connman_service_create_ip6config(service, dev->ifi);
+		}
 	}
 
 	g_hash_table_replace(dev->bss_net, g_strdup(bss->path), net);
