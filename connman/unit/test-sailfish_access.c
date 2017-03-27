@@ -19,22 +19,20 @@
 
 #include <dbusaccess_peer.h>
 #include <dbusaccess_policy.h>
+#include <dbusaccess_system.h>
+
 #include <gutil_idlepool.h>
+#include <gutil_log.h>
 
 #define CONNMAN_API_SUBJECT_TO_CHANGE
 #include "plugin.h"
 
 #define DRIVER "sailfish"
 #define SPEC_BAD "bad"
-#define SPEC_DENY "deny"
-#define SPEC_ALLOW "allow"
+#define SPEC_DENY DA_POLICY_VERSION ";*=deny"
+#define SPEC_ALLOW DA_POLICY_VERSION ";*=allow"
+#define SPEC_DENY_CLEAR DA_POLICY_VERSION ";*=allow;ClearProperty(*)=deny"
 
-struct da_policy {
-	int ref_count;
-	gboolean allow;
-};
-
-static int policy_count;
 static GUtilIdlePool* peer_pool;
 
 extern struct connman_plugin_desc __connman_builtin_sailfish_access;
@@ -42,43 +40,6 @@ extern struct connman_plugin_desc __connman_builtin_sailfish_access;
 /*==========================================================================*
  * Stubs
  *==========================================================================*/
-
-DAPolicy *da_policy_new_full(const char *spec, const DA_ACTION *actions)
-{
-	if (!g_strcmp0(spec, SPEC_BAD)) {
-		return NULL;
-	} else {
-		DAPolicy *p = g_new0(DAPolicy, 1);
-		p->ref_count = 1;
-		p->allow = !g_strcmp0(spec, SPEC_ALLOW);
-		policy_count++;
-		return p;
-	}
-}
-
-DAPolicy *da_policy_ref(DAPolicy *p)
-{
-	if (p) {
-		g_atomic_int_inc(&p->ref_count);
-	}
-	return p;
-}
-
-void da_policy_unref(DAPolicy *p)
-{
-	if (p) {
-		if (g_atomic_int_dec_and_test(&p->ref_count)) {
-			policy_count--;
-			g_free(p);
-		}
-	}
-}
-
-DA_ACCESS da_policy_check(DAPolicy *p, const DACred *cred, guint action,
-				const char *arg, DA_ACCESS default_access)
-{
-	return p->allow ? DA_ACCESS_ALLOW : DA_ACCESS_DENY;
-}
 
 DAPeer* da_peer_get(DA_BUS bus, const char* name)
 {
@@ -89,6 +50,10 @@ DAPeer* da_peer_get(DA_BUS bus, const char* name)
 		strcpy(buf, name);
 		peer->name = buf;
 		gutil_idle_pool_add(peer_pool, peer, g_free);
+		if (strcmp(name, "root")) {
+			peer->cred.euid = 1;
+			peer->cred.egid = 1;
+		}
 		return peer;
 	} else {
 		return NULL;
@@ -98,6 +63,29 @@ DAPeer* da_peer_get(DA_BUS bus, const char* name)
 void da_peer_flush(DA_BUS bus, const char* name)
 {
 	gutil_idle_pool_drain(peer_pool);
+}
+
+/*
+ * The build environment doesn't necessarily have these users and groups.
+ * And yet, sailfish access plugin depends on those.
+ */
+
+int da_system_uid(const char* user)
+{
+	if (!g_strcmp0(user, "nemo")) {
+		return 100000;
+	} else {
+		return -1;
+	}
+}
+
+int da_system_gid(const char* group)
+{
+	if (!g_strcmp0(group, "privileged")) {
+		return 996;
+	} else {
+		return -1;
+	}
 }
 
 /*==========================================================================*
@@ -131,6 +119,7 @@ static void test_sailfish_access_default()
 	tp = connman_access_tech_policy_create(NULL);
 	g_assert(sp);
 	g_assert(tp);
+	g_assert(connman_access_is_default_service_policy(sp));
 	connman_access_service_policy_free(sp);
 	connman_access_tech_policy_free(tp);
 
@@ -138,6 +127,7 @@ static void test_sailfish_access_default()
 	tp = connman_access_tech_policy_create("");
 	g_assert(sp);
 	g_assert(tp);
+	g_assert(connman_access_is_default_service_policy(sp));
 	connman_access_service_policy_free(sp);
 	connman_access_tech_policy_free(tp);
 
@@ -171,7 +161,6 @@ static void test_sailfish_access_cache()
 	g_assert(p1);
 	g_assert(p2);
 	/* The policy implementation is reused */
-	g_assert(policy_count == 1);
 	connman_access_service_policy_free(p1);
 	connman_access_service_policy_free(p2);
 	__connman_builtin_sailfish_access.exit();
@@ -187,14 +176,16 @@ static void test_sailfish_access_allow()
 	tp = connman_access_tech_policy_create(DRIVER ":" SPEC_ALLOW);
 	g_assert(sp);
 	g_assert(tp);
-	g_assert(connman_access_service_get_property(sp, "x", "foo",
-				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
-	g_assert(connman_access_service_set_property(sp, NULL, "foo",
-				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
-	g_assert(connman_access_tech_set_property(tp, "x", "foo",
-				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
-	g_assert(connman_access_tech_set_property(tp, NULL, "foo",
-				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, "foo", "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, "foo", NULL,
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+	g_assert(connman_access_tech_set_property(tp, "foo", "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_tech_set_property(tp, "foo", NULL,
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
 	connman_access_service_policy_free(sp);
 	connman_access_tech_policy_free(tp);
 	__connman_builtin_sailfish_access.exit();
@@ -210,16 +201,54 @@ static void test_sailfish_access_deny()
 	tp = connman_access_tech_policy_create(DRIVER ":" SPEC_DENY);
 	g_assert(sp);
 	g_assert(tp);
-	g_assert(connman_access_service_get_property(sp, "x", "foo",
-				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
-	g_assert(connman_access_service_set_property(sp, NULL, "foo",
-				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_ALLOW);
-	g_assert(connman_access_tech_set_property(tp, "x", "foo",
-				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
-	g_assert(connman_access_tech_set_property(tp, NULL, "foo",
-				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, "foo", "x",
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, "foo", NULL,
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	g_assert(connman_access_tech_set_property(tp, "foo", "x",
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	g_assert(connman_access_tech_set_property(tp, "foo", NULL,
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
 	connman_access_service_policy_free(sp);
 	connman_access_tech_policy_free(tp);
+	__connman_builtin_sailfish_access.exit();
+}
+
+static void test_sailfish_access_deny_clear()
+{
+	struct connman_access_service_policy *sp;
+
+	g_assert(__connman_builtin_sailfish_access.init() == 0);
+	sp = connman_access_service_policy_create(DRIVER ":" SPEC_DENY_CLEAR);
+	g_assert(sp);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, "foo", "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, "foo", "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY, "Error", "x",
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_CONNECT, NULL, "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_DISCONNECT, NULL, "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_REMOVE, NULL, "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_service_policy_check(sp,
+			CONNMAN_ACCESS_SERVICE_RESET_COUNTERS, NULL, "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	/* Even if the action is unknown, it's still allowed because
+	 * everything is allowed, except for ClearProperty */
+	g_assert(connman_access_service_policy_check(sp, -1, NULL, "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	connman_access_service_policy_free(sp);
 	__connman_builtin_sailfish_access.exit();
 }
 
@@ -230,6 +259,9 @@ int main(int argc, char *argv[])
 	int ret;
 	peer_pool = gutil_idle_pool_new();
 	g_test_init(&argc, &argv, NULL);
+	gutil_log_timestamp = FALSE;
+	gutil_log_default.level = g_test_verbose() ?
+		GLOG_LEVEL_VERBOSE : GLOG_LEVEL_NONE;
 	g_test_add_func(PREFIX "register", test_sailfish_access_register);
 	g_test_add_func(PREFIX "badspec", test_sailfish_access_badspec);
 	g_test_add_func(PREFIX "default", test_sailfish_access_default);
@@ -237,6 +269,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(PREFIX "cache", test_sailfish_access_cache);
 	g_test_add_func(PREFIX "allow", test_sailfish_access_allow);
 	g_test_add_func(PREFIX "deny", test_sailfish_access_deny);
+	g_test_add_func(PREFIX "deny_clear", test_sailfish_access_deny_clear);
 	ret = g_test_run();
 	gutil_idle_pool_unref(peer_pool);
 	return ret;

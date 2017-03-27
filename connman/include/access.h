@@ -26,6 +26,17 @@ enum connman_access {
 	CONNMAN_ACCESS_ALLOW
 };
 
+/* For convenience of the implementation, these should be non-zero */
+enum connman_access_service_methods {
+	CONNMAN_ACCESS_SERVICE_GET_PROPERTY = 1,
+	CONNMAN_ACCESS_SERVICE_SET_PROPERTY,
+	CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY,
+	CONNMAN_ACCESS_SERVICE_CONNECT,
+	CONNMAN_ACCESS_SERVICE_DISCONNECT,
+	CONNMAN_ACCESS_SERVICE_REMOVE,
+	CONNMAN_ACCESS_SERVICE_RESET_COUNTERS
+};
+
 struct connman_access_service_policy;
 struct connman_access_service_policy_impl;
 struct connman_access_tech_policy;
@@ -38,46 +49,50 @@ struct connman_access_driver {
 		(const char *spec);
 	void (*service_policy_free)
 		(struct connman_access_service_policy_impl *policy);
-	enum connman_access (*service_get_property)
-		(struct connman_access_service_policy_impl *policy,
-			const char *sender, const char *name,
-			enum connman_access default_access);
-	enum connman_access (*service_set_property)
-		(struct connman_access_service_policy_impl *policy,
-			const char *sender, const char *name,
+	gboolean (*service_policy_equal)
+		(const struct connman_access_service_policy_impl *p1,
+			const struct connman_access_service_policy_impl *p2);
+	enum connman_access (*service_policy_check)
+		(const struct connman_access_service_policy_impl *policy,
+			enum connman_access_service_methods method,
+			const char *arg, const char *sender,
 			enum connman_access default_access);
 	struct connman_access_tech_policy_impl *(*tech_policy_create)
 		(const char *spec);
 	void (*tech_policy_free)
 		(struct connman_access_tech_policy_impl *policy);
 	enum connman_access (*tech_set_property)
-		(struct connman_access_tech_policy_impl *policy,
-			const char *sender, const char *name,
+		(const struct connman_access_tech_policy_impl *policy,
+			const char *name, const char *sender,
 			enum connman_access default_access);
 };
 
 int connman_access_driver_register(const struct connman_access_driver *d);
 void connman_access_driver_unregister(const struct connman_access_driver *d);
-const char *connman_access_default_service_policy(void);
+const char *connman_access_default_service_policy_str(void);
+gboolean connman_access_is_default_service_policy(
+				struct connman_access_service_policy *policy);
 
 struct connman_access_service_policy *connman_access_service_policy_create(
 							const char *spec);
 void connman_access_service_policy_free(
 				struct connman_access_service_policy *policy);
-enum connman_access connman_access_service_get_property(
-	struct connman_access_service_policy *policy, const char *sender,
-	const char *name, enum connman_access default_access);
-enum connman_access connman_access_service_set_property(
-	struct connman_access_service_policy *policy, const char *sender,
-	const char *name, enum connman_access default_access);
+gboolean connman_access_service_policy_equal(
+			const struct connman_access_service_policy *p1,
+			const struct connman_access_service_policy *p2);
+enum connman_access connman_access_service_policy_check(
+		const struct connman_access_service_policy *policy,
+		enum connman_access_service_methods method,
+		const char *arg, const char *sender,
+		enum connman_access default_access);
 
 struct connman_access_tech_policy *connman_access_tech_policy_create(
 							const char *spec);
 void connman_access_tech_policy_free(
 				struct connman_access_tech_policy *policy);
 enum connman_access connman_access_tech_set_property(
-	struct connman_access_tech_policy *policy, const char *sender,
-	const char *name, enum connman_access default_access);
+	const struct connman_access_tech_policy *policy, const char *name,
+	const char *sender, enum connman_access default_access);
 
 G_END_DECLS
 
