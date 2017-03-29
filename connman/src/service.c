@@ -46,14 +46,108 @@
 // Maximum time between failed online checks is ONLINE_CHECK_RETRY_COUNT^2 seconds
 #define ONLINE_CHECK_RETRY_COUNT 12
 
-#define PASSPHRASE_GET_ACCESS CONNMAN_ACCESS_DENY
-#define PASSPHRASE_SET_ACCESS CONNMAN_ACCESS_DENY
-#define ACCESS_GET_ACCESS     CONNMAN_ACCESS_DENY
-#define ACCESS_SET_ACCESS     CONNMAN_ACCESS_DENY
-#define IDENTITY_GET_ACCESS   CONNMAN_ACCESS_DENY
-#define IDENTITY_SET_ACCESS   CONNMAN_ACCESS_DENY
-#define EAP_GET_ACCESS        CONNMAN_ACCESS_ALLOW
-#define EAP_SET_ACCESS        CONNMAN_ACCESS_DENY
+/* (Some) property names */
+#define PROP_ACCESS                     "Access"
+#define PROP_DEFAULT_ACCESS             "DefaultAccess"
+#define PROP_AVAILABLE                  "Available"
+#define PROP_SAVED                      "Saved"
+#define PROP_PASSPHRASE                 "Passphrase"
+#define PROP_IDENTITY                   "Identity"
+#define PROP_EAP                        "EAP"
+
+/* Get/set properties */
+#define GET_ACCESS_ACCESS               CONNMAN_ACCESS_DENY
+#define SET_ACCESS_ACCESS               CONNMAN_ACCESS_DENY
+#define GET_DEFAULT_ACCESS_ACCESS       GET_ACCESS_ACCESS
+#define SET_DEFAULT_ACCESS_ACCESS       SET_ACCESS_ACCESS
+#define GET_PASSPHRASE_ACCESS           CONNMAN_ACCESS_DENY
+#define SET_PASSPHRASE_ACCESS           CONNMAN_ACCESS_DENY
+#define GET_IDENTITY_ACCESS             CONNMAN_ACCESS_DENY
+#define SET_IDENTITY_ACCESS             CONNMAN_ACCESS_DENY
+#define GET_EAP_ACCESS                  CONNMAN_ACCESS_ALLOW
+#define SET_EAP_ACCESS                  CONNMAN_ACCESS_DENY
+
+/* Other methods */
+#define CLEAR_PROPERTY_ACCESS           CONNMAN_ACCESS_ALLOW
+#define CONNECT_ACCESS                  CONNMAN_ACCESS_ALLOW
+#define DISCONNECT_ACCESS               CONNMAN_ACCESS_ALLOW
+#define REMOVE_ACCESS                   CONNMAN_ACCESS_ALLOW
+#define RESET_COUNTERS_ACCESS           CONNMAN_ACCESS_ALLOW
+
+/* Access descriptors */
+#define ACCESS_PROP_ACCESS              0x00000001
+#define ACCESS_PROP_DEFAULT_ACCESS      0x00000002
+#define ACCESS_PROP_PASSPHRASE          0x00000004
+#define ACCESS_PROP_IDENTITY            0x00000008
+#define ACCESS_PROP_EAP                 0x00000010
+
+#define ACCESS_METHOD_CLEAR_PROPERTY    0x00000001
+#define ACCESS_METHOD_CONNECT           0x00000002
+#define ACCESS_METHOD_DISCONNECT        0x00000004
+#define ACCESS_METHOD_REMOVE            0x00000008
+#define ACCESS_METHOD_RESET_COUNTERS    0x00000010
+
+static const struct connman_service_property_access {
+	guint32 flag;
+	const char *name;
+	enum connman_access default_get_access;
+	enum connman_access default_set_access;
+} service_property_access[] = {
+	{
+		ACCESS_PROP_ACCESS,
+		PROP_ACCESS,
+		GET_ACCESS_ACCESS,
+		SET_ACCESS_ACCESS
+	},{
+		ACCESS_PROP_DEFAULT_ACCESS,
+		PROP_DEFAULT_ACCESS,
+		GET_DEFAULT_ACCESS_ACCESS,
+		SET_DEFAULT_ACCESS_ACCESS
+	},{
+		ACCESS_PROP_PASSPHRASE,
+		PROP_PASSPHRASE,
+		GET_PASSPHRASE_ACCESS,
+		SET_PASSPHRASE_ACCESS
+	},{
+		ACCESS_PROP_IDENTITY,
+		PROP_IDENTITY,
+		GET_IDENTITY_ACCESS,
+		SET_IDENTITY_ACCESS
+	},{
+		ACCESS_PROP_EAP,
+		PROP_EAP,
+		GET_EAP_ACCESS,
+		SET_EAP_ACCESS
+	}
+};
+
+static const struct connman_service_method_access {
+	guint32 flag;
+	enum connman_access_service_methods method;
+	enum connman_access default_access;
+} service_method_access[] = {
+	{
+		ACCESS_METHOD_CLEAR_PROPERTY,
+		CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY,
+		CLEAR_PROPERTY_ACCESS
+	},{
+		ACCESS_METHOD_CONNECT,
+		CONNMAN_ACCESS_SERVICE_CONNECT,
+		CONNECT_ACCESS
+	},{
+		ACCESS_METHOD_DISCONNECT,
+		CONNMAN_ACCESS_SERVICE_DISCONNECT,
+		DISCONNECT_ACCESS
+	},{
+		ACCESS_METHOD_REMOVE,
+		CONNMAN_ACCESS_SERVICE_REMOVE,
+		REMOVE_ACCESS
+	},{
+		ACCESS_METHOD_RESET_COUNTERS,
+		CONNMAN_ACCESS_SERVICE_RESET_COUNTERS,
+		RESET_COUNTERS_ACCESS
+	}
+};
 
 static DBusConnection *connection = NULL;
 
@@ -628,9 +722,9 @@ static int service_load(struct connman_service *service)
 		g_free(str);
 	}
 
-	get_config_string(keyfile, service->identifier, "EAP",
+	get_config_string(keyfile, service->identifier, PROP_EAP,
 					&service->eap);
-	get_config_string(keyfile, service->identifier, "Identity",
+	get_config_string(keyfile, service->identifier, PROP_IDENTITY,
 					&service->identity);
 	get_config_string(keyfile, service->identifier, "AnonymousIdentity",
 					&service->anonymous_identity);
@@ -654,7 +748,7 @@ static int service_load(struct connman_service *service)
 					&service->phase2);
 
 	str = g_key_file_get_string(keyfile,
-				service->identifier, "Access", NULL);
+				service->identifier, PROP_ACCESS, NULL);
 	if (str) {
 		__connman_service_set_access(service, str);
 		g_free(str);
@@ -801,9 +895,9 @@ static int service_save(struct connman_service *service)
 						"Frequency", freq);
 		}
 		set_config_string(keyfile, service->identifier,
-			"EAP", service->eap);
+			PROP_EAP, service->eap);
 		set_config_string(keyfile, service->identifier,
-			"Identity", service->identity);
+			PROP_IDENTITY, service->identity);
 		set_config_string(keyfile, service->identifier,
 			"AnonymousIdentity", service->anonymous_identity);
 		set_config_string(keyfile, service->identifier,
@@ -843,6 +937,9 @@ static int service_save(struct connman_service *service)
 					"AutoConnect", service->autoconnect);
 		break;
 	}
+
+	set_config_string(keyfile, service->identifier,
+					PROP_ACCESS, service->access);
 
 	str = g_time_val_to_iso8601(&service->modified);
 	if (str) {
@@ -1722,9 +1819,9 @@ static gboolean service_saved_value(struct connman_service *service)
 static const struct connman_service_boolean_property service_autoconnect =
 	{ "AutoConnect", service_autoconnect_value };
 static const struct connman_service_boolean_property service_available =
-	{ "Available", service_available_value };
+	{ PROP_AVAILABLE, service_available_value };
 static const struct connman_service_boolean_property service_saved =
-	{ "Saved", service_saved_value };
+	{ PROP_SAVED, service_saved_value };
 
 #define autoconnect_changed(s) service_boolean_changed(s, &service_autoconnect)
 
@@ -2539,12 +2636,39 @@ static void string_changed(struct connman_service *service,
 				DBUS_TYPE_STRING, &value);
 }
 
+static gboolean can_get_property(struct connman_service *service,
+				const char *name, const char *sender,
+				enum connman_access default_access)
+{
+	return connman_access_service_policy_check(service->policy,
+			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, name,
+			sender, default_access) == CONNMAN_ACCESS_ALLOW;
+}
+
+static gboolean can_set_property(struct connman_service *service,
+				const char *name, DBusMessage *msg,
+				enum connman_access default_access)
+{
+	return connman_access_service_policy_check(service->policy,
+			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, name,
+			dbus_message_get_sender(msg),
+			default_access) == CONNMAN_ACCESS_ALLOW;
+}
+
+static gboolean can_call(struct connman_service *service,
+			enum connman_access_service_methods method,
+			DBusMessage *msg, enum connman_access default_access)
+{
+	return connman_access_service_policy_check(service->policy,
+			method, NULL, dbus_message_get_sender(msg),
+			default_access) == CONNMAN_ACCESS_ALLOW;
+}
+
 static void restricted_string_changed(struct connman_service *service,
 				const char *name, const char *value,
 				enum connman_access default_get_access)
 {
-	if (connman_access_service_get_property(service->policy, NULL,
-			name, default_get_access) == CONNMAN_ACCESS_ALLOW) {
+	if (can_get_property(service, name, NULL, default_get_access)) {
 		/* Access is wide open, send the value */
 		string_changed(service, name, value);
 	} else if (allow_property_changed(service)) {
@@ -2562,12 +2686,12 @@ static void restricted_string_changed(struct connman_service *service,
 }
 
 static void append_restricted_string(DBusMessageIter *dict,
-		struct connman_access_service_policy *policy, const char *name,
+		struct connman_service *service, const char *name,
 		const char *str, enum connman_access default_access)
 {
-	if (connman_access_service_get_property(policy,
-				g_dbus_get_current_sender(), name,
-				default_access) != CONNMAN_ACCESS_ALLOW)
+	const char *sender = g_dbus_get_current_sender();
+
+	if (!can_get_property(service, name, sender, default_access))
 		return;
 
 	if (!str)
@@ -2593,13 +2717,12 @@ static DBusMessage *reply_string(DBusMessage *msg, const char *str)
 }
 
 static DBusMessage *check_and_reply_string(DBusMessage *msg,
-		struct connman_access_service_policy *policy, const char *name,
+		struct connman_service *service, const char *name,
 		const char *value, enum connman_access default_access)
 {
-	const char *sender = g_dbus_get_current_sender();
+	const char *sender = dbus_message_get_sender(msg);
 
-	if (connman_access_service_get_property(policy, sender, name,
-				default_access) == CONNMAN_ACCESS_ALLOW) {
+	if (can_get_property(service, name, sender, default_access)) {
 		DBG("sending %s to %s", name, sender);
 		return reply_string(msg, value);
 	} else {
@@ -2612,7 +2735,6 @@ static DBusMessage *get_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
 	struct connman_service *service = user_data;
-	const char *sender = g_dbus_get_current_sender();
 	const char *name;
 	DBusMessageIter iter;
 
@@ -2624,21 +2746,25 @@ static DBusMessage *get_property(DBusConnection *conn,
 
 	dbus_message_iter_get_basic(&iter, &name);
 
-	if (!g_strcmp0(name, "Passphrase")) {
-		return check_and_reply_string(msg, service->policy, name,
-				service->passphrase, PASSPHRASE_GET_ACCESS);
-	} else if (!g_strcmp0(name, "Access")) {
-		return check_and_reply_string(msg, service->policy, name,
-				service->access, ACCESS_GET_ACCESS);
-	} else if (!g_strcmp0(name, "Identity")) {
-		return check_and_reply_string(msg, service->policy, name,
-				service->identity, IDENTITY_GET_ACCESS);
-	} else if (!g_strcmp0(name, "EAP")) {
-		return check_and_reply_string(msg, service->policy, name,
-				service->eap, EAP_GET_ACCESS);
+	if (!g_strcmp0(name, PROP_PASSPHRASE)) {
+		return check_and_reply_string(msg, service, name,
+				service->passphrase, GET_PASSPHRASE_ACCESS);
+	} else if (!g_strcmp0(name, PROP_ACCESS)) {
+		return check_and_reply_string(msg, service, name,
+				service->access, GET_ACCESS_ACCESS);
+	} else if (!g_strcmp0(name, PROP_DEFAULT_ACCESS)) {
+		return check_and_reply_string(msg, service, name,
+				connman_access_default_service_policy_str(),
+				GET_DEFAULT_ACCESS_ACCESS);
+	} else if (!g_strcmp0(name, PROP_IDENTITY)) {
+		return check_and_reply_string(msg, service, name,
+				service->identity, GET_IDENTITY_ACCESS);
+	} else if (!g_strcmp0(name, PROP_EAP)) {
+		return check_and_reply_string(msg, service, name,
+				service->eap, GET_EAP_ACCESS);
 	}
 
-	DBG("%s requested %s - why?", sender, name);
+	DBG("%s requested %s - why?", dbus_message_get_sender(msg), name);
 	return __connman_error_invalid_arguments(msg);
 }
 
@@ -2713,12 +2839,12 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "Hidden",
 						DBUS_TYPE_BOOLEAN, &val);
 
-		append_restricted_string(dict, service->policy, "Passphrase",
-				service->passphrase, PASSPHRASE_GET_ACCESS);
-		append_restricted_string(dict, service->policy, "Identity",
-				service->identity, IDENTITY_GET_ACCESS);
-		append_restricted_string(dict, service->policy, "EAP",
-				service->eap, IDENTITY_GET_ACCESS);
+		append_restricted_string(dict, service, PROP_PASSPHRASE,
+				service->passphrase, GET_PASSPHRASE_ACCESS);
+		append_restricted_string(dict, service, PROP_IDENTITY,
+				service->identity, GET_IDENTITY_ACCESS);
+		append_restricted_string(dict, service, PROP_EAP,
+				service->eap, GET_IDENTITY_ACCESS);
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -2774,8 +2900,11 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 	service_append_boolean(service, &service_available, dict);
 	service_append_boolean(service, &service_saved, dict);
-	append_restricted_string(dict, service->policy, "Access",
-				service->access, ACCESS_GET_ACCESS);
+	append_restricted_string(dict, service, PROP_ACCESS, service->access,
+				GET_ACCESS_ACCESS);
+	append_restricted_string(dict, service, PROP_DEFAULT_ACCESS,
+				connman_access_default_service_policy_str(),
+				GET_DEFAULT_ACCESS_ACCESS);
 }
 
 static void append_struct_service(DBusMessageIter *iter,
@@ -3180,8 +3309,8 @@ static gboolean set_identity(struct connman_service *service,
 	g_free(service->identity);
 	service->identity = g_strdup(identity);
 
-	restricted_string_changed(service, "Identity", service->identity,
-							IDENTITY_GET_ACCESS);
+	restricted_string_changed(service, PROP_IDENTITY, service->identity,
+							GET_IDENTITY_ACCESS);
 	if (service->network)
 		connman_network_set_string(service->network,
 					"WiFi.Identity",
@@ -3365,8 +3494,8 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	g_free(service->passphrase);
 	service->passphrase = g_strdup(passphrase);
 
-	restricted_string_changed(service, "Passphrase", service->passphrase,
-						PASSPHRASE_GET_ACCESS);
+	restricted_string_changed(service, PROP_PASSPHRASE,
+				service->passphrase, GET_PASSPHRASE_ACCESS);
 	if (service->network)
 		connman_network_set_string(service->network, "WiFi.Passphrase",
 				service->passphrase);
@@ -3382,21 +3511,37 @@ const char *__connman_service_get_passphrase(struct connman_service *service)
 	return service->passphrase;
 }
 
+/* Takes the ownership of the policy */
+static void service_set_access_policy(struct connman_service *service,
+	const char *access, struct connman_access_service_policy *policy)
+{
+	g_free(service->access);
+	connman_access_service_policy_free(service->policy);
+
+	/* NULL or empty access string will initialize the default policy */
+	service->policy = policy;
+	service->access = 
+		(policy && !connman_access_is_default_service_policy(policy)) ?
+						g_strdup(access) : NULL;
+
+	restricted_string_changed(service, PROP_ACCESS, service->access,
+						GET_ACCESS_ACCESS);
+}
+
 void __connman_service_set_access(struct connman_service *service,
 							const char *access)
 {
 	if (!service)
 		return;
 
+	if (!service->access && (!access || !access[0]))
+		return;
+
 	if (!g_strcmp0(service->access, access))
 		return;
 
-	g_free(service->access);
-	connman_access_service_policy_free(service->policy);
-
-	/* NULL parameter initializes the default access policy */
-	service->policy = connman_access_service_policy_create(access);
-	service->access = g_strdup(access);
+	service_set_access_policy(service, access,
+			connman_access_service_policy_create(access));
 }
 
 /* Only allows valid values */
@@ -3411,8 +3556,8 @@ static gboolean set_eap_method(struct connman_service *service,
 				!g_strcmp0(method, "ttls")) {
 			g_free(service->eap);
 			service->eap = g_strdup(method);
-			restricted_string_changed(service, "EAP",
-					service->eap, EAP_GET_ACCESS);
+			restricted_string_changed(service, PROP_EAP,
+					service->eap, GET_EAP_ACCESS);
 			return TRUE;
 		}
 		DBG("invalid EAP method %s", method);
@@ -3420,8 +3565,8 @@ static gboolean set_eap_method(struct connman_service *service,
 	if (service->eap) {
 		g_free(service->eap);
 		service->eap = NULL;
-		restricted_string_changed(service, "EAP",
-				service->eap, EAP_GET_ACCESS);
+		restricted_string_changed(service, PROP_EAP,
+				service->eap, GET_EAP_ACCESS);
 		return TRUE;
 	}
 	return FALSE;
@@ -3440,9 +3585,7 @@ static DBusMessage *set_restricted_string(struct connman_service *service,
 
 	dbus_message_iter_get_basic(value, &str);
 
-	if (connman_access_service_set_property(service->policy,
-				g_dbus_get_current_sender(), name,
-				default_set_access) != CONNMAN_ACCESS_ALLOW)
+	if (!can_set_property(service, name, msg, default_set_access))
 		return __connman_error_permission_denied(msg);
 
 	if (set(service, str))
@@ -4034,7 +4177,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		}
 
 		service_save(service);
-	} else if (g_str_equal(name, "Passphrase")) {
+	} else if (g_str_equal(name, PROP_PASSPHRASE)) {
 		const char *str = NULL;
 
 		if (type != DBUS_TYPE_STRING)
@@ -4042,9 +4185,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		dbus_message_iter_get_basic(&value, &str);
 
-		if (connman_access_service_set_property(service->policy,
-				g_dbus_get_current_sender(), name,
-				PASSPHRASE_SET_ACCESS) != CONNMAN_ACCESS_ALLOW)
+		if (!can_set_property(service, name, msg,
+						SET_PASSPHRASE_ACCESS))
 			return __connman_error_permission_denied(msg);
 
 		if (g_strcmp0(str, service->passphrase)) {
@@ -4064,18 +4206,15 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 			service_save(service);
 		}
-	} else if (g_str_equal(name, "Access")) {
+	} else if (g_str_equal(name, PROP_ACCESS)) {
 		const char *str = NULL;
-		const char *sender = g_dbus_get_current_sender();
 
 		if (type != DBUS_TYPE_STRING)
 			return __connman_error_invalid_arguments(msg);
 
 		dbus_message_iter_get_basic(&value, &str);
 
-		if (connman_access_service_set_property(service->policy,
-				sender, name, ACCESS_SET_ACCESS) !=
-						CONNMAN_ACCESS_ALLOW)
+		if (!can_set_property(service, name, msg, SET_ACCESS_ACCESS))
 			return __connman_error_permission_denied(msg);
 
 		if (g_strcmp0(str, service->access)) {
@@ -4087,28 +4226,26 @@ static DBusMessage *set_property(DBusConnection *conn,
 				return __connman_error_invalid_arguments(msg);
 
 			/* Don't allow the user to shoot self in the foot */
-			if (connman_access_service_set_property(policy,
-					sender, name, ACCESS_SET_ACCESS) !=
-						CONNMAN_ACCESS_ALLOW) {
+			if (connman_access_service_policy_check(policy,
+					CONNMAN_ACCESS_SERVICE_SET_PROPERTY,
+					name, dbus_message_get_sender(msg),
+					SET_ACCESS_ACCESS) !=
+							CONNMAN_ACCESS_ALLOW) {
 				DBG("self-shooting prevented");
 				connman_access_service_policy_free(policy);
 				return __connman_error_invalid_arguments(msg);
 			}
 
 			DBG("%s access \"%s\"", service->identifier, str);
-			g_free(service->access);
-			connman_access_service_policy_free(service->policy);
-			service->policy = policy;
-			service->access = g_strdup(str);
-
+			service_set_access_policy(service, str, policy);
 			service_save(service);
 		}
-	} else if (g_str_equal(name, "Identity")) {
+	} else if (g_str_equal(name, PROP_IDENTITY)) {
 		return set_restricted_string(service, name, &value, msg,
-					set_identity, IDENTITY_SET_ACCESS);
-	} else if (g_str_equal(name, "EAP")) {
+					set_identity, SET_IDENTITY_ACCESS);
+	} else if (g_str_equal(name, PROP_EAP)) {
 		return set_restricted_string(service, name, &value, msg,
-					set_eap_method, EAP_SET_ACCESS);
+					set_eap_method, SET_EAP_ACCESS);
 	} else
 		return __connman_error_invalid_property(msg);
 
@@ -4179,6 +4316,7 @@ static void service_complete(struct connman_service *service)
 static DBusMessage *clear_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
+	const char *sender = dbus_message_get_sender(msg);
 	struct connman_service *service = user_data;
 	const char *name;
 
@@ -4186,6 +4324,14 @@ static DBusMessage *clear_property(DBusConnection *conn,
 
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &name,
 							DBUS_TYPE_INVALID);
+
+	if (connman_access_service_policy_check(service->policy,
+			CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY, name, sender,
+			CLEAR_PROPERTY_ACCESS) != CONNMAN_ACCESS_ALLOW) {
+		DBG("%s is not allowed to clear %s for %s", sender, name,
+							service->path);
+		return __connman_error_permission_denied(msg);
+	}
 
 	if (g_str_equal(name, "Error")) {
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
@@ -4662,6 +4808,13 @@ static DBusMessage *connect_service(DBusConnection *conn,
 
 	DBG("service %p", service);
 
+	if (!can_call(service, CONNMAN_ACCESS_SERVICE_CONNECT, msg,
+							CONNECT_ACCESS)) {
+		DBG("%s is not allowed to connect %s",
+			dbus_message_get_sender(msg), service->path);
+		return __connman_error_permission_denied(msg);
+	}
+
 	if (service->pending)
 		return __connman_error_in_progress(msg);
 
@@ -4715,6 +4868,13 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 	int err;
 
 	DBG("service %p", service);
+
+	if (!can_call(service, CONNMAN_ACCESS_SERVICE_DISCONNECT, msg,
+							DISCONNECT_ACCESS)) {
+		DBG("%s is not allowed to disconnect %s",
+			dbus_message_get_sender(msg), service->path);
+		return __connman_error_permission_denied(msg);
+	}
 
 	//service->ignore = true;
 
@@ -4790,6 +4950,13 @@ static DBusMessage *remove_service(DBusConnection *conn,
 	struct connman_service *service = user_data;
 
 	DBG("service %p", service);
+
+	if (!can_call(service, CONNMAN_ACCESS_SERVICE_REMOVE, msg,
+							REMOVE_ACCESS)) {
+		DBG("%s is not allowed to remove %s",
+			dbus_message_get_sender(msg), service->path);
+		return __connman_error_permission_denied(msg);
+	}
 
 	if (!__connman_service_remove(service))
 		return __connman_error_not_supported(msg);
@@ -4995,9 +5162,58 @@ static DBusMessage *reset_counters(DBusConnection *conn,
 {
 	struct connman_service *service = user_data;
 
+	if (!can_call(service, CONNMAN_ACCESS_SERVICE_RESET_COUNTERS, msg,
+						RESET_COUNTERS_ACCESS)) {
+		DBG("%s is not allowed to reset counters for %s",
+			dbus_message_get_sender(msg), service->path);
+		return __connman_error_permission_denied(msg);
+	}
+
 	reset_stats(service);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
+static DBusMessage *check_access(DBusConnection *conn,
+					DBusMessage *msg, void *user_data)
+{
+	struct connman_service *service = user_data;
+	const char *sender = dbus_message_get_sender(msg);
+	DBusMessage *reply = dbus_message_new_method_return(msg);
+	DBusMessageIter it;
+	dbus_uint32_t get_props = 0;
+	dbus_uint32_t set_props = 0;
+	dbus_uint32_t calls = 0;
+	int i;
+
+	for (i=0; i<G_N_ELEMENTS(service_property_access); i++) {
+		const struct connman_service_property_access *pa =
+			service_property_access + i;
+
+		if (can_get_property(service, pa->name, sender,
+						pa->default_get_access)) {
+			get_props |= pa->flag;
+		}
+		if (can_set_property(service, pa->name, msg,
+						pa->default_set_access)) {
+			set_props |= pa->flag;
+		}
+	}
+
+	for (i=0; i<G_N_ELEMENTS(service_method_access); i++) {
+		const struct connman_service_method_access *ma =
+			service_method_access + i;
+
+		if (can_call(service, ma->method, msg, ma->default_access)) {
+			calls |= ma->flag;
+		}
+	}
+
+	dbus_message_iter_init_append(reply, &it);
+	dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &get_props);
+	dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &set_props);
+	dbus_message_iter_append_basic(&it, DBUS_TYPE_UINT32, &calls);
+	return reply;
 }
 
 static struct _services_notify {
@@ -5146,6 +5362,9 @@ static const GDBusMethodTable service_methods[] = {
 			GDBUS_ARGS({ "service", "o" }), NULL,
 			move_after) },
 	{ GDBUS_METHOD("ResetCounters", NULL, NULL, reset_counters) },
+	{ GDBUS_METHOD("CheckAccess",
+			NULL, GDBUS_ARGS({ "access", "uuu" }),
+			check_access) },
 	{ },
 };
 
@@ -5712,9 +5931,9 @@ void __connman_service_set_string(struct connman_service *service,
 {
 	if (service->hidden)
 		return;
-	if (g_str_equal(key, "EAP")) {
+	if (g_str_equal(key, PROP_EAP)) {
 		set_eap_method(service, value);
-	} else if (g_str_equal(key, "Identity")) {
+	} else if (g_str_equal(key, PROP_IDENTITY)) {
 		set_identity(service, value);
 	} else if (g_str_equal(key, "AnonymousIdentity")) {
 		g_free(service->anonymous_identity);
@@ -5746,7 +5965,7 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "Phase2")) {
 		g_free(service->phase2);
 		service->phase2 = g_strdup(value);
-	} else if (g_str_equal(key, "Passphrase"))
+	} else if (g_str_equal(key, PROP_PASSPHRASE))
 		__connman_service_set_passphrase(service, value);
 }
 

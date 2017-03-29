@@ -38,11 +38,6 @@ struct connman_access_tech_policy_impl {
 	DAPolicy *impl;
 };
 
-enum sailfish_service_access_action {
-	SERVICE_ACCESS_GET_PROPERTY = 1,
-	SERVICE_ACCESS_SET_PROPERTY
-};
-
 enum sailfish_tech_access_action {
 	TECH_ACCESS_SET_PROPERTY = 1
 };
@@ -54,23 +49,48 @@ enum sailfish_tech_access_action {
 G_STATIC_ASSERT((DA_ACCESS)CONNMAN_ACCESS_DENY == DA_ACCESS_DENY);
 G_STATIC_ASSERT((DA_ACCESS)CONNMAN_ACCESS_ALLOW == DA_ACCESS_ALLOW);
 
+/* We assume that these are non-zero */
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_GET_PROPERTY);
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_SET_PROPERTY);
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY);
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_CONNECT);
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_DISCONNECT);
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_REMOVE);
+G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_RESET_COUNTERS);
+
 static GHashTable *service_policies;
 static GUtilIdlePool* service_policies_pool;
 
-static const char *service_policy_default =
-	DA_POLICY_VERSION ";group(privileged)=allow";
+static const char service_policy_default[] =
+	DA_POLICY_VERSION ";"
+	"ClearProperty(*)|"
+	"Connect()|"
+	"Disconnect()|"
+	"Remove()|"
+	"ResetCounters()=deny;"
+	"group(privileged)=allow";
 static const DA_ACTION service_policy_actions [] = {
-        { "get", SERVICE_ACCESS_GET_PROPERTY, 1 },
-        { "set", SERVICE_ACCESS_SET_PROPERTY, 1 },
+        { "GetProperty",   CONNMAN_ACCESS_SERVICE_GET_PROPERTY,   1 },
+        { "get",           CONNMAN_ACCESS_SERVICE_GET_PROPERTY,   1 },
+        { "SetProperty",   CONNMAN_ACCESS_SERVICE_SET_PROPERTY,   1 },
+        { "set",           CONNMAN_ACCESS_SERVICE_SET_PROPERTY,   1 },
+        { "ClearProperty", CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY, 1 },
+        { "Connect",       CONNMAN_ACCESS_SERVICE_CONNECT,        0 },
+        { "Disconnect",    CONNMAN_ACCESS_SERVICE_DISCONNECT,     0 },
+        { "Remove",        CONNMAN_ACCESS_SERVICE_REMOVE,         0 },
+        { "ResetCounters", CONNMAN_ACCESS_SERVICE_RESET_COUNTERS, 0 },
         { NULL }
-    };
+};
 
 static const char *tech_policy_default =
-	DA_POLICY_VERSION ";set(Powered)=deny;group(privileged)=allow";
+	DA_POLICY_VERSION ";"
+	"SetProperty(Powered)=deny;"
+	"group(privileged)=allow";
 static const DA_ACTION tech_policy_actions [] = {
-        { "set", TECH_ACCESS_SET_PROPERTY, 1 },
+        { "set",         TECH_ACCESS_SET_PROPERTY, 1 },
+        { "SetProperty", TECH_ACCESS_SET_PROPERTY, 1 },
         { NULL }
-    };
+};
 
 static void sailfish_access_service_policy_free(
 			struct connman_access_service_policy_impl *p)
@@ -147,35 +167,28 @@ static struct connman_access_service_policy_impl *
 	return p;
 }
 
-static enum connman_access sailfish_access_service_check(
-	struct connman_access_service_policy_impl *policy,
-	const char *sender, enum sailfish_service_access_action action,
-	const char *name, enum connman_access default_access)
+static gboolean sailfish_access_service_policy_equal(
+			const struct connman_access_service_policy_impl *p1,
+			const struct connman_access_service_policy_impl *p2)
+{
+	/* Caller makes sure that arguments are not NULL */
+	return da_policy_equal(p1->impl, p2->impl);
+}
+
+static enum connman_access sailfish_access_service_policy_check(
+		const struct connman_access_service_policy_impl *policy,
+		enum connman_access_service_methods method,
+		const char *arg, const char *sender,
+		enum connman_access default_access)
 {
 	/* Don't unref this one: */
 	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
 
+	/* If we get no peer information from dbus-daemon, it means that
+	 * the peer is gone. Reject the access in this case */
 	return peer ? (enum connman_access)da_policy_check(policy->impl,
-		&peer->cred, action, name, (DA_ACCESS)default_access) :
-		default_access;
-}
-
-static enum connman_access sailfish_access_service_get_property(
-			struct connman_access_service_policy_impl *policy,
-			const char *sender, const char *name,
-			enum connman_access default_access)
-{
-	return sailfish_access_service_check(policy, sender,
-			SERVICE_ACCESS_GET_PROPERTY, name, default_access);
-}
-
-static enum connman_access sailfish_access_service_set_property(
-			struct connman_access_service_policy_impl *policy,
-			const char *sender, const char *name,
-			enum connman_access default_access)
-{
-	return sailfish_access_service_check(policy, sender,
-			SERVICE_ACCESS_SET_PROPERTY, name, default_access);
+		&peer->cred, method, arg, (DA_ACCESS)default_access) :
+		CONNMAN_ACCESS_DENY;
 }
 
 static struct connman_access_tech_policy_impl *
@@ -211,27 +224,29 @@ static void sailfish_access_tech_policy_free(
 }
 
 static enum connman_access sailfish_access_tech_set_property(
-			struct connman_access_tech_policy_impl *policy,
-			const char *sender, const char *name,
+			const struct connman_access_tech_policy_impl *policy,
+			const char *name, const char *sender,
 			enum connman_access default_access)
 {
 	/* Don't unref this one: */
 	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
 
+	/* Reject the access if the peer is gone */
 	return peer ? (enum connman_access)da_policy_check(policy->impl,
 		&peer->cred, TECH_ACCESS_SET_PROPERTY, name, (DA_ACCESS)
-		default_access) : default_access;
+		default_access) : CONNMAN_ACCESS_DENY;
 }
 
 static const struct connman_access_driver sailfish_connman_access_driver = {
-	.name                  = DRIVER_NAME,
-	.service_policy_create = sailfish_access_service_policy_create,
-	.service_policy_free   = sailfish_access_service_policy_free,
-	.service_get_property  = sailfish_access_service_get_property,
-	.service_set_property  = sailfish_access_service_set_property,
-	.tech_policy_create    = sailfish_access_tech_policy_create,
-	.tech_policy_free      = sailfish_access_tech_policy_free,
-	.tech_set_property     = sailfish_access_tech_set_property
+	.name                   = DRIVER_NAME,
+	.default_service_policy = service_policy_default,
+	.service_policy_create  = sailfish_access_service_policy_create,
+	.service_policy_free    = sailfish_access_service_policy_free,
+	.service_policy_equal   = sailfish_access_service_policy_equal,
+	.service_policy_check   = sailfish_access_service_policy_check,
+	.tech_policy_create     = sailfish_access_tech_policy_create,
+	.tech_policy_free       = sailfish_access_tech_policy_free,
+	.tech_set_property      = sailfish_access_tech_set_property
 };
 
 static int sailfish_access_init()

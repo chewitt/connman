@@ -391,8 +391,8 @@ AC_ARG_ENABLE(sailfish-access,
 		[enable_sailfish_access=${enableval}], [enable_sailfish_access="no"])
 AM_CONDITIONAL(SAILFISH_ACCESS, test "${enable_sailfish_access}" != "no")
 if (test "${enable_sailfish_access}" = "yes"); then
-	PKG_CHECK_MODULES(DBUSACCESS, libdbusaccess, dummy=yes,
-				AC_MSG_ERROR(libdbusaccess is required))
+	PKG_CHECK_MODULES(DBUSACCESS, libdbusaccess >= 1.0.3, dummy=yes,
+			AC_MSG_ERROR(libdbusaccess >= 1.0.3 is required))
 	CFLAGS="$CFLAGS $DBUSACCESS_CFLAGS"
 	LIBS="$LIBS $DBUSACCESS_LIBS"
 	need_glibutil=yes

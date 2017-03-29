@@ -976,7 +976,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 			return __connman_error_invalid_arguments(msg);
 
 		if (connman_access_tech_set_property(get_tech_access_policy(),
-				sender, name, POWERED_SET_ACCESS) !=
+				name, sender, POWERED_SET_ACCESS) !=
 						CONNMAN_ACCESS_ALLOW) {
 			DBG("access denied for %s", sender);
 			return __connman_error_permission_denied(msg);

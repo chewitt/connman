@@ -34,23 +34,50 @@ struct connman_access_tech_policy {
 #define DRIVER_NAME_SEPARATOR_STR ":"
 
 static GSList *access_drivers;
-static char *access_default_service_policy;
+static char *access_default_service_policy_str;
+struct connman_access_service_policy *access_default_service_policy;
+
+static struct connman_access_service_policy *connman_access_service_policy_new(
+		const struct connman_access_driver *driver, const char *spec)
+{
+	if (driver && driver->service_policy_create) {
+		struct connman_access_service_policy_impl *impl =
+			driver->service_policy_create(spec);
+
+		if (impl) {
+			struct connman_access_service_policy *p;
+
+			p = g_slice_new(struct connman_access_service_policy);
+			p->impl = impl;
+			p->driver = driver;
+			return p;
+		}
+	}
+	return NULL;
+}
 
 static void connman_access_driver_update_default_service_policy()
 {
-	g_free(access_default_service_policy);
+	g_free(access_default_service_policy_str);
+	access_default_service_policy_str = NULL;
+
+	connman_access_service_policy_free(access_default_service_policy);
 	access_default_service_policy = NULL;
 
 	if (access_drivers) {
-		const struct connman_access_driver *default_driver =
+		/* Default driver: */
+		const struct connman_access_driver *driver =
 			access_drivers->data;
 
-		if (default_driver->default_service_policy) {
-			access_default_service_policy =
-				g_strconcat(default_driver->name,
+		if (driver->default_service_policy) {
+			access_default_service_policy_str =
+				g_strconcat(driver->name,
 					DRIVER_NAME_SEPARATOR_STR,
-					default_driver->default_service_policy,
+					driver->default_service_policy,
 					NULL);
+			access_default_service_policy =
+				connman_access_service_policy_new(driver,
+					driver->default_service_policy);
 		}
 	}
 }
@@ -82,9 +109,16 @@ void connman_access_driver_unregister(const struct connman_access_driver *drv)
 	}
 }
 
-const char *connman_access_default_service_policy()
+const char *connman_access_default_service_policy_str()
 {
-	return access_default_service_policy;
+	return access_default_service_policy_str;
+}
+
+gboolean connman_access_is_default_service_policy(
+				struct connman_access_service_policy *policy)
+{
+	return connman_access_service_policy_equal(policy,
+					access_default_service_policy);
 }
 
 static const struct connman_access_driver *connman_access_get_driver(
@@ -147,22 +181,10 @@ static const struct connman_access_driver *connman_access_get_driver(
 struct connman_access_service_policy *connman_access_service_policy_create(
 							const char *spec)
 {
-	struct connman_access_service_policy *p = NULL;
 	const struct connman_access_driver *driver =
 		connman_access_get_driver(spec, &spec);
 
-	if (driver && driver->service_policy_create) {
-		struct connman_access_service_policy_impl *impl =
-			driver->service_policy_create(spec);
-
-		if (impl) {
-			p = g_slice_new(struct connman_access_service_policy);
-			p->impl = impl;
-			p->driver = driver;
-		}
-	}
-
-	return p;
+	return connman_access_service_policy_new(driver, spec);
 }
 
 void connman_access_service_policy_free(
@@ -176,24 +198,33 @@ void connman_access_service_policy_free(
 	}
 }
 
-enum connman_access connman_access_service_get_property(
-		struct connman_access_service_policy *p, const char *sender,
-		const char *name, enum connman_access default_access)
+gboolean connman_access_service_policy_equal(
+			const struct connman_access_service_policy *p1,
+			const struct connman_access_service_policy *p2)
 {
-	if (p && p->driver->service_get_property)
-		return p->driver->service_get_property(p->impl, sender, name,
-							default_access);
+	if (p1 == p2) {
+		return TRUE;
+	} else if (!p1 || !p2) {
+		return FALSE;
+	} else if (p1->driver != p2->driver) {
+		return FALSE;
+	} else {
+		const struct connman_access_driver *driver = p1->driver;
 
-	return default_access;
+		return driver->service_policy_equal &&
+			driver->service_policy_equal(p1->impl, p2->impl);
+	}
 }
 
-enum connman_access connman_access_service_set_property(
-		struct connman_access_service_policy *p, const char *sender,
-		const char *name, enum connman_access default_access)
+enum connman_access connman_access_service_policy_check(
+		const struct connman_access_service_policy *policy,
+		enum connman_access_service_methods method,
+		const char *arg, const char *sender,
+		enum connman_access default_access)
 {
-	if (p && p->driver->service_set_property)
-		return p->driver->service_set_property(p->impl, sender, name,
-							default_access);
+	if (policy && policy->driver->service_policy_check)
+		return policy->driver->service_policy_check(policy->impl,
+					method, arg, sender, default_access);
 
 	return default_access;
 }
@@ -219,8 +250,7 @@ struct connman_access_tech_policy *connman_access_tech_policy_create(
 	return p;
 }
 
-void connman_access_tech_policy_free(
-			struct connman_access_tech_policy *p)
+void connman_access_tech_policy_free(struct connman_access_tech_policy *p)
 {
 	if (p) {
 		if (p->driver->tech_policy_free)
@@ -231,11 +261,11 @@ void connman_access_tech_policy_free(
 }
 
 enum connman_access connman_access_tech_set_property(
-		struct connman_access_tech_policy *p, const char *sender,
-		const char *name, enum connman_access default_access)
+		const struct connman_access_tech_policy *p, const char *name,
+		const char *sender, enum connman_access default_access)
 {
 	if (p && p->driver->tech_set_property)
-		return p->driver->tech_set_property(p->impl, sender, name,
+		return p->driver->tech_set_property(p->impl, name, sender,
 							default_access);
 
 	return default_access;
