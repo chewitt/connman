@@ -137,6 +137,9 @@ Documentation for connman.
 
 make %{?jobs:-j%jobs}
 
+%check
+make check
+
 %install
 rm -rf %{buildroot}
 %make_install
