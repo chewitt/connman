@@ -118,6 +118,7 @@ struct modem_data {
 	const char *country;
 	gboolean roaming;
 	gboolean enabled;
+	gboolean connectable;
 	guint strength;
 	char *name;
 	char *imsi;
@@ -224,17 +225,8 @@ static int ofono_network_connect(struct connman_network *network)
 		 * is not autoconnectable. The AutoConnect property in the
 		 * Sailfish UI is presented to users as on/off switch for
 		 * mobile data. Let's interpret it as such.
-		 *
-		 * Strictly speaking, the value of the AutoConnect property
-		 * isn't equal to service->autconnect, as one might think.
-		 * It's actually service->favorite && service->autoconnect,
-		 * but we only need to check service->autoconnect because
-		 * for whatever reason favorite becomes true only after
-		 * the service has been connected at least once.
 		 */
-		struct connman_service *service =
-			connman_service_lookup_from_network(network);
-		if (service && connman_service_get_autoconnect(service)) {
+		if (md->connectable) {
 			ofono_connctx_activate(md->connctx);
 			if (md->connctx->active) {
 				/* Already connected */
@@ -274,13 +266,38 @@ static int ofono_network_disconnect(struct connman_network *network)
 	}
 }
 
+static void ofono_network_autoconnect_changed(struct connman_network *network,
+							bool autoconnect)
+{
+	struct modem_data *md = connman_network_get_data(network);
+	DBG("%s network %p %s", ofono_modem_path(md->modem), network,
+						autoconnect ? "on" : "off");
+	md->connectable = autoconnect;
+	if (!autoconnect) {
+		struct connman_service *service =
+			connman_service_lookup_from_network(network);
+		if (service) {
+			__connman_service_disconnect(service);
+		}
+	}
+
+	/*
+	 * Check activate_timeout_id to avoid submitting two Deactivate calls
+	 * in a row. It wouldn't break anything but it's unnecessary.
+	 */
+	if (!md->activate_timeout_id) {
+		connctx_update_active(md);
+	}
+}
+
 static struct connman_network_driver ofono_network_driver = {
-	.name           = "cellular",
-	.type           = CONNMAN_NETWORK_TYPE_CELLULAR,
-	.probe          = ofono_network_probe,
-	.remove         = ofono_network_remove,
-	.connect        = ofono_network_connect,
-	.disconnect     = ofono_network_disconnect,
+	.name                = "cellular",
+	.type                = CONNMAN_NETWORK_TYPE_CELLULAR,
+	.probe               = ofono_network_probe,
+	.remove              = ofono_network_remove,
+	.connect             = ofono_network_connect,
+	.disconnect          = ofono_network_disconnect,
+	.autoconnect_changed = ofono_network_autoconnect_changed
 };
 
 static int ofono_device_probe(struct connman_device *device)
@@ -646,7 +663,7 @@ static void connctx_update_active(struct modem_data *md)
 	GASSERT(md->connctx);
 	if (ofono_connctx_valid(md->connctx)) {
 		if (md->connctx->active) {
-			if (!md->enabled || !md->network) {
+			if (!md->enabled || !md->connectable || !md->network) {
 				/*
 				 * Mobile data is not supposed to be
 				 * connected.
