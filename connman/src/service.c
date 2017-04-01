@@ -2649,10 +2649,17 @@ static gboolean can_set_property(struct connman_service *service,
 				const char *name, DBusMessage *msg,
 				enum connman_access default_access)
 {
-	return connman_access_service_policy_check(service->policy,
+	const char *sender = dbus_message_get_sender(msg);
+
+	if (connman_access_service_policy_check(service->policy,
 			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, name,
-			dbus_message_get_sender(msg),
-			default_access) == CONNMAN_ACCESS_ALLOW;
+			sender, default_access) == CONNMAN_ACCESS_ALLOW) {
+		return TRUE;
+	} else {
+		connman_warn("%s is not allowed to set %s for %s", sender,
+							name, service->path);
+		return FALSE;
+	}
 }
 
 static gboolean can_call(struct connman_service *service,
@@ -4328,8 +4335,8 @@ static DBusMessage *clear_property(DBusConnection *conn,
 	if (connman_access_service_policy_check(service->policy,
 			CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY, name, sender,
 			CLEAR_PROPERTY_ACCESS) != CONNMAN_ACCESS_ALLOW) {
-		DBG("%s is not allowed to clear %s for %s", sender, name,
-							service->path);
+		connman_warn("%s is not allowed to clear %s for %s", sender,
+							name, service->path);
 		return __connman_error_permission_denied(msg);
 	}
 
@@ -4810,7 +4817,7 @@ static DBusMessage *connect_service(DBusConnection *conn,
 
 	if (!can_call(service, CONNMAN_ACCESS_SERVICE_CONNECT, msg,
 							CONNECT_ACCESS)) {
-		DBG("%s is not allowed to connect %s",
+		connman_warn("%s is not allowed to connect %s",
 			dbus_message_get_sender(msg), service->path);
 		return __connman_error_permission_denied(msg);
 	}
@@ -4871,7 +4878,7 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 
 	if (!can_call(service, CONNMAN_ACCESS_SERVICE_DISCONNECT, msg,
 							DISCONNECT_ACCESS)) {
-		DBG("%s is not allowed to disconnect %s",
+		connman_warn("%s is not allowed to disconnect %s",
 			dbus_message_get_sender(msg), service->path);
 		return __connman_error_permission_denied(msg);
 	}
@@ -4953,7 +4960,7 @@ static DBusMessage *remove_service(DBusConnection *conn,
 
 	if (!can_call(service, CONNMAN_ACCESS_SERVICE_REMOVE, msg,
 							REMOVE_ACCESS)) {
-		DBG("%s is not allowed to remove %s",
+		connman_warn("%s is not allowed to remove %s",
 			dbus_message_get_sender(msg), service->path);
 		return __connman_error_permission_denied(msg);
 	}
@@ -5164,7 +5171,7 @@ static DBusMessage *reset_counters(DBusConnection *conn,
 
 	if (!can_call(service, CONNMAN_ACCESS_SERVICE_RESET_COUNTERS, msg,
 						RESET_COUNTERS_ACCESS)) {
-		DBG("%s is not allowed to reset counters for %s",
+		connman_warn("%s is not allowed to reset counters for %s",
 			dbus_message_get_sender(msg), service->path);
 		return __connman_error_permission_denied(msg);
 	}
