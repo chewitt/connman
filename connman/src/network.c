@@ -1727,6 +1727,13 @@ const char *connman_network_get_enc_mode(struct connman_network *network)
 				network->wifi.encryption_mode : "";
 }
 
+void connman_network_autoconnect_changed(struct connman_network *network,
+							bool autoconnect)
+{
+	if (network && network->driver && network->driver->autoconnect_changed)
+		network->driver->autoconnect_changed(network, autoconnect);
+}
+
 int connman_network_set_nameservers(struct connman_network *network,
 				const char *nameservers)
 {

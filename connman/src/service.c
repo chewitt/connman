@@ -3936,6 +3936,10 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		autoconnect_changed(service);
 
+		if (service->network)
+			connman_network_autoconnect_changed(service->network,
+								autoconnect);
+
 		if (autoconnect)
 			__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
@@ -6303,6 +6307,8 @@ static int service_indicate_state(struct connman_service *service)
 			service_boolean_changed(service, &service_saved);
 		}
 
+		service->new_service = false;
+
 		default_changed();
 
 		def_service = __connman_service_get_default();
@@ -6310,11 +6316,6 @@ static int service_indicate_state(struct connman_service *service)
 		service_update_preferred_order(def_service, service, new_state);
 
 		__connman_service_set_favorite(service, true);
-
-		if (!service->autoconnect) {
-			service->autoconnect = TRUE;
-			service_boolean_changed(service, &service_autoconnect);
-		}
 
 		reply_pending(service, 0);
 
@@ -7944,8 +7945,11 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	if (!service)
 		return false;
 
-	if (__connman_network_get_weakness(network))
+	if (__connman_network_get_weakness(network)) {
+		connman_network_autoconnect_changed(network,
+						service->autoconnect);
 		return service;
+        }
 
 	if (service->path) {
 		update_from_network(service, network);
@@ -7964,6 +7968,8 @@ bool __connman_service_create_from_network(struct connman_network *network)
 			break;
 		}
 	}
+
+	connman_network_autoconnect_changed(network, service->autoconnect);
 
 	switch (service->type) {
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:

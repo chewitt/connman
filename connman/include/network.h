@@ -133,6 +133,9 @@ int connman_network_set_enc_mode(struct connman_network *network,
 				const char *encryption_mode);
 const char *connman_network_get_enc_mode(struct connman_network *network);
 
+void connman_network_autoconnect_changed(struct connman_network *network,
+							bool autoconnect);
+
 int connman_network_set_name(struct connman_network *network,
 							const char *name);
 int connman_network_set_strength(struct connman_network *network,
@@ -173,6 +176,8 @@ struct connman_network_driver {
 	void (*remove) (struct connman_network *network);
 	int (*connect) (struct connman_network *network);
 	int (*disconnect) (struct connman_network *network);
+	void (*autoconnect_changed) (struct connman_network *network,
+							bool autoconnect);
 };
 
 int connman_network_driver_register(struct connman_network_driver *driver);
