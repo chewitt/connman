@@ -86,6 +86,16 @@
 #define ACCESS_METHOD_DISCONNECT        0x00000004
 #define ACCESS_METHOD_REMOVE            0x00000008
 #define ACCESS_METHOD_RESET_COUNTERS    0x00000010
+#define ACCESS_METHOD_GET_PROPERTIES    0x00000020
+#define ACCESS_METHOD_GET_PROPERTY      0x00000040
+#define ACCESS_METHOD_SET_PROPERTY      0x00000080
+
+/* These are alwas allowed, individual properties are checked */
+#define ACCESS_METHOD_ALWAYS_ALLOWED (\
+	ACCESS_METHOD_CLEAR_PROPERTY | \
+	ACCESS_METHOD_GET_PROPERTIES | \
+	ACCESS_METHOD_GET_PROPERTY   | \
+	ACCESS_METHOD_SET_PROPERTY)
 
 static const struct connman_service_property_access {
 	guint32 flag;
@@ -127,10 +137,6 @@ static const struct connman_service_method_access {
 	enum connman_access default_access;
 } service_method_access[] = {
 	{
-		ACCESS_METHOD_CLEAR_PROPERTY,
-		CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY,
-		CLEAR_PROPERTY_ACCESS
-	},{
 		ACCESS_METHOD_CONNECT,
 		CONNMAN_ACCESS_SERVICE_CONNECT,
 		CONNECT_ACCESS
@@ -5194,7 +5200,7 @@ static DBusMessage *check_access(DBusConnection *conn,
 	DBusMessageIter it;
 	dbus_uint32_t get_props = 0;
 	dbus_uint32_t set_props = 0;
-	dbus_uint32_t calls = 0;
+	dbus_uint32_t calls = ACCESS_METHOD_ALWAYS_ALLOWED;
 	int i;
 
 	for (i=0; i<G_N_ELEMENTS(service_property_access); i++) {
