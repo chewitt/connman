@@ -56,7 +56,7 @@
 #define PROP_EAP                        "EAP"
 
 /* Get/set properties */
-#define GET_ACCESS_ACCESS               CONNMAN_ACCESS_DENY
+#define GET_ACCESS_ACCESS               CONNMAN_ACCESS_ALLOW
 #define SET_ACCESS_ACCESS               CONNMAN_ACCESS_DENY
 #define GET_DEFAULT_ACCESS_ACCESS       GET_ACCESS_ACCESS
 #define SET_DEFAULT_ACCESS_ACCESS       SET_ACCESS_ACCESS
