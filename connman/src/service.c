@@ -4832,6 +4832,9 @@ static DBusMessage *connect_service(DBusConnection *conn,
 		return __connman_error_permission_denied(msg);
 	}
 
+	if (!service->network)
+		return __connman_error_no_carrier(msg);
+
 	if (service->pending)
 		return __connman_error_in_progress(msg);
 
