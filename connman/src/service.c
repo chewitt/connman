@@ -4959,8 +4959,18 @@ bool __connman_service_remove(struct connman_service *service)
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
 
-	service_list = g_list_remove(service_list, service);
-	g_hash_table_remove(service_hash, service->identifier);
+	if (service->network) {
+		/* The network is still alive (but not saved anymore) */
+		if (!service->new_service) {
+			service->new_service = true;
+			service_boolean_changed(service, &service_saved);
+		}
+	} else {
+		/* No network for this service, it's gone for good */
+		service_list = g_list_remove(service_list, service);
+		g_hash_table_remove(service_hash, service->identifier);
+	}
+
 	return true;
 }
 
@@ -5490,7 +5500,13 @@ static void service_free(gpointer user_data)
 	reply_pending(service, ENOENT);
 
 	__connman_notifier_service_remove(service);
-	service_schedule_removed(service);
+	/* In our fork, service_schedule_removed() is called by
+	 * service_removed() when the service is being removed
+	 * from service_hash table. If we are only doing it here,
+	 * it may be too late (hash table reference may not be the
+	 * last one left), doing it here and there may result in
+	 * double D-Bus notifications which is also wrong. */
+	//service_schedule_removed(service);
 
 	__connman_wispr_stop(service);
 
@@ -7318,8 +7334,11 @@ static struct connman_service *service_get(const char *identifier)
 	return service;
 }
 
-static void service_unref(void *service)
+static void service_removed(void *data)
 {
+	struct connman_service *service = data;
+
+	service_schedule_removed(service);
 	connman_service_unref(service);
 }
 
@@ -8323,7 +8342,7 @@ int __connman_service_init(void)
 	connection = connman_dbus_get_connection();
 
 	service_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
-							NULL, service_unref);
+							NULL, service_removed);
 
 	services_notify = g_new0(struct _services_notify, 1);
 	services_notify->remove = g_hash_table_new_full(g_str_hash,
