@@ -7693,6 +7693,9 @@ struct connman_service *__connman_service_lookup_from_index(int index)
 	for (list = service_list; list; list = list->next) {
 		service = list->data;
 
+		if (!service->network)
+			continue;
+
 		if (__connman_ipconfig_get_index(service->ipconfig_ipv4)
 							== index)
 			return service;
@@ -8138,6 +8141,8 @@ void __connman_service_remove_from_network(struct connman_network *network)
 	} else {
 		/* We keep it around but it has become unavailable */
 		service_boolean_changed(service, &service_available);
+		/* Availability affects the order */
+		service_list_sort();
 	}
 }
 
