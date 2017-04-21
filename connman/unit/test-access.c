@@ -21,6 +21,10 @@ struct connman_access_service_policy_impl {
 	char *spec;
 };
 
+struct connman_access_manager_policy_impl {
+	int unused;
+};
+
 struct connman_access_tech_policy_impl {
 	int unused;
 };
@@ -51,6 +55,18 @@ static gboolean test_service_policy_equal
 	return !g_strcmp0(p1->spec, p2->spec);
 }
 
+static struct connman_access_manager_policy_impl *test_manager_policy_create
+		(const char *spec)
+{
+	return g_new0(struct connman_access_manager_policy_impl, 1);
+}
+
+static void test_manager_policy_free
+		(struct connman_access_manager_policy_impl *policy)
+{
+	g_free(policy);
+}
+
 static struct connman_access_tech_policy_impl *test_tech_policy_create
 		(const char *spec)
 {
@@ -76,6 +92,15 @@ static enum connman_access test1_service_policy_check
 	return CONNMAN_ACCESS_ALLOW;
 }
 
+static enum connman_access test1_manager_policy_check
+		(const struct connman_access_manager_policy_impl *policy,
+			enum connman_access_manager_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access)
+{
+	return CONNMAN_ACCESS_ALLOW;
+}
+
 static enum connman_access test1_tech_set_property
 		(const struct connman_access_tech_policy_impl *policy,
 			const char *sender, const char *name,
@@ -91,6 +116,9 @@ static const struct connman_access_driver test1_driver = {
 	.service_policy_free = test_service_policy_free,
 	.service_policy_equal = test_service_policy_equal,
 	.service_policy_check = test1_service_policy_check,
+	.manager_policy_create = test_manager_policy_create,
+	.manager_policy_free = test_manager_policy_free,
+	.manager_policy_check = test1_manager_policy_check,
 	.tech_policy_create = test_tech_policy_create,
 	.tech_policy_free = test_tech_policy_free,
 	.tech_set_property = test1_tech_set_property
@@ -103,6 +131,15 @@ static const struct connman_access_driver test1_driver = {
 static enum connman_access test2_service_policy_check
 		(const struct connman_access_service_policy_impl *policy,
 			enum connman_access_service_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access)
+{
+	return CONNMAN_ACCESS_DENY;
+}
+
+static enum connman_access test2_manager_policy_check
+		(const struct connman_access_manager_policy_impl *policy,
+			enum connman_access_manager_methods method,
 			const char *arg, const char *sender,
 			enum connman_access default_access)
 {
@@ -124,6 +161,9 @@ static const struct connman_access_driver test2_driver = {
 	.service_policy_free = test_service_policy_free,
 	.service_policy_equal = test_service_policy_equal,
 	.service_policy_check = test2_service_policy_check,
+	.manager_policy_create = test_manager_policy_create,
+	.manager_policy_free = test_manager_policy_free,
+	.manager_policy_check = test2_manager_policy_check,
 	.tech_policy_create = test_tech_policy_create,
 	.tech_policy_free = test_tech_policy_free,
 	.tech_set_property = test2_tech_set_property
@@ -142,6 +182,15 @@ static enum connman_access test3_service_policy_check
 	return default_access;
 }
 
+static enum connman_access test3_manager_policy_check
+		(const struct connman_access_manager_policy_impl *policy,
+			enum connman_access_manager_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access)
+{
+	return default_access;
+}
+
 static enum connman_access test3_tech_set_property
 		(const struct connman_access_tech_policy_impl *policy,
 			const char *sender, const char *name,
@@ -153,6 +202,7 @@ static enum connman_access test3_tech_set_property
 static const struct connman_access_driver test3_driver = {
 	.name = "test3",
 	.service_policy_check = test3_service_policy_check,
+	.manager_policy_check = test3_manager_policy_check,
 	.tech_set_property = test3_tech_set_property
 };
 
@@ -161,6 +211,12 @@ static const struct connman_access_driver test3_driver = {
  *==========================================================================*/
 
 static struct connman_access_service_policy_impl *test4_service_policy_create
+		(const char *spec)
+{
+	return NULL;
+}
+
+static struct connman_access_manager_policy_impl *test4_manager_policy_create
 		(const char *spec)
 {
 	return NULL;
@@ -176,6 +232,7 @@ static const struct connman_access_driver test4_driver = {
 	.name = "test4",
 	.service_policy_create = test4_service_policy_create,
 	.service_policy_check = test3_service_policy_check,
+	.manager_policy_create = test4_manager_policy_create,
 	.tech_policy_create = test4_tech_policy_create,
 	.tech_set_property = test3_tech_set_property
 };
@@ -191,6 +248,13 @@ static struct connman_access_service_policy_impl *test5_service_policy_create
 	return &impl;
 }
 
+static struct connman_access_manager_policy_impl *test5_manager_policy_create
+		(const char *spec)
+{
+	static struct connman_access_manager_policy_impl impl;
+	return &impl;
+}
+
 static struct connman_access_tech_policy_impl *test5_tech_policy_create
 		(const char *spec)
 {
@@ -201,6 +265,7 @@ static struct connman_access_tech_policy_impl *test5_tech_policy_create
 static const struct connman_access_driver test5_driver = {
 	.name = "test5",
 	.service_policy_create = test5_service_policy_create,
+	.manager_policy_create = test5_manager_policy_create,
 	.tech_policy_create = test5_tech_policy_create
 };
 
@@ -211,7 +276,7 @@ static const struct connman_access_driver test5_driver = {
 static const struct connman_access_driver test6_driver = {
 	.name = "test6",
 	.service_policy_create = test_service_policy_create,
-	.service_policy_free = test_service_policy_free,
+	.service_policy_free = test_service_policy_free
 };
 
 /*==========================================================================*
@@ -397,6 +462,72 @@ static void test_access_policy_equal()
 	connman_access_driver_unregister(&test6_driver);
 }
 
+static void test_access_manager_policy()
+{
+	struct connman_access_manager_policy *policy;
+
+	g_assert(!connman_access_manager_policy_create(NULL));
+	g_assert(connman_access_driver_register(&test1_driver) == 0);
+	g_assert(connman_access_driver_register(&test2_driver) == 0);
+
+	/* test3_driver has no manager_policy_create callback */
+	g_assert(connman_access_driver_register(&test3_driver) == 0);
+	g_assert(!connman_access_manager_policy_create(NULL));
+	connman_access_driver_unregister(&test3_driver);
+
+	/* test4_driver has manager_policy_create which returns NULL */
+	g_assert(connman_access_driver_register(&test4_driver) == 0);
+	g_assert(!connman_access_manager_policy_create(NULL));
+	connman_access_driver_unregister(&test4_driver);
+
+	/*
+	 * test5_driver has manager_policy_create but no manager_policy_free.
+	 * It also has no manager_get/set_property callbacks.
+	 */
+	g_assert(connman_access_driver_register(&test5_driver) == 0);
+	policy = connman_access_manager_policy_create(NULL);
+	g_assert(policy);
+	g_assert(connman_access_manager_policy_check(policy,
+			CONNMAN_ACCESS_MANAGER_GET_PROPERTY, NULL, NULL,
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_manager_policy_check(policy,
+			CONNMAN_ACCESS_MANAGER_GET_PROPERTY, NULL, NULL,
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+	connman_access_manager_policy_free(policy);
+	connman_access_driver_unregister(&test5_driver);
+
+	/* Invalid driver name */
+	g_assert(!connman_access_manager_policy_create("test:"));
+
+	/* test1_driver allows everything */
+	policy = connman_access_manager_policy_create("test1:whatever");
+	g_assert(connman_access_manager_policy_check(policy,
+			CONNMAN_ACCESS_MANAGER_GET_PROPERTY, NULL, NULL,
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	connman_access_manager_policy_free(policy);
+
+	/* test2_driver (last one, i.e. default) disallows everything */
+	policy = connman_access_manager_policy_create("test2");
+	g_assert(connman_access_manager_policy_check(policy,
+			CONNMAN_ACCESS_MANAGER_SET_PROPERTY, NULL, NULL,
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	connman_access_manager_policy_free(policy);
+
+	connman_access_driver_unregister(&test1_driver);
+	connman_access_driver_unregister(&test2_driver);
+
+	/* It's OK to delete NULL */
+	connman_access_manager_policy_free(NULL);
+
+	/* or to pass NULL policy */
+	g_assert(connman_access_manager_policy_check(NULL,
+			CONNMAN_ACCESS_MANAGER_CREATE_SERVICE, NULL, NULL,
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_ALLOW);
+	g_assert(connman_access_manager_policy_check(NULL,
+			CONNMAN_ACCESS_MANAGER_CREATE_SERVICE, NULL, NULL,
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+}
+
 static void test_access_tech_policy()
 {
 	struct connman_access_tech_policy *policy;
@@ -466,6 +597,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(PREFIX "default_policy", test_access_default_policy);
 	g_test_add_func(PREFIX "service_policy", test_access_service_policy);
 	g_test_add_func(PREFIX "policy_equal", test_access_policy_equal);
+	g_test_add_func(PREFIX "manager_policy", test_access_manager_policy);
 	g_test_add_func(PREFIX "tech_policy", test_access_tech_policy);
 	return g_test_run();
 }

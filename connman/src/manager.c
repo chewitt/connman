@@ -30,14 +30,32 @@
 
 #include <connman/agent.h>
 #include <connman/service.h>
+#include <connman/access.h>
 
 #include "connman.h"
 
 #include <gsupplicant_util.h>
 #include <gutil_misc.h>
 
+#define SET_OFFLINE_MODE_ACCESS     CONNMAN_ACCESS_ALLOW
+#define CREATE_SERVICE_ACCESS       CONNMAN_ACCESS_ALLOW
+
 static bool connman_state_idle;
 static dbus_bool_t sessionmode;
+struct connman_access_manager_policy *manager_access_policy;
+
+static struct connman_access_manager_policy *get_manager_access_policy()
+{
+	/* We can't initialize this variable in __connman_manager_init
+	 * because __connman_manager_init runs before sailfish access
+	 * plugin (or any other plugin) is loaded */
+	if (!manager_access_policy) {
+		/* Use the default policy */
+		manager_access_policy =
+			connman_access_manager_policy_create(NULL);
+	}
+	return manager_access_policy;
+}
 
 static DBusMessage *get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *data)
@@ -100,10 +118,20 @@ static DBusMessage *set_property(DBusConnection *conn,
 	type = dbus_message_iter_get_arg_type(&value);
 
 	if (g_str_equal(name, "OfflineMode")) {
+		const char *sender = dbus_message_get_sender(msg);
 		dbus_bool_t offlinemode;
 
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
+
+		if (connman_access_manager_policy_check(
+				get_manager_access_policy(),
+				CONNMAN_ACCESS_MANAGER_SET_PROPERTY,
+				name, sender, SET_OFFLINE_MODE_ACCESS) !=
+						CONNMAN_ACCESS_ALLOW) {
+			DBG("access denied for %s", sender);
+			return __connman_error_permission_denied(msg);
+		}
 
 		dbus_message_iter_get_basic(&value, &offlinemode);
 
@@ -347,6 +375,7 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	DBusMessageIter iter, array, entry;
 	enum connman_service_type service_type;
 	GKeyFile *settings;
+	const char *sender = dbus_message_get_sender(msg);
 	const char *device_ident, *network_ident, *type = NULL, *name = NULL;
 	char *ident, *p, *tmp_name = NULL;
 
@@ -392,6 +421,15 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	} else {
 		/* No device type given, assume wifi */
 		service_type = CONNMAN_SERVICE_TYPE_WIFI;
+		type = __connman_service_type2string(service_type);
+	}
+
+	/* Check access */
+	if (connman_access_manager_policy_check(get_manager_access_policy(),
+			CONNMAN_ACCESS_MANAGER_CREATE_SERVICE, type, sender,
+			CREATE_SERVICE_ACCESS) != CONNMAN_ACCESS_ALLOW) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
 	}
 
 	/*
@@ -837,4 +875,7 @@ void __connman_manager_cleanup(void)
 						CONNMAN_MANAGER_INTERFACE);
 
 	dbus_connection_unref(connection);
+
+	connman_access_manager_policy_free(manager_access_policy);
+	manager_access_policy = NULL;
 }

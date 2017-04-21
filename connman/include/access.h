@@ -37,14 +37,24 @@ enum connman_access_service_methods {
 	CONNMAN_ACCESS_SERVICE_RESET_COUNTERS
 };
 
+enum connman_access_manager_methods {
+	CONNMAN_ACCESS_MANAGER_GET_PROPERTY = 1,
+	CONNMAN_ACCESS_MANAGER_SET_PROPERTY,
+	CONNMAN_ACCESS_MANAGER_CREATE_SERVICE
+};
+
 struct connman_access_service_policy;
 struct connman_access_service_policy_impl;
 struct connman_access_tech_policy;
 struct connman_access_tech_policy_impl;
+struct connman_access_manager_policy;
+struct connman_access_manager_policy_impl;
 
 struct connman_access_driver {
 	const char *name;
 	const char *default_service_policy;
+
+	/* Service */
 	struct connman_access_service_policy_impl *(*service_policy_create)
 		(const char *spec);
 	void (*service_policy_free)
@@ -57,6 +67,19 @@ struct connman_access_driver {
 			enum connman_access_service_methods method,
 			const char *arg, const char *sender,
 			enum connman_access default_access);
+
+	/* Manager */
+	struct connman_access_manager_policy_impl *(*manager_policy_create)
+		(const char *spec);
+	void (*manager_policy_free)
+		(struct connman_access_manager_policy_impl *policy);
+	enum connman_access (*manager_policy_check)
+		(const struct connman_access_manager_policy_impl *policy,
+			enum connman_access_manager_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access);
+
+	/* Technology */
 	struct connman_access_tech_policy_impl *(*tech_policy_create)
 		(const char *spec);
 	void (*tech_policy_free)
@@ -69,6 +92,8 @@ struct connman_access_driver {
 
 int connman_access_driver_register(const struct connman_access_driver *d);
 void connman_access_driver_unregister(const struct connman_access_driver *d);
+
+/* Service */
 const char *connman_access_default_service_policy_str(void);
 gboolean connman_access_is_default_service_policy(
 				struct connman_access_service_policy *policy);
@@ -86,6 +111,18 @@ enum connman_access connman_access_service_policy_check(
 		const char *arg, const char *sender,
 		enum connman_access default_access);
 
+/* Manager */
+struct connman_access_manager_policy *connman_access_manager_policy_create(
+							const char *spec);
+void connman_access_manager_policy_free(
+				struct connman_access_manager_policy *policy);
+enum connman_access connman_access_manager_policy_check(
+		const struct connman_access_manager_policy *policy,
+		enum connman_access_manager_methods method,
+		const char *arg, const char *sender,
+		enum connman_access default_access);
+
+/* Technology */
 struct connman_access_tech_policy *connman_access_tech_policy_create(
 							const char *spec);
 void connman_access_tech_policy_free(
