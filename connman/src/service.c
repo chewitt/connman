@@ -266,6 +266,8 @@ struct connman_service {
 	char *access;
 };
 
+static void service_set_access(struct connman_service *service,
+					const char *access);
 static bool allow_property_changed(struct connman_service *service);
 
 static struct connman_ipconfig *create_ip4config(struct connman_service *service,
@@ -756,7 +758,7 @@ static int service_load(struct connman_service *service)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, PROP_ACCESS, NULL);
 	if (str) {
-		__connman_service_set_access(service, str);
+		service_set_access(service, str);
 		g_free(str);
 	}
 
@@ -3541,7 +3543,7 @@ static void service_set_access_policy(struct connman_service *service,
 						GET_ACCESS_ACCESS);
 }
 
-void __connman_service_set_access(struct connman_service *service,
+static void service_set_access(struct connman_service *service,
 							const char *access)
 {
 	if (!service)
