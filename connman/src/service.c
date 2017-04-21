@@ -31,10 +31,13 @@
 #include <ctype.h>
 #include <stdint.h>
 
+#include <gutil_misc.h>
+
 #include <connman/storage.h>
 #include <connman/setting.h>
 #include <connman/agent.h>
 #include <connman/access.h>
+#include <connman/provision.h>
 
 #include "connman.h"
 
@@ -54,6 +57,8 @@
 #define PROP_PASSPHRASE                 "Passphrase"
 #define PROP_IDENTITY                   "Identity"
 #define PROP_EAP                        "EAP"
+#define PROP_NAME                       "Name"
+#define PROP_SSID                       "SSID"
 
 /* Get/set properties */
 #define GET_ACCESS_ACCESS               CONNMAN_ACCESS_ALLOW
@@ -262,12 +267,17 @@ struct connman_service {
 	guint online_check_timer_ipv6;
 	guint connect_retry_timer;
 	guint connect_retry_timeout;
+	GBytes *ssid;
 	struct connman_access_service_policy *policy;
 	char *access;
 };
 
 static void service_set_access(struct connman_service *service,
 					const char *access);
+static void service_set_autoconnect(struct connman_service *service,
+					bool autoconnect);
+static void string_changed(struct connman_service *service,
+					const char *name, const char *value);
 static bool allow_property_changed(struct connman_service *service);
 
 static struct connman_ipconfig *create_ip4config(struct connman_service *service,
@@ -275,12 +285,35 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 
-static void service_destroy(struct connman_service *service);
-
 struct find_data {
 	const char *path;
 	struct connman_service *service;
 };
+
+void __connman_service_foreach(void (*fn) (struct connman_service *service,
+					void *user_data), void *user_data)
+{
+	GList *l;
+
+	/* Assume that the callback is not modifying the service list */
+	for (l = service_list; l; l = l->next) {
+		fn((struct connman_service *)l->data, user_data);
+	}
+}
+
+GBytes *__connman_service_get_ssid(struct connman_service *service)
+{
+	return service ? service->ssid : NULL;
+}
+
+/*
+ * It's hard to tell the difference between hidden and hidden_service
+ * flags, so this function checks both.
+ */
+bool __connman_service_is_really_hidden(struct connman_service *service)
+{
+	return service && (service->hidden || service->hidden_service);
+}
 
 static void do_single_online_check(struct connman_service *service, enum connman_ipconfig_type type)
 {
@@ -360,6 +393,17 @@ static void set_config_string(GKeyFile *keyfile, const char *group,
 		g_key_file_set_string(keyfile, group, key, value);
 	else
 		g_key_file_remove_key(keyfile, group, key, NULL);
+}
+
+static inline char *service_path(const char *ident)
+{
+	return g_strconcat(CONNMAN_PATH, "/service/", ident, NULL);
+}
+
+static void service_remove(struct connman_service *service)
+{
+	service_list = g_list_remove(service_list, service);
+	g_hash_table_remove(service_hash, service->identifier);
 }
 
 static void compare_path(gpointer value, gpointer user_data)
@@ -620,24 +664,13 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	return 0;
 }
 
-static int service_load(struct connman_service *service)
+static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 {
-	GKeyFile *keyfile;
 	GError *error = NULL;
 	gsize length;
 	gchar *str;
 	bool autoconnect;
 	unsigned int ssid_len;
-	int err = 0;
-
-	DBG("service %p %s", service, service->identifier);
-
-	keyfile = connman_storage_load_service(service->identifier);
-	if (!keyfile) {
-		service->new_service = true;
-		return -EIO;
-	} else
-		service->new_service = false;
 
 	switch (service->type) {
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
@@ -655,54 +688,45 @@ static int service_load(struct connman_service *service)
 		g_clear_error(&error);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
-		if (!service->name) {
-			gchar *name;
-
-			name = g_key_file_get_string(keyfile,
-					service->identifier, "Name", NULL);
-			if (name) {
+		str = g_key_file_get_string(keyfile,
+					service->identifier, PROP_NAME, NULL);
+		if (str) {
+			if (g_strcmp0(service->name, str)) {
 				g_free(service->name);
-				service->name = name;
+				service->name = str;
+				string_changed(service, PROP_NAME, str);
+			} else {
+				g_free(str);
 			}
 
 			if (service->network)
 				connman_network_set_name(service->network,
-									name);
+							service->name);
 		}
 
-		if (service->network &&
+		str = g_key_file_get_string(keyfile, service->identifier,
+							PROP_SSID, NULL);
+		if (str) {
+			GBytes *ssid = gutil_hex2bytes(str, -1);
+			if (ssid) {
+				if (!service->ssid ||
+					!g_bytes_equal(service->ssid, ssid)) {
+					if (service->ssid)
+						g_bytes_unref(service->ssid);
+					service->ssid = ssid;
+				} else {
+					g_bytes_unref(ssid);
+				}
+			}
+			g_free(str);
+		}
+
+		if (service->ssid && service->network &&
 				!connman_network_get_blob(service->network,
 						"WiFi.SSID", &ssid_len)) {
-			gchar *hex_ssid;
-
-			hex_ssid = g_key_file_get_string(keyfile,
-							service->identifier,
-								"SSID", NULL);
-
-			if (hex_ssid) {
-				gchar *ssid;
-				unsigned int i, j = 0, hex;
-				size_t hex_ssid_len = strlen(hex_ssid);
-
-				ssid = g_try_malloc0(hex_ssid_len / 2);
-				if (!ssid) {
-					g_free(hex_ssid);
-					err = -ENOMEM;
-					goto done;
-				}
-
-				for (i = 0; i < hex_ssid_len; i += 2) {
-					sscanf(hex_ssid + i, "%02x", &hex);
-					ssid[j++] = hex;
-				}
-
-				connman_network_set_blob(service->network,
-					"WiFi.SSID", ssid, hex_ssid_len / 2);
-
-				g_free(ssid);
-			}
-
-			g_free(hex_ssid);
+			connman_network_set_blob(service->network, "WiFi.SSID",
+				g_bytes_get_data(service->ssid, NULL),
+				g_bytes_get_size(service->ssid));
 		}
 		/* fall through */
 
@@ -718,7 +742,7 @@ static int service_load(struct connman_service *service)
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
-			service->autoconnect = autoconnect;
+			service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
 		break;
 	}
@@ -828,11 +852,25 @@ static int service_load(struct connman_service *service)
 
 	service->hidden_service = g_key_file_get_boolean(keyfile,
 					service->identifier, "Hidden", NULL);
+}
 
-done:
+static int service_load(struct connman_service *service)
+{
+	GKeyFile *keyfile;
+
+	DBG("service %p %s", service, service->identifier);
+
+	keyfile = connman_storage_load_service(service->identifier);
+	if (!keyfile) {
+		service->new_service = true;
+		return -EIO;
+	} else
+		service->new_service = false;
+
+	service_apply(service, keyfile);
 	g_key_file_unref(keyfile);
 
-	return err;
+	return 0;
 }
 
 static int service_save(struct connman_service *service)
@@ -870,13 +908,11 @@ static int service_save(struct connman_service *service)
 					"AutoConnect", service->autoconnect);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
-		if (service->network) {
+		if (service->ssid) {
+			gsize ssid_len = 0;
 			const unsigned char *ssid;
-			unsigned int ssid_len = 0;
 
-			ssid = connman_network_get_blob(service->network,
-							"WiFi.SSID", &ssid_len);
-
+			ssid = g_bytes_get_data(service->ssid, &ssid_len);
 			if (ssid && ssid_len > 0 && ssid[0] != '\0') {
 				char *identifier = service->identifier;
 				GString *ssid_str;
@@ -897,7 +933,8 @@ static int service_save(struct connman_service *service)
 
 				g_string_free(ssid_str, TRUE);
 			}
-
+		}
+		if (service->network) {
 			freq = connman_network_get_frequency(service->network);
 			g_key_file_set_integer(keyfile, service->identifier,
 						"Frequency", freq);
@@ -1832,6 +1869,26 @@ static const struct connman_service_boolean_property service_saved =
 	{ PROP_SAVED, service_saved_value };
 
 #define autoconnect_changed(s) service_boolean_changed(s, &service_autoconnect)
+
+static void service_set_autoconnect(struct connman_service *service,
+							bool autoconnect)
+{
+	const bool newval = autoconnect ? true : false;
+	if (service->autoconnect != newval) {
+		service->autoconnect = newval;
+		service_boolean_changed(service, &service_autoconnect);
+	}
+}
+
+static void service_set_new_service(struct connman_service *service,
+							bool new_service)
+{
+	const bool newval = new_service ? true : false;
+	if (service->new_service != newval) {
+		service->new_service = newval;
+		service_boolean_changed(service, &service_saved);
+	}
+}
 
 static void append_security(DBusMessageIter *iter, void *user_data)
 {
@@ -4917,9 +4974,10 @@ bool __connman_service_remove(struct connman_service *service)
 			__connman_provider_is_immutable(service->provider))
 		return false;
 
-	if (!service->favorite && service->state !=
-						CONNMAN_SERVICE_STATE_FAILURE)
-		return false;
+	/* Not clear what was the meaning of this restriction: */
+//	if (!service->favorite && service->state !=
+//						CONNMAN_SERVICE_STATE_FAILURE)
+//		return false;
 
 	/* We don't want the service files to stay around forever */
 	__connman_storage_remove_service(service->identifier);
@@ -4963,14 +5021,10 @@ bool __connman_service_remove(struct connman_service *service)
 
 	if (service->network) {
 		/* The network is still alive (but not saved anymore) */
-		if (!service->new_service) {
-			service->new_service = true;
-			service_boolean_changed(service, &service_saved);
-		}
+		service_set_new_service(service, true);
 	} else {
 		/* No network for this service, it's gone for good */
-		service_list = g_list_remove(service_list, service);
-		g_hash_table_remove(service_hash, service->identifier);
+		service_remove(service);
 	}
 
 	return true;
@@ -5360,6 +5414,7 @@ static bool allow_property_changed(struct connman_service *service)
 {
 	if (!service || !service->path)
 		return false;
+
 	if (g_hash_table_lookup_extended(services_notify->add, service->path,
 					NULL, NULL)) {
 		DBG("no property updates for service %p", service);
@@ -5373,9 +5428,6 @@ static const GDBusMethodTable service_methods[] = {
 	{ GDBUS_DEPRECATED_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			get_properties) },
-	{ GDBUS_METHOD("GetProperty",
-			GDBUS_ARGS({ "name", "s" }),
-			GDBUS_ARGS({ "value", "v" }), get_property) },
 	{ GDBUS_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
@@ -5397,6 +5449,9 @@ static const GDBusMethodTable service_methods[] = {
 	{ GDBUS_METHOD("CheckAccess",
 			NULL, GDBUS_ARGS({ "access", "uuu" }),
 			check_access) },
+	{ GDBUS_METHOD("GetProperty",
+			GDBUS_ARGS({ "name", "s" }),
+			GDBUS_ARGS({ "value", "v" }), get_property) },
 	{ },
 };
 
@@ -5416,10 +5471,35 @@ static void stats_destroy(struct connman_service *service)
 		g_timer_destroy(service->stats_timer);
 }
 
-static void service_destroy(struct connman_service *service)
+static void service_free(gpointer user_data)
 {
-	if (service->path != NULL)
-		g_free(service->path);
+	struct connman_service *service = user_data;
+	char *path = service->path;
+
+	DBG("service %p", service);
+
+	reply_pending(service, ENOENT);
+
+	__connman_notifier_service_remove(service);
+	/* In our fork, service_schedule_removed() is called by
+	 * service_removed() when the service is being removed
+	 * from service_hash table. If we are only doing it here,
+	 * it may be too late (hash table reference may not be the
+	 * last one left), doing it here and there may result in
+	 * double D-Bus notifications which is also wrong. */
+	//service_schedule_removed(service);
+
+	__connman_wispr_stop(service);
+
+	service->path = NULL;
+
+	if (path) {
+		__connman_connection_update_gateway();
+
+		g_dbus_unregister_interface(connection, path,
+						CONNMAN_SERVICE_INTERFACE);
+		g_free(path);
+	}
 
 	g_hash_table_destroy(service->counter_table);
 
@@ -5481,48 +5561,19 @@ static void service_destroy(struct connman_service *service)
 
 	connman_access_service_policy_free(service->policy);
 	g_free(service->access);
-
-	if (current_default == service)
-		current_default = NULL;
+	g_free(service->path);
 
 	stop_recurring_online_check(service);
 	if (service->connect_retry_timer)
 		g_source_remove(service->connect_retry_timer);
 
+	if (service->ssid)
+		g_bytes_unref(service->ssid);
+
+	if (current_default == service)
+		current_default = NULL;
+
 	g_free(service);
-}
-
-static void service_free(gpointer user_data)
-{
-	struct connman_service *service = user_data;
-	char *path = service->path;
-
-	DBG("service %p", service);
-
-	reply_pending(service, ENOENT);
-
-	__connman_notifier_service_remove(service);
-	/* In our fork, service_schedule_removed() is called by
-	 * service_removed() when the service is being removed
-	 * from service_hash table. If we are only doing it here,
-	 * it may be too late (hash table reference may not be the
-	 * last one left), doing it here and there may result in
-	 * double D-Bus notifications which is also wrong. */
-	//service_schedule_removed(service);
-
-	__connman_wispr_stop(service);
-
-	service->path = NULL;
-
-	if (path) {
-		__connman_connection_update_gateway();
-
-		g_dbus_unregister_interface(connection, path,
-						CONNMAN_SERVICE_INTERFACE);
-		g_free(path);
-	}
-
-	service_destroy(service);
 }
 
 static void service_initialize(struct connman_service *service)
@@ -6329,12 +6380,7 @@ static int service_indicate_state(struct connman_service *service)
 	case CONNMAN_SERVICE_STATE_READY:
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
-		if (service->new_service) {
-			service->new_service = false;
-			service_boolean_changed(service, &service_saved);
-		}
-
-		service->new_service = false;
+		service_set_new_service(service, false);
 
 		default_changed();
 
@@ -7344,41 +7390,137 @@ static void service_removed(void *data)
 	connman_service_unref(service);
 }
 
+/* Deduce the security type from the service identifier */
+static enum connman_service_security security_from_ident(const char *ident)
+{
+	const char *str = NULL;
+
+	if (ident) {
+		const char *sep = strrchr(ident, '_');
+
+		if (sep) {
+			str = sep + 1;
+		}
+	}
+
+	return __connman_service_string2security(str);
+}
+
+static struct connman_service *service_new(enum connman_service_type type,
+							const char *ident)
+{
+	struct connman_service *service = connman_service_create();
+
+	service->identifier = g_strdup(ident);
+	service->path = service_path(ident);
+	service->type = type;
+	service->security = security_from_ident(ident);
+	return service;
+}
+
+static void service_init_1(struct connman_service *service)
+{
+	/* Autoconnect is confused by the UNKNONW state */
+	service->state = service->state_ipv4 =
+	service->state_ipv6 = CONNMAN_SERVICE_STATE_IDLE;
+
+	/* Stick it into the table. The table holds the reference */
+	g_hash_table_replace(service_hash, service->identifier, service);
+	service_list = g_list_insert_sorted(service_list,
+			connman_service_ref(service), service_compare);
+}
+
+static void service_init_2(struct connman_service *service)
+{
+	/*
+	 * load_wifi_services() is called before the access
+	 * plugin (or any other plugin for that matter) has
+	 * a chance to initialize, meaning that service->policy
+	 * for those services is going to be NULL. We need to
+	 * re-evaluate access rules after access plugins have
+	 * been loaded.
+	 */
+	if (!service->policy)
+		service->policy = connman_access_service_policy_create(
+							service->access);
+
+	/*
+	 * Now that __connman_ipconfig_init has been invoked
+	 * (it runs after __connman_service_init), we can read
+	 * the ipconfig settings.
+	 */
+	if (!service->ipconfig_ipv4) {
+		service->ipconfig_ipv4 = create_ip4config(service, -1,
+			CONNMAN_IPCONFIG_METHOD_DHCP);
+		__connman_service_read_ip4config(service);
+	}
+
+	if (!service->ipconfig_ipv6) {
+		service->ipconfig_ipv6 = create_ip6config(service, -1);
+		__connman_service_read_ip6config(service);
+	}
+
+	/*
+	 * Now that we have access rules fixed, we can actually
+	 * export the object
+	 */
+	g_dbus_register_interface(connection, service->path,
+				CONNMAN_SERVICE_INTERFACE, service_methods,
+				service_signals, NULL, service, NULL);
+}
+
+/* Note: config.c requires "service_ident" group in the keyfile */
+const char *__connman_service_create(enum connman_service_type type,
+				const char *ident, GKeyFile *settings)
+{
+	struct connman_service *service = lookup_by_identifier(ident);
+
+	if (service) {
+		/* Apply settings to the existing service */
+		service_apply(service, settings);
+	} else {
+		/* Create a new one */
+		service = service_new(type, ident);
+		service_init_1(service);
+		service_init_2(service);
+		service_apply(service, settings);
+		service_schedule_added(service);
+		service_list_sort();
+		__connman_notifier_service_add(service, service->name);
+		__connman_connection_update_gateway();
+		connman_service_unref(service);
+	}
+
+	/*
+	 * service_apply() function sets service->hidden_service rather
+	 * than service->hidden. It's hard to tell the difference between
+	 * those two. In any case, here we need to check the hidden_service
+	 * flag.
+	 */
+	if (service->hidden_service) {
+		/* We need to throw a scan to detect hidden networks */
+		__connman_device_request_scan(type);
+	}
+
+	/* Trigger autoconnect */
+	if (service->autoconnect) {
+		service->favorite = true;
+		__connman_service_auto_connect(
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+	}
+
+	/* Save the service */
+	service_set_new_service(service, false);
+	service_save(service);
+	return service->path;
+}
+
 static gboolean finish_loading_wifi_service(void *user_data)
 {
 	struct connman_service *service = user_data;
 
 	if (g_hash_table_contains(service_hash, service->identifier)) {
-		/*
-		 * load_wifi_services() is called before the access
-		 * plugin (or any other plugin for that matter) has
-		 * a chance to initialize, meaning that service->policy
-		 * for those services is going to be NULL. We need to
-		 * re-evaluate access rules after access plugins have
-		 * been loaded.
-		 */
-		if (!service->policy)
-			service->policy = connman_access_service_policy_create(
-							service->access);
-
-		/*
-		 * Now that __connman_ipconfig_init has been invoked
-		 * (it runs after __connman_service_init), we can read
-		 * the ipconfig settings.
-		 */
-		service->ipconfig_ipv4 = create_ip4config(service, -1,
-			CONNMAN_IPCONFIG_METHOD_DHCP);
-		service->ipconfig_ipv6 = create_ip6config(service, -1);
-		__connman_service_read_ip4config(service);
-		__connman_service_read_ip6config(service);
-
-		/*
-		 * Now that we have acceess rules fixed, we can actually
-		 * export the object
-		 */
-		g_dbus_register_interface(connection, service->path,
-				CONNMAN_SERVICE_INTERFACE, service_methods,
-				service_signals, NULL, service, NULL);
+		service_init_2(service);
 	}
 
 	/* Release the reference passed to g_idle_add */
@@ -7388,35 +7530,22 @@ static gboolean finish_loading_wifi_service(void *user_data)
 
 static void load_wifi_service(const char *ident)
 {
-	struct connman_service *service = connman_service_create();
-	const char *sep = strrchr(ident, '_');
-
-	service->identifier = g_strdup(ident);
-	service->path = g_strdup_printf("%s/service/%s", CONNMAN_PATH, ident);
-	service->type = CONNMAN_SERVICE_TYPE_WIFI;
-	if (sep) {
-		/* Deduce the security type from the identifier */
-		service->security = __connman_service_string2security(sep + 1);
-	}
+	struct connman_service *service =
+		service_new(CONNMAN_SERVICE_TYPE_WIFI, ident);
 
 	if (service_load(service) == 0) {
 		DBG("service %p path %s", service, service->path);
 
-		/* Autoconnect is confused by the UNKNONW state */
-		service->state = service->state_ipv4 =
-		service->state_ipv6 = CONNMAN_SERVICE_STATE_IDLE;
+		/* Do whatever we can do during connman initialization */
+		service_init_1(service);
 
-		/* Stick it into the table. The table holds the reference */
-		g_hash_table_replace(service_hash, service->identifier,
-								service);
-		service_list = g_list_insert_sorted(service_list, service,
-							service_compare);
 		/*
 		 * The rest of initialization can be completed after
-		 * everything else is initialized (plugins loaded etc)
+		 * everything else is initialized (plugins loaded etc).
+		 * finish_loading_wifi_service() will release the reference
+		 * returned by service_new();
 		 */
-		g_idle_add(finish_loading_wifi_service,
-					connman_service_ref(service));
+		g_idle_add(finish_loading_wifi_service, service);
 	} else {
 		service_free(service);
 	}
@@ -7847,6 +7976,21 @@ gboolean __connman_service_update_value_from_network(
 	} else if (!g_strcmp0(key, "WiFi.Identity")) {
 		return set_identity(service,
 				connman_network_get_string(network, key));
+	} else if (!g_strcmp0(key, "WiFi.SSID")) {
+		unsigned int n = 0;
+		const void *ssid = connman_network_get_blob(network, key, &n);
+		if (ssid) {
+			if (!service->ssid ||
+				g_bytes_get_size(service->ssid) != n ||
+				memcmp(g_bytes_get_data(service->ssid, NULL),
+								ssid, n)) {
+				if (service->ssid)
+					g_bytes_unref(service->ssid);
+				service->ssid = g_bytes_new(ssid, n);
+				return TRUE;
+			}
+		}
+		return FALSE;
 	} else {
 		return TRUE;
 	}
@@ -7909,6 +8053,8 @@ static void update_from_network(struct connman_service *service,
 	service->security = convert_wifi_security(str);
 
 	if (service->type == CONNMAN_SERVICE_TYPE_WIFI) {
+		__connman_service_update_value_from_network(service, network,
+								"WiFi.SSID");
 		__connman_service_update_value_from_network(service, network,
 								"WiFi.EAP");
 		service->wps = connman_network_get_bool(network, "WiFi.WPS");
@@ -8091,7 +8237,7 @@ void __connman_service_update_from_network(struct connman_network *network)
 	if (g_strcmp0(service->name, name) != 0) {
 		g_free(service->name);
 		service->name = g_strdup(name);
-		string_changed(service, "Name", name);
+		string_changed(service, PROP_NAME, name);
 	}
 
 	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
@@ -8160,8 +8306,7 @@ void __connman_service_remove_from_network(struct connman_network *network)
 	 * to be done last).
 	 */
 	if (service->new_service) {
-		service_list = g_list_remove(service_list, service);
-		g_hash_table_remove(service_hash, service->identifier);
+		service_remove(service);
 	} else {
 		/* We keep it around but it has become unavailable */
 		service_boolean_changed(service, &service_available);

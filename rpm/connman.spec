@@ -37,7 +37,7 @@ BuildRequires:  pkgconfig(libglibutil) >= 1.0.21
 BuildRequires:  pkgconfig(libdbuslogserver-dbus)
 BuildRequires:  pkgconfig(libdbusaccess) >= 1.0.3
 BuildRequires:  pkgconfig(libmce-glib)
-BuildRequires:  pkgconfig(libgsupplicant) >= 1.0.4
+BuildRequires:  pkgconfig(libgsupplicant) >= 1.0.6
 BuildRequires:  ppp-devel
 
 %description
