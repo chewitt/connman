@@ -512,7 +512,9 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 
 		if (type == ARPHRD_ETHER)
 			read_uevent(interface);
-	} else
+	} else if (type == ARPHRD_ETHER && interface->device_type == CONNMAN_DEVICE_TYPE_UNKNOWN)
+		read_uevent(interface);
+	else
 		interface = NULL;
 
 	for (list = rtnl_list; list; list = list->next) {
