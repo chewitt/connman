@@ -28,6 +28,10 @@
 #include <gutil_idlepool.h>
 #include <gutil_log.h>
 
+struct connman_access_manager_policy_impl {
+	DAPolicy *impl;
+};
+
 struct connman_access_service_policy_impl {
 	DAPolicy *impl;
 	int ref_count;
@@ -57,6 +61,9 @@ G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_CONNECT);
 G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_DISCONNECT);
 G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_REMOVE);
 G_STATIC_ASSERT(CONNMAN_ACCESS_SERVICE_RESET_COUNTERS);
+G_STATIC_ASSERT(CONNMAN_ACCESS_MANAGER_GET_PROPERTY);
+G_STATIC_ASSERT(CONNMAN_ACCESS_MANAGER_SET_PROPERTY);
+G_STATIC_ASSERT(CONNMAN_ACCESS_MANAGER_CREATE_SERVICE);
 
 static GHashTable *service_policies;
 static GUtilIdlePool* service_policies_pool;
@@ -79,6 +86,20 @@ static const DA_ACTION service_policy_actions [] = {
         { "Disconnect",    CONNMAN_ACCESS_SERVICE_DISCONNECT,     0 },
         { "Remove",        CONNMAN_ACCESS_SERVICE_REMOVE,         0 },
         { "ResetCounters", CONNMAN_ACCESS_SERVICE_RESET_COUNTERS, 0 },
+        { NULL }
+};
+
+static const char *manager_policy_default =
+	DA_POLICY_VERSION ";"
+	"SetProperty(OfflineMode)=deny;"
+	"CreateService(*)=deny;"
+	"group(privileged)=allow";
+static const DA_ACTION manager_policy_actions [] = {
+        { "get",           CONNMAN_ACCESS_MANAGER_GET_PROPERTY,   1 },
+        { "GetProperty",   CONNMAN_ACCESS_MANAGER_GET_PROPERTY,   1 },
+        { "set",           CONNMAN_ACCESS_MANAGER_SET_PROPERTY,   1 },
+        { "SetProperty",   CONNMAN_ACCESS_MANAGER_SET_PROPERTY,   1 },
+        { "CreateService", CONNMAN_ACCESS_MANAGER_CREATE_SERVICE, 1 },
         { NULL }
 };
 
@@ -191,6 +212,54 @@ static enum connman_access sailfish_access_service_policy_check(
 		CONNMAN_ACCESS_DENY;
 }
 
+static struct connman_access_manager_policy_impl *
+		sailfish_access_manager_policy_create(const char *spec)
+{
+	DAPolicy *impl;
+
+	if (!spec || !spec[0]) {
+		/* Empty policy = use default */
+		spec = manager_policy_default;
+	}
+
+	/* Parse the policy string */
+	impl = da_policy_new_full(spec, manager_policy_actions);
+	if (impl) {
+		/* String is usable */
+		struct connman_access_manager_policy_impl *p = g_slice_new0
+			(struct connman_access_manager_policy_impl);
+
+		p->impl = impl;
+		return p;
+	} else {
+		DBG("invalid spec \"%s\"", spec);
+		return NULL;
+	}
+}
+
+static void sailfish_access_manager_policy_free(
+			struct connman_access_manager_policy_impl *p)
+{
+	da_policy_unref(p->impl);
+	g_slice_free(struct connman_access_manager_policy_impl, p);
+}
+
+static enum connman_access sailfish_access_manager_policy_check(
+		const struct connman_access_manager_policy_impl *p,
+		enum connman_access_manager_methods method,
+		const char *arg, const char *sender,
+		enum connman_access default_access)
+{
+	/* Don't unref this one: */
+	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
+
+	/* If we get no peer information from dbus-daemon, it means that
+	 * the peer is gone. Reject the access in this case */
+	return peer ? (enum connman_access)da_policy_check(p->impl,
+		&peer->cred, method, arg, (DA_ACCESS)default_access) :
+		CONNMAN_ACCESS_DENY;
+}
+
 static struct connman_access_tech_policy_impl *
 		sailfish_access_tech_policy_create(const char *spec)
 {
@@ -244,6 +313,9 @@ static const struct connman_access_driver sailfish_connman_access_driver = {
 	.service_policy_free    = sailfish_access_service_policy_free,
 	.service_policy_equal   = sailfish_access_service_policy_equal,
 	.service_policy_check   = sailfish_access_service_policy_check,
+	.manager_policy_create  = sailfish_access_manager_policy_create,
+	.manager_policy_free    = sailfish_access_manager_policy_free,
+	.manager_policy_check   = sailfish_access_manager_policy_check,
 	.tech_policy_create     = sailfish_access_tech_policy_create,
 	.tech_policy_free       = sailfish_access_tech_policy_free,
 	.tech_set_property      = sailfish_access_tech_set_property

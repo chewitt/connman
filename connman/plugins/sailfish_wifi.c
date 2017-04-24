@@ -383,13 +383,6 @@ static GString *wifi_bss_ident_append_suffix(GString *str, GSupplicantBSS *bss)
 	return str;
 }
 
-static char *wifi_bss_ident_suffix(GSupplicantBSS *bss)
-{
-	GString *str = g_string_sized_new(18);
-
-	return g_string_free(wifi_bss_ident_append_suffix(str, bss), FALSE);
-}
-
 static char *wifi_bss_ident(struct wifi_bss *bss_data)
 {
 	GString *str;
@@ -1512,8 +1505,7 @@ static void wifi_device_tp_free(struct wifi_device_tp *tp)
 static void wifi_device_bss_add(struct wifi_device *dev, GSupplicantBSS *bss);
 static void wifi_device_autoscan_perform(struct wifi_device *dev);
 static void wifi_device_active_scan_perform(struct wifi_device *dev);
-static void wifi_device_active_scan_schedule(struct wifi_device *dev,
-						GSupplicantBSS *bss);
+static void wifi_device_active_scan_schedule(struct wifi_device *dev);
 static void wifi_device_set_state(struct wifi_device *dev,
 						WIFI_DEVICE_STATE state);
 
@@ -1858,7 +1850,7 @@ static gboolean wifi_device_autoscan_repeat(gpointer data)
 	 * perform active scan.
 	 */
 	if (wifi_device_have_hidden_networks(dev)) {
-		wifi_device_active_scan_schedule(dev, NULL);
+		wifi_device_active_scan_schedule(dev);
 	}
 
 	wifi_device_autoscan_request(dev);
@@ -1958,51 +1950,23 @@ static void wifi_device_active_scan_add(struct wifi_device *dev, GBytes *ssid)
 					(char*)g_bytes_get_data(ssid, NULL));
 }
 
-static void wifi_device_check_hidden_network(struct wifi_device *dev,
-							const char *name)
+static void wifi_device_hidden_network_cb(struct connman_service *service,
+								void *data)
 {
-	GKeyFile *file = connman_storage_load_service(name);
+	if (connman_service_get_type(service) == CONNMAN_SERVICE_TYPE_WIFI &&
+			__connman_service_is_really_hidden(service)) {
+		struct wifi_device *dev = data;
+		GBytes* ssid = __connman_service_get_ssid(service);
 
-	if (file) {
-		if (g_key_file_get_boolean(file, name, "Favorite", NULL) &&
-			g_key_file_get_boolean(file, name, "Hidden", NULL)) {
-			char *hex = g_key_file_get_string(file, name,
-								"SSID", NULL);
-			GBytes *ssid;
-
-			if (hex) g_strstrip(hex);
-			ssid = gutil_hex2bytes(hex, -1);
-			if (ssid) {
-				wifi_device_active_scan_add(dev, ssid);
-				g_bytes_unref(ssid);
-			}
-			g_free(hex);
+		if (ssid) {
+			wifi_device_active_scan_add(dev, ssid);
 		}
-		g_key_file_unref(file);
 	}
 }
 
-static void wifi_device_active_scan_schedule(struct wifi_device *dev,
-							GSupplicantBSS *bss)
+static void wifi_device_active_scan_schedule(struct wifi_device *dev)
 {
-	gchar **services;
-
-	services = connman_storage_get_services();
-	if (services) {
-		int i;
-		char *suffix = bss ? wifi_bss_ident_suffix(bss) : NULL;
-
-		for (i = 0; services[i]; i++) {
-			const char *name = services[i];
-
-			if (g_str_has_prefix(name, WIFI_SERVICE_PREFIX) &&
-				(!suffix || g_str_has_suffix(name, suffix))) {
-				wifi_device_check_hidden_network(dev, name);
-			}
-		}
-		g_strfreev(services);
-		g_free(suffix);
-	}
+	__connman_service_foreach(wifi_device_hidden_network_cb, dev);
 	wifi_device_scan_check(dev);
 }
 
@@ -2400,7 +2364,7 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 		connect->user_data = NULL;
 		wifi_hidden_connect_free(connect);
 	} else if (!ssid || !g_bytes_get_size(ssid)) {
-		wifi_device_active_scan_schedule(dev, bss);
+		wifi_device_active_scan_schedule(dev);
 	}
 }
 
@@ -2562,7 +2526,7 @@ static int wifi_device_scan(struct wifi_device *dev,
 		return (-EALREADY);
 	} else if (!ssid || !ssid_len) {
 		if (wifi_device_have_hidden_networks(dev)) {
-			wifi_device_active_scan_schedule(dev, NULL);
+			wifi_device_active_scan_schedule(dev);
 		}
 		DBG("restarting autoscan");
 		wifi_device_autoscan_restart(dev);
@@ -3288,7 +3252,7 @@ static void wifi_device_update_screen_state(struct wifi_device *dev)
 		DBG("screen %sactive", active ? "" : "in");
 		dev->screen_active = active;
 		if (active) {
-			wifi_device_active_scan_schedule(dev, NULL);
+			wifi_device_active_scan_schedule(dev);
 			wifi_device_autoscan_restart(dev);
 		}
 	}

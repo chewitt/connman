@@ -61,7 +61,6 @@ struct connman_config_service {
 	GSList *service_identifiers;
 	char *config_ident; /* file prefix */
 	char *config_entry; /* entry name */
-	char *access;
 	bool hidden;
 	bool virtual;
 	char *virtual_file;
@@ -113,7 +112,6 @@ static bool cleanup = false;
 #define SERVICE_KEY_PASSPHRASE         "Passphrase"
 #define SERVICE_KEY_SECURITY           "Security"
 #define SERVICE_KEY_HIDDEN             "Hidden"
-#define SERVICE_KEY_ACCESS             "Access"
 
 #define SERVICE_KEY_IPv4               "IPv4"
 #define SERVICE_KEY_IPv6               "IPv6"
@@ -158,7 +156,6 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_SEARCH_DOMAINS,
 	SERVICE_KEY_TIMESERVERS,
 	SERVICE_KEY_DOMAIN,
-	SERVICE_KEY_ACCESS,
 	NULL,
 };
 
@@ -265,7 +262,6 @@ free_only:
 	g_free(config_service->config_ident);
 	g_free(config_service->config_entry);
 	g_free(config_service->virtual_file);
-	g_free(config_service->access);
 	g_free(config_service);
 }
 
@@ -466,12 +462,6 @@ static bool load_service_generic(GKeyFile *keyfile,
 		g_free(str);
 	}
 
-	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_ACCESS, NULL);
-	if (str) {
-		g_free(service->access);
-		service->access = str;
-	}
-
 	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_IPv6_PRIVACY,
 									NULL);
 	if (str) {
@@ -527,7 +517,6 @@ static bool load_service_generic(GKeyFile *keyfile,
 	return true;
 
 err:
-	g_free(service->access);
 	g_free(service->ident);
 	g_free(service->type);
 	g_free(service->ipv4_address);
@@ -1363,9 +1352,6 @@ static int try_provision_service(struct connman_config_service *config,
 
 	__connman_service_set_config(service, config->config_ident,
 						config->config_entry);
-
-	if (config->access)
-		__connman_service_set_access(service, config->access);
 
 	if (config->domain_name)
 		__connman_service_set_domainname(service, config->domain_name);

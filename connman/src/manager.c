@@ -24,16 +24,38 @@
 #endif
 
 #include <errno.h>
+#include <ctype.h>
 
 #include <gdbus.h>
 
 #include <connman/agent.h>
 #include <connman/service.h>
+#include <connman/access.h>
 
 #include "connman.h"
 
+#include <gsupplicant_util.h>
+#include <gutil_misc.h>
+
+#define SET_OFFLINE_MODE_ACCESS     CONNMAN_ACCESS_ALLOW
+#define CREATE_SERVICE_ACCESS       CONNMAN_ACCESS_ALLOW
+
 static bool connman_state_idle;
 static dbus_bool_t sessionmode;
+struct connman_access_manager_policy *manager_access_policy;
+
+static struct connman_access_manager_policy *get_manager_access_policy()
+{
+	/* We can't initialize this variable in __connman_manager_init
+	 * because __connman_manager_init runs before sailfish access
+	 * plugin (or any other plugin) is loaded */
+	if (!manager_access_policy) {
+		/* Use the default policy */
+		manager_access_policy =
+			connman_access_manager_policy_create(NULL);
+	}
+	return manager_access_policy;
+}
 
 static DBusMessage *get_properties(DBusConnection *conn,
 					DBusMessage *msg, void *data)
@@ -96,10 +118,20 @@ static DBusMessage *set_property(DBusConnection *conn,
 	type = dbus_message_iter_get_arg_type(&value);
 
 	if (g_str_equal(name, "OfflineMode")) {
+		const char *sender = dbus_message_get_sender(msg);
 		dbus_bool_t offlinemode;
 
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
+
+		if (connman_access_manager_policy_check(
+				get_manager_access_policy(),
+				CONNMAN_ACCESS_MANAGER_SET_PROPERTY,
+				name, sender, SET_OFFLINE_MODE_ACCESS) !=
+						CONNMAN_ACCESS_ALLOW) {
+			DBG("access denied for %s", sender);
+			return __connman_error_permission_denied(msg);
+		}
 
 		dbus_message_iter_get_basic(&value, &offlinemode);
 
@@ -211,8 +243,7 @@ static DBusMessage *get_peers(DBusConnection *conn,
 		return NULL;
 
 	__connman_dbus_append_objpath_dict_array(reply,
-			append_peer_structs, NULL);
-
+					append_peer_structs, NULL);
 	return reply;
 }
 
@@ -315,16 +346,223 @@ static DBusMessage *unregister_counter(DBusConnection *conn,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
-static DBusMessage *reset_counters(DBusConnection *conn, DBusMessage *msg, void *data)
+static DBusMessage *reset_counters(DBusConnection *conn, DBusMessage *msg,
+								void *data)
 {
-    DBG("conn %p", conn);
+	const char *type = NULL;
 
-    const char *type;
-    dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &type, DBUS_TYPE_INVALID);
+	DBG("conn %p", conn);
+	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &type,
+							DBUS_TYPE_INVALID);
 
-    __connman_service_counter_reset_all(type);
+	__connman_service_counter_reset_all(type);
 
-    return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
+/* This key is checked only if the first CreateService argument is empty */
+#define SERVICE_KEY_TYPE       "Type"
+
+/* These should match the ones defined in service.c */
+#define SERVICE_KEY_NAME       "Name"
+#define SERVICE_KEY_SSID       "SSID"
+#define SERVICE_KEY_SECURITY   "Security"
+
+static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
+								void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, array, entry;
+	enum connman_service_type service_type;
+	GKeyFile *settings;
+	const char *sender = dbus_message_get_sender(msg);
+	const char *device_ident, *network_ident, *type = NULL, *name = NULL;
+	char *ident, *p, *tmp_name = NULL;
+
+	/* N.B. The caller has checked the signature */
+	dbus_message_iter_init(msg, &iter);
+	dbus_message_iter_get_basic(&iter, &type);
+	dbus_message_iter_next(&iter);
+	dbus_message_iter_get_basic(&iter, &device_ident);
+	dbus_message_iter_next(&iter);
+	dbus_message_iter_get_basic(&iter, &network_ident);
+	dbus_message_iter_next(&iter);
+
+	/* If service type is missing, pull it from the settings */
+	if (!type || !type[0]) {
+		dbus_message_iter_recurse(&iter, &array);
+		while (dbus_message_iter_get_arg_type(&array) ==
+							DBUS_TYPE_STRUCT) {
+			const char *key = NULL;
+
+			dbus_message_iter_recurse(&array, &entry);
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (!g_strcmp0(key, SERVICE_KEY_TYPE)) {
+				dbus_message_iter_get_basic(&entry, &type);
+				break;
+			}
+
+			dbus_message_iter_next(&array);
+		}
+	}
+
+	if (type && type[0]) {
+		/* Check the service type (only wifi is supported for now) */
+		service_type = __connman_service_string2type(type);
+		if (service_type == CONNMAN_SERVICE_TYPE_UNKNOWN) {
+			DBG("unknown device type %s", type);
+			return __connman_error_invalid_arguments(msg);
+		} else if (service_type != CONNMAN_SERVICE_TYPE_WIFI) {
+			DBG("unsupported device type %s", type);
+			return __connman_error_not_supported(msg);
+		}
+	} else {
+		/* No device type given, assume wifi */
+		service_type = CONNMAN_SERVICE_TYPE_WIFI;
+		type = __connman_service_type2string(service_type);
+	}
+
+	/* Check access */
+	if (connman_access_manager_policy_check(get_manager_access_policy(),
+			CONNMAN_ACCESS_MANAGER_CREATE_SERVICE, type, sender,
+			CREATE_SERVICE_ACCESS) != CONNMAN_ACCESS_ALLOW) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
+
+	/*
+	 * If no device identifier is given, assume the first device
+	 * of this type.
+	 */
+	if (!device_ident || !device_ident[0]) {
+		struct connman_device *device =
+			__connman_device_find_device(service_type);
+
+		if (!device) {
+			DBG("no devices of type %s", type);
+			return __connman_error_invalid_arguments(msg);
+		}
+		device_ident = connman_device_get_ident(device);
+	}
+
+	/*
+	 * If no network identifier is provided, deduce one from ssid
+	 * and security (we have to assume wifi here)
+	 */
+	if (network_ident && network_ident[0]) {
+		ident = g_strconcat(type, "_", device_ident, "_",
+							network_ident, NULL);
+	} else {
+		const char *ssid = NULL, *security = NULL, *ptr;
+
+		dbus_message_iter_recurse(&iter, &array);
+		while (dbus_message_iter_get_arg_type(&array) ==
+				DBUS_TYPE_STRUCT && !(ssid && security)) {
+			const char *key = NULL;
+
+			dbus_message_iter_recurse(&array, &entry);
+			dbus_message_iter_get_basic(&entry, &key);
+			dbus_message_iter_next(&entry);
+
+			if (!g_strcmp0(key, SERVICE_KEY_SSID)) {
+				dbus_message_iter_get_basic(&entry, &ssid);
+			} else if (!g_strcmp0(key, SERVICE_KEY_SECURITY)) {
+				dbus_message_iter_get_basic(&entry, &security);
+			}
+
+			dbus_message_iter_next(&array);
+		}
+
+		if (!ssid || !security) {
+			DBG("missing security and/or ssid");
+			return __connman_error_invalid_arguments(msg);
+		}
+
+		if (__connman_service_string2security(security) ==
+					CONNMAN_SERVICE_SECURITY_UNKNOWN) {
+			DBG("invalid security %s", security);
+			return __connman_error_invalid_arguments(msg);
+		}
+
+		for (ptr = ssid; *ptr; ptr++) {
+			if (!isxdigit(*ptr)) {
+				DBG("invalid ssid %s", ssid);
+				return __connman_error_invalid_arguments(msg);
+			}
+		}
+
+		if ((ptr - ssid) & 1) {
+			DBG("invalid ssid length");
+			return __connman_error_invalid_arguments(msg);
+		}
+
+		ident = g_strconcat(type, "_", device_ident, "_",
+					ssid, "_managed_", security, NULL);
+	}
+
+	/* Lowercase the identifier */
+	p = g_utf8_strdown(ident, -1);
+	if (p) {
+		g_free(ident);
+		ident = p;
+	}
+
+	/* Decode settings */
+	settings = g_key_file_new();
+	dbus_message_iter_recurse(&iter, &array);
+	while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_STRUCT) {
+		const char *key, *value;
+
+		dbus_message_iter_recurse(&array, &entry);
+		dbus_message_iter_get_basic(&entry, &key);
+		dbus_message_iter_next(&entry);
+		dbus_message_iter_get_basic(&entry, &value);
+		g_key_file_set_string(settings, ident, key, value);
+		dbus_message_iter_next(&array);
+
+		/* Find the name in the process of filling the keyfile */
+		if (!g_strcmp0(key, SERVICE_KEY_NAME)) {
+			name = value;
+		}
+	}
+
+	/* If there's no name, generate one (again, this is wifi specific) */
+	if (!name) {
+		char *str = g_key_file_get_string(settings, ident,
+						SERVICE_KEY_SSID, NULL);
+		GBytes* ssid = gutil_hex2bytes(str, -1);
+		if (ssid) {
+			name = tmp_name = gsupplicant_utf8_from_bytes(ssid);
+			g_bytes_unref(ssid);
+		}
+		g_free(str);
+	}
+
+	if (name) {
+		const char *path;
+
+		/* Actually create the service (or update the existing one) */
+		DBG("%s \"%s\"", ident, name);
+		path = __connman_service_create(service_type, ident, settings);
+		if (path) {
+			DBG("%s", path);
+			reply = g_dbus_create_reply(msg,
+					DBUS_TYPE_OBJECT_PATH, &path,
+					DBUS_TYPE_INVALID);
+		} else {
+			/* Passing zero to get the generic Failed error */
+			reply = __connman_error_failed(msg, 0);
+		}
+	} else {
+		DBG("can't generate service name");
+		reply = __connman_error_invalid_arguments(msg);
+	}
+
+	g_key_file_unref(settings);
+	g_free(ident);
+	return reply;
 }
 
 static DBusMessage *create_session(DBusConnection *conn,
@@ -550,9 +788,16 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("UnregisterCounter",
 			GDBUS_ARGS({ "path", "o" }), NULL,
 			unregister_counter) },
-    { GDBUS_METHOD("ResetCounters",
-            GDBUS_ARGS({ "type", "s" }), NULL,
-            reset_counters) },
+	{ GDBUS_METHOD("ResetCounters",
+			GDBUS_ARGS({ "type", "s" }), NULL,
+			reset_counters) },
+	{ GDBUS_METHOD("CreateService",
+			GDBUS_ARGS({ "service_type", "s" },
+					{ "device_ident", "s" },
+					{ "network_ident", "s" },
+					{ "settings", "a(ss)" }),
+			GDBUS_ARGS({ "service", "o" }),
+			create_service) },
 	{ GDBUS_ASYNC_METHOD("CreateSession",
 			GDBUS_ARGS({ "settings", "a{sv}" },
 						{ "notifier", "o" }),
@@ -630,4 +875,7 @@ void __connman_manager_cleanup(void)
 						CONNMAN_MANAGER_INTERFACE);
 
 	dbus_connection_unref(connection);
+
+	connman_access_manager_policy_free(manager_access_policy);
+	manager_access_policy = NULL;
 }

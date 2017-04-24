@@ -622,6 +622,8 @@ bool __connman_network_get_weakness(struct connman_network *network);
 int __connman_config_init();
 void __connman_config_cleanup(void);
 
+void __connman_service_foreach(void (*fn) (struct connman_service *service,
+					void *user_data), void *user_data);
 void __connman_service_list_struct(DBusMessageIter *iter);
 
 int __connman_config_load_service(GKeyFile *keyfile, const char *group,
@@ -684,6 +686,8 @@ void __connman_service_list_struct(DBusMessageIter *iter);
 
 int __connman_service_compare(const struct connman_service *a,
 					const struct connman_service *b);
+const char *__connman_service_create(enum connman_service_type type,
+				const char *ident, GKeyFile *settings);
 
 struct connman_service *__connman_service_lookup_from_index(int index);
 struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
@@ -759,6 +763,8 @@ void __connman_service_return_error(struct connman_service *service,
 int __connman_service_provision_changed(const char *ident);
 void __connman_service_set_config(struct connman_service *service,
 				const char *file_id, const char *section);
+bool __connman_service_is_really_hidden(struct connman_service *service);
+GBytes *__connman_service_get_ssid(struct connman_service *service);
 gboolean __connman_service_update_value_from_network(
 			struct connman_service *service,
 			struct connman_network *network, const char *key);
@@ -831,8 +837,6 @@ int __connman_service_counter_register(const char *counter);
 void __connman_service_counter_unregister(const char *counter);
 void __connman_service_counter_send_initial(const char *counter);
 void __connman_service_counter_reset_all(const char *type);
-void __connman_service_set_access(struct connman_service *service,
-							const char *access);
 
 #include <connman/peer.h>
 
