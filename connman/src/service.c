@@ -4617,10 +4617,13 @@ static bool auto_connect_service(GList *services,
 		}
 
 		if (!service->favorite) {
-			if (preferred)
-			       continue;
-
-			return autoconnecting;
+			/*
+			 * If we are connecting preferred technologies and
+			 * this service is autoconnectable, then connect it
+			 * regardless of whether it is favorite or not.
+			 */
+			if (!preferred)
+				return autoconnecting;
 		}
 
 		if (is_ignore(service) || service->state !=
@@ -7362,7 +7365,14 @@ static struct connman_service *service_get(const char *identifier)
 
 	service = g_hash_table_lookup(service_hash, identifier);
 	if (service) {
-		connman_service_ref(service);
+		/*
+		 * No, we don't need to add a reference here.
+		 * The caller will add one if needed. In our
+		 * fork, service_hash keeps the reference which
+		 * gets released when the service is removed
+		 * from the table.
+		 */
+//		connman_service_ref(service);
 		return service;
 	}
 
@@ -8127,12 +8137,15 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	if (__connman_network_get_weakness(network)) {
 		connman_network_autoconnect_changed(network,
 						service->autoconnect);
-		return service;
-        }
+		return true;
+	}
 
 	if (service->path) {
 		update_from_network(service, network);
 		__connman_connection_update_gateway();
+		if (service->autoconnect)
+			__connman_service_auto_connect(
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		return true;
 	}
 
@@ -8183,7 +8196,7 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	service_register(service);
 	service_schedule_added(service);
 
-	if (service->favorite) {
+	if (service->favorite || service->autoconnect) {
 		device = connman_network_get_device(service->network);
 		if (device && !connman_device_get_scanning(device)) {
 
