@@ -170,6 +170,7 @@ static unsigned int vpn_autoconnect_timeout = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 static bool autoconnect_paused = false;
+static guint load_wifi_services_id = 0;
 
 struct connman_service_boolean_property {
 	const char *name;
@@ -272,6 +273,7 @@ struct connman_service {
 	char *access;
 };
 
+static const char *service_get_access(struct connman_service *service);
 static void service_set_access(struct connman_service *service,
 					const char *access);
 static void service_set_autoconnect(struct connman_service *service,
@@ -983,8 +985,8 @@ static int service_save(struct connman_service *service)
 		break;
 	}
 
-	set_config_string(keyfile, service->identifier,
-					PROP_ACCESS, service->access);
+	set_config_string(keyfile, service->identifier, PROP_ACCESS,
+					service_get_access(service));
 
 	str = g_time_val_to_iso8601(&service->modified);
 	if (str) {
@@ -2823,7 +2825,7 @@ static DBusMessage *get_property(DBusConnection *conn,
 				service->passphrase, GET_PASSPHRASE_ACCESS);
 	} else if (!g_strcmp0(name, PROP_ACCESS)) {
 		return check_and_reply_string(msg, service, name,
-				service->access, GET_ACCESS_ACCESS);
+			service_get_access(service), GET_ACCESS_ACCESS);
 	} else if (!g_strcmp0(name, PROP_DEFAULT_ACCESS)) {
 		return check_and_reply_string(msg, service, name,
 				connman_access_default_service_policy_str(),
@@ -2972,7 +2974,8 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 	service_append_boolean(service, &service_available, dict);
 	service_append_boolean(service, &service_saved, dict);
-	append_restricted_string(dict, service, PROP_ACCESS, service->access,
+	append_restricted_string(dict, service, PROP_ACCESS,
+				service_get_access(service),
 				GET_ACCESS_ACCESS);
 	append_restricted_string(dict, service, PROP_DEFAULT_ACCESS,
 				connman_access_default_service_policy_str(),
@@ -3583,6 +3586,22 @@ const char *__connman_service_get_passphrase(struct connman_service *service)
 	return service->passphrase;
 }
 
+/*
+ * The default access policy is returned and saved as an empty string.
+ * This way we can change the defaults and the services that were using
+ * the default policy will automatically pick it up.
+ */
+static const char *service_get_access(struct connman_service *service)
+{
+	if (!service || !service->access || !service->policy)
+		return NULL;
+
+	if (connman_access_is_default_service_policy(service->policy))
+		return NULL;
+
+	return service->access;
+}
+
 /* Takes the ownership of the policy */
 static void service_set_access_policy(struct connman_service *service,
 	const char *access, struct connman_access_service_policy *policy)
@@ -3592,12 +3611,10 @@ static void service_set_access_policy(struct connman_service *service,
 
 	/* NULL or empty access string will initialize the default policy */
 	service->policy = policy;
-	service->access = 
-		(policy && !connman_access_is_default_service_policy(policy)) ?
-						g_strdup(access) : NULL;
+	service->access = g_strdup(access);
 
-	restricted_string_changed(service, PROP_ACCESS, service->access,
-						GET_ACCESS_ACCESS);
+	restricted_string_changed(service, PROP_ACCESS,
+			service_get_access(service), GET_ACCESS_ACCESS);
 }
 
 static void service_set_access(struct connman_service *service,
@@ -7428,7 +7445,7 @@ static struct connman_service *service_new(enum connman_service_type type,
 	return service;
 }
 
-static void service_init_1(struct connman_service *service)
+static void service_init(struct connman_service *service)
 {
 	/* Autoconnect is confused by the UNKNONW state */
 	service->state = service->state_ipv4 =
@@ -7438,27 +7455,7 @@ static void service_init_1(struct connman_service *service)
 	g_hash_table_replace(service_hash, service->identifier, service);
 	service_list = g_list_insert_sorted(service_list,
 			connman_service_ref(service), service_compare);
-}
 
-static void service_init_2(struct connman_service *service)
-{
-	/*
-	 * load_wifi_services() is called before the access
-	 * plugin (or any other plugin for that matter) has
-	 * a chance to initialize, meaning that service->policy
-	 * for those services is going to be NULL. We need to
-	 * re-evaluate access rules after access plugins have
-	 * been loaded.
-	 */
-	if (!service->policy)
-		service->policy = connman_access_service_policy_create(
-							service->access);
-
-	/*
-	 * Now that __connman_ipconfig_init has been invoked
-	 * (it runs after __connman_service_init), we can read
-	 * the ipconfig settings.
-	 */
 	if (!service->ipconfig_ipv4) {
 		service->ipconfig_ipv4 = create_ip4config(service, -1,
 			CONNMAN_IPCONFIG_METHOD_DHCP);
@@ -7470,10 +7467,6 @@ static void service_init_2(struct connman_service *service)
 		__connman_service_read_ip6config(service);
 	}
 
-	/*
-	 * Now that we have access rules fixed, we can actually
-	 * export the object
-	 */
 	g_dbus_register_interface(connection, service->path,
 				CONNMAN_SERVICE_INTERFACE, service_methods,
 				service_signals, NULL, service, NULL);
@@ -7491,8 +7484,7 @@ const char *__connman_service_create(enum connman_service_type type,
 	} else {
 		/* Create a new one */
 		service = service_new(type, ident);
-		service_init_1(service);
-		service_init_2(service);
+		service_init(service);
 		service_apply(service, settings);
 		service_schedule_added(service);
 		service_list_sort();
@@ -7525,19 +7517,6 @@ const char *__connman_service_create(enum connman_service_type type,
 	return service->path;
 }
 
-static gboolean finish_loading_wifi_service(void *user_data)
-{
-	struct connman_service *service = user_data;
-
-	if (g_hash_table_contains(service_hash, service->identifier)) {
-		service_init_2(service);
-	}
-
-	/* Release the reference passed to g_idle_add */
-	connman_service_unref(service);
-	return G_SOURCE_REMOVE;
-}
-
 static void load_wifi_service(const char *ident)
 {
 	struct connman_service *service =
@@ -7545,34 +7524,29 @@ static void load_wifi_service(const char *ident)
 
 	if (service_load(service) == 0) {
 		DBG("service %p path %s", service, service->path);
-
-		/* Do whatever we can do during connman initialization */
-		service_init_1(service);
-
-		/*
-		 * The rest of initialization can be completed after
-		 * everything else is initialized (plugins loaded etc).
-		 * finish_loading_wifi_service() will release the reference
-		 * returned by service_new();
-		 */
-		g_idle_add(finish_loading_wifi_service, service);
+		service_init(service);
+		connman_service_unref(service);
 	} else {
 		service_free(service);
 	}
 }
 
-static void load_wifi_services()
+static gboolean load_wifi_services(gpointer unused)
 {
 	char **services = connman_storage_get_services();
+
+	load_wifi_services_id = 0;
 
 	if (services) {
 		int i;
 
 		for (i = 0; services[i]; i++) {
 			const char *ident = services[i];
+			const enum connman_service_type type =
+				__connman_service_string2type(ident);
 
-			if (__connman_service_string2type(ident) == 
-						CONNMAN_SERVICE_TYPE_WIFI) {
+			if (type == CONNMAN_SERVICE_TYPE_WIFI &&
+				!g_hash_table_contains(service_hash, ident)) {
 				load_wifi_service(ident);
 			}
 		}
@@ -7580,6 +7554,8 @@ static void load_wifi_services()
 		g_strfreev(services);
 		service_list_sort();
 	}
+
+	return G_SOURCE_REMOVE;
 }
 
 static int service_register(struct connman_service *service)
@@ -8510,7 +8486,12 @@ int __connman_service_init(void)
 	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
 
 	remove_unprovisioned_services();
-	load_wifi_services();
+
+	/*
+	 * wifi services have to be loaded after plugins are initialized
+	 * (e.g. access control plugin). This function is called too early.
+	 */
+	load_wifi_services_id = g_idle_add(load_wifi_services, NULL);
 
 	return 0;
 }
@@ -8518,6 +8499,11 @@ int __connman_service_init(void)
 void __connman_service_cleanup(void)
 {
 	DBG("");
+
+	if (load_wifi_services_id) {
+		g_source_remove(load_wifi_services_id);
+		load_wifi_services_id = 0;
+	}
 
 	if (vpn_autoconnect_timeout) {
 		g_source_remove(vpn_autoconnect_timeout);
