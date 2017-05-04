@@ -276,7 +276,7 @@ struct connman_service {
 static const char *service_get_access(struct connman_service *service);
 static void service_set_access(struct connman_service *service,
 					const char *access);
-static void service_set_autoconnect(struct connman_service *service,
+static bool service_set_autoconnect(struct connman_service *service,
 					bool autoconnect);
 static void string_changed(struct connman_service *service,
 					const char *name, const char *value);
@@ -649,7 +649,7 @@ int __connman_service_load_modifiable(struct connman_service *service)
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
-			service->autoconnect = autoconnect;
+			service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
 		break;
 	}
@@ -686,7 +686,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
-			service->autoconnect = autoconnect;
+			service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
@@ -1872,14 +1872,20 @@ static const struct connman_service_boolean_property service_saved =
 
 #define autoconnect_changed(s) service_boolean_changed(s, &service_autoconnect)
 
-static void service_set_autoconnect(struct connman_service *service,
+static bool service_set_autoconnect(struct connman_service *service,
 							bool autoconnect)
 {
-	const bool newval = autoconnect ? true : false;
-	if (service->autoconnect != newval) {
-		service->autoconnect = newval;
-		service_boolean_changed(service, &service_autoconnect);
-	}
+	if (service->autoconnect == autoconnect)
+		return false;
+
+	service->autoconnect = autoconnect;
+	service_boolean_changed(service, &service_autoconnect);
+
+	if (service->network)
+		connman_network_autoconnect_changed(service->network,
+							service->autoconnect);
+
+	return true;
 }
 
 static void service_set_new_service(struct connman_service *service,
@@ -4006,26 +4012,15 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
 
-		//if (!service->favorite)
-		//	return __connman_error_invalid_service(msg);
-
 		dbus_message_iter_get_basic(&value, &autoconnect);
 
-		if (service->autoconnect == autoconnect)
-			return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+		if (service_set_autoconnect(service, autoconnect) &&
+							autoconnect) {
+			__connman_service_auto_connect(
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+			service_save(service);
+		}
 
-		service->autoconnect = autoconnect;
-
-		autoconnect_changed(service);
-
-		if (service->network)
-			connman_network_autoconnect_changed(service->network,
-								autoconnect);
-
-		if (autoconnect)
-			__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-
-		service_save(service);
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
 		DBusMessageIter entry;
 		GString *str;
@@ -5031,11 +5026,7 @@ bool __connman_service_remove(struct connman_service *service)
 	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
 	__connman_service_set_favorite(service, false);
-
-	if (service->autoconnect) {
-		service->autoconnect = FALSE;
-		service_boolean_changed(service, &service_autoconnect);
-	}
+	service_set_autoconnect(service, false);
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
 
