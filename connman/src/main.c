@@ -56,9 +56,6 @@
 #define CONFIGMAINFILE CONFIGDIR "/" MAINFILE
 
 static char *default_auto_connect[] = {
-	"wifi",
-	"ethernet",
-	"cellular",
 	NULL
 };
 
