@@ -2718,19 +2718,25 @@ static gboolean can_get_property(struct connman_service *service,
 			sender, default_access) == CONNMAN_ACCESS_ALLOW;
 }
 
+static gboolean check_set_property(struct connman_service *service,
+				const char *name, DBusMessage *msg,
+				enum connman_access default_access)
+{
+	return connman_access_service_policy_check(service->policy,
+			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, name,
+			dbus_message_get_sender(msg),
+			default_access) == CONNMAN_ACCESS_ALLOW;
+}
+
 static gboolean can_set_property(struct connman_service *service,
 				const char *name, DBusMessage *msg,
 				enum connman_access default_access)
 {
-	const char *sender = dbus_message_get_sender(msg);
-
-	if (connman_access_service_policy_check(service->policy,
-			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, name,
-			sender, default_access) == CONNMAN_ACCESS_ALLOW) {
+	if (check_set_property(service, name, msg, default_access)) {
 		return TRUE;
 	} else {
-		connman_warn("%s is not allowed to set %s for %s", sender,
-							name, service->path);
+		connman_warn("%s is not allowed to set %s for %s",
+			dbus_message_get_sender(msg), name, service->path);
 		return FALSE;
 	}
 }
@@ -5290,10 +5296,16 @@ static DBusMessage *check_access(DBusConnection *conn,
 		if (can_get_property(service, pa->name, sender,
 						pa->default_get_access)) {
 			get_props |= pa->flag;
+		} else {
+			DBG("%s is not allowed to get %s for %s", sender,
+						pa->name, service->path);
 		}
-		if (can_set_property(service, pa->name, msg,
+		if (check_set_property(service, pa->name, msg,
 						pa->default_set_access)) {
 			set_props |= pa->flag;
+		} else {
+			DBG("%s is not allowed to set %s for %s", sender,
+						pa->name, service->path);
 		}
 	}
 
