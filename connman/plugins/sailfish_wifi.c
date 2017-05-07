@@ -19,6 +19,7 @@
 #endif
 
 #include <connman/storage.h>
+#include <connman/wakeup_timer.h>
 #include "connman.h"
 
 #include "sailfish_signalpoll.h"
@@ -489,10 +490,10 @@ static struct wifi_hidden_connect *wifi_hidden_connect_new(GBytes *ssid,
 	connect->identity = g_strdup(identity);
 	connect->passphrase = g_strdup(passphrase);
 	connect->security = wifi_security(security);
-	connect->timeout_id = g_timeout_add_seconds(
+	connect->timeout_id = connman_wakeup_timer_add_seconds(
 				WIFI_HIDDEN_CONNECT_TIMEOUT_SEC,
 				wifi_hidden_connect_timeout, dev);
-	connect->scan_id = g_timeout_add_seconds(
+	connect->scan_id = connman_wakeup_timer_add_seconds(
 				WIFI_HIDDEN_CONNECT_SCAN_SEC,
 				wifi_hidden_connect_scan, dev);
 	wifi_device_active_scan_add(dev, ssid);
@@ -746,7 +747,8 @@ static void wifi_network_interface_scanning(struct wifi_network *net)
 			 * running but start it if it's not running yet.
 			 */
 			net->disconnect_timer_id =
-				g_timeout_add(WIFI_DISCONNECT_TIMEOUT_MS,
+				connman_wakeup_timer_add(
+					WIFI_DISCONNECT_TIMEOUT_MS,
 					wifi_network_disconnect_timeout, net);
 		}
 	}
@@ -773,7 +775,7 @@ static void wifi_network_interface_disconnected(struct wifi_network *net)
 		 */
 		wifi_network_disconnect_timeout_cancel(net);
 		net->disconnect_timer_id =
-			g_timeout_add(WIFI_DISCONNECT_TIMEOUT_MS,
+			connman_wakeup_timer_add(WIFI_DISCONNECT_TIMEOUT_MS,
 				wifi_network_disconnect_timeout, net);
 	}
 }
@@ -1818,7 +1820,8 @@ static void wifi_device_scan_requested(struct wifi_device *dev)
 	if (dev->scan_start_timeout_id) {
 		g_source_remove(dev->scan_start_timeout_id);
 	}
-	dev->scan_start_timeout_id = g_timeout_add(WIFI_SCAN_START_TIMEOUT_MS,
+	dev->scan_start_timeout_id = connman_wakeup_timer_add(
+					WIFI_SCAN_START_TIMEOUT_MS,
 					wifi_device_scan_start_timeout, dev);
 	wifi_device_update_scanning(dev);
 }
@@ -1911,13 +1914,14 @@ static void wifi_device_autoscan_perform(struct wifi_device *dev)
 		 */
 		GASSERT(!dev->autoscan_holdoff_timer_id);
 		dev->autoscan_holdoff_timer_id =
-			g_timeout_add_seconds(WIFI_AUTOSCAN_MIN_SEC,
+			connman_wakeup_timer_add_seconds(WIFI_AUTOSCAN_MIN_SEC,
 				wifi_device_autoscan_holdoff_timer_expired,
 				dev);
 
 		/* Schedule the next scan */
 		dev->autoscan_start_timer_id =
-			g_timeout_add_seconds(dev->autoscan_interval_sec,
+			connman_wakeup_timer_add_seconds(
+				dev->autoscan_interval_sec,
 				wifi_device_autoscan_repeat, dev);
 
 		/* Increase the timeout */
@@ -2157,7 +2161,8 @@ static void wifi_device_bss_presence_changed(GSupplicantBSS *bss, void *data)
 				timer_data->dev = dev;
 				timer_data->bss = bss_data;
 				bss_data->remove_timeout_id =
-					g_timeout_add_full(G_PRIORITY_DEFAULT,
+					connman_wakeup_timer_add_full(
+						G_PRIORITY_DEFAULT,
 						WIFI_BSS_REMOVE_TIMEOUT_MS,
 						wifi_device_bss_remove_timer,
 						timer_data, g_free);

@@ -8064,12 +8064,16 @@ static void update_from_network(struct connman_service *service,
 	if (service->strength > strength && service->network) {
 		connman_network_unref(service->network);
 		service->network = connman_network_ref(network);
-
+		connman_network_autoconnect_changed(service->network,
+							service->autoconnect);
 		strength_changed(service);
 	}
 
-	if (!service->network)
+	if (!service->network) {
 		service->network = connman_network_ref(network);
+		connman_network_autoconnect_changed(service->network,
+							service->autoconnect);
+        }
 
 	if (was_available != service_available.value(service))
 		service_boolean_changed(service, &service_available);
@@ -8113,11 +8117,8 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	if (!service)
 		return false;
 
-	if (__connman_network_get_weakness(network)) {
-		connman_network_autoconnect_changed(network,
-						service->autoconnect);
+	if (__connman_network_get_weakness(network))
 		return true;
-	}
 
 	if (service->path) {
 		update_from_network(service, network);
@@ -8139,8 +8140,6 @@ bool __connman_service_create_from_network(struct connman_network *network)
 			break;
 		}
 	}
-
-	connman_network_autoconnect_changed(network, service->autoconnect);
 
 	switch (service->type) {
 	case CONNMAN_SERVICE_TYPE_UNKNOWN:
