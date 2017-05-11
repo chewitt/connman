@@ -453,6 +453,17 @@ done:
 
 	g_key_file_unref(keyfile);
 
+	/* Currently, Sailfish OS assumes that cellular technology is
+	 * always enabled. We don't have any UI to enable it meaning
+	 * that if it ever gets disabled, it stays like that forever.
+	 * Let's make sure it's enabled.
+	 *
+	 * Note that the technology won't actually get enabled if the
+	 * device is in the offline mode.
+	 */
+	if (technology->type == CONNMAN_SERVICE_TYPE_CELLULAR)
+		technology->enable_persistent = true;
+
 	return;
 }
 

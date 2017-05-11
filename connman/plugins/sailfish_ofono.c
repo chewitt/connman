@@ -118,7 +118,6 @@ struct modem_data {
 	const char *country;
 	gboolean roaming;
 	gboolean enabled;
-	gboolean connectable;
 	guint strength;
 	char *name;
 	char *imsi;
@@ -186,6 +185,13 @@ static void connctx_activate_restart_timer(struct modem_data *md)
 					connctx_activate_timeout, md);
 }
 
+static gboolean modem_connectable(struct modem_data *md)
+{
+	struct connman_service *service =
+			connman_service_lookup_from_network(md->network);
+	return service && connman_service_get_autoconnect(service);
+}
+
 static int ofono_network_probe(struct connman_network *network)
 {
 	struct modem_data *md = connman_network_get_data(network);
@@ -226,7 +232,7 @@ static int ofono_network_connect(struct connman_network *network)
 		 * Sailfish UI is presented to users as on/off switch for
 		 * mobile data. Let's interpret it as such.
 		 */
-		if (md->connectable) {
+		if (modem_connectable(md)) {
 			ofono_connctx_activate(md->connctx);
 			if (md->connctx->active) {
 				/* Already connected */
@@ -272,7 +278,6 @@ static void ofono_network_autoconnect_changed(struct connman_network *network,
 	struct modem_data *md = connman_network_get_data(network);
 	DBG("%s network %p %s", ofono_modem_path(md->modem), network,
 						autoconnect ? "on" : "off");
-	md->connectable = autoconnect;
 	if (!autoconnect) {
 		struct connman_service *service =
 			connman_service_lookup_from_network(network);
@@ -663,7 +668,7 @@ static void connctx_update_active(struct modem_data *md)
 	GASSERT(md->connctx);
 	if (ofono_connctx_valid(md->connctx)) {
 		if (md->connctx->active) {
-			if (!md->enabled || !md->connectable || !md->network) {
+			if (!md->enabled || !modem_connectable(md)) {
 				/*
 				 * Mobile data is not supposed to be
 				 * connected.

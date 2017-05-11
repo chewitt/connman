@@ -4020,11 +4020,11 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		dbus_message_iter_get_basic(&value, &autoconnect);
 
-		if (service_set_autoconnect(service, autoconnect) &&
-							autoconnect) {
-			__connman_service_auto_connect(
-					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+		if (service_set_autoconnect(service, autoconnect)) {
 			service_save(service);
+			if (autoconnect)
+				__connman_service_auto_connect(
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		}
 
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
