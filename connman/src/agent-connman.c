@@ -381,19 +381,9 @@ static void previous_passphrase_handler(DBusMessageIter *iter,
 			return;
 
 		security = __connman_service_get_security(service);
-		switch (security) {
-		case CONNMAN_SERVICE_SECURITY_WEP:
-			data.type = "wep";
-			break;
-		case CONNMAN_SERVICE_SECURITY_PSK:
-			data.type  = "psk";
-			break;
-		/*
-		 * This should never happen: no passphrase is set if security
-		 * is not one of the above. */
-		default:
-			break;
-		}
+		data.type = __connman_service_security2string(security);
+		if (!data.type)
+			return;
 	}
 
 	connman_dbus_dict_append_dict(iter, "PreviousPassphrase",
