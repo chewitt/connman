@@ -4600,6 +4600,36 @@ static bool auto_connect_service(GList *services,
 
 	ignore[CONNMAN_SERVICE_TYPE_VPN] = true;
 
+	/*
+	 * Do not try to simultaneously autoconnect more than one service
+	 * of each kind.
+	 */
+	for (list = services; list; list = list->next) {
+		service = list->data;
+
+		/*
+		 * Once we hit the unavailable service, we know that the
+		 * rest of them are unavailable too (see service_compare),
+		 * so we can break out early.
+		 */
+		if (!service->network)
+			break;
+
+		if (ignore[service->type])
+			continue;
+
+		if (service->pending ||
+				is_connecting(service) ||
+				is_connected(service)) {
+			ignore[service->type] = true;
+			autoconnecting = true;
+
+			DBG("service %p type %s busy", service,
+				__connman_service_type2string(service->type));
+			continue;
+		}
+	}
+
 	for (list = services; list; list = list->next) {
 		service = list->data;
 
@@ -4616,21 +4646,6 @@ static bool auto_connect_service(GList *services,
 				service,
 				__connman_service_type2string(service->type),
 				ignore[service->type], service->autoconnect);
-			continue;
-		}
-
-		if (service->pending ||
-				is_connecting(service) ||
-				is_connected(service)) {
-			if (!active_count)
-				return true;
-
-			ignore[service->type] = true;
-			autoconnecting = true;
-
-			DBG("service %p type %s busy", service,
-				__connman_service_type2string(service->type));
-
 			continue;
 		}
 
