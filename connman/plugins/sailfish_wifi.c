@@ -2526,16 +2526,6 @@ static int wifi_device_scan(struct wifi_device *dev,
 	if (dev->tethering) {
 		DBG("tethering on!");
 		return 0;
-	} else if (connman_device_get_scanning(dev->device)) {
-		DBG("already scanning!");
-		return (-EALREADY);
-	} else if (!ssid || !ssid_len) {
-		if (wifi_device_have_hidden_networks(dev)) {
-			wifi_device_active_scan_schedule(dev);
-		}
-		DBG("restarting autoscan");
-		wifi_device_autoscan_restart(dev);
-		return 0;
 	} else if (ssid && ssid_len) {
 		GBytes *ssid_bytes = g_bytes_new(ssid, ssid_len);
 
@@ -2557,6 +2547,16 @@ static int wifi_device_scan(struct wifi_device *dev,
 		 * we can continue connecting this network.
 		 */
 		g_bytes_unref(ssid_bytes);
+		return 0;
+	} else if (connman_device_get_scanning(dev->device)) {
+		DBG("already scanning!");
+		return (-EALREADY);
+	} else if (!ssid || !ssid_len) {
+		if (wifi_device_have_hidden_networks(dev)) {
+			wifi_device_active_scan_schedule(dev);
+		}
+		DBG("restarting autoscan");
+		wifi_device_autoscan_restart(dev);
 		return 0;
 	}
 	return (-EINVAL);
