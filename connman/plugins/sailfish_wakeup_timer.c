@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2014-2016 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2014-2017 Jolla Ltd. All rights reserved.
  *  Contact: Hannu Mallat <hannu.mallat@jollamobile.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -393,7 +393,8 @@ static void wakeup_reschedule(void)
 		DBG("Checking need for wakeup at %lu.", timeout->wakeup_time);
 
 		if (context.wakeup_time != timeout->wakeup_time) {
-			time_t delta_min = timeout->wakeup_time - now.tv_sec;
+			time_t delta_min = (timeout->wakeup_time > now.tv_sec) ?
+				(timeout->wakeup_time - now.tv_sec) : 0;
 			time_t delta_max = delta_min + GRAIN;
 
 			DBG("Scheduling IPHB wakeup %lu..%lu seconds from now.",
