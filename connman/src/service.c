@@ -4592,6 +4592,7 @@ static bool auto_connect_service(GList *services,
 {
 	struct connman_service *service = NULL;
 	bool ignore[MAX_CONNMAN_SERVICE_TYPES] = { };
+	bool busy[MAX_CONNMAN_SERVICE_TYPES] = { };
 	bool autoconnecting = false;
 	GList *list;
 
@@ -4615,16 +4616,22 @@ static bool auto_connect_service(GList *services,
 		if (!service->network)
 			break;
 
-		if (ignore[service->type])
+		if (ignore[service->type] || busy[service->type])
 			continue;
 
 		if (service->pending ||
 				is_connecting(service) ||
 				is_connected(service)) {
-			ignore[service->type] = true;
-			autoconnecting = true;
-
-			DBG("service %p type %s busy", service,
+			/*
+			 * At least one service of this type is busy.
+			 * Don't set the autoconnecting flag just yet,
+			 * because we may need to ask a service of other
+			 * type to get connected, if it happens to have
+			 * a higher priority (e.g. to switch from cellular
+			 * to wifi).
+			 */
+			busy[service->type] = true;
+			DBG("service %p busy, skipping %s", service,
 				__connman_service_type2string(service->type));
 			continue;
 		}
@@ -4646,6 +4653,19 @@ static bool auto_connect_service(GList *services,
 				service,
 				__connman_service_type2string(service->type),
 				ignore[service->type], service->autoconnect);
+			continue;
+		}
+
+		if (busy[service->type]) {
+			if (!active_count)
+				return true;
+
+			ignore[service->type] = true;
+			autoconnecting = true;
+
+			DBG("service %p type %s busy", service,
+				__connman_service_type2string(service->type));
+
 			continue;
 		}
 
