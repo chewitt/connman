@@ -63,6 +63,7 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	DBusMessage *reply;
 	DBusMessageIter array, dict;
 	dbus_bool_t offlinemode;
+	dbus_uint32_t uint32_value;
 	const char *str;
 
 	DBG("conn %p", conn);
@@ -86,6 +87,11 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	connman_dbus_dict_append_basic(&dict, "SessionMode",
 					DBUS_TYPE_BOOLEAN,
 					&sessionmode);
+
+	uint32_value = connman_timeout_input_request();
+	connman_dbus_dict_append_basic(&dict, "InputRequestTimeout",
+					DBUS_TYPE_UINT32,
+					&uint32_value);
 
 	connman_dbus_dict_close(&array, &dict);
 
