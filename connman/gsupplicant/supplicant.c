@@ -4873,6 +4873,8 @@ int g_supplicant_interface_connect(GSupplicantInterface *interface,
 	struct interface_data *intf_data;
 	int ret = 0;
 
+	SUPPLICANT_DBG("");
+
 	if (!interface)
 		return -EINVAL;
 

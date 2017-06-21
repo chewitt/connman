@@ -8786,6 +8786,8 @@ int __connman_service_connect(struct connman_service *service,
 
 	err = service_connect(service);
 
+	DBG("service %p err %d", service, err);
+
 	service->connect_reason = reason;
 
 	switch (err) {
