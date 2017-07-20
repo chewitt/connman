@@ -100,11 +100,6 @@ done:
 	dbus_message_unref(reply);
 }
 
-static void append_string(DBusMessageIter *iter, void *user_data)
-{
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, user_data);
-}
-
 static void append_string_list(DBusMessageIter *iter, void *user_data)
 {
 	char **list = user_data;
@@ -199,11 +194,6 @@ static void create_proxy_configuration(void)
 						DBUS_TYPE_STRING, &interface);
 		g_free(interface);
 	}
-
-	str = GET_PROXY_DOMAINNAME(default_service);
-	if (str)
-		connman_dbus_dict_append_array(&dict, "Domains",
-					DBUS_TYPE_STRING, append_string, &str);
 
 	str_list = GET_PROXY_NAMESERVERS(default_service);
 	if (str_list)
