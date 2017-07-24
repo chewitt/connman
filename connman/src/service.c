@@ -8440,7 +8440,6 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		if (connman_setting_get_bool("EnableOnlineCheck")) {
 			if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 				check_proxy_setup(service);
-				service_rp_filter(service, true);
 			} else {
 				service->online_check_interval_ipv6 =
 						ONLINE_CHECK_RETRY_COUNT;
@@ -8449,6 +8448,8 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		} else
 			connman_info("Online check disabled. "
 				"Default service remains in READY state.");
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+			service_rp_filter(service, true);
 		break;
 	case CONNMAN_SERVICE_STATE_ONLINE:
 		break;
