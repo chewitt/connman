@@ -6214,6 +6214,15 @@ static void request_input_cb(struct connman_service *service,
 		}
 	}
 
+	if (!service->network) {
+		if (service->hidden)
+			__connman_service_return_error(service,
+							ECONNABORTED,
+							user_data);
+		err = -ECONNABORTED;
+		goto done;
+	}
+
 	if (service->hidden && name_len > 0 && name_len <= 32) {
 		device = connman_network_get_device(service->network);
 		security = connman_network_get_string(service->network,
