@@ -262,16 +262,12 @@ static void timeout_record(struct wakeup_timeout *timeout)
 	debug_timeouts();
 }
 
-static gboolean timeout_function_wrapper(gpointer user_data)
+static void timeout_function_wrapper(gpointer user_data)
 {
 	struct wakeup_timeout *timeout = user_data;
-	gboolean again;
 	GSource *source;
 
 	DBG("Timeout %p expired", timeout);
-
-	if (g_list_find(context.timeouts, timeout))
-		context.timeouts = g_list_remove(context.timeouts, timeout);
 
 	/* If the timeout is to be repeated, put it back to the
 	   bookkeeping list in the right position; if not, our
@@ -279,8 +275,7 @@ static gboolean timeout_function_wrapper(gpointer user_data)
 	   calls it. */
 
 	source = g_source_ref(timeout->source);
-	again = (timeout->function)(timeout->user_data);
-	if (again) {
+	if ((timeout->function)(timeout->user_data) == G_SOURCE_CONTINUE) {
 		DBG("Timeout %p repeating.", timeout);
 		timeout_record(timeout);
 	} else {
@@ -289,8 +284,6 @@ static gboolean timeout_function_wrapper(gpointer user_data)
 			g_source_destroy(source);
 	}
 	g_source_unref(source);
-
-	return again;
 }
 
 static void timeout_notify_wrapper(gpointer user_data)
@@ -316,20 +309,41 @@ static void timeout_notify_wrapper(gpointer user_data)
 static void timer_trigger_expired(void)
 {
 	struct timespec now;
+	struct wakeup_timeout *timeout;
+	GList *l, *expired;
 
 	DBG("");
 
+	/* Do we have any timeouts at all? */
+	if (!context.timeouts)
+		return;
+
 	clock_gettime(CLOCK_BOOTTIME, &now);
 
-	while (context.timeouts) {
-		struct wakeup_timeout *timeout = context.timeouts->data;
+	/* Check the first timeout */
+	timeout = context.timeouts->data;
 
-		if (timespec_cmp(&timeout->trigger, &now) <= 0) {
-			timeout_function_wrapper(timeout);
+	if (timespec_cmp(&timeout->trigger, &now) > 0)
+		return;
+
+	/* At least one timeout has expired */
+	expired = context.timeouts;
+
+	/* Split the list at the point where the expired timeouts end */
+	for (l = context.timeouts->next; l; l = l->next) {
+		timeout = l->data;
+
+		if (timespec_cmp(&timeout->trigger, &now) > 0) {
+			l->prev->next = NULL;
+			l->prev = NULL;
+			break;
 		}
-
-		break;
 	}
+
+	context.timeouts = l;
+
+	/* Notify the timeout handlers */
+	g_list_free_full(expired, timeout_function_wrapper);
 }
 
 static gboolean timer_event(gpointer user_data)
