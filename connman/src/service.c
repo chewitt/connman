@@ -8377,8 +8377,14 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	if (!service)
 		return NULL;
 
+	if (service->provider != provider) {
+		if (service->provider)
+			connman_provider_unref(service->provider);
+
+		service->provider = connman_provider_ref(provider);
+	}
+
 	service->type = CONNMAN_SERVICE_TYPE_VPN;
-	service->provider = connman_provider_ref(provider);
 	service->autoconnect = false;
 	service->favorite = true;
 
