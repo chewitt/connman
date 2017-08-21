@@ -6,8 +6,7 @@ Group:      Communications/ConnMan
 License:    GPLv2
 URL:        http://connman.net/
 Source0:    %{name}-%{version}.tar.bz2
-Source1:    connman.tracing
-Source2:    main.conf
+Source1:    main.conf
 Requires:   dbus >= 1.4
 Requires:   wpa_supplicant >= 0.7.1
 Requires:   ofono
@@ -77,14 +76,6 @@ Requires:   %{name} = %{version}-%{release}
 %description tools
 Programs for debugging Connman
 
-%package tracing
-Summary:    Configuration for Connection Manager to enable tracing
-Group:      Development/Tools
-Requires:   %{name} = %{version}-%{release}
-
-%description tracing
-Will enable tracing for ConnMan
-
 %package configs-mer
 Summary:    Package to provide default configs for connman
 Group:      Development/Tools
@@ -150,10 +141,8 @@ cp -a tools/*-test %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/iptables-unit %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
 
-mkdir -p %{buildroot}%{_sysconfdir}/tracing/connman/
-cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/tracing/connman/
 mkdir -p %{buildroot}%{_sysconfdir}/connman/
-cp -a %{SOURCE2} %{buildroot}%{_sysconfdir}/connman/
+cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/connman/
 
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/connman.service
@@ -218,10 +207,6 @@ systemctl daemon-reload || :
 %files tools
 %defattr(-,root,root,-)
 %{_libdir}/%{name}/tools/*
-
-%files tracing
-%defattr(-,root,root,-)
-%config %{_sysconfdir}/tracing/connman
 
 %files configs-mer
 %defattr(-,root,root,-)

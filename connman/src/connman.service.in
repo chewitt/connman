@@ -8,9 +8,9 @@ Wants=network.target
 [Service]
 Type=notify
 Restart=always
-EnvironmentFile=-/etc/tracing/connman/connman.tracing
 EnvironmentFile=-/etc/sysconfig/connman
-ExecStart=@sbindir@/connmand -n -W nl80211 --nobacktrace --systemd --noplugin=wifi $TRACING $SYSCONF_ARGS
+EnvironmentFile=-/var/lib/environment/connman/*.conf
+ExecStart=@sbindir@/connmand -n -W nl80211 --nobacktrace --systemd --noplugin=wifi $SYSCONF_ARGS $CONNMAN_ARGS
 StandardOutput=null
 
 [Install]
