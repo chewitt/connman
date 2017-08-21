@@ -526,6 +526,9 @@ int __connman_network_refresh_rs_ipv6(struct connman_network *network,
 {
 	int ret = 0;
 
+	if (!network)
+		return 0;
+
 	DBG("network %p index %d", network, index);
 
 	/* Send only one RS for all RDNSS entries which are about to expire */
