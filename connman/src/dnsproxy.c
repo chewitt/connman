@@ -836,7 +836,7 @@ static struct cache_entry *cache_check(gpointer request, int *qtype, int proto)
 static int get_name(int counter,
 		unsigned char *pkt, unsigned char *start, unsigned char *max,
 		unsigned char *output, int output_max, int *output_len,
-		unsigned char **end, char *name, int *name_len)
+		unsigned char **end, char *name, size_t max_name, int *name_len)
 {
 	unsigned char *p;
 
@@ -857,7 +857,7 @@ static int get_name(int counter,
 
 			return get_name(counter + 1, pkt, pkt + offset, max,
 					output, output_max, output_len, end,
-					name, name_len);
+					name, max_name, name_len);
 		} else {
 			unsigned label_len = *p;
 
@@ -865,6 +865,9 @@ static int get_name(int counter,
 				return -ENOBUFS;
 
 			if (*output_len > output_max)
+				return -ENOBUFS;
+
+			if ((*name_len + 1 + label_len + 1) > max_name)
 				return -ENOBUFS;
 
 			/*
@@ -898,14 +901,14 @@ static int parse_rr(unsigned char *buf, unsigned char *start,
 			unsigned char *response, unsigned int *response_size,
 			uint16_t *type, uint16_t *class, int *ttl, int *rdlen,
 			unsigned char **end,
-			char *name)
+			char *name, size_t max_name)
 {
 	struct domain_rr *rr;
 	int err, offset;
 	int name_len = 0, output_len = 0, max_rsp = *response_size;
 
 	err = get_name(0, buf, start, max, response, max_rsp,
-		&output_len, end, name, &name_len);
+			&output_len, end, name, max_name, &name_len);
 	if (err < 0)
 		return err;
 
@@ -1031,7 +1034,8 @@ static int parse_response(unsigned char *buf, int buflen,
 		memset(rsp, 0, sizeof(rsp));
 
 		ret = parse_rr(buf, ptr, buf + buflen, rsp, &rsp_len,
-			type, class, ttl, &rdlen, &next, name);
+			type, class, ttl, &rdlen, &next, name,
+			sizeof(name) - 1);
 		if (ret != 0) {
 			err = ret;
 			goto out;
@@ -1097,7 +1101,7 @@ static int parse_response(unsigned char *buf, int buflen,
 			 */
 			ret = get_name(0, buf, next - rdlen, buf + buflen,
 					rsp, rsp_len, &output_len, &end,
-					name, &name_len);
+					name, sizeof(name) - 1, &name_len);
 			if (ret != 0) {
 				/* just ignore the error at this point */
 				ptr = next;
@@ -2525,6 +2529,25 @@ static int server_create_socket(struct server_data *data)
 	return 0;
 }
 
+static void enable_fallback(bool enable)
+{
+	GSList *list;
+
+	for (list = server_list; list; list = list->next) {
+		struct server_data *data = list->data;
+
+		if (data->index != -1)
+			continue;
+
+		if (enable)
+			DBG("Enabling fallback DNS server %s", data->server);
+		else
+			DBG("Disabling fallback DNS server %s", data->server);
+
+		data->enabled = enable;
+	}
+}
+
 static struct server_data *create_server(int index,
 					const char *domain, const char *server,
 					int protocol)
@@ -2611,6 +2634,8 @@ static struct server_data *create_server(int index,
 								data->index)) {
 			data->enabled = true;
 			DBG("Adding DNS server %s", data->server);
+
+			enable_fallback(false);
 		}
 
 		server_list = g_slist_append(server_list, data);
@@ -2772,12 +2797,22 @@ static void remove_server(int index, const char *domain,
 			const char *server, int protocol)
 {
 	struct server_data *data;
+	GSList *list;
 
 	data = find_server(index, server, protocol);
 	if (!data)
 		return;
 
 	destroy_server(data);
+
+	for (list = server_list; list; list = list->next) {
+		struct server_data *data = list->data;
+
+		if (data->index != -1 && data->enabled == true)
+			return;
+	}
+
+	enable_fallback(true);
 }
 
 int __connman_dnsproxy_remove(int index, const char *domain,
@@ -2830,6 +2865,7 @@ static void dnsproxy_offline_mode(bool enabled)
 
 static void dnsproxy_default_changed(struct connman_service *service)
 {
+	bool server_enabled = false;
 	GSList *list;
 	int index;
 
@@ -2854,11 +2890,15 @@ static void dnsproxy_default_changed(struct connman_service *service)
 		if (data->index == index) {
 			DBG("Enabling DNS server %s", data->server);
 			data->enabled = true;
+			server_enabled = true;
 		} else {
 			DBG("Disabling DNS server %s", data->server);
 			data->enabled = false;
 		}
 	}
+
+	if (!server_enabled)
+		enable_fallback(true);
 
 	cache_refresh();
 }
