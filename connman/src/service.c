@@ -6272,7 +6272,12 @@ static void request_input_cb(struct connman_service *service,
 	} else {
 		/* It is not relevant to stay on Failure state
 		 * when failing is due to wrong user input */
-		service->state = CONNMAN_SERVICE_STATE_IDLE;
+		if (service->state != CONNMAN_SERVICE_STATE_IDLE) {
+			service->state = CONNMAN_SERVICE_STATE_IDLE;
+			state_changed(service);
+		}
+
+		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
 		if (!service->hidden) {
 			/*
