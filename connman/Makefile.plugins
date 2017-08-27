@@ -83,6 +83,10 @@ endif
 if SAILFISH_DEBUGLOG
 builtin_modules += sailfish_debuglog
 builtin_sources += plugins/sailfish_debuglog.c
+if VPN
+builtin_vpn_modules += sailfish_debuglog
+builtin_vpn_sources += plugins/sailfish_debuglog.c
+endif
 endif
 
 if SAILFISH_USB_TETHERING
