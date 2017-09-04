@@ -63,6 +63,7 @@ struct connman_session {
 	struct firewall_context *fw;
 	uint32_t mark;
 	int index;
+	char *addr;
 	char *gateway;
 	bool policy_routing;
 	bool snat_enabled;
@@ -77,6 +78,7 @@ struct fw_snat {
 	GSList *sessions;
 	int id;
 	int index;
+	char *addr;
 	struct firewall_context *fw;
 };
 
@@ -198,7 +200,7 @@ static char *service2bearer(enum connman_service_type type)
 	return "";
 }
 
-static struct fw_snat *fw_snat_lookup(int index)
+static struct fw_snat *fw_snat_lookup(int index, const char *addr)
 {
 	struct fw_snat *fw_snat;
 	GSList *list;
@@ -206,8 +208,11 @@ static struct fw_snat *fw_snat_lookup(int index)
 	for (list = fw_snat_list; list; list = list->next) {
 		fw_snat = list->data;
 
-		if (fw_snat->index == index)
+		if (fw_snat->index == index) {
+			if (g_strcmp0(addr, fw_snat->addr) != 0)
+				continue;
 			return fw_snat;
+		}
 	}
 	return NULL;
 }
@@ -222,6 +227,7 @@ static int fw_snat_create(struct connman_session *session,
 
 	fw_snat->fw = __connman_firewall_create();
 	fw_snat->index = index;
+	fw_snat->addr = g_strdup(addr);
 
 	fw_snat->id = __connman_firewall_enable_snat(fw_snat->fw,
 						index, ifname, addr);
@@ -236,6 +242,7 @@ static int fw_snat_create(struct connman_session *session,
 	return 0;
 err:
 	__connman_firewall_destroy(fw_snat->fw);
+	g_free(fw_snat->addr);
 	g_free(fw_snat);
 	return err;
 }
@@ -388,7 +395,7 @@ static void del_nat_rules(struct connman_session *session)
 		return;
 
 	session->snat_enabled = false;
-	fw_snat = fw_snat_lookup(session->index);
+	fw_snat = fw_snat_lookup(session->index, session->addr);
 
 	if (!fw_snat)
 		return;
@@ -415,8 +422,11 @@ static void add_nat_rules(struct connman_session *session)
 	if (!addr)
 		return;
 
+	g_free(session->addr);
+	session->addr = g_strdup(addr);
+
 	session->snat_enabled = true;
-	fw_snat = fw_snat_lookup(index);
+	fw_snat = fw_snat_lookup(index, session->addr);
 	if (fw_snat) {
 		fw_snat_ref(session, fw_snat);
 		return;
@@ -497,6 +507,7 @@ static void free_session(struct connman_session *session)
 	g_free(session->info);
 	g_free(session->info_last);
 	g_free(session->gateway);
+	g_free(session->addr);
 
 	g_free(session);
 }
