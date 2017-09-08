@@ -763,6 +763,8 @@ void __connman_service_return_error(struct connman_service *service,
 int __connman_service_provision_changed(const char *ident);
 void __connman_service_set_config(struct connman_service *service,
 				const char *file_id, const char *section);
+enum connman_service_connect_reason
+	__connman_service_get_connect_reason(struct connman_service *service);
 bool __connman_service_is_really_hidden(struct connman_service *service);
 GBytes *__connman_service_get_ssid(struct connman_service *service);
 gboolean __connman_service_update_value_from_network(
