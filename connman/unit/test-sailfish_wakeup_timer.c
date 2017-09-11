@@ -34,8 +34,10 @@
 #define CHUNK 4
 #define MAX_COUNT 100
 #define MAX_DELAY 20
+#define TEST_TIMEOUT_SEC (30)
 
 static GMainLoop *main_loop = NULL;
+static guint test_timeout_id = 0;
 
 extern struct connman_plugin_desc __connman_builtin_sailfish_wakeup_timer;
 
@@ -90,6 +92,15 @@ iphb_t iphb_close(iphb_t iphbh)
 
 struct connman_wakeup_timer dummy_timer = {"Dummy", NULL, NULL};
 
+static gboolean test_timeout_cb(gpointer user_data)
+{
+	connman_error("Timeout!");
+	g_main_loop_quit(main_loop);
+	test_timeout_id = 0;
+
+	return G_SOURCE_REMOVE;
+}
+
 static void test_common_init()
 {
 	__connman_log_init("test-sailfish-wakeup-timer",
@@ -102,6 +113,8 @@ static void test_common_init()
 	g_assert(connman_wakeup_timer_register(&dummy_timer) == (-EALREADY));
 
 	main_loop = g_main_loop_new(NULL, FALSE);
+	test_timeout_id = g_timeout_add_seconds(TEST_TIMEOUT_SEC,
+						test_timeout_cb, NULL);
 }
 
 static void test_common_deinit()
@@ -112,6 +125,10 @@ static void test_common_deinit()
 	__connman_builtin_sailfish_wakeup_timer.exit();
 	__connman_log_cleanup(FALSE);
 	g_main_loop_unref(main_loop);
+	g_assert(test_timeout_id);
+	g_source_remove(test_timeout_id);
+	test_timeout_id = 0;
+	main_loop = NULL;
 }
 
 /*==========================================================================*
@@ -186,6 +203,69 @@ static void test_create_timeout_within_callback(void)
 	g_main_loop_run(main_loop);
 
 	g_assert(data.timeouts_destroyed == data.timeouts_scheduled);
+	test_common_deinit();
+}
+
+/*==========================================================================*
+ * cancel-timeout-within-callback
+ *==========================================================================*/
+
+struct cancel_timeout_within_callback_data {
+	guint timeout_to_cancel;
+};
+
+static gboolean cancel_timeout_done_cb(gpointer user_data)
+{
+	DBG("Done!");
+	g_main_loop_quit(main_loop);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean cancel_timeout_cb(gpointer user_data)
+{
+	struct cancel_timeout_within_callback_data *data = user_data;
+
+	DBG("");
+	g_assert(data->timeout_to_cancel);
+	g_source_remove(data->timeout_to_cancel);
+	data->timeout_to_cancel = 0;
+
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean cancelled_timeout_cb(gpointer user_data)
+{
+	g_assert(FALSE);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean cancel_timeout_within_callback_go(gpointer user_data)
+{
+	struct cancel_timeout_within_callback_data *data = user_data;
+	
+	g_assert(connman_wakeup_timer_add(0, cancel_timeout_cb, user_data));
+
+	data->timeout_to_cancel = connman_wakeup_timer_add(0,
+					cancelled_timeout_cb, user_data);
+	
+	g_assert(connman_wakeup_timer_add(0, cancel_timeout_done_cb,
+					user_data));
+
+	return G_SOURCE_REMOVE;
+}
+
+static void test_cancel_timeout_within_callback(void)
+{
+	struct cancel_timeout_within_callback_data data = {0};
+
+	/* This one will schedule the regular glib callback */
+	connman_wakeup_timer_add(0, cancel_timeout_within_callback_go, &data);
+
+	test_common_init();
+
+	g_main_loop_run(main_loop);
+
+	g_assert(!data.timeout_to_cancel);
 	test_common_deinit();
 }
 
@@ -293,6 +373,8 @@ int main(int argc, char *argv[])
 
 	g_test_add_func(TEST_("create-timeout-within-callback"),
 			test_create_timeout_within_callback);
+	g_test_add_func(TEST_("cancel-timeout-within-callback"),
+			test_cancel_timeout_within_callback);
 	g_test_add_func(TEST_("timeout-order"), test_timeout_order);
 
 	return g_test_run();

@@ -269,9 +269,8 @@ static void timeout_record(struct wakeup_timeout *timeout)
 	debug_timeouts();
 }
 
-static void timeout_function_wrapper(gpointer user_data)
+static void timeout_function_wrapper(struct wakeup_timeout *timeout)
 {
-	struct wakeup_timeout *timeout = user_data;
 	GSource *source;
 
 	DBG("Timeout %p expired", timeout);
@@ -315,42 +314,28 @@ static void timeout_notify_wrapper(gpointer user_data)
 
 static void timer_trigger_expired(void)
 {
-	struct timespec now;
-	struct wakeup_timeout *timeout;
-	GList *l, *expired;
-
 	DBG("");
 
-	/* Do we have any timeouts at all? */
-	if (!context.timeouts)
-		return;
+	if (context.timeouts) {
+		struct timespec now;
 
-	clock_gettime(CLOCK_BOOTTIME, &now);
+		clock_gettime(CLOCK_BOOTTIME, &now);
 
-	/* Check the first timeout */
-	timeout = context.timeouts->data;
+		/*
+		 * Remove expired timeouts one by one because one expired
+		 * timeout may want to cancel another expired timeout.
+		 */
+		do {
+			struct wakeup_timeout *timeout = context.timeouts->data;
 
-	if (timespec_cmp(&timeout->trigger, &now) > 0)
-		return;
+			if (timespec_cmp(&timeout->trigger, &now) > 0)
+				break;
 
-	/* At least one timeout has expired */
-	expired = context.timeouts;
-
-	/* Split the list at the point where the expired timeouts end */
-	for (l = context.timeouts->next; l; l = l->next) {
-		timeout = l->data;
-
-		if (timespec_cmp(&timeout->trigger, &now) > 0) {
-			l->prev->next = NULL;
-			l->prev = NULL;
-			break;
-		}
+			context.timeouts = g_list_delete_link(context.timeouts,
+							context.timeouts);
+			timeout_function_wrapper(timeout);
+		} while (context.timeouts);
 	}
-
-	context.timeouts = l;
-
-	/* Notify the timeout handlers */
-	g_list_free_full(expired, timeout_function_wrapper);
 }
 
 static gboolean timer_event(gpointer user_data)
