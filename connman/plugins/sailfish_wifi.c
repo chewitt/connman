@@ -46,7 +46,7 @@
 #define WIFI_SERVICE_PREFIX "wifi_"
 #define NETWORK_BGSCAN "simple:30:-65:300"
 #define WIFI_BSSID_LEN 6
-#define MAX_HANDSHAKE_RETRIES 2
+#define MAX_HANDSHAKE_RETRIES 5
 
 #define WIFI_SCAN_START_TIMEOUT_MS (1000)
 #define WIFI_BSS_REMOVE_TIMEOUT_MS (1000)
@@ -701,6 +701,13 @@ static void wifi_network_set_state(struct wifi_network *net,
 			connman_network_set_connected(net->network, FALSE);
 			break;
 		case WIFI_NETWORK_CONNECTED:
+			/*
+			 * Reset the handshake retry count so that the next
+			 * time we get disconnected and fail to connect, we
+			 * start counting failures from zero and don't bail
+			 * out too early.
+			 */
+			net->handshake_retries = 0;
 			connman_network_set_associating(net->network, FALSE);
 			connman_network_set_connected(net->network, TRUE);
 			break;
@@ -757,27 +764,52 @@ static void wifi_network_interface_scanning(struct wifi_network *net)
 static void wifi_network_interface_disconnected(struct wifi_network *net)
 {
 	if (net->interface_states[1] ==
-				GSUPPLICANT_INTERFACE_STATE_4WAY_HANDSHAKE &&
-			net->handshake_retries < MAX_HANDSHAKE_RETRIES) {
+			GSUPPLICANT_INTERFACE_STATE_4WAY_HANDSHAKE) {
+		struct connman_service *service =
+			connman_service_lookup_from_network(net->network);
+		const gboolean user_connect = service &&
+			__connman_service_get_connect_reason(service) ==
+					CONNMAN_SERVICE_CONNECT_REASON_USER;
+
 		/*
-		 * This should (hopefully) force connman to query WiFi
-		 * password.
+		 * Note that we can't really tell whether we have
+		 * lost the signal in the 4way_handshake state or
+		 * the passphrase didn't match. If we are connecting
+		 * automatically (i.e. silently) we need to try several
+		 * times before we declare that the key is wrong.
 		 */
-		net->handshake_retries++;
-		NDBG(net, "handshake retry %d", net->handshake_retries);
-		connman_network_set_error(net->network,
+		NDBG(net, "%s connect", user_connect ? "user" : "auto");
+		if (!user_connect) {
+			net->handshake_retries++;
+			NDBG(net, "handshake retry %d", net->handshake_retries);
+		}
+
+		if (user_connect &&
+			net->handshake_retries >= MAX_HANDSHAKE_RETRIES) {
+			/*
+			 * For interactive connects, this will (hopefully)
+			 * make connman to query WiFi password again. For
+			 * automatic connects this disables subsequent
+			 * connect attempts (if we have exceeded the
+			 * maximum number of retried).
+			 */
+			connman_network_set_error(net->network,
 					CONNMAN_NETWORK_ERROR_INVALID_KEY);
+			return;
+		}
 	} else {
-		/*
-		 * We will mark network as disconnected if it stays
-		 * longer than WIFI_DISCONNECT_TIMEOUT_MS milliseconds
-		 * in one of the disconnected states.
-		 */
-		wifi_network_disconnect_timeout_cancel(net);
-		net->disconnect_timer_id =
-			connman_wakeup_timer_add(WIFI_DISCONNECT_TIMEOUT_MS,
-				wifi_network_disconnect_timeout, net);
+		net->handshake_retries = 0;
 	}
+
+	/*
+	 * We will mark network as disconnected if it stays
+	 * longer than WIFI_DISCONNECT_TIMEOUT_MS milliseconds
+	 * in one of the disconnected states.
+	 */
+	wifi_network_disconnect_timeout_cancel(net);
+	net->disconnect_timer_id =
+		connman_wakeup_timer_add(WIFI_DISCONNECT_TIMEOUT_MS,
+				wifi_network_disconnect_timeout, net);
 }
 
 static void wifi_network_interface_completed(struct wifi_network *net)

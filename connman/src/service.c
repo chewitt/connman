@@ -308,6 +308,13 @@ GBytes *__connman_service_get_ssid(struct connman_service *service)
 	return service ? service->ssid : NULL;
 }
 
+enum connman_service_connect_reason
+	__connman_service_get_connect_reason(struct connman_service *service)
+{
+	return service ? service->connect_reason :
+		CONNMAN_SERVICE_CONNECT_REASON_NONE;
+}
+
 /*
  * It's hard to tell the difference between hidden and hidden_service
  * flags, so this function checks both.
