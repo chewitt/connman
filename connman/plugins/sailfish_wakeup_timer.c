@@ -169,19 +169,26 @@ static gboolean iphb_reestablish(gpointer user_data)
 
 static void debug_timeouts(void)
 {
-	struct timespec now;
-	GList *l;
+	static struct connman_debug_desc debug_desc CONNMAN_DEBUG_ATTR = {
+		.file = __FILE__,
+		.flags = CONNMAN_DEBUG_FLAG_DEFAULT
+	};
 
-	clock_gettime(CLOCK_BOOTTIME, &now);
-	DBG("now = %lu", now.tv_sec);
-	DBG("context.wakeup_time = %lu", context.wakeup_time);
-	DBG("context.timeouts = {");
-	for (l = context.timeouts; l; l = l->next) {
-		struct wakeup_timeout *timeout = l->data;
-		DBG("        timeout %p: wakeup_time = %lu",
-			timeout, timeout->wakeup_time);
+	if (debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) {
+		struct timespec now;
+		GList *l;
+
+		clock_gettime(CLOCK_BOOTTIME, &now);
+		DBG("now = %lu", now.tv_sec);
+		DBG("context.wakeup_time = %lu", context.wakeup_time);
+		DBG("context.timeouts = {");
+		for (l = context.timeouts; l; l = l->next) {
+			struct wakeup_timeout *timeout = l->data;
+			DBG("        timeout %p: wakeup_time = %lu",
+				timeout, timeout->wakeup_time);
+		}
+		DBG("}");
 	}
-	DBG("}");
 }
 
 static int timespec_cmp(const struct timespec *t1, const struct timespec *t2)
