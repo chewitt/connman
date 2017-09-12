@@ -126,7 +126,7 @@ Documentation for connman.
     --enable-systemd \
     --with-tmpfilesdir=%{_libdir}/tmpfiles.d
 
-make %{?jobs:-j%jobs}
+make %{?_smp_mflags}
 
 %check
 make check
