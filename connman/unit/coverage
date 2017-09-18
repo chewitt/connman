@@ -8,6 +8,7 @@
 # Tests with coverage enabled:
 TESTS="test-access \
 test-ippool \
+test-dnsproxy \
 test-sailfish_access \
 test-sailfish_wakeup_timer"
 

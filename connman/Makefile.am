@@ -298,6 +298,7 @@ unit_test_sailfish_wakeup_timer_SOURCES = unit/test-sailfish_wakeup_timer.c \
 				plugins/sailfish_wakeup_timer.c
 unit_test_sailfish_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 
+unit_test_dnsproxy_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c
 unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
