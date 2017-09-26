@@ -117,6 +117,25 @@ bool __connman_plugin_enabled(const char *name)
 	return false;
 }
 
+void __connman_plugin_foreach(void (*fn) (struct connman_plugin_desc *desc,
+				int flags, void *user_data), void *user_data)
+{
+	GSList *list;
+
+	for (list = plugins; list; list = list->next) {
+		struct connman_plugin *plugin = list->data;
+		int flags = 0;
+
+		if (!plugin->handle)
+			flags |= CONNMAN_PLUGIN_FLAG_BUILTIN;
+
+		if (plugin->active)
+			flags |= CONNMAN_PLUGIN_FLAG_ACTIVE;
+
+                fn(plugin->desc, flags, user_data);
+	}
+}
+
 #include <builtin.h>
 
 int __connman_plugin_init(const char *pattern, const char *exclude)

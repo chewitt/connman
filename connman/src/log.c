@@ -137,7 +137,7 @@ void connman_debug(const char *format, ...)
 	}
 }
 
-void __connman_dbg(const struct connman_debug_desc *desc,
+void connman_log(const struct connman_debug_desc *desc,
 						const char *format, ...)
 {
 	va_list ap;

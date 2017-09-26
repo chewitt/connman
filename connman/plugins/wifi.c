@@ -3044,7 +3044,7 @@ static void debug(const char *function, const char *format, va_list va)
 
 		g_string_printf(supplicant_debug_str,  "%s() ", function);
 		g_string_append_vprintf(supplicant_debug_str, format, va);
-		__connman_dbg(&desc, "%s", supplicant_debug_str->str);
+		connman_log(&desc, "%s", supplicant_debug_str->str);
 	}
 }
 
