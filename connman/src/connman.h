@@ -142,8 +142,14 @@ void __connman_log_enable(struct connman_debug_desc *start,
 #include <connman/plugin.h>
 
 int __connman_plugin_init(const char *pattern, const char *exclude);
-bool __connman_plugin_enabled(const char *plugin);
 void __connman_plugin_cleanup(void);
+
+bool __connman_plugin_enabled(const char *plugin);
+void __connman_plugin_foreach(void (*fn) (struct connman_plugin_desc *desc,
+			int flags, void *user_data), void *user_data);
+
+#define CONNMAN_PLUGIN_FLAG_BUILTIN (0x01)
+#define CONNMAN_PLUGIN_FLAG_ACTIVE  (0x02)
 
 #include <connman/task.h>
 
