@@ -783,10 +783,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	gweb_log_hook = __connman_dbg;
-	gresolv_log_hook = __connman_dbg;
-	gdhcp_client_log_hook = __connman_dbg;
-	gdhcp_server_log_hook = __connman_dbg;
+	gweb_log_hook = connman_log;
+	gresolv_log_hook = connman_log;
+	gdhcp_client_log_hook = connman_log;
+	gdhcp_server_log_hook = connman_log;
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 

@@ -86,11 +86,11 @@ struct connman_debug_desc {
 		.file = __FILE__, .flags = CONNMAN_DEBUG_FLAG_DEFAULT, \
 	}; \
 	if (__connman_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) \
-		__connman_dbg(&__connman_debug_desc, "%s() " fmt, \
+		connman_log(&__connman_debug_desc, "%s() " fmt, \
 					 __FUNCTION__ , ## arg); \
 } while (0)
 
-void __connman_dbg(const struct connman_debug_desc *desc, const char *fmt, ...)
+void connman_log(const struct connman_debug_desc *desc, const char *fmt, ...)
 				__attribute__((format(printf, 2, 3)));
 
 typedef void (*connman_log_hook_cb_t)(const struct connman_debug_desc *desc,
