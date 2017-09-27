@@ -36,7 +36,6 @@
 #include <connman/storage.h>
 #include <connman/setting.h>
 #include <connman/agent.h>
-#include <connman/access.h>
 #include <connman/provision.h>
 
 #include "connman.h"
@@ -2720,7 +2719,7 @@ static gboolean can_get_property(struct connman_service *service,
 				const char *name, const char *sender,
 				enum connman_access default_access)
 {
-	return connman_access_service_policy_check(service->policy,
+	return __connman_access_service_policy_check(service->policy,
 			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, name,
 			sender, default_access) == CONNMAN_ACCESS_ALLOW;
 }
@@ -2729,7 +2728,7 @@ static gboolean check_set_property(struct connman_service *service,
 				const char *name, DBusMessage *msg,
 				enum connman_access default_access)
 {
-	return connman_access_service_policy_check(service->policy,
+	return __connman_access_service_policy_check(service->policy,
 			CONNMAN_ACCESS_SERVICE_SET_PROPERTY, name,
 			dbus_message_get_sender(msg),
 			default_access) == CONNMAN_ACCESS_ALLOW;
@@ -2752,7 +2751,7 @@ static gboolean can_call(struct connman_service *service,
 			enum connman_access_service_methods method,
 			DBusMessage *msg, enum connman_access default_access)
 {
-	return connman_access_service_policy_check(service->policy,
+	return __connman_access_service_policy_check(service->policy,
 			method, NULL, dbus_message_get_sender(msg),
 			default_access) == CONNMAN_ACCESS_ALLOW;
 }
@@ -2847,7 +2846,7 @@ static DBusMessage *get_property(DBusConnection *conn,
 			service_get_access(service), GET_ACCESS_ACCESS);
 	} else if (!g_strcmp0(name, PROP_DEFAULT_ACCESS)) {
 		return check_and_reply_string(msg, service, name,
-				connman_access_default_service_policy_str(),
+				__connman_access_default_service_policy_str(),
 				GET_DEFAULT_ACCESS_ACCESS);
 	} else if (!g_strcmp0(name, PROP_IDENTITY)) {
 		return check_and_reply_string(msg, service, name,
@@ -2997,7 +2996,7 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 				service_get_access(service),
 				GET_ACCESS_ACCESS);
 	append_restricted_string(dict, service, PROP_DEFAULT_ACCESS,
-				connman_access_default_service_policy_str(),
+				__connman_access_default_service_policy_str(),
 				GET_DEFAULT_ACCESS_ACCESS);
 }
 
@@ -3615,7 +3614,7 @@ static const char *service_get_access(struct connman_service *service)
 	if (!service || !service->access || !service->policy)
 		return NULL;
 
-	if (connman_access_is_default_service_policy(service->policy))
+	if (__connman_access_is_default_service_policy(service->policy))
 		return NULL;
 
 	return service->access;
@@ -3626,7 +3625,7 @@ static void service_set_access_policy(struct connman_service *service,
 	const char *access, struct connman_access_service_policy *policy)
 {
 	g_free(service->access);
-	connman_access_service_policy_free(service->policy);
+	__connman_access_service_policy_free(service->policy);
 
 	/* NULL or empty access string will initialize the default policy */
 	service->policy = policy;
@@ -3649,7 +3648,7 @@ static void service_set_access(struct connman_service *service,
 		return;
 
 	service_set_access_policy(service, access,
-			connman_access_service_policy_create(access));
+			__connman_access_service_policy_create(access));
 }
 
 /* Only allows valid values */
@@ -4321,19 +4320,19 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (g_strcmp0(str, service->access)) {
 			/* Check the syntax */
 			struct connman_access_service_policy *policy =
-				connman_access_service_policy_create(str);
+				__connman_access_service_policy_create(str);
 
 			if (str && !policy)
 				return __connman_error_invalid_arguments(msg);
 
 			/* Don't allow the user to shoot self in the foot */
-			if (connman_access_service_policy_check(policy,
+			if (__connman_access_service_policy_check(policy,
 					CONNMAN_ACCESS_SERVICE_SET_PROPERTY,
 					name, dbus_message_get_sender(msg),
 					SET_ACCESS_ACCESS) !=
 							CONNMAN_ACCESS_ALLOW) {
 				DBG("self-shooting prevented");
-				connman_access_service_policy_free(policy);
+				__connman_access_service_policy_free(policy);
 				return __connman_error_invalid_arguments(msg);
 			}
 
@@ -4426,7 +4425,7 @@ static DBusMessage *clear_property(DBusConnection *conn,
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &name,
 							DBUS_TYPE_INVALID);
 
-	if (connman_access_service_policy_check(service->policy,
+	if (__connman_access_service_policy_check(service->policy,
 			CONNMAN_ACCESS_SERVICE_CLEAR_PROPERTY, name, sender,
 			CLEAR_PROPERTY_ACCESS) != CONNMAN_ACCESS_ALLOW) {
 		connman_warn("%s is not allowed to clear %s for %s", sender,
@@ -5624,7 +5623,7 @@ static void service_free(gpointer user_data)
 
 	stats_destroy(service);
 
-	connman_access_service_policy_free(service->policy);
+	__connman_access_service_policy_free(service->policy);
 	g_free(service->access);
 	g_free(service->path);
 
@@ -5668,7 +5667,7 @@ static void service_initialize(struct connman_service *service)
 
 	service->online_check_timer_ipv4 = 0;
 	service->online_check_timer_ipv6 = 0;
-	service->policy = connman_access_service_policy_create(NULL);
+	service->policy = __connman_access_service_policy_create(NULL);
 
 	service->provider = NULL;
 

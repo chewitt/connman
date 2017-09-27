@@ -101,7 +101,7 @@ static struct connman_access_tech_policy *get_tech_access_policy()
 	 * plugin (or any other plugin) is loaded */
 	if (!tech_access_policy) {
 		/* Use the default policy */
-		tech_access_policy = connman_access_tech_policy_create(NULL);
+		tech_access_policy = __connman_access_tech_policy_create(NULL);
 	}
 	return tech_access_policy;
 }
@@ -986,7 +986,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
 
-		if (connman_access_tech_set_property(get_tech_access_policy(),
+		if (__connman_access_tech_set_property(get_tech_access_policy(),
 				name, sender, POWERED_SET_ACCESS) !=
 						CONNMAN_ACCESS_ALLOW) {
 			DBG("access denied for %s", sender);
@@ -1900,6 +1900,6 @@ void __connman_technology_cleanup(void)
 
 	dbus_connection_unref(connection);
 
-	connman_access_tech_policy_free(tech_access_policy);
+	__connman_access_tech_policy_free(tech_access_policy);
 	tech_access_policy = NULL;
 }

@@ -113,8 +113,8 @@ static const DA_ACTION tech_policy_actions [] = {
         { NULL }
 };
 
-static void sailfish_access_service_policy_free(
-			struct connman_access_service_policy_impl *p)
+static void sailfish_access_service_policy_free
+				(struct connman_access_service_policy_impl *p)
 {
 	GASSERT(p->ref_count > 0);
 	if (!--(p->ref_count)) {
@@ -188,19 +188,19 @@ static struct connman_access_service_policy_impl *
 	return p;
 }
 
-static gboolean sailfish_access_service_policy_equal(
-			const struct connman_access_service_policy_impl *p1,
+static bool sailfish_access_service_policy_equal
+		(const struct connman_access_service_policy_impl *p1,
 			const struct connman_access_service_policy_impl *p2)
 {
 	/* Caller makes sure that arguments are not NULL */
 	return da_policy_equal(p1->impl, p2->impl);
 }
 
-static enum connman_access sailfish_access_service_policy_check(
-		const struct connman_access_service_policy_impl *policy,
-		enum connman_access_service_methods method,
-		const char *arg, const char *sender,
-		enum connman_access default_access)
+static enum connman_access sailfish_access_service_policy_check
+		(const struct connman_access_service_policy_impl *policy,
+			enum connman_access_service_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access)
 {
 	/* Don't unref this one: */
 	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
@@ -237,18 +237,18 @@ static struct connman_access_manager_policy_impl *
 	}
 }
 
-static void sailfish_access_manager_policy_free(
-			struct connman_access_manager_policy_impl *p)
+static void sailfish_access_manager_policy_free
+			(struct connman_access_manager_policy_impl *p)
 {
 	da_policy_unref(p->impl);
 	g_slice_free(struct connman_access_manager_policy_impl, p);
 }
 
-static enum connman_access sailfish_access_manager_policy_check(
-		const struct connman_access_manager_policy_impl *p,
-		enum connman_access_manager_methods method,
-		const char *arg, const char *sender,
-		enum connman_access default_access)
+static enum connman_access sailfish_access_manager_policy_check
+		(const struct connman_access_manager_policy_impl *p,
+			enum connman_access_manager_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access)
 {
 	/* Don't unref this one: */
 	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
@@ -285,15 +285,15 @@ static struct connman_access_tech_policy_impl *
 	}
 }
 
-static void sailfish_access_tech_policy_free(
-			struct connman_access_tech_policy_impl *p)
+static void sailfish_access_tech_policy_free
+			(struct connman_access_tech_policy_impl *p)
 {
 	da_policy_unref(p->impl);
 	g_slice_free(struct connman_access_tech_policy_impl, p);
 }
 
-static enum connman_access sailfish_access_tech_set_property(
-			const struct connman_access_tech_policy_impl *policy,
+static enum connman_access sailfish_access_tech_set_property
+		(const struct connman_access_tech_policy_impl *policy,
 			const char *name, const char *sender,
 			enum connman_access default_access)
 {
@@ -348,7 +348,7 @@ static void sailfish_access_exit()
 }
 
 CONNMAN_PLUGIN_DEFINE(sailfish_access, "Sailfish access control", VERSION,
-			CONNMAN_PLUGIN_PRIORITY_DEFAULT,
+			CONNMAN_PLUGIN_PRIORITY_HIGH - 1,
 			sailfish_access_init, sailfish_access_exit)
 
 /*

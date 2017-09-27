@@ -1086,6 +1086,45 @@ void __connman_nfacct_cleanup(void);
 int __connman_machine_init(void);
 void __connman_machine_cleanup(void);
 
+#include <connman/access.h>
+
+/* Service */
+const char *__connman_access_default_service_policy_str(void);
+bool __connman_access_is_default_service_policy
+		(struct connman_access_service_policy *policy);
+
+struct connman_access_service_policy *__connman_access_service_policy_create
+		(const char *spec);
+void __connman_access_service_policy_free
+		(struct connman_access_service_policy *policy);
+bool __connman_access_service_policy_equal
+		(const struct connman_access_service_policy *p1,
+			const struct connman_access_service_policy *p2);
+enum connman_access __connman_access_service_policy_check
+		(const struct connman_access_service_policy *policy,
+			enum connman_access_service_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access);
+
+struct connman_access_manager_policy *__connman_access_manager_policy_create
+		(const char *spec);
+void __connman_access_manager_policy_free
+		(struct connman_access_manager_policy *policy);
+enum connman_access __connman_access_manager_policy_check
+		(const struct connman_access_manager_policy *policy,
+			enum connman_access_manager_methods method,
+			const char *arg, const char *sender,
+			enum connman_access default_access);
+
+struct connman_access_tech_policy *__connman_access_tech_policy_create
+		(const char *spec);
+void __connman_access_tech_policy_free
+		(struct connman_access_tech_policy *policy);
+enum connman_access __connman_access_tech_set_property
+		(const struct connman_access_tech_policy *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access);
+
 int __connman_util_get_random(uint64_t *val);
 int __connman_util_init(void);
 void __connman_util_cleanup(void);

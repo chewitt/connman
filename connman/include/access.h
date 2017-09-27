@@ -17,9 +17,11 @@
 #ifndef __CONNMAN_ACCESS_H
 #define __CONNMAN_ACCESS_H
 
-#include <glib.h>
+#include <stdbool.h>
 
-G_BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum connman_access {
 	CONNMAN_ACCESS_DENY,
@@ -59,7 +61,7 @@ struct connman_access_driver {
 		(const char *spec);
 	void (*service_policy_free)
 		(struct connman_access_service_policy_impl *policy);
-	gboolean (*service_policy_equal)
+	bool (*service_policy_equal)
 		(const struct connman_access_service_policy_impl *p1,
 			const struct connman_access_service_policy_impl *p2);
 	enum connman_access (*service_policy_check)
@@ -93,45 +95,9 @@ struct connman_access_driver {
 int connman_access_driver_register(const struct connman_access_driver *d);
 void connman_access_driver_unregister(const struct connman_access_driver *d);
 
-/* Service */
-const char *connman_access_default_service_policy_str(void);
-gboolean connman_access_is_default_service_policy(
-				struct connman_access_service_policy *policy);
-
-struct connman_access_service_policy *connman_access_service_policy_create(
-							const char *spec);
-void connman_access_service_policy_free(
-				struct connman_access_service_policy *policy);
-gboolean connman_access_service_policy_equal(
-			const struct connman_access_service_policy *p1,
-			const struct connman_access_service_policy *p2);
-enum connman_access connman_access_service_policy_check(
-		const struct connman_access_service_policy *policy,
-		enum connman_access_service_methods method,
-		const char *arg, const char *sender,
-		enum connman_access default_access);
-
-/* Manager */
-struct connman_access_manager_policy *connman_access_manager_policy_create(
-							const char *spec);
-void connman_access_manager_policy_free(
-				struct connman_access_manager_policy *policy);
-enum connman_access connman_access_manager_policy_check(
-		const struct connman_access_manager_policy *policy,
-		enum connman_access_manager_methods method,
-		const char *arg, const char *sender,
-		enum connman_access default_access);
-
-/* Technology */
-struct connman_access_tech_policy *connman_access_tech_policy_create(
-							const char *spec);
-void connman_access_tech_policy_free(
-				struct connman_access_tech_policy *policy);
-enum connman_access connman_access_tech_set_property(
-	const struct connman_access_tech_policy *policy, const char *name,
-	const char *sender, enum connman_access default_access);
-
-G_END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __CONNMAN_ACCESS_H */
 

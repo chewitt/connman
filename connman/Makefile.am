@@ -12,8 +12,7 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/storage.h include/provision.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h \
-			include/technology.h include/wakeup_timer.h \
-			include/access.h
+			include/technology.h
 
 nodist_include_HEADERS = include/version.h
 
@@ -21,6 +20,7 @@ noinst_HEADERS = include/rtnl.h include/task.h \
 			include/dbus.h include/option.h \
 			include/provider.h include/vpn-dbus.h \
 			include/utsname.h include/timeserver.h include/proxy.h \
+			include/wakeup_timer.h include/access.h \
 			include/setting.h
 
 local_headers = $(foreach file,$(include_HEADERS) $(nodist_include_HEADERS) \
