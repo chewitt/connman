@@ -30,12 +30,6 @@
 
 #include "connman.h"
 
-#include <connman/access.h>
-
-#define POWERED_SET_ACCESS     CONNMAN_ACCESS_ALLOW
-
-struct connman_access_tech_policy *tech_access_policy;
-
 static DBusConnection *connection;
 
 static GSList *technology_list = NULL;
@@ -49,6 +43,7 @@ static GHashTable *rfkill_list;
 
 static bool global_offlinemode;
 static unsigned int global_offlinemode_override; /* Technology bitmask */
+struct connman_access_tech_policy *tech_access_policy;
 
 struct connman_rfkill {
 	unsigned int index;
@@ -899,6 +894,14 @@ static DBusMessage *set_property(DBusConnection *conn,
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
 		return __connman_error_invalid_arguments(msg);
 
+	if (__connman_access_tech_set_property(get_tech_access_policy(),
+		name, dbus_message_get_sender(msg), CONNMAN_ACCESS_ALLOW) !=
+						CONNMAN_ACCESS_ALLOW) {
+		DBG("%s is not allowed to set %s",
+				dbus_message_get_sender(msg), name);
+		return __connman_error_permission_denied(msg);
+	}
+
 	dbus_message_iter_recurse(&iter, &value);
 
 	type = dbus_message_iter_get_arg_type(&value);
@@ -981,17 +984,9 @@ static DBusMessage *set_property(DBusConnection *conn,
 		}
 	} else if (g_str_equal(name, "Powered")) {
 		dbus_bool_t enable;
-		const char *sender = g_dbus_get_current_sender();
 
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
-
-		if (__connman_access_tech_set_property(get_tech_access_policy(),
-				name, sender, POWERED_SET_ACCESS) !=
-						CONNMAN_ACCESS_ALLOW) {
-			DBG("access denied for %s", sender);
-			return __connman_error_permission_denied(msg);
-		}
 
 		dbus_message_iter_get_basic(&value, &enable);
 

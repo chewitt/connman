@@ -105,7 +105,7 @@ static const DA_ACTION manager_policy_actions [] = {
 
 static const char *tech_policy_default =
 	DA_POLICY_VERSION ";"
-	"SetProperty(Powered)=deny;"
+	"SetProperty(*)=deny;"
 	"group(privileged)=allow";
 static const DA_ACTION tech_policy_actions [] = {
         { "set",         TECH_ACCESS_SET_PROPERTY, 1 },
