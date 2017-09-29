@@ -29,8 +29,6 @@
 #include <gdbus.h>
 
 #include <connman/agent.h>
-#include <connman/service.h>
-#include <connman/access.h>
 
 #include "connman.h"
 
@@ -52,7 +50,7 @@ static struct connman_access_manager_policy *get_manager_access_policy()
 	if (!manager_access_policy) {
 		/* Use the default policy */
 		manager_access_policy =
-			connman_access_manager_policy_create(NULL);
+			__connman_access_manager_policy_create(NULL);
 	}
 	return manager_access_policy;
 }
@@ -130,7 +128,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (type != DBUS_TYPE_BOOLEAN)
 			return __connman_error_invalid_arguments(msg);
 
-		if (connman_access_manager_policy_check(
+		if (__connman_access_manager_policy_check(
 				get_manager_access_policy(),
 				CONNMAN_ACCESS_MANAGER_SET_PROPERTY,
 				name, sender, SET_OFFLINE_MODE_ACCESS) !=
@@ -431,7 +429,7 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	}
 
 	/* Check access */
-	if (connman_access_manager_policy_check(get_manager_access_policy(),
+	if (__connman_access_manager_policy_check(get_manager_access_policy(),
 			CONNMAN_ACCESS_MANAGER_CREATE_SERVICE, type, sender,
 			CREATE_SERVICE_ACCESS) != CONNMAN_ACCESS_ALLOW) {
 		DBG("access denied for %s", sender);
@@ -882,6 +880,6 @@ void __connman_manager_cleanup(void)
 
 	dbus_connection_unref(connection);
 
-	connman_access_manager_policy_free(manager_access_policy);
+	__connman_access_manager_policy_free(manager_access_policy);
 	manager_access_policy = NULL;
 }
