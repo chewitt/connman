@@ -81,7 +81,8 @@ static const struct connman_access_driver *access_get_driver
 			}
 
 			if (!driver) {
-				DBG("no such access driver: %.*s", len, name);
+				DBG("no such access driver: %.*s", (int)len,
+									name);
 			}
 
 		} else {
