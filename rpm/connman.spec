@@ -38,6 +38,7 @@ BuildRequires:  pkgconfig(libdbusaccess) >= 1.0.3
 BuildRequires:  pkgconfig(libmce-glib)
 BuildRequires:  pkgconfig(libgsupplicant) >= 1.0.6
 BuildRequires:  ppp-devel
+BuildRequires:  libtool
 
 %description
 Connection Manager provides a daemon for managing Internet connections
