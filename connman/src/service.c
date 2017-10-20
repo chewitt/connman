@@ -329,6 +329,8 @@ struct connman_service {
 	int nameservers_ipv4_refcount;
 	int nameservers_ipv6_refcount;
 	char **domains;
+	bool mdns;
+	bool mdns_config;
 	char *hostname;
 	char *domainname;
 	char **timeservers;
@@ -1053,6 +1055,9 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 		service->pac = str;
 	}
 
+	service->mdns_config = g_key_file_get_boolean(keyfile,
+				service->identifier, "mDNS", NULL);
+
 	service->hidden_service = g_key_file_get_boolean(keyfile,
 					service->identifier, "Hidden", NULL);
 
@@ -1264,6 +1269,13 @@ static int service_save(struct connman_service *service)
 	if (service->pac && strlen(service->pac) > 0)
 		g_key_file_set_string(keyfile, service->identifier,
 				"Proxy.URL", service->pac);
+
+	if (service->mdns_config)
+		g_key_file_set_boolean(keyfile, service->identifier,
+								"mDNS", TRUE);
+	else
+		g_key_file_remove_key(keyfile, service->identifier,
+								"mDNS", NULL);
 
 	if (service->hidden_service)
 		g_key_file_set_boolean(keyfile, service->identifier,
@@ -2819,6 +2831,48 @@ static void proxy_configuration_changed(struct connman_service *service)
 	proxy_changed(service);
 }
 
+static void mdns_changed(struct connman_service *service)
+{
+	dbus_bool_t mdns = service->mdns;
+
+	if (!allow_property_changed(service))
+		return;
+
+	connman_dbus_property_changed_basic(service->path,
+			CONNMAN_SERVICE_INTERFACE, "mDNS", DBUS_TYPE_BOOLEAN,
+			&mdns);
+}
+
+static void mdns_configuration_changed(struct connman_service *service)
+{
+	dbus_bool_t mdns_config = service->mdns_config;
+
+	if (!allow_property_changed(service))
+		return;
+
+	connman_dbus_property_changed_basic(service->path,
+			CONNMAN_SERVICE_INTERFACE, "mDNS.Configuration",
+			DBUS_TYPE_BOOLEAN, &mdns_config);
+}
+
+static int set_mdns(struct connman_service *service,
+			bool enabled)
+{
+	int result;
+
+	result = __connman_resolver_set_mdns(
+			__connman_service_get_index(service), enabled);
+
+	if (result == 0) {
+		if (service->mdns != enabled) {
+			service->mdns = enabled;
+			mdns_changed(service);
+		}
+	}
+
+	return result;
+}
+
 static void timeservers_configuration_changed(struct connman_service *service)
 {
 	if (!allow_property_changed(service))
@@ -3571,6 +3625,14 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 
 	connman_dbus_dict_append_dict(dict, "Proxy.Configuration",
 						append_proxyconfig, service);
+
+	val = service->mdns;
+	connman_dbus_dict_append_basic(dict, "mDNS", DBUS_TYPE_BOOLEAN,
+				&val);
+
+	val = service->mdns_config;
+	connman_dbus_dict_append_basic(dict, "mDNS.Configuration",
+				DBUS_TYPE_BOOLEAN, &val);
 
 	connman_dbus_dict_append_dict(dict, "Provider",
 						append_provider, service);
@@ -5176,6 +5238,23 @@ static DBusMessage *set_property(DBusConnection *conn,
 		cancel_online_check(service);
 
 		start_wispr_when_connected(service);
+
+		service_save(service);
+	} else if (g_str_equal(name, "mDNS.Configuration")) {
+		dbus_bool_t val;
+
+		if (service->immutable)
+			return __connman_error_not_supported(msg);
+
+		if (type != DBUS_TYPE_BOOLEAN)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &val);
+		service->mdns_config = val;
+
+		mdns_configuration_changed(service);
+
+		set_mdns(service, service->mdns_config);
 
 		service_save(service);
 	} else if (g_str_equal(name, "IPv4.Configuration") ||
@@ -7638,6 +7717,14 @@ void __connman_service_set_search_domains(struct connman_service *service,
 	searchdomain_add_all(service);
 }
 
+int __connman_service_set_mdns(struct connman_service *service,
+			bool enabled)
+{
+	service->mdns_config = enabled;
+
+	return set_mdns(service, enabled);
+}
+
 static void report_error_cb(void *user_context, bool retry,
 							void *user_data)
 {
@@ -8450,6 +8537,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 				"Default service remains in READY state.");
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 			service_rp_filter(service, true);
+		set_mdns(service, service->mdns_config);
 		break;
 	case CONNMAN_SERVICE_STATE_ONLINE:
 		break;
