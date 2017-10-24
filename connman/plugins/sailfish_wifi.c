@@ -153,7 +153,7 @@ struct wifi_bss {
 	gulong event_id[BSS_EVENT_COUNT];
 	guint remove_timeout_id;
 	GUtilIntHistory *history;       /* Signal strength history */
-	int strength;                   /* Median strength */
+	guint strength;                 /* Median strength */
 };
 
 typedef enum wifi_network_state {
@@ -1322,7 +1322,7 @@ static void wifi_network_bss_update_strength(gpointer data, gpointer user_data)
 	struct wifi_bss *bss_data = data;
 
 	bss_data->strength = gutil_int_history_size(bss_data->history) ?
-		gutil_int_history_median(bss_data->history, 0) :
+		(guint)gutil_int_history_median(bss_data->history, 0) :
 		wifi_rssi_strength(bss_data->bss->signal);
 }
 

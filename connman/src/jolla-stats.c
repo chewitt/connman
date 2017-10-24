@@ -153,7 +153,7 @@ static struct connman_stats *stats_new(const char *id, const char *dir,
 /** Deletes the leftovers from the old connman */
 static void stats_delete_obsolete_files(const char* dir)
 {
-	int i;
+	guint i;
 	for (i=0; i<G_N_ELEMENTS(stats_obsolete); i++) {
 		char* path = g_strconcat(dir, "/", stats_obsolete[i], NULL);
 		if (unlink(path) < 0) {

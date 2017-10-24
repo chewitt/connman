@@ -5328,7 +5328,7 @@ static DBusMessage *check_access(DBusConnection *conn,
 	dbus_uint32_t get_props = 0;
 	dbus_uint32_t set_props = 0;
 	dbus_uint32_t calls = ACCESS_METHOD_ALWAYS_ALLOWED;
-	int i;
+	guint i;
 
 	for (i=0; i<G_N_ELEMENTS(service_property_access); i++) {
 		const struct connman_service_property_access *pa =
