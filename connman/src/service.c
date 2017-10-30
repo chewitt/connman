@@ -4675,6 +4675,13 @@ static bool auto_connect_service(GList *services,
 			continue;
 		}
 
+		if (service->new_service &&
+			reason == CONNMAN_SERVICE_CONNECT_REASON_AUTO) {
+			DBG("service %p type %s new (skipping)", service,
+				__connman_service_type2string(service->type));
+			continue;
+		}
+
 		if (!service->favorite) {
 			/*
 			 * If we are connecting preferred technologies and
