@@ -763,8 +763,18 @@ static void wifi_network_interface_scanning(struct wifi_network *net)
 
 static void wifi_network_interface_disconnected(struct wifi_network *net)
 {
-	if (net->interface_states[1] ==
-			GSUPPLICANT_INTERFACE_STATE_4WAY_HANDSHAKE) {
+	/*
+	 * Depending on the security, authentication failures may look
+	 * like this:
+	 *
+	 * PSK: associating -> [associated ->] 4way_handshake -> disconnected
+	 * EAP: associating ->  associated -> disconnected
+	 */
+	const GSUPPLICANT_INTERFACE_STATE prev = net->interface_states[1];
+	if ((prev == GSUPPLICANT_INTERFACE_STATE_4WAY_HANDSHAKE ||
+			prev == GSUPPLICANT_INTERFACE_STATE_ASSOCIATED) &&
+			gsupplicant_bss_security(net->connecting_to) !=
+						GSUPPLICANT_SECURITY_NONE) {
 		struct connman_service *service =
 			connman_service_lookup_from_network(net->network);
 		const gboolean user_connect = service &&
@@ -773,10 +783,10 @@ static void wifi_network_interface_disconnected(struct wifi_network *net)
 
 		/*
 		 * Note that we can't really tell whether we have
-		 * lost the signal in the 4way_handshake state or
-		 * the passphrase didn't match. If we are connecting
-		 * automatically (i.e. silently) we need to try several
-		 * times before we declare that the key is wrong.
+		 * lost the signal or credentials didn't match. If
+		 * we are connecting automatically (i.e. silently)
+		 * we need to try several times before we can assume
+		 * that credentials are wrong.
 		 */
 		NDBG(net, "%s connect", user_connect ? "user" : "auto");
 		if (!user_connect) {
@@ -784,14 +794,15 @@ static void wifi_network_interface_disconnected(struct wifi_network *net)
 			NDBG(net, "handshake retry %d", net->handshake_retries);
 		}
 
-		if (user_connect &&
+		if (user_connect ||
 			net->handshake_retries >= MAX_HANDSHAKE_RETRIES) {
+
 			/*
 			 * For interactive connects, this will (hopefully)
-			 * make connman to query WiFi password again. For
+			 * make connman query WiFi password again. For
 			 * automatic connects this disables subsequent
 			 * connect attempts (if we have exceeded the
-			 * maximum number of retried).
+			 * maximum number of retries).
 			 */
 			connman_network_set_error(net->network,
 					CONNMAN_NETWORK_ERROR_INVALID_KEY);
