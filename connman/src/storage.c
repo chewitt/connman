@@ -884,12 +884,12 @@ static char *vpn_storage_dir = NULL;
 static int storage_dir_mode;
 static int storage_file_mode;
 
-const char *__connman_storage_dir(void)
+const char *connman_storage_dir(void)
 {
 	return storage_dir;
 }
 
-const char *__connman_vpn_storage_dir(void)
+const char *connman_storage_vpn_dir(void)
 {
 	return vpn_storage_dir;
 }

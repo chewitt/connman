@@ -257,13 +257,13 @@ int __connman_resolvfile_append(int index, const char *domain, const char *serve
 int __connman_resolvfile_remove(int index, const char *domain, const char *server);
 int __connman_resolver_redo_servers(int index);
 
-#define STORAGEDIR __connman_storage_dir()
-#define VPN_STORAGEDIR __connman_vpn_storage_dir()
+#include <connman/storage.h>
+
+#define STORAGEDIR connman_storage_dir()
+#define VPN_STORAGEDIR connman_storage_vpn_dir()
 #define STORAGE_DIR_MODE __connman_storage_dir_mode()
 #define STORAGE_FILE_MODE __connman_storage_file_mode()
 
-const char *__connman_storage_dir(void);
-const char *__connman_vpn_storage_dir(void);
 int __connman_storage_dir_mode(void);
 int __connman_storage_file_mode(void);
 int __connman_storage_init(const char *root, int dir_mode, int file_mode);
