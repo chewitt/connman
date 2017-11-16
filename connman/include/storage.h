@@ -31,6 +31,9 @@ extern "C" {
 gchar **connman_storage_get_services();
 GKeyFile *connman_storage_load_service(const char *service_id);
 
+const char *connman_storage_dir(void);
+const char *connman_storage_vpn_dir(void);
+
 #ifdef __cplusplus
 }
 #endif
