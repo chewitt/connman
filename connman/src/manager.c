@@ -566,6 +566,13 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 		dbus_message_iter_next(&array);
 	}
 
+	/*
+	 * Make sure both Name and SSID are in there (one of them may have
+	 * been auto-generated from the other)
+	 */
+	g_key_file_set_string(settings, ident, SERVICE_KEY_NAME, name);
+	g_key_file_set_string(settings, ident, SERVICE_KEY_SSID, ssid);
+
 	/* Actually create the service (or update the existing one) */
 	DBG("%s \"%s\"", ident, name);
 	ptr = __connman_service_create(service_type, ident, settings);
