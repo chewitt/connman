@@ -381,7 +381,8 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	GKeyFile *settings;
 	const char *sender = dbus_message_get_sender(msg);
 	const char *device_ident, *network_ident, *type = NULL, *name = NULL;
-	char *ident, *p, *tmp_name = NULL;
+	const char *ptr, *ssid = NULL, *security = NULL, *settings_type = NULL;
+	char *ident, *p, *tmp_name = NULL, *tmp_ssid = NULL;
 
 	/* N.B. The caller has checked the signature */
 	dbus_message_iter_init(msg, &iter);
@@ -392,27 +393,46 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	dbus_message_iter_get_basic(&iter, &network_ident);
 	dbus_message_iter_next(&iter);
 
-	/* If service type is missing, pull it from the settings */
-	if (!type || !type[0]) {
-		dbus_message_iter_recurse(&iter, &array);
-		while (dbus_message_iter_get_arg_type(&array) ==
-							DBUS_TYPE_STRUCT) {
-			const char *key = NULL;
+	/* Pull some important things from the settings */
+	dbus_message_iter_recurse(&iter, &array);
+	while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_STRUCT) {
+		const char *key = NULL;
 
-			dbus_message_iter_recurse(&array, &entry);
-			dbus_message_iter_get_basic(&entry, &key);
-			dbus_message_iter_next(&entry);
+		dbus_message_iter_recurse(&array, &entry);
+		dbus_message_iter_get_basic(&entry, &key);
+		dbus_message_iter_next(&entry);
 
-			if (!g_strcmp0(key, SERVICE_KEY_TYPE)) {
-				dbus_message_iter_get_basic(&entry, &type);
-				break;
-			}
-
-			dbus_message_iter_next(&array);
+		if (!g_strcmp0(key, SERVICE_KEY_TYPE)) {
+			dbus_message_iter_get_basic(&entry, &settings_type);
+		} else if (!g_strcmp0(key, SERVICE_KEY_NAME)) {
+			dbus_message_iter_get_basic(&entry, &name);
+		} else if (!g_strcmp0(key, SERVICE_KEY_SSID)) {
+			dbus_message_iter_get_basic(&entry, &ssid);
+		} else if (!g_strcmp0(key, SERVICE_KEY_SECURITY)) {
+			dbus_message_iter_get_basic(&entry, &security);
 		}
+
+		dbus_message_iter_next(&array);
 	}
 
-	if (type && type[0]) {
+	/* Nullify empty strings to simplify checks */
+	if (type && !type[0]) type = NULL;
+	if (device_ident && !device_ident[0]) device_ident = NULL;
+	if (network_ident && !network_ident[0])network_ident  = NULL;
+	if (settings_type && !settings_type[0]) settings_type = NULL;
+	if (security && !security[0]) security = NULL;
+	if (name && !name[0]) name = NULL;
+	if (ssid && !ssid[0]) ssid = NULL;
+
+	/* If the service type is missing, take one from the settings */
+	if (!type) {
+		type = settings_type;
+	} else if (settings_type && strcmp(settings_type, type)) {
+		DBG("service type mismatch %s/%s", type, settings_type);
+		return __connman_error_invalid_arguments(msg);
+	}
+
+	if (type) {
 		/* Check the service type (only wifi is supported for now) */
 		service_type = __connman_service_string2type(type);
 		if (service_type == CONNMAN_SERVICE_TYPE_UNKNOWN) {
@@ -440,7 +460,7 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	 * If no device identifier is given, assume the first device
 	 * of this type.
 	 */
-	if (!device_ident || !device_ident[0]) {
+	if (!device_ident) {
 		struct connman_device *device =
 			__connman_device_find_device(service_type);
 
@@ -452,44 +472,39 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 	}
 
 	/*
-	 * If no network identifier is provided, deduce one from ssid
-	 * and security (we have to assume wifi here)
+	 * Either name or SSID must be provided. If one of them is missing
+	 * we generate it from the other (note that SSID doesn't have to
+	 * be a valid string but it often is). This is wifi specific stuff
+	 * but we don't support creation of services of any other type atm.
 	 */
-	if (network_ident && network_ident[0]) {
-		ident = g_strconcat(type, "_", device_ident, "_",
-							network_ident, NULL);
+	if (ssid && !name) {
+		/* Generate the name from SSID */
+		GBytes* bytes = gutil_hex2bytes(ssid, -1);
+
+		if (bytes) {
+			name = tmp_name = gsupplicant_utf8_from_bytes(bytes);
+			g_bytes_unref(bytes);
+		}
+		if (name) {
+			DBG("%s => \"%s\"", ssid, name);
+		} else {
+			DBG("can't generate service name");
+			return __connman_error_invalid_arguments(msg);
+		}
+	} else if (!ssid && name) {
+		/* Generate SSID from the name */
+		GString *buf = g_string_sized_new(strlen(name)*2);
+
+		for (ptr = name; *ptr; ptr++) {
+			g_string_printf(buf, "%02X", (unsigned char)*ptr);
+		}
+		ssid = tmp_ssid = g_string_free(buf, FALSE);
+		DBG("\"%s\" => %s", name, ssid);
+	} else if (!ssid && !name) {
+		DBG("no name and no ssid, bailing out");
+		return __connman_error_invalid_arguments(msg);
 	} else {
-		const char *ssid = NULL, *security = NULL, *ptr;
-
-		dbus_message_iter_recurse(&iter, &array);
-		while (dbus_message_iter_get_arg_type(&array) ==
-				DBUS_TYPE_STRUCT && !(ssid && security)) {
-			const char *key = NULL;
-
-			dbus_message_iter_recurse(&array, &entry);
-			dbus_message_iter_get_basic(&entry, &key);
-			dbus_message_iter_next(&entry);
-
-			if (!g_strcmp0(key, SERVICE_KEY_SSID)) {
-				dbus_message_iter_get_basic(&entry, &ssid);
-			} else if (!g_strcmp0(key, SERVICE_KEY_SECURITY)) {
-				dbus_message_iter_get_basic(&entry, &security);
-			}
-
-			dbus_message_iter_next(&array);
-		}
-
-		if (!ssid || !security) {
-			DBG("missing security and/or ssid");
-			return __connman_error_invalid_arguments(msg);
-		}
-
-		if (__connman_service_string2security(security) ==
-					CONNMAN_SERVICE_SECURITY_UNKNOWN) {
-			DBG("invalid security %s", security);
-			return __connman_error_invalid_arguments(msg);
-		}
-
+		/* Validate SSID */
 		for (ptr = ssid; *ptr; ptr++) {
 			if (!isxdigit(*ptr)) {
 				DBG("invalid ssid %s", ssid);
@@ -499,6 +514,30 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 
 		if ((ptr - ssid) & 1) {
 			DBG("invalid ssid length");
+			return __connman_error_invalid_arguments(msg);
+		}
+	}
+
+	/*
+	 * If no network identifier is provided, deduce one from ssid
+	 * and security (we have to assume wifi here)
+	 */
+	if (network_ident) {
+		ident = g_strconcat(type, "_", device_ident, "_",
+							network_ident, NULL);
+	} else {
+		if (!security) {
+			DBG("missing security");
+			g_free(tmp_name);
+			g_free(tmp_ssid);
+			return __connman_error_invalid_arguments(msg);
+		}
+
+		if (__connman_service_string2security(security) ==
+					CONNMAN_SERVICE_SECURITY_UNKNOWN) {
+			DBG("invalid security %s", security);
+			g_free(tmp_name);
+			g_free(tmp_ssid);
 			return __connman_error_invalid_arguments(msg);
 		}
 
@@ -525,46 +564,24 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 		dbus_message_iter_get_basic(&entry, &value);
 		g_key_file_set_string(settings, ident, key, value);
 		dbus_message_iter_next(&array);
-
-		/* Find the name in the process of filling the keyfile */
-		if (!g_strcmp0(key, SERVICE_KEY_NAME)) {
-			name = value;
-		}
 	}
 
-	/* If there's no name, generate one (again, this is wifi specific) */
-	if (!name) {
-		char *str = g_key_file_get_string(settings, ident,
-						SERVICE_KEY_SSID, NULL);
-		GBytes* ssid = gutil_hex2bytes(str, -1);
-		if (ssid) {
-			name = tmp_name = gsupplicant_utf8_from_bytes(ssid);
-			g_bytes_unref(ssid);
-		}
-		g_free(str);
-	}
-
-	if (name) {
-		const char *path;
-
-		/* Actually create the service (or update the existing one) */
-		DBG("%s \"%s\"", ident, name);
-		path = __connman_service_create(service_type, ident, settings);
-		if (path) {
-			DBG("%s", path);
-			reply = g_dbus_create_reply(msg,
-					DBUS_TYPE_OBJECT_PATH, &path,
-					DBUS_TYPE_INVALID);
-		} else {
-			/* Passing zero to get the generic Failed error */
-			reply = __connman_error_failed(msg, 0);
-		}
+	/* Actually create the service (or update the existing one) */
+	DBG("%s \"%s\"", ident, name);
+	ptr = __connman_service_create(service_type, ident, settings);
+	if (ptr) {
+		DBG("%s", ptr);
+		reply = g_dbus_create_reply(msg,
+				DBUS_TYPE_OBJECT_PATH, &ptr,
+				DBUS_TYPE_INVALID);
 	} else {
-		DBG("can't generate service name");
-		reply = __connman_error_invalid_arguments(msg);
+		/* Passing zero to get the generic Failed error */
+		reply = __connman_error_failed(msg, 0);
 	}
 
 	g_key_file_unref(settings);
+	g_free(tmp_name);
+	g_free(tmp_ssid);
 	g_free(ident);
 	return reply;
 }
