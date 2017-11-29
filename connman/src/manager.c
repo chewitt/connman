@@ -496,7 +496,7 @@ static DBusMessage *create_service(DBusConnection *conn, DBusMessage *msg,
 		GString *buf = g_string_sized_new(strlen(name)*2);
 
 		for (ptr = name; *ptr; ptr++) {
-			g_string_printf(buf, "%02X", (unsigned char)*ptr);
+			g_string_append_printf(buf, "%02X", (guchar)*ptr);
 		}
 		ssid = tmp_ssid = g_string_free(buf, FALSE);
 		DBG("\"%s\" => %s", name, ssid);
