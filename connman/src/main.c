@@ -107,6 +107,7 @@ static struct {
 	bool enable_6to4;
 	char *vendor_class_id;
 	bool enable_online_check;
+	bool auto_connect_roaming_services;
 	GHashTable *fallback_device_types;
 	bool enable_login_manager;
 	char *localtime;
@@ -134,6 +135,7 @@ static struct {
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
+	.auto_connect_roaming_services = false,
 	.fallback_device_types = NULL,
 	.enable_login_manager = false,
 	.localtime = NULL,
@@ -167,6 +169,7 @@ static struct {
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
+#define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
@@ -204,6 +207,7 @@ static const char *supported_options[] = {
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
 	CONF_ENABLE_ONLINE_CHECK,
+	CONF_AUTO_CONNECT_ROAMING_SERVICES,
 	CONF_FALLBACK_DEVICE_TYPES,
 	CONF_ENABLE_LOGIN_MANAGER,
 	CONF_LOCALTIME,
@@ -607,6 +611,13 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	boolean = __connman_config_get_bool(config, "General",
+				CONF_AUTO_CONNECT_ROAMING_SERVICES, &error);
+	if (!error)
+		connman_settings.auto_connect_roaming_services = boolean;
+
+	g_clear_error(&error);
+
 	str_list = __connman_config_get_string_list(config, "General",
 			CONF_FALLBACK_DEVICE_TYPES, &len, &error);
 
@@ -895,6 +906,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
 		return connman_settings.enable_online_check;
+
+	if (g_str_equal(key, CONF_AUTO_CONNECT_ROAMING_SERVICES))
+		return connman_settings.auto_connect_roaming_services;
 
 	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
 		return connman_settings.enable_login_manager;
