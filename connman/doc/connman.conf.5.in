@@ -152,6 +152,11 @@ transitioned to ONLINE state.
 If this setting is false, the default service will remain in READY state.
 Default value is true.
 .TP
+.BI AutoConnectRoamingServices=true\ \fR|\fB\ false
+Automatically connect roaming services. This is not recommended unless you know
+you won't have any billing problem.
+Default value is false.
+.TP
 .BI FallbackDeviceTypes= interface:devtype\fR[,...]
 If /sys/class/net/<interface>/uevent does not contain DEVTYPE information,
 heuristics are used to choose between wifi and ethernet device types. If
