@@ -191,7 +191,7 @@ int __connman_device_enable(struct connman_device *device)
 		return -EBUSY;
 
 	if (device->powered_pending == PENDING_ENABLE)
-		return -EALREADY;
+		return -EINPROGRESS;
 
 	if (device->powered_pending == PENDING_NONE && device->powered)
 		return -EALREADY;
@@ -242,7 +242,7 @@ int __connman_device_disable(struct connman_device *device)
 		return -EBUSY;
 
 	if (device->powered_pending == PENDING_DISABLE)
-		return -EALREADY;
+		return -EINPROGRESS;
 
 	if (device->powered_pending == PENDING_NONE && !device->powered)
 		return -EALREADY;
