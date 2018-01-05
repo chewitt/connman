@@ -1664,10 +1664,45 @@ static gboolean wifi_device_find_hidden_network(gpointer key,
 	return FALSE;
 }
 
-static gboolean wifi_device_have_hidden_networks(struct wifi_device *dev)
+static void wifi_device_count_hidden_autoconnect_cb(struct connman_service *s,
+								void *data)
 {
-	return g_hash_table_find(dev->ident_net,
-				wifi_device_find_hidden_network, dev) != NULL;
+	if (connman_service_get_type(s) == CONNMAN_SERVICE_TYPE_WIFI &&
+			connman_service_get_autoconnect(s) &&
+				__connman_service_is_really_hidden(s)) {
+		DBG("hidden autoconnectable network: %s",
+					__connman_service_get_name(s));
+		(*((int*)data))++;
+	}
+}
+
+static gboolean wifi_device_may_have_hidden_networks(struct wifi_device *dev)
+{
+	/*
+	 * We perform active scan if a) we have any hidden networks reported
+	 * by the supplicant or b) we have any autoconnectable hidden networks
+	 * configured. And of course if we have any hidden networks configured
+	 * in the first place.
+	 *
+	 * Even if wpa_supplicant does't report any hidden networks around,
+	 * they may still be available and will respond to the active scan.
+	 * That's the rationale for always performing active scans even if
+	 * there seems to be no hidden networks around.
+	 */
+	if (g_hash_table_find(dev->ident_net,
+			wifi_device_find_hidden_network, dev)) {
+		return TRUE;
+	} else {
+		int n = 0;
+
+		__connman_service_foreach
+			(wifi_device_count_hidden_autoconnect_cb, &n);
+		if (n > 0) {
+			DBG("found %d hidden autoconnectable network(s)", n);
+			return TRUE;
+		}
+		return FALSE;
+	}
 }
 
 static void wifi_device_active_scan_add(struct wifi_device *dev, GBytes *ssid)
@@ -1951,7 +1986,7 @@ static void wifi_device_scan_check(struct wifi_device *dev)
 	}
 
 	if (dev->scan_state == WIFI_SCAN_SCHEDULED) {
-		if (wifi_device_have_hidden_networks(dev)) {
+		if (wifi_device_may_have_hidden_networks(dev)) {
 			wifi_device_active_scan_init(dev);
 		}
 		if (dev->active_scans) {
