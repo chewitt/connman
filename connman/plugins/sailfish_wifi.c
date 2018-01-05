@@ -205,6 +205,13 @@ typedef enum wifi_device_state {
 	WIFI_DEVICE_UNDEFINED
 } WIFI_DEVICE_STATE;
 
+typedef enum wifi_scan_state {
+	WIFI_SCAN_NONE,
+	WIFI_SCAN_SCHEDULED,
+	WIFI_SCAN_ACTIVE,
+	WIFI_SCAN_PASSIVE
+} WIFI_SCAN_STATE;
+
 struct wifi_device_tp {
 	GSupplicantNetworkParams np;
 	char *ifname;
@@ -239,7 +246,7 @@ struct wifi_device {
 	guint autoscan_interval_sec;
 	guint autoscan_start_timer_id;
 	guint autoscan_holdoff_timer_id;
-	gboolean autoscan_requested;
+	WIFI_SCAN_STATE scan_state;
 	GSList *active_scans;
 	unsigned int watch;
 	struct connman_technology *tethering;
@@ -384,28 +391,55 @@ static GString *wifi_bss_ident_append_suffix(GString *str, GSupplicantBSS *bss)
 	return str;
 }
 
+static gboolean wifi_ssid_hidden(GBytes* ssid)
+{
+	/*
+	 * Some APs configured to hide SSID are still broadcasting non-empty
+	 * SSID consisting of all zeros (number of zeros often matches the
+	 * length of the actual SSID!). In any case, if we see all zeros,
+	 * let's assume that it's a hidden network.
+	 */
+	if (ssid) {
+		gsize i, len = 0;
+		const guint8 *data = g_bytes_get_data(ssid, &len);
+
+		for (i = 0; i < len; i++) {
+			if (data[i]) {
+				return FALSE;
+			}
+		}
+	}
+	return TRUE;
+}
+
 static char *wifi_bss_ident(struct wifi_bss *bss_data)
 {
 	GString *str;
 	gsize id_len = 0;
+	const guint8 *id_data;
 	GSupplicantBSS *bss = bss_data->bss;
-	const guint8 *id_data = NULL;
+	const gboolean hidden = wifi_ssid_hidden(bss_data->ssid);
 
 	GASSERT(bss->valid && bss->present);
-	if (bss_data->ssid && g_bytes_get_size(bss_data->ssid) > 0) {
-		id_data = g_bytes_get_data(bss_data->ssid, &id_len);
-	} else if (bss->bssid) {
+	if (hidden) {
 		id_data = g_bytes_get_data(bss->bssid, &id_len);
+	} else {
+		id_data = g_bytes_get_data(bss_data->ssid, &id_len);
 	}
 
-	str = g_string_sized_new(id_len*2 + 24);
+	str = g_string_sized_new(id_len*2 + 32);
+
+	if (hidden) {
+		g_string_append_printf(str, "hidden_");
+	}
+
 	if (id_len > 0) {
 		guint i;
+
 		for (i = 0; i < id_len; i++) {
 			g_string_append_printf(str, "%02x", id_data[i]);
 		}
-	} else {
-		g_string_append_printf(str, "hidden");
+
 	}
 
 	return g_string_free(wifi_bss_ident_append_suffix(str, bss), FALSE);
@@ -1548,9 +1582,8 @@ static void wifi_device_tp_free(struct wifi_device_tp *tp)
  *==========================================================================*/
 
 static void wifi_device_bss_add(struct wifi_device *dev, GSupplicantBSS *bss);
-static void wifi_device_autoscan_perform(struct wifi_device *dev);
 static void wifi_device_active_scan_perform(struct wifi_device *dev);
-static void wifi_device_active_scan_schedule(struct wifi_device *dev);
+static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev);
 static void wifi_device_set_state(struct wifi_device *dev,
 						WIFI_DEVICE_STATE state);
 
@@ -1622,7 +1655,7 @@ static gboolean wifi_device_find_hidden_network(gpointer key,
 		struct wifi_bss *bss_data = l->data;
 		GSupplicantBSS *bss = bss_data->bss;
 
-		if (!bss->ssid || !g_bytes_get_size(bss->ssid)) {
+		if (wifi_ssid_hidden(bss->ssid)) {
 			DBG("found hidden bss: %s", bss->path);
 			return TRUE;
 		}
@@ -1631,10 +1664,80 @@ static gboolean wifi_device_find_hidden_network(gpointer key,
 	return FALSE;
 }
 
-static gboolean wifi_device_have_hidden_networks(struct wifi_device *dev)
+static void wifi_device_count_hidden_autoconnect_cb(struct connman_service *s,
+								void *data)
 {
-	return g_hash_table_find(dev->ident_net,
-				wifi_device_find_hidden_network, dev) != NULL;
+	if (connman_service_get_type(s) == CONNMAN_SERVICE_TYPE_WIFI &&
+			connman_service_get_autoconnect(s) &&
+				__connman_service_is_really_hidden(s)) {
+		DBG("hidden autoconnectable network: %s",
+					__connman_service_get_name(s));
+		(*((int*)data))++;
+	}
+}
+
+static gboolean wifi_device_may_have_hidden_networks(struct wifi_device *dev)
+{
+	/*
+	 * We perform active scan if a) we have any hidden networks reported
+	 * by the supplicant or b) we have any autoconnectable hidden networks
+	 * configured. And of course if we have any hidden networks configured
+	 * in the first place.
+	 *
+	 * Even if wpa_supplicant does't report any hidden networks around,
+	 * they may still be available and will respond to the active scan.
+	 * That's the rationale for always performing active scans even if
+	 * there seems to be no hidden networks around.
+	 */
+	if (g_hash_table_find(dev->ident_net,
+			wifi_device_find_hidden_network, dev)) {
+		return TRUE;
+	} else {
+		int n = 0;
+
+		__connman_service_foreach
+			(wifi_device_count_hidden_autoconnect_cb, &n);
+		if (n > 0) {
+			DBG("found %d hidden autoconnectable network(s)", n);
+			return TRUE;
+		}
+		return FALSE;
+	}
+}
+
+static void wifi_device_active_scan_add(struct wifi_device *dev, GBytes *ssid)
+{
+	GSList *l;
+
+	for (l = dev->active_scans; l; l = l->next) {
+		if (wifi_bytes_equal(ssid, l->data)) {
+			return;
+		}
+	}
+
+	dev->active_scans = g_slist_prepend(dev->active_scans,
+					g_bytes_ref(ssid));
+	DBG("\"%.*s\"", (int)g_bytes_get_size(ssid),
+					(char*)g_bytes_get_data(ssid, NULL));
+}
+
+static void wifi_device_hidden_network_cb(struct connman_service *service,
+								void *data)
+{
+	if (connman_service_get_type(service) == CONNMAN_SERVICE_TYPE_WIFI &&
+			__connman_service_is_really_hidden(service)) {
+		struct wifi_device *dev = data;
+		GBytes* ssid = __connman_service_get_ssid(service);
+
+		if (!wifi_ssid_hidden(ssid)) {
+			wifi_device_active_scan_add(dev, ssid);
+		}
+	}
+}
+
+static void wifi_device_active_scan_init(struct wifi_device *dev)
+{
+	__connman_service_foreach(wifi_device_hidden_network_cb, dev);
 }
 
 static void wifi_device_reset(struct wifi_device *dev)
@@ -1734,7 +1837,7 @@ static void wifi_device_update_scanning(struct wifi_device *dev)
 
 static void wifi_device_drop_interface(struct wifi_device *dev)
 {
-	dev->autoscan_requested = FALSE;
+	dev->scan_state = WIFI_SCAN_NONE;
 	if (dev->scan_start_timeout_id) {
 		g_source_remove(dev->scan_start_timeout_id);
 		dev->scan_start_timeout_id = 0;
@@ -1823,14 +1926,99 @@ static void wifi_device_autoscan_reset(struct wifi_device *dev)
 	dev->autoscan_interval_sec = WIFI_AUTOSCAN_MIN_SEC;
 }
 
+static gboolean wifi_device_autoscan_holdoff_timer_expired(gpointer data)
+{
+	struct wifi_device *dev = data;
+
+	GASSERT(dev->autoscan_holdoff_timer_id);
+	dev->autoscan_holdoff_timer_id = 0;
+	wifi_device_scan_check(dev);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean wifi_device_autoscan_repeat(gpointer data)
+{
+	struct wifi_device *dev = data;
+
+	GASSERT(dev->autoscan_start_timer_id);
+	dev->autoscan_start_timer_id = 0;
+	wifi_device_scan_check(dev);
+	return G_SOURCE_REMOVE;
+}
+
+static void wifi_device_autoscan_schedule_next(struct wifi_device *dev)
+{
+	DBG("next autoscan in %u sec", dev->autoscan_interval_sec);
+
+	/*
+	 * Hold-off timer prevents autoscan requests from being
+	 * submitted too fast.
+	 */
+	if (dev->autoscan_holdoff_timer_id) {
+		g_source_remove(dev->autoscan_holdoff_timer_id);
+	}
+	dev->autoscan_holdoff_timer_id =
+		connman_wakeup_timer_add_seconds(WIFI_AUTOSCAN_MIN_SEC,
+			wifi_device_autoscan_holdoff_timer_expired, dev);
+
+	/* Schedule the next scan */
+	if (dev->autoscan_start_timer_id) {
+		g_source_remove(dev->autoscan_start_timer_id);
+	}
+	dev->autoscan_start_timer_id =
+		connman_wakeup_timer_add_seconds(dev->autoscan_interval_sec,
+			wifi_device_autoscan_repeat, dev);
+
+	/* Increase the timeout */
+	dev->autoscan_interval_sec *= WIFI_AUTOSCAN_MULTIPLIER;
+	if (dev->autoscan_interval_sec > WIFI_AUTOSCAN_MAX_SEC) {
+		dev->autoscan_interval_sec = WIFI_AUTOSCAN_MAX_SEC;
+	}
+}
+
 static void wifi_device_scan_check(struct wifi_device *dev)
 {
-	if (dev->active_scans && wifi_device_can_active_scan(dev)) {
-		wifi_device_active_scan_perform(dev);
+	if (dev->scan_state == WIFI_SCAN_NONE &&
+			!dev->autoscan_start_timer_id &&
+				wifi_device_can_autoscan(dev)) {
+		/* Autoscan timer has expired */
+		dev->scan_state = WIFI_SCAN_SCHEDULED;
 	}
-	if (dev->autoscan_requested && wifi_device_can_autoscan(dev)) {
-		DBG("performing delayed scan");
-		wifi_device_autoscan_perform(dev);
+
+	if (dev->scan_state == WIFI_SCAN_SCHEDULED) {
+		if (wifi_device_may_have_hidden_networks(dev)) {
+			wifi_device_active_scan_init(dev);
+		}
+		if (dev->active_scans) {
+			dev->scan_state = WIFI_SCAN_ACTIVE;
+		} else {
+			dev->scan_state = WIFI_SCAN_PASSIVE;
+		}
+	}
+
+	if (dev->scan_state == WIFI_SCAN_ACTIVE &&
+					wifi_device_can_active_scan(dev)) {
+		if (dev->active_scans) {
+			wifi_device_active_scan_perform(dev);
+		} else {
+			dev->scan_state = WIFI_SCAN_PASSIVE;
+		}
+	}
+
+	if (dev->scan_state == WIFI_SCAN_PASSIVE &&
+					wifi_device_can_scan(dev)) {
+		if (wifi_device_passive_scan_perform(dev)) {
+			if (dev->active_scans) {
+				/*
+				 * New active scan was requested while
+				 * we were doing our passive scan.
+				 */
+				dev->scan_state = WIFI_SCAN_ACTIVE;
+			} else {
+				wifi_device_autoscan_schedule_next(dev);
+				dev->scan_state = WIFI_SCAN_NONE;
+			}
+		}
 	}
 }
 
@@ -1841,15 +2029,6 @@ static gboolean wifi_device_scan_start_timeout(gpointer data)
 	GASSERT(dev->scan_start_timeout_id);
 	dev->scan_start_timeout_id = 0;
 	wifi_device_update_scanning(dev);
-	return G_SOURCE_REMOVE;
-}
-
-static gboolean wifi_device_autoscan_holdoff_timer_expired(gpointer data)
-{
-	struct wifi_device *dev = data;
-
-	dev->autoscan_holdoff_timer_id = 0;
-	wifi_device_scan_check(dev);
 	return G_SOURCE_REMOVE;
 }
 
@@ -1869,38 +2048,13 @@ static void wifi_device_scan_requested(struct wifi_device *dev)
 	wifi_device_update_scanning(dev);
 }
 
-static void wifi_device_autoscan_request(struct wifi_device *dev)
+static void wifi_device_scan_request(struct wifi_device *dev)
 {
-	if (wifi_device_can_autoscan(dev)) {
-		wifi_device_autoscan_perform(dev);
-	} else if (!dev->autoscan_requested) {
-		/* Scan requests are being submitted too fast */
-		DBG("holding off...");
-		dev->autoscan_requested = TRUE;
-	} else {
-		DBG("autoscan already scheduled");
+	if (dev->scan_state == WIFI_SCAN_NONE) {
+		DBG("scheduling autoscan");
+		dev->scan_state = WIFI_SCAN_SCHEDULED;
 	}
-}
-
-static gboolean wifi_device_autoscan_repeat(gpointer data)
-{
-	struct wifi_device *dev = data;
-
-	GASSERT(dev->autoscan_start_timer_id);
-	dev->autoscan_start_timer_id = 0;
-
-	/*
-	 * AP that doesn't broadcast its SSID won't necessarily respond
-	 * to the very first scan. Therefore, it we have some hidden
-	 * network in range, we have no choice but to periodically
-	 * perform active scan.
-	 */
-	if (wifi_device_have_hidden_networks(dev)) {
-		wifi_device_active_scan_schedule(dev);
-	}
-
-	wifi_device_autoscan_request(dev);
-	return G_SOURCE_REMOVE;
+	wifi_device_scan_check(dev);
 }
 
 static void wifi_device_active_scan_perform(struct wifi_device *dev)
@@ -1935,86 +2089,20 @@ static void wifi_device_active_scan_perform(struct wifi_device *dev)
 	}
 }
 
-static void wifi_device_autoscan_perform(struct wifi_device *dev)
+static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 {
-	if (dev->scan_start_timeout_id) {
-		g_source_remove(dev->scan_start_timeout_id);
-		dev->scan_start_timeout_id = 0;
-	}
-	if (dev->autoscan_start_timer_id) {
-		g_source_remove(dev->autoscan_start_timer_id);
-		dev->autoscan_start_timer_id = 0;
-	}
 	if (gsupplicant_interface_scan(dev->iface, NULL, NULL, NULL)) {
-		DBG("requested passive scan, next in %u sec",
-					dev->autoscan_interval_sec);
-		dev->autoscan_requested = FALSE;
+		DBG("requested passive scan");
 		wifi_device_scan_requested(dev);
-
-		/*
-		 * Hold-off timer prevents autoscan requests from being
-		 * submitted too fast.
-		 */
-		GASSERT(!dev->autoscan_holdoff_timer_id);
-		dev->autoscan_holdoff_timer_id =
-			connman_wakeup_timer_add_seconds(WIFI_AUTOSCAN_MIN_SEC,
-				wifi_device_autoscan_holdoff_timer_expired,
-				dev);
-
-		/* Schedule the next scan */
-		dev->autoscan_start_timer_id =
-			connman_wakeup_timer_add_seconds(
-				dev->autoscan_interval_sec,
-				wifi_device_autoscan_repeat, dev);
-
-		/* Increase the timeout */
-		dev->autoscan_interval_sec *= WIFI_AUTOSCAN_MULTIPLIER;
-		if (dev->autoscan_interval_sec > WIFI_AUTOSCAN_MAX_SEC) {
-			dev->autoscan_interval_sec = WIFI_AUTOSCAN_MAX_SEC;
-		}
+		return TRUE;
 	}
+	return FALSE;
 }
 
 static void wifi_device_autoscan_restart(struct wifi_device *dev)
 {
 	wifi_device_autoscan_reset(dev);
-	wifi_device_autoscan_request(dev);
-}
-
-static void wifi_device_active_scan_add(struct wifi_device *dev, GBytes *ssid)
-{
-	GSList *l;
-
-	for (l = dev->active_scans; l; l = l->next) {
-		if (wifi_bytes_equal(ssid, l->data)) {
-			return;
-		}
-	}
-
-	dev->active_scans = g_slist_prepend(dev->active_scans,
-					g_bytes_ref(ssid));
-	DBG("\"%.*s\"", (int)g_bytes_get_size(ssid),
-					(char*)g_bytes_get_data(ssid, NULL));
-}
-
-static void wifi_device_hidden_network_cb(struct connman_service *service,
-								void *data)
-{
-	if (connman_service_get_type(service) == CONNMAN_SERVICE_TYPE_WIFI &&
-			__connman_service_is_really_hidden(service)) {
-		struct wifi_device *dev = data;
-		GBytes* ssid = __connman_service_get_ssid(service);
-
-		if (ssid) {
-			wifi_device_active_scan_add(dev, ssid);
-		}
-	}
-}
-
-static void wifi_device_active_scan_schedule(struct wifi_device *dev)
-{
-	__connman_service_foreach(wifi_device_hidden_network_cb, dev);
-	wifi_device_scan_check(dev);
+	wifi_device_scan_request(dev);
 }
 
 static void wifi_device_remove_bss(gpointer bssp, gpointer devp)
@@ -2411,8 +2499,9 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 				connect->passphrase, connect->user_data);
 		connect->user_data = NULL;
 		wifi_hidden_connect_free(connect);
-	} else if (!ssid || !g_bytes_get_size(ssid)) {
-		wifi_device_active_scan_schedule(dev);
+	} else if (wifi_ssid_hidden(ssid)) {
+		wifi_device_active_scan_init(dev);
+		wifi_device_scan_request(dev);
 	}
 }
 
@@ -2595,9 +2684,6 @@ static int wifi_device_scan(struct wifi_device *dev,
 		DBG("already scanning!");
 		return (-EALREADY);
 	} else if (!ssid || !ssid_len) {
-		if (wifi_device_have_hidden_networks(dev)) {
-			wifi_device_active_scan_schedule(dev);
-		}
 		DBG("restarting autoscan");
 		wifi_device_autoscan_restart(dev);
 		return 0;
@@ -2674,7 +2760,7 @@ static void wifi_device_on_ok(struct wifi_device *dev)
 	if (!connman_device_get_powered(dev->device)) {
 		connman_device_set_powered(dev->device, TRUE);
 	}
-	wifi_device_autoscan_request(dev);
+	wifi_device_scan_request(dev);
 	wifi_device_update_bss_list(dev);
 }
 
@@ -3214,7 +3300,7 @@ static void wifi_device_set_state(struct wifi_device *dev,
 		 */
 		wifi_device_autoscan_reset(dev);
 		if (state == WIFI_DEVICE_ON) {
-			wifi_device_autoscan_request(dev);
+			wifi_device_scan_request(dev);
 		}
 
 		if (state == WIFI_DEVICE_ON ||
@@ -3300,7 +3386,6 @@ static void wifi_device_update_screen_state(struct wifi_device *dev)
 		DBG("screen %sactive", active ? "" : "in");
 		dev->screen_active = active;
 		if (active) {
-			wifi_device_active_scan_schedule(dev);
 			wifi_device_autoscan_restart(dev);
 		}
 	}
