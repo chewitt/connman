@@ -2800,6 +2800,8 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	connman_network_set_strength(network,
 				calculate_strength(supplicant_network));
 	connman_network_set_bool(network, "WiFi.WPS", wps);
+	connman_network_set_bool(network, "WiFi.WPSAdvertising",
+				wps_advertizing);
 
 	if (wps) {
 		/* Is AP advertizing for WPS association?

@@ -366,6 +366,7 @@ struct connman_service {
 	char **excludes;
 	char *pac;
 	bool wps;
+	bool wps_advertizing;
 	unsigned int online_check_interval_ipv4;
 	unsigned int online_check_interval_ipv6;
 	guint online_timeout_ipv4;
@@ -2407,6 +2408,12 @@ static void append_security(DBusMessageIter *iter, void *user_data)
 		case CONNMAN_SERVICE_SECURITY_WEP:
 		case CONNMAN_SERVICE_SECURITY_8021X:
 			break;
+		}
+
+		if (service->wps_advertizing) {
+			str = "wps_advertising";
+			dbus_message_iter_append_basic(iter,
+						DBUS_TYPE_STRING, &str);
 		}
 	}
 }
@@ -7044,6 +7051,7 @@ static void service_initialize(struct connman_service *service)
 	service->provider = NULL;
 
 	service->wps = false;
+	service->wps_advertizing = false;
 
 	service->nameservers_ipv4_refcount = 0;
 	service->nameservers_ipv6_refcount = 0;
@@ -9899,6 +9907,8 @@ static void update_from_network(struct connman_service *service,
 		__connman_service_update_value_from_network(service, network,
 								"WiFi.EAP");
 		service->wps = connman_network_get_bool(network, "WiFi.WPS");
+		service->wps_advertizing = connman_network_get_bool(network,
+							"WiFi.WPSAdvertising");
 	}
 
 	/*
@@ -10115,8 +10125,11 @@ void __connman_service_update_from_network(struct connman_network *network)
 		string_changed(service, PROP_NAME, name);
 	}
 
-	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI) {
 		service->wps = connman_network_get_bool(network, "WiFi.WPS");
+		service->wps_advertizing = connman_network_get_bool(network,
+							"WiFi.WPSAdvertising");
+	}
 
 	strength = connman_network_get_strength(service->network);
 	if (strength == service->strength)
