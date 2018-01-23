@@ -2419,6 +2419,19 @@ static void append_security(DBusMessageIter *iter, void *user_data)
 	}
 }
 
+static void security_changed(struct connman_service *service)
+{
+	if (!service->path)
+		return;
+
+	if (!allow_property_changed(service))
+		return;
+
+	connman_dbus_property_changed_array(service->path,
+				CONNMAN_SERVICE_INTERFACE, "Security",
+				DBUS_TYPE_STRING, append_security, service);
+}
+
 static void append_ethernet(DBusMessageIter *iter, void *user_data)
 {
 	struct connman_service *service = user_data;
@@ -9813,6 +9826,21 @@ static enum connman_service_security convert_wifi_security(const char *security)
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
 }
 
+static void update_wps_values(struct connman_service *service,
+				struct connman_network *network)
+{
+	bool wps = connman_network_get_bool(network, "WiFi.WPS");
+	bool wps_advertising = connman_network_get_bool(network,
+							"WiFi.WPSAdvertising");
+
+	if (service->wps != wps ||
+			service->wps_advertizing != wps_advertising) {
+		service->wps = wps;
+		service->wps_advertizing = wps_advertising;
+		security_changed(service);
+	}
+}
+
 /* Return true if service has been updated */
 gboolean __connman_service_update_value_from_network(
 			struct connman_service *service,
@@ -9914,9 +9942,7 @@ static void update_from_network(struct connman_service *service,
 								"WiFi.SSID");
 		__connman_service_update_value_from_network(service, network,
 								"WiFi.EAP");
-		service->wps = connman_network_get_bool(network, "WiFi.WPS");
-		service->wps_advertizing = connman_network_get_bool(network,
-							"WiFi.WPSAdvertising");
+		update_wps_values(service, network);
 	}
 
 	/*
@@ -10133,11 +10159,8 @@ void __connman_service_update_from_network(struct connman_network *network)
 		string_changed(service, PROP_NAME, name);
 	}
 
-	if (service->type == CONNMAN_SERVICE_TYPE_WIFI) {
-		service->wps = connman_network_get_bool(network, "WiFi.WPS");
-		service->wps_advertizing = connman_network_get_bool(network,
-							"WiFi.WPSAdvertising");
-	}
+	if (service->type == CONNMAN_SERVICE_TYPE_WIFI)
+		update_wps_values(service, network);
 
 	strength = connman_network_get_strength(service->network);
 	if (strength == service->strength)
