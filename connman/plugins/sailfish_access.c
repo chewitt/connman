@@ -91,7 +91,7 @@ static const DA_ACTION service_policy_actions [] = {
 
 static const char *manager_policy_default =
 	DA_POLICY_VERSION ";"
-	"SetProperty(OfflineMode)=allow;"
+	"SetProperty(OfflineMode)=deny;"
 	"CreateService(*)=deny;"
 	"group(privileged)=allow";
 static const DA_ACTION manager_policy_actions [] = {
