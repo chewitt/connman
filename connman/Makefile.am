@@ -290,18 +290,18 @@ unit_test_ippool_LDADD = gdbus/libgdbus-internal.la \
 
 unit_test_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_access_SOURCES = unit/test-access.c src/access.c src/log.c \
-				$(backtrace_sources) 
+				$(backtrace_sources)
 unit_test_access_LDADD = @GLIB_LIBS@ -ldl
 
 unit_test_sailfish_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
 			src/log.c src/access.c plugins/sailfish_access.c \
-			$(backtrace_sources) 
+			$(backtrace_sources)
 unit_test_sailfish_access_LDADD = @GLIB_LIBS@ -ldl
 
 unit_test_dnsproxy_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c \
-				$(backtrace_sources) 
+				$(backtrace_sources)
 unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
 TESTS = unit/test-access unit/test-ippool unit/test-dnsproxy \
@@ -312,7 +312,7 @@ unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_sailfish_wakeup_timer_SOURCES = unit/test-sailfish_wakeup_timer.c \
 				src/log.c src/wakeup_timer.c \
 				plugins/sailfish_wakeup_timer.c \
-				$(backtrace_sources) 
+				$(backtrace_sources)
 unit_test_sailfish_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 noinst_PROGRAMS += unit/test-sailfish_wakeup_timer
 TESTS += unit/test-sailfish_wakeup_timer
