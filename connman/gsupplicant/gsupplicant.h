@@ -144,10 +144,6 @@ struct _GSupplicantSSID {
 	const char *identity;
 	const char *anonymous_identity;
 	const char *ca_cert_path;
-	const char *subject_match;
-	const char *altsubject_match;
-	const char *domain_suffix_match;
-	const char *domain_match;
 	const char *client_cert_path;
 	const char *private_key_path;
 	const char *private_key_passphrase;
@@ -337,13 +333,6 @@ GSupplicantInterface *g_supplicant_peer_get_group_interface(GSupplicantPeer *pee
 bool g_supplicant_peer_is_client(GSupplicantPeer *peer);
 bool g_supplicant_peer_has_requested_connection(GSupplicantPeer *peer);
 
-/*
- * Description: Network client requires additional wifi specific info
- */
-const unsigned char *g_supplicant_network_get_bssid(GSupplicantNetwork *network);
-unsigned int g_supplicant_network_get_maxrate(GSupplicantNetwork *network);
-const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network);
-
 struct _GSupplicantCallbacks {
 	void (*system_ready) (void);
 	void (*system_killed) (void);
@@ -363,7 +352,7 @@ struct _GSupplicantCallbacks {
 	void (*peer_changed) (GSupplicantPeer *peer,
 					GSupplicantPeerState state);
 	void (*peer_request) (GSupplicantPeer *peer);
-	void (*debug) (const char *function, const char *format, va_list va);
+	void (*debug) (const char *str);
 };
 
 typedef struct _GSupplicantCallbacks GSupplicantCallbacks;

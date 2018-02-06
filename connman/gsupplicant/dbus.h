@@ -73,8 +73,8 @@ int supplicant_dbus_method_call(const char *path,
 				const char *interface, const char *method,
 				supplicant_dbus_setup_function setup,
 				supplicant_dbus_result_function function,
-				void *user_data, 
-				void *caller);
+				void *user_data,
+				gpointer caller);
 
 void supplicant_dbus_method_call_cancel_all(gpointer caller);
 

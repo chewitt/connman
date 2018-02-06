@@ -290,20 +290,24 @@ struct interface_scan_data {
 
 static int network_remove(struct interface_data *data);
 
-static void debug(const char *fn, const char *format, ...)
+static inline void debug(const char *format, ...)
 {
+	char str[256];
 	va_list ap;
 
 	if (!callbacks_pointer || !callbacks_pointer->debug)
 		return;
 
 	va_start(ap, format);
-	callbacks_pointer->debug(fn, format, ap);
+
+	if (vsnprintf(str, sizeof(str), format, ap) > 0)
+		callbacks_pointer->debug(str);
+
 	va_end(ap);
 }
 
 #define SUPPLICANT_DBG(fmt, arg...) \
-	debug(__FUNCTION__ , fmt, ## arg)
+	debug("%s:%s() " fmt, __FILE__, __FUNCTION__ , ## arg);
 
 static GSupplicantMode string2mode(const char *mode)
 {
@@ -1183,53 +1187,6 @@ const char *g_supplicant_peer_get_name(GSupplicantPeer *peer)
 	return peer->name;
 }
 
-/*
- * Description: Network client requires additional wifi specific info
- */
-const unsigned char *g_supplicant_network_get_bssid(GSupplicantNetwork *network)
-{
-	if (!network || !network->best_bss)
-		return NULL;
-
-	return (const unsigned char *)network->best_bss->bssid;
-}
-
-unsigned int g_supplicant_network_get_maxrate(GSupplicantNetwork *network)
-{
-	if (!network || !network->best_bss)
-		return 0;
-
-	return network->best_bss->maxrate;
-}
-
-const char *g_supplicant_network_get_enc_mode(GSupplicantNetwork *network)
-{
-	if (!network || !network->best_bss)
-		return NULL;
-
-	if (network->best_bss->security == G_SUPPLICANT_SECURITY_PSK ||
-	    network->best_bss->security == G_SUPPLICANT_SECURITY_IEEE8021X) {
-		unsigned int pairwise;
-
-		pairwise = network->best_bss->rsn_pairwise |
-				network->best_bss->wpa_pairwise;
-
-		if ((pairwise & G_SUPPLICANT_PAIRWISE_CCMP) &&
-		    (pairwise & G_SUPPLICANT_PAIRWISE_TKIP))
-			return "mixed";
-		else if (pairwise & G_SUPPLICANT_PAIRWISE_CCMP)
-			return "aes";
-		else if (pairwise & G_SUPPLICANT_PAIRWISE_TKIP)
-			return "tkip";
-
-	} else if (network->best_bss->security == G_SUPPLICANT_SECURITY_WEP)
-		return "wep";
-	else if (network->best_bss->security == G_SUPPLICANT_SECURITY_NONE)
-		return "none";
-
-	return NULL;
-}
-
 const unsigned char *g_supplicant_peer_get_widi_ies(GSupplicantPeer *peer,
 								int *length)
 {
@@ -1312,7 +1269,6 @@ bool g_supplicant_peer_has_requested_connection(GSupplicantPeer *peer)
 	return peer->connection_requested;
 }
 
-#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 static void merge_network(GSupplicantNetwork *network)
 {
 	GString *str;
@@ -1431,8 +1387,6 @@ static void interface_network_removed(DBusMessageIter *iter, void *user_data)
 	SUPPLICANT_DBG("");
 	return;
 }
-
-#endif
 
 static char *create_name(unsigned char *ssid, int ssid_len)
 {
@@ -2171,9 +2125,7 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	} else if (g_strcmp0(key, "CurrentBSS") == 0) {
 		interface_bss_added_without_keys(iter, interface);
 	} else if (g_strcmp0(key, "CurrentNetwork") == 0) {
-#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 		interface_network_added(iter, interface);
-#endif
 	} else if (g_strcmp0(key, "BSSs") == 0) {
 		supplicant_dbus_array_foreach(iter,
 					interface_bss_added_without_keys,
@@ -2181,10 +2133,8 @@ static void interface_property(const char *key, DBusMessageIter *iter,
 	} else if (g_strcmp0(key, "Blobs") == 0) {
 		/* Nothing */
 	} else if (g_strcmp0(key, "Networks") == 0) {
-#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 		supplicant_dbus_array_foreach(iter, interface_network_added,
 								interface);
-#endif
 	} else
 		SUPPLICANT_DBG("key %s type %c",
 				key, dbus_message_iter_get_arg_type(iter));
@@ -2364,7 +2314,7 @@ static void signal_name_owner_changed(const char *path, DBusMessageIter *iter)
 {
 	const char *name = NULL, *old = NULL, *new = NULL;
 
-	SUPPLICANT_DBG("%s", path);
+	SUPPLICANT_DBG("");
 
 	if (g_strcmp0(path, DBUS_PATH_DBUS) != 0)
 		return;
@@ -2503,8 +2453,6 @@ static void signal_bss_removed(const char *path, DBusMessageIter *iter)
 	interface_bss_removed(iter, interface);
 }
 
-#ifdef NET_MAPPING_TABLE_MAKES_SENSE
-
 static void signal_network_added(const char *path, DBusMessageIter *iter)
 {
 	GSupplicantInterface *interface;
@@ -2530,8 +2478,6 @@ static void signal_network_removed(const char *path, DBusMessageIter *iter)
 
 	interface_network_removed(iter, interface);
 }
-
-#endif
 
 static void signal_bss_changed(const char *path, DBusMessageIter *iter)
 {
@@ -3277,11 +3223,8 @@ static struct {
 	{ SUPPLICANT_INTERFACE ".Interface", "ScanDone",          signal_scan_done         },
 	{ SUPPLICANT_INTERFACE ".Interface", "BSSAdded",          signal_bss_added         },
 	{ SUPPLICANT_INTERFACE ".Interface", "BSSRemoved",        signal_bss_removed       },
-
-#ifdef NET_MAPPING_TABLE_MAKES_SENSE
 	{ SUPPLICANT_INTERFACE ".Interface", "NetworkAdded",      signal_network_added     },
 	{ SUPPLICANT_INTERFACE ".Interface", "NetworkRemoved",    signal_network_removed   },
-#endif
 
 	{ SUPPLICANT_INTERFACE ".BSS", "PropertiesChanged", signal_bss_changed   },
 
@@ -3860,12 +3803,9 @@ int g_supplicant_interface_remove(GSupplicantInterface *interface,
 						SUPPLICANT_INTERFACE,
 						"RemoveInterface",
 						interface_remove_params,
-						callback
-						? interface_remove_result
-						: NULL,
-						data,
+						interface_remove_result, data,
 						NULL);
-	if (ret < 0 || !callback) {
+	if (ret < 0) {
 		g_free(data->path);
 		dbus_free(data);
 	}
@@ -4152,11 +4092,6 @@ static void interface_select_network_params(DBusMessageIter *iter,
 					&interface->network_path);
 }
 
-static void objpath_param(DBusMessageIter *iter, void *path)
-{
-	dbus_message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH, &path);
-}
-
 static void interface_add_network_result(const char *error,
 				DBusMessageIter *iter, void *user_data)
 {
@@ -4173,17 +4108,6 @@ static void interface_add_network_result(const char *error,
 		goto error;
 
 	SUPPLICANT_DBG("PATH: %s", path);
-
-	if (interface->network_path && strcmp(interface->network_path, path)) {
-		/* Prevent unused wpa_supplicant networks from piling up */
-		SUPPLICANT_DBG("Removing network %s", interface->network_path);
-		supplicant_dbus_method_call(interface->path,
-			SUPPLICANT_INTERFACE ".Interface", "RemoveNetwork",
-			objpath_param, NULL, interface->network_path,
-			interface);
-	}
-
-	g_free(interface->network_path);
 
 	interface->network_path = g_strdup(path);
 
@@ -4468,26 +4392,6 @@ static void add_network_security_eap(DBusMessageIter *dict,
 		supplicant_dbus_dict_append_basic(dict, "anonymous_identity",
 						     DBUS_TYPE_STRING,
 						     &ssid->anonymous_identity);
-
-	if(ssid->subject_match)
-		supplicant_dbus_dict_append_basic(dict, "subject_match",
-						     DBUS_TYPE_STRING,
-						     &ssid->subject_match);
-
-	if(ssid->altsubject_match)
-		supplicant_dbus_dict_append_basic(dict, "altsubject_match",
-						     DBUS_TYPE_STRING,
-						     &ssid->altsubject_match);
-
-	if(ssid->domain_suffix_match)
-		supplicant_dbus_dict_append_basic(dict, "domain_suffix_match",
-						     DBUS_TYPE_STRING,
-						     &ssid->domain_suffix_match);
-
-	if(ssid->domain_match)
-		supplicant_dbus_dict_append_basic(dict, "domain_match",
-						     DBUS_TYPE_STRING,
-						     &ssid->domain_match);
 
 	g_free(eap_value);
 }

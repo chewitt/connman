@@ -497,31 +497,22 @@ int supplicant_dbus_method_call(const char *path,
 	if (!path || !interface || !method)
 		return -EINVAL;
 
+	method_call = g_try_new0(struct method_call_data, 1);
+	if (!method_call)
+		return -ENOMEM;
+
 	message = dbus_message_new_method_call(SUPPLICANT_SERVICE, path,
 							interface, method);
-	if (!message)
+	if (!message) {
+		g_free(method_call);
 		return -ENOMEM;
+	}
 
 	dbus_message_set_auto_start(message, FALSE);
 
 	dbus_message_iter_init_append(message, &iter);
 	if (setup)
 		setup(&iter, user_data);
-
-	/* No need to wait for reply if there's no reply function */
-	if (!function) {
-		int r = dbus_connection_send(connection, message, NULL)
-			? 0
-			: -EIO;
-		dbus_message_unref(message);
-		return r;
-	}
-
-	method_call = g_try_new0(struct method_call_data, 1);
-	if (!method_call) {
-		dbus_message_unref(message);
-		return -ENOMEM;
-	}
 
 	if (!dbus_connection_send_with_reply(connection, message,
 						&call, TIMEOUT)) {
