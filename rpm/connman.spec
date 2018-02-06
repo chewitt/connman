@@ -104,7 +104,7 @@ Documentation for connman.
 %build
 %reconfigure --disable-static \
     --enable-ethernet=builtin \
-    --enable-wifi=builtin \
+    --disable-wifi \
     --enable-bluetooth=builtin \
     --enable-openconnect=builtin \
     --enable-openvpn=builtin \
