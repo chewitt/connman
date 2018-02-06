@@ -2742,6 +2742,7 @@ int g_dhcp_client_start(GDHCPClient *dhcp_client, const char *last_address)
 
 	if (!dhcp_client)
 		return 0;
+
 	remove_timeouts(dhcp_client);
 
 	if (dhcp_client->type == G_DHCP_IPV6) {

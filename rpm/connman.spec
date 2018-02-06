@@ -1,6 +1,6 @@
 Name:       connman
 Summary:    Connection Manager
-Version:    1.31
+Version:    1.32
 Release:    1
 Group:      Communications/ConnMan
 License:    GPLv2
@@ -104,7 +104,7 @@ Documentation for connman.
 %build
 %reconfigure --disable-static \
     --enable-ethernet=builtin \
-    --enable-wifi=builtin \
+    --disable-wifi \
     --enable-bluetooth=builtin \
     --enable-openconnect=builtin \
     --enable-openvpn=builtin \
