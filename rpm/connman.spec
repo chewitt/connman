@@ -199,6 +199,8 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %doc AUTHORS COPYING ChangeLog README
 %{_includedir}/%{name}/*.h
+%{_includedir}/%{name}/vpn/*.h
+%{_includedir}/%{name}/vpn/plugins/*.h
 %{_libdir}/pkgconfig/*.pc
 
 %files test
