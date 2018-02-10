@@ -8773,8 +8773,16 @@ static int service_connect(struct connman_service *service)
 			if (!service->eap) {
 				/* Give WPS a chance */
 				if (!service->wps ||
-					!connman_network_get_bool(service->network, "WiFi.UseWPS"))
+					!connman_network_get_bool(service->network,"WiFi.UseWPS")) {
+					connman_warn("EAP type has not been "
+						"found. "
+						"Most likely ConnMan is not "
+						"able to find a configuration "
+						"for given 8021X network. "
+						"Check SSID or Name match with "
+						"the network name.");
 					return -EINVAL;
+				}
 
 				break;
 			}
