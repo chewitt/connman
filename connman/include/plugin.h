@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2018  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -29,10 +30,7 @@
 extern "C" {
 #endif
 
-#ifndef CONNMAN_API_SUBJECT_TO_CHANGE
-#error "Please define CONNMAN_API_SUBJECT_TO_CHANGE to acknowledge your \
-understanding that ConnMan hasn't reached a stable API."
-#endif
+#define CONNMAN_PLUGIN_INTERFACE_VERSION    1
 
 #define CONNMAN_PLUGIN_PRIORITY_LOW      -100
 #define CONNMAN_PLUGIN_PRIORITY_DEFAULT     0
@@ -53,6 +51,7 @@ struct connman_plugin_desc {
 	void (*exit) (void);
 	void *debug_start;
 	void *debug_stop;
+	int interface_version;
 };
 
 /**
@@ -84,7 +83,8 @@ struct connman_plugin_desc {
 #ifdef CONNMAN_PLUGIN_BUILTIN
 #define CONNMAN_PLUGIN_DEFINE(name, description, version, priority, init, exit) \
 		struct connman_plugin_desc __connman_builtin_ ## name = { \
-			#name, description, version, priority, init, exit \
+			#name, description, version, priority, init, exit, \
+			NULL, NULL, CONNMAN_PLUGIN_INTERFACE_VERSION, \
 		};
 #else
 #define CONNMAN_PLUGIN_DEFINE(name, description, version, priority, init, exit) \
@@ -96,7 +96,8 @@ struct connman_plugin_desc {
 				__attribute__ ((visibility("default"))); \
 		struct connman_plugin_desc connman_plugin_desc = { \
 			#name, description, version, priority, init, exit, \
-			__start___debug, __stop___debug \
+			__start___debug, __stop___debug, \
+			CONNMAN_PLUGIN_INTERFACE_VERSION \
 		};
 #endif
 
