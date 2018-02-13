@@ -352,10 +352,11 @@ int __connman_firewall_remove_rule(struct firewall_context *ctx, int id)
 	GList *list;
 	int err = -ENOENT;
 
-	for (list = g_list_last(ctx->rules); list;
-			list = g_list_previous(list)) {
-		rule = list->data;
+	list = g_list_last(ctx->rules);
+	while (list) {
+		GList *prev = g_list_previous(list);
 
+		rule = list->data;
 		if (rule->id == id || id == FW_ALL_RULES) {
 			ctx->rules = g_list_remove(ctx->rules, rule);
 			cleanup_fw_rule(rule);
@@ -364,6 +365,8 @@ int __connman_firewall_remove_rule(struct firewall_context *ctx, int id)
 			if (id != FW_ALL_RULES)
 				break;
 		}
+
+		list = prev;
 	}
 
 	return err;
