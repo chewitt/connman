@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2018  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -56,7 +57,15 @@ static bool add_plugin(void *handle, struct connman_plugin_desc *desc)
 	if (!desc->init)
 		return false;
 
-	if (!g_str_equal(desc->version, CONNMAN_VERSION)) {
+	/* Check the validity of the interface version */
+	if (desc->interface_version != CONNMAN_PLUGIN_INTERFACE_VERSION) {
+		connman_error("Invalid plugin interface version %d for %s",
+				desc->interface_version, desc->description);
+		return false;
+	}
+
+	/* Allow older versions (API must be backward compatible) */
+	if (!desc->version || strcmp(desc->version, CONNMAN_VERSION) > 0) {
 		connman_error("Invalid version %s for %s", desc->version,
 							desc->description);
 		return false;
