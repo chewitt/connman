@@ -14,9 +14,16 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/inotify.h include/peer.h include/machine.h \
 			include/technology.h
 
+if VPN
+include_HEADERS += include/task.h include/dbus.h include/setting.h \
+			include/vpn-dbus.h
+nobase_include_HEADERS = vpn/vpn-provider.h vpn/vpn-agent.h \
+			vpn/plugins/vpn.h
+endif
+
 nodist_include_HEADERS = include/version.h
 
-noinst_HEADERS = include/rtnl.h include/task.h \
+noinst_HEADERS = include/rtnl.h \
 			include/dbus.h include/option.h \
 			include/provider.h include/vpn-dbus.h \
 			include/utsname.h include/timeserver.h include/proxy.h \
@@ -540,6 +547,14 @@ include/connman/version.h: include/version.h
 
 include/connman/%.h: $(abs_top_srcdir)/include/%.h
 	$(AM_V_at)$(MKDIR_P) include/connman
+	$(AM_V_GEN)$(LN_S) $< $@
+
+include/connman/vpn/%.h: $(abs_top_srcdir)/vpn/%.h
+	$(AM_V_at)$(MKDIR_P) include/connman/vpn
+	$(AM_V_GEN)$(LN_S) $< $@
+
+include/connman/vpn/plugins/%.h: $(abs_top_srcdir)/vpn/plugins/%.h
+	$(AM_V_at)$(MKDIR_P) include/connman/vpn/plugins
 	$(AM_V_GEN)$(LN_S) $< $@
 
 clean-local:
