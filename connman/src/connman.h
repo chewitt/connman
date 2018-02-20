@@ -954,6 +954,8 @@ int __connman_iptables_delete_chain(const char *table_name,
 					const char *chain);
 int __connman_iptables_flush_chain(const char *table_name,
 					const char *chain);
+int __connman_iptables_find_chain(const char *table_name,
+					const char *chain);
 int __connman_iptables_change_policy(const char *table_name,
 					const char *chain,
 					const char *policy);
@@ -966,6 +968,9 @@ int __connman_iptables_insert(const char *table_name,
 int __connman_iptables_delete(const char *table_name,
 			const char *chain,
 			const char *rule_spec);
+int __connman_iptables_restore_all();
+int __connman_iptables_save_all();
+
 
 typedef void (*connman_iptables_iterate_chains_cb_t) (const char *chain_name,
 							void *user_data);

@@ -2201,6 +2201,23 @@ int __connman_iptables_flush_chain(const char *table_name,
 	return iptables_flush_chain(table, chain);
 }
 
+int __connman_iptables_find_chain(const char *table_name,
+					const char *chain)
+{
+	struct connman_iptables *table;
+
+	DBG("-t %s -F %s", table_name, chain);
+
+	table = get_table(table_name);
+	if (!table)
+		return -EINVAL;
+	
+	if(!find_chain_head(table, chain))
+		return -ENOENT; // Not Found
+	
+	return 0; // Found
+}
+
 int __connman_iptables_change_policy(const char *table_name,
 					const char *chain,
 					const char *policy)
