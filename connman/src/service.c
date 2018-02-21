@@ -2190,7 +2190,8 @@ static void default_changed(void)
 				connman_setting_get_bool("AllowHostnameUpdates"))
 			__connman_utsname_set_hostname(service->hostname);
 
-		if (service->domainname)
+		if (service->domainname &&
+				connman_setting_get_bool("AllowDomainnameUpdates"))
 			__connman_utsname_set_domainname(service->domainname);
 
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
