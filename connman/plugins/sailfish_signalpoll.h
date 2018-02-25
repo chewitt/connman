@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2015-2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2015-2018 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,8 @@
 #define __SAILFISH_SIGNALPOLL_H
 
 #include <gsupplicant_types.h>
+
+#include <glib-object.h>
 
 typedef struct signalpoll_priv SignalPollPriv;
 
