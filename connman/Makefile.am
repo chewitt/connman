@@ -134,7 +134,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/jolla-stats.c src/fsid.c \
-			src/access.c
+			src/access.c vpn/vpn-settings.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -168,7 +168,7 @@ vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) $(backtrace_sources) \
 			vpn/vpn-ipconfig.c src/inet.c vpn/vpn-rtnl.c \
 			src/dbus.c src/storage.c src/ipaddress.c src/agent.c \
 			vpn/vpn-agent.c vpn/vpn-agent.h src/inotify.c \
-			vpn/vpn-config.c src/fsid.c
+			vpn/vpn-config.c src/fsid.c vpn/vpn-settings.c
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ \
@@ -239,6 +239,7 @@ src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 				-DCONFIGDIR=\""$(configdir)\"" \
+				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-I$(builddir)/src
 
 EXTRA_DIST = src/genbuiltin src/connman-dbus.conf src/connman-polkit.conf \
@@ -283,7 +284,7 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 endif
 
 noinst_PROGRAMS += unit/test-access unit/test-dnsproxy unit/test-ippool \
-	unit/test-sailfish_access
+	unit/test-sailfish_access unit/test-vpn-settings
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -311,8 +312,14 @@ unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c \
 				$(backtrace_sources)
 unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
 
+unit_test_vpn_settings_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\"
+unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
+				vpn/vpn-settings.c src/log.c
+unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
+
 TESTS = unit/test-access unit/test-ippool unit/test-dnsproxy \
-	unit/test-sailfish_access
+	unit/test-sailfish_access unit/test-vpn-settings
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)

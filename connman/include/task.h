@@ -42,7 +42,10 @@ typedef void (* connman_task_exit_t) (struct connman_task *task,
 typedef DBusMessage * (* connman_task_notify_t) (struct connman_task *task,
 				DBusMessage *message, void *user_data);
 
-struct connman_task *connman_task_create(const char *program);
+typedef void (* connman_task_setup_t) (void *user_data);
+
+struct connman_task *connman_task_create(const char *program,
+				connman_task_setup_t custom_task_setup);
 void connman_task_destroy(struct connman_task *task);
 
 const char *connman_task_get_path(struct connman_task *task);

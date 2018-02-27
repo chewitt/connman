@@ -44,124 +44,9 @@
 
 #define CONFIGMAINFILE CONFIGDIR "/connman-vpn.conf"
 
-#define DEFAULT_INPUT_REQUEST_TIMEOUT 300 * 1000
-#define DEFAULT_STORAGE_DIR_PERMISSIONS (0700)
-#define DEFAULT_STORAGE_FILE_PERMISSIONS (0600)
-#define DEFAULT_UMASK (0077)
-
 static GMainLoop *main_loop = NULL;
 
 static unsigned int __terminated = 0;
-
-static struct {
-	unsigned int timeout_inputreq;
-	char *fs_identity;
-	char *storage_root;
-	char *state_dir;
-	mode_t storage_dir_permissions;
-	mode_t storage_file_permissions;
-	mode_t umask;
-} connman_vpn_settings  = {
-	.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT,
-	.storage_dir_permissions = DEFAULT_STORAGE_DIR_PERMISSIONS,
-	.storage_file_permissions = DEFAULT_STORAGE_FILE_PERMISSIONS,
-	.umask = DEFAULT_UMASK
-};
-
-static char *get_string(GKeyFile *config, const char *group, const char *key)
-{
-	char *str = g_key_file_get_string(config, group, key, NULL);
-	return str ? g_strchomp(str) : NULL;
-}
-
-static gboolean get_perm(GKeyFile *config, const char *group,
-					const char *key, mode_t *perm)
-{
-	gboolean ok = FALSE;
-	char *str = g_key_file_get_string(config, group, key, NULL);
-	if (str) {
-		/*
-		 * Some people are thinking that # is a comment
-		 * anywhere on the line, not just at the beginning
-		 */
-		unsigned long val;
-		char *comment = strchr(str, '#');
-		if (comment) *comment = 0;
-		val = strtoul(g_strstrip(str), NULL, 0);
-		if (val > 0 && !(val & ~0777UL)) {
-			*perm = (mode_t)val;
-			ok = TRUE;
-		}
-		g_free(str);
-	}
-	return ok;
-}
-
-static GKeyFile *load_config(const char *file)
-{
-	GError *err = NULL;
-	GKeyFile *keyfile;
-
-	keyfile = g_key_file_new();
-
-	g_key_file_set_list_separator(keyfile, ',');
-
-	if (!g_key_file_load_from_file(keyfile, file, 0, &err)) {
-		if (err->code != G_FILE_ERROR_NOENT) {
-			connman_error("Parsing %s failed: %s", file,
-								err->message);
-		}
-
-		g_error_free(err);
-		g_key_file_unref(keyfile);
-		return NULL;
-	}
-
-	return keyfile;
-}
-
-static void parse_config(GKeyFile *config, const char *file)
-{
-	const char *group = "General";
-	GError *error = NULL;
-	int timeout;
-
-	if (!config)
-		return;
-
-	DBG("parsing %s", file);
-
-	timeout = g_key_file_get_integer(config, "General",
-			"InputRequestTimeout", &error);
-	if (!error && timeout >= 0)
-		connman_vpn_settings.timeout_inputreq = timeout * 1000;
-
-	g_clear_error(&error);
-
-	connman_vpn_settings.fs_identity = get_string(config, group,
-						"FileSystemIdentity");
-	connman_vpn_settings.storage_root = get_string(config, group,
-						"StorageRoot");
-	connman_vpn_settings.state_dir = get_string(config, group,
-						"StateDirectory");
-	get_perm(config, group, "StorageDirPermissions",
-			&connman_vpn_settings.storage_dir_permissions);
-	get_perm(config, group, "StorageFilePermissions",
-			&connman_vpn_settings.storage_file_permissions);
-	get_perm(config, group, "Umask", &connman_vpn_settings.umask);
-}
-
-static int config_init(const char *file)
-{
-	GKeyFile *config;
-
-	config = load_config(file);
-	parse_config(config, file);
-	if (config)
-		g_key_file_unref(config);
-
-	return 0;
-}
 
 static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 							gpointer user_data)
@@ -257,13 +142,6 @@ static bool parse_debug(const char *key, const char *value,
 	return true;
 }
 
-const char *__vpn_state_dir()
-{
-	return connman_vpn_settings.state_dir ?
-		connman_vpn_settings.state_dir :
-		DEFAULT_VPN_STATEDIR;
-}
-
 static GOptionEntry options[] = {
 	{ "config", 'c', 0, G_OPTION_ARG_STRING, &option_config,
 				"Load the specified configuration file "
@@ -291,7 +169,7 @@ static GOptionEntry options[] = {
  */
 unsigned int connman_timeout_input_request(void)
 {
-	return connman_vpn_settings.timeout_inputreq;
+	return __vpn_settings_get_timeout_inputreq();
 }
 
 int main(int argc, char *argv[])
@@ -331,27 +209,28 @@ int main(int argc, char *argv[])
 	__connman_log_init(argv[0], option_debug, option_detach, false,
 			"Connection Manager VPN daemon", VERSION);
 
-	if (connman_vpn_settings.fs_identity)
-		__connman_set_fsid(connman_vpn_settings.fs_identity);
+	const char* fs_identity = NULL;
+	if ((fs_identity = __vpn_settings_get_fs_identity()))
+		__connman_set_fsid(fs_identity);
 
 	__connman_inotify_init();
-	__connman_storage_init(connman_vpn_settings.storage_root,
-			connman_vpn_settings.storage_dir_permissions,
-			connman_vpn_settings.storage_file_permissions);
+	__connman_storage_init(__vpn_settings_get_storage_root(),
+			__vpn_settings_get_storage_dir_permissions(),
+			__vpn_settings_get_storage_file_permissions());
 
 	if (g_mkdir_with_parents(VPN_STATEDIR,
-			connman_vpn_settings.storage_dir_permissions) < 0) {
+			__vpn_settings_get_storage_dir_permissions()) < 0) {
 		if (errno != EEXIST)
 			perror("Failed to create state directory");
 	}
 
 	if (g_mkdir_with_parents(VPN_STORAGEDIR,
-			connman_vpn_settings.storage_dir_permissions) < 0) {
+			__vpn_settings_get_storage_dir_permissions()) < 0) {
 		if (errno != EEXIST)
 			perror("Failed to create VPN storage directory");
 	}
 
-	umask(connman_vpn_settings.umask);
+	umask(__vpn_settings_get_umask());
 
 	main_loop = g_main_loop_new(NULL, FALSE);
 
@@ -374,9 +253,9 @@ int main(int argc, char *argv[])
 	__connman_dbus_init(conn);
 
 	if (!option_config)
-		config_init(CONFIGMAINFILE);
+		__vpn_settings_init(CONFIGMAINFILE);
 	else
-		config_init(option_config);
+		__vpn_settings_init(option_config);
 
 	__connman_agent_init();
 	__vpn_provider_init(option_routes);
@@ -413,9 +292,7 @@ int main(int argc, char *argv[])
 
 	g_main_loop_unref(main_loop);
 
-	g_free(connman_vpn_settings.fs_identity);
-	g_free(connman_vpn_settings.storage_root);
-	g_free(connman_vpn_settings.state_dir);
+	__vpn_settings_free();
 
 	g_free(option_debug);
 

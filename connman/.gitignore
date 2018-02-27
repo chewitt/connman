@@ -71,6 +71,7 @@ unit/test-dnsproxy
 unit/test-access
 unit/test-sailfish_access
 unit/test-sailfish_wakeup_timer
+unit/test-vpn-settings
 
 *.gcda
 *.gcno

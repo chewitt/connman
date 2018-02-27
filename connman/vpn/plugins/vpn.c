@@ -34,6 +34,9 @@
 #include <sys/types.h>
 #include <linux/if_tun.h>
 #include <net/if.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include <dbus/dbus.h>
 
@@ -48,6 +51,7 @@
 #include "../vpn-provider.h"
 
 #include "vpn.h"
+#include "../vpn.h"
 
 struct vpn_data {
 	struct vpn_provider *provider;
@@ -407,6 +411,122 @@ exist_err:
 	return ret;
 }
 
+static gboolean is_numeric(const char *str)
+{
+	gint i = 0;
+	
+	if(!str || !(*str))
+		return false;
+	
+	for(i = 0; str[i] ; i++)
+	{
+		if(!g_ascii_isdigit(str[i]))
+			return false;
+	}
+	return true;
+}
+
+static gint get_gid(const char *group_name)
+{
+	gint gid = -1;
+	struct group *grp = NULL;
+	
+	if(!group_name || !(*group_name))
+		return gid;
+	
+	if (is_numeric(group_name))
+	{
+		gid_t group_id = (gid_t)g_ascii_strtoull(group_name, NULL, 10);
+		grp = getgrgid(group_id);
+	}
+	else
+		grp = getgrnam(group_name);
+	
+	if (grp)
+		gid = grp->gr_gid;
+
+	return gid;
+}
+
+static gint get_uid(const char *user_name)
+{
+	gint uid = -1;
+	struct passwd *pw = NULL;
+	
+	if(!user_name || !(*user_name))
+		return uid;
+	
+	if (is_numeric(user_name))
+	{
+		uid_t user_id = (uid_t)g_ascii_strtoull(user_name, NULL, 10);
+		pw = getpwuid(user_id);
+	}
+	else
+		pw = getpwnam(user_name);
+	
+	if (pw)
+		uid = pw->pw_uid;
+	
+	return uid;
+}
+
+static gint get_supplementary_gids(gchar **groups, gid_t **gid_list)
+{
+	gint group_count = 0;
+	int i = 0;
+	
+	gid_t *list = NULL;
+	
+	if (groups)
+	{	
+		for(i = 0; groups[i]; i++)
+		{
+			group_count++;
+			
+			list = (gid_t*)g_try_realloc(list, sizeof(gid_t) * group_count);
+		
+			if(!list)
+			{
+				connman_error("cannot allocate supplementary group list");
+				break;
+			}
+				
+			list[i] = get_gid(groups[i]);
+		}
+	}
+	
+	*gid_list = list;
+	
+	return group_count;
+}
+
+static void vpn_task_setup(gpointer user_data)
+{
+	struct connman_task *task = user_data;
+	
+	// These are retrieved from vpn config
+	gint uid = get_uid(__vpn_settings_get_binary_user());
+	gint gid = get_gid(__vpn_settings_get_binary_group());
+	gchar **suppl_grps = __vpn_settings_get_binary_supplementary_groups();
+	
+	gid_t *gid_list = NULL;
+	size_t gid_list_size = get_supplementary_gids(suppl_grps, &gid_list);
+	
+	DBG("vpn_task_setup %p", task);
+	
+	// Change group if proper group name was set, requires CAP_SETGID.
+	if (gid > 0 && setgid(gid))
+		connman_error("error setting gid %d %s", gid, strerror(errno));
+	
+	// Set the supplementary groups if list exists, requires CAP_SETGID.
+	if (gid_list_size && gid_list && setgroups(gid_list_size, gid_list))
+		connman_error("error setting gid list %s", strerror(errno));
+	
+	// Finally change user for the task if set, requires CAP_SETUID
+	if (uid > 0 && setuid(uid))
+		connman_error("error setting uid %d %s", uid, strerror(errno));
+}
+
 static int vpn_connect(struct vpn_provider *provider,
 			vpn_provider_connect_cb_t cb,
 			const char *dbus_sender, void *user_data)
@@ -470,7 +590,7 @@ static int vpn_connect(struct vpn_provider *provider,
 			goto exist_err;
 	}
 
-	data->task = connman_task_create(vpn_driver_data->program);
+	data->task = connman_task_create(vpn_driver_data->program, vpn_task_setup);
 
 	if (!data->task) {
 		ret = -ENOMEM;
