@@ -10,7 +10,8 @@ TESTS="test-access \
 test-ippool \
 test-dnsproxy \
 test-sailfish_access \
-test-sailfish_wakeup_timer"
+test-sailfish_wakeup_timer \
+test-vpn-settings"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"
@@ -22,11 +23,12 @@ popd > /dev/null
 FULL_COV="$TEST_DIR/full.gcov"
 PLUGINS_COV="$TEST_DIR/plugins.gcov"
 SRC_COV="$TEST_DIR/src.gcov"
+VPN_COV="$TEST_DIR/vpn.gcov"
 OUT="$TEST_DIR/html"
 
 # Clean everything up
 find "$BASE_DIR" -name "*.gcda" -exec rm {} \;
-rm -f "$FULL_COV" "$PLUGINS_COV" "$SRC_COV"
+rm -f "$FULL_COV" "$PLUGINS_COV" "$SRC_COV" "$VPN_COV"
 rm -fr "$OUT"
 
 # Run the tests
@@ -45,6 +47,7 @@ GENHTML_OPT="--branch-coverage"
 lcov $LCOV_OPT -c -d "$BASE_DIR" -o "$FULL_COV" || exit 1
 lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/plugins/*" -o "$PLUGINS_COV" || exit 1
 lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/src/*" -o "$SRC_COV" || exit 1
-genhtml $GENHTML_OPT -t connman "$PLUGINS_COV" "$SRC_COV" --output-directory "$OUT" || exit 1
+lcov $LCOV_OPT -e "$FULL_COV" "$BASE_DIR/vpn/*" -o "$VPN_COV" || exit 1
+genhtml $GENHTML_OPT -t connman "$PLUGINS_COV" "$SRC_COV" "$VPN_COV" --output-directory "$OUT" || exit 1
 
 echo Coverage report: $OUT/index.html
