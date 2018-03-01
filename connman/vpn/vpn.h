@@ -117,6 +117,17 @@ char *__vpn_config_get_string(GKeyFile *key_file,
 char **__vpn_config_get_string_list(GKeyFile *key_file,
         const char *group_name, const char *key, gsize *length, GError **error);
 
-#define VPN_STATEDIR __vpn_state_dir()
+#define VPN_STATEDIR __vpn_settings_state_dir()
 
-const char *__vpn_state_dir(void);
+const char * __vpn_settings_state_dir(void);
+int __vpn_settings_init(const char *file);
+void __vpn_settings_free(void);
+const char *__vpn_settings_get_fs_identity(void);
+const char *__vpn_settings_get_storage_root(void);
+mode_t __vpn_settings_get_storage_dir_permissions(void);
+mode_t __vpn_settings_get_storage_file_permissions(void);
+mode_t __vpn_settings_get_umask(void);
+unsigned int __vpn_settings_get_timeout_inputreq(void);
+const char * __vpn_settings_get_binary_user(void);
+const char * __vpn_settings_get_binary_group(void);
+char ** __vpn_settings_get_binary_supplementary_groups(void);
