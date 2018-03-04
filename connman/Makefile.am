@@ -57,6 +57,12 @@ else
 gweb_sources += gweb/giognutls.h gweb/gionotls.c
 endif
 
+if STATS
+stats_sources = src/stats.c
+else
+stats_sources = src/nostats.c
+endif
+
 if BACKTRACE
 backtrace_sources = src/backtrace.c
 endif
@@ -120,9 +126,9 @@ MANUAL_PAGES =
 
 sbin_PROGRAMS = src/connmand src/connmand-wait-online
 
-src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
-			$(builtin_sources) $(shared_sources) src/connman.ver \
-			src/main.c src/connman.h src/log.c \
+src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(stats_sources) \
+			$(backtrace_sources) $(builtin_sources) $(shared_sources) \
+			src/connman.ver src/main.c src/connman.h src/log.c \
 			src/error.c src/plugin.c src/task.c \
 			src/device.c src/network.c src/connection.c \
 			src/manager.c src/service.c \
@@ -134,9 +140,8 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/storage.c src/dbus.c src/config.c \
 			src/technology.c src/counter.c src/ntp.c \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
-			src/6to4.c \
-			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/ipv6pd.c src/peer.c \
+			src/6to4.c src/ippool.c src/bridge.c src/nat.c \
+			src/ipaddress.c src/inotify.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c vpn/vpn-util.c \
