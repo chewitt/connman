@@ -502,17 +502,20 @@ static gint get_supplementary_gids(gchar **groups, gid_t **gid_list)
 
 static void vpn_task_setup(gpointer user_data)
 {
-	struct connman_task *task = user_data;
+	struct vpn_plugin_data *data = (struct vpn_plugin_data *)user_data;
 	
-	// These are retrieved from vpn config
-	gint uid = get_uid(__vpn_settings_get_binary_user());
-	gint gid = get_gid(__vpn_settings_get_binary_group());
-	gchar **suppl_grps = __vpn_settings_get_binary_supplementary_groups();
+	const gchar *user = __vpn_settings_get_binary_user(data);
+	const gchar *group = __vpn_settings_get_binary_group(data);
+	gchar **suppl_groups = __vpn_settings_get_binary_supplementary_groups(data);
 	
+	// Get user, group and supplementary group ids
+	gint uid = get_uid(user);
+	gint gid = get_gid(group);
 	gid_t *gid_list = NULL;
-	size_t gid_list_size = get_supplementary_gids(suppl_grps, &gid_list);
+	size_t gid_list_size = get_supplementary_gids(suppl_groups, &gid_list);
 	
-	DBG("vpn_task_setup %p", task);
+	DBG("vpn_task_setup uid:%d gid:%d supplementary list size:%d", uid, gid,
+		gid_list_size);
 	
 	// Change group if proper group name was set, requires CAP_SETGID.
 	if (gid > 0 && setgid(gid))
@@ -590,7 +593,8 @@ static int vpn_connect(struct vpn_provider *provider,
 			goto exist_err;
 	}
 
-	data->task = connman_task_create(vpn_driver_data->program, vpn_task_setup);
+	data->task = connman_task_create(vpn_driver_data->program, vpn_task_setup,
+		__vpn_settings_get_vpn_plugin_config(vpn_driver_data->name));
 
 	if (!data->task) {
 		ret = -ENOMEM;
@@ -729,6 +733,9 @@ int vpn_register(const char *name, struct vpn_driver *vpn_driver,
 			const char *program)
 {
 	struct vpn_driver_data *data;
+	
+	if (!name)
+		return -EINVAL;
 
 	data = g_try_new0(struct vpn_driver_data, 1);
 	if (!data)
@@ -736,6 +743,9 @@ int vpn_register(const char *name, struct vpn_driver *vpn_driver,
 
 	data->name = name;
 	data->program = program;
+
+	if (__vpn_settings_parse_vpn_plugin_config(data->name) != 0)
+		DBG("No configuration provided for VPN plugin %s", data->name);
 
 	data->vpn_driver = vpn_driver;
 
@@ -775,6 +785,7 @@ void vpn_unregister(const char *name)
 		return;
 
 	vpn_provider_driver_unregister(&data->provider_driver);
+	__vpn_settings_delete_vpn_plugin_config(name);
 
 	g_hash_table_remove(driver_hash, name);
 
