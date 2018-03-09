@@ -48,6 +48,7 @@ struct connman_task {
 	connman_task_setup_t custom_setup_func;
 	void *exit_data;
 	GHashTable *notify;
+	void *user_data;
 };
 
 static GHashTable *task_hash = NULL;
@@ -95,7 +96,7 @@ static void free_task(gpointer data)
  * Returns: a newly-allocated #connman_task structure
  */
 struct connman_task *connman_task_create(const char *program,
-	connman_task_setup_t custom_task_setup)
+	connman_task_setup_t custom_task_setup, void *user_data)
 {
 	struct connman_task *task;
 	gint counter;
@@ -126,6 +127,8 @@ struct connman_task *connman_task_create(const char *program,
 	DBG("task %p", task);
 
 	g_hash_table_insert(task_hash, task->path, task);
+	
+	task->user_data = user_data;
 
 	return task;
 }
@@ -283,7 +286,7 @@ static void task_setup(gpointer user_data)
 		connman_error("Failed to clean signal mask");
 	
 	if (task->custom_setup_func)
-		task->custom_setup_func(user_data);
+		task->custom_setup_func(task->user_data);
 }
 
 /**

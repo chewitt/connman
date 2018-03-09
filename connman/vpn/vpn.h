@@ -119,15 +119,28 @@ char **__vpn_config_get_string_list(GKeyFile *key_file,
 
 #define VPN_STATEDIR __vpn_settings_state_dir()
 
+struct vpn_plugin_data;
+
 const char * __vpn_settings_state_dir(void);
 int __vpn_settings_init(const char *file);
 void __vpn_settings_free(void);
+int __vpn_settings_parse_vpn_plugin_config(const char* plugin_name);
+void __vpn_settings_delete_vpn_plugin_config(const char *name);
+struct vpn_plugin_data* __vpn_settings_get_vpn_plugin_config(const char *name);
+
 const char *__vpn_settings_get_fs_identity(void);
 const char *__vpn_settings_get_storage_root(void);
 mode_t __vpn_settings_get_storage_dir_permissions(void);
 mode_t __vpn_settings_get_storage_file_permissions(void);
 mode_t __vpn_settings_get_umask(void);
 unsigned int __vpn_settings_get_timeout_inputreq(void);
-const char * __vpn_settings_get_binary_user(void);
-const char * __vpn_settings_get_binary_group(void);
-char ** __vpn_settings_get_binary_supplementary_groups(void);
+const char * __vpn_settings_get_binary_user(struct vpn_plugin_data *data);
+const char * __vpn_settings_get_binary_group(struct vpn_plugin_data *data);
+char ** __vpn_settings_get_binary_supplementary_groups(
+	struct vpn_plugin_data *data);
+
+GKeyFile *__vpn_settings_load_config(const char *file);
+char *__vpn_settings_get_string(GKeyFile *config, const char *group,
+		const char *key);
+char **__vpn_settings_get_string_list(GKeyFile *config,
+		const char *group, const char *key);
