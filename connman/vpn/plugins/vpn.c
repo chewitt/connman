@@ -321,12 +321,21 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 				DBG("Cannot take interface %d up err %d/%s",
 					index, -err, strerror(-err));
 		}
+
+		if (!__vpn_provider_set_autoconnect(provider, true))
+			DBG("cannot set autoconnect for provider %p", provider);
+
 		break;
 
 	case VPN_STATE_UNKNOWN:
 	case VPN_STATE_IDLE:
 	case VPN_STATE_DISCONNECT:
 	case VPN_STATE_FAILURE:
+		// Set autoconnect disabled in case of failure
+		if (state == VPN_STATE_FAILURE) {
+			if (!__vpn_provider_set_autoconnect(provider, false))
+				DBG("cannot unset autoconnect for provider %p", provider);
+		}
 		vpn_provider_set_state(provider,
 					VPN_PROVIDER_STATE_DISCONNECT);
 		break;
