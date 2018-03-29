@@ -45,6 +45,7 @@
 #endif
 
 #include "connman.h"
+#include "iptables_ext.h"
 
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
@@ -848,6 +849,7 @@ int main(int argc, char *argv[])
 
 	__connman_ippool_init();
 	__connman_iptables_init();
+	__connman_iptables_restore_all();
 	__connman_firewall_init();
 	__connman_nat_init();
 	__connman_tethering_init();
@@ -910,6 +912,8 @@ int main(int argc, char *argv[])
 	__connman_rtnl_cleanup();
 	__connman_resolver_cleanup();
 
+	__connman_iptables_save_all();
+	
 	__connman_clock_cleanup();
 	__connman_stats_cleanup();
 	__connman_config_cleanup();

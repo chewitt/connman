@@ -107,6 +107,11 @@ CONNMAN_SERVICE_AFTER="dbus.socket oneshot-root.service"
 AC_SUBST(CONNMAN_SERVICE_REQUIRES)
 AC_SUBST(CONNMAN_SERVICE_AFTER)
 
+PKG_CHECK_MODULES(LIBIPTC, libiptc >= 0.27.1, dummy=yes,
+			AC_MSG_ERROR(Libiptc library is required))
+AC_SUBST(LIBIPTC_CFLAGS)
+AC_SUBST(LIBIPTC_LIBS)
+
 AC_ARG_WITH(openconnect, AC_HELP_STRING([--with-openconnect=PROGRAM],
         [specify location of openconnect binary]), [path_openconnect=${withval}])
 

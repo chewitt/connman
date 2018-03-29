@@ -12,10 +12,11 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/storage.h include/provision.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h \
-			include/technology.h
+			include/technology.h include/iptables_ext.h \
+			include/dbus.h gdbus/gdbus.h
 
 if VPN
-include_HEADERS += include/task.h include/dbus.h include/setting.h \
+include_HEADERS += include/task.h include/setting.h \
 			include/vpn-dbus.h
 nobase_include_HEADERS = vpn/vpn-provider.h vpn/vpn-agent.h \
 			vpn/plugins/vpn.h
@@ -134,11 +135,12 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/jolla-stats.c src/fsid.c \
-			src/access.c vpn/vpn-settings.c
+			src/access.c vpn/vpn-settings.c \
+			src/sailfish_iptables_ext.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-			@IPHB_LIBS@ -lresolv -ldl -lrt
+			@IPHB_LIBS@ @LIBIPTC_LIBS@ -lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
@@ -284,7 +286,8 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 endif
 
 noinst_PROGRAMS += unit/test-access unit/test-dnsproxy unit/test-ippool \
-	unit/test-sailfish_access unit/test-vpn-settings
+	unit/test-sailfish_access unit/test-vpn-settings \
+	unit/test-sailfish_iptables_ext
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -318,8 +321,18 @@ unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
 				vpn/vpn-settings.c src/log.c
 unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
 
+unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@
+unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
+				unit/test-sailfish_iptables_ext.c \
+				src/log.c src/storage.c src/inotify.c \
+				src/iptables.c src/firewall.c \
+				src/sailfish_iptables_ext.c
+unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
+				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
+
 TESTS = unit/test-access unit/test-ippool unit/test-dnsproxy \
-	unit/test-sailfish_access unit/test-vpn-settings
+	unit/test-sailfish_access unit/test-vpn-settings \
+	unit/test-sailfish_iptables_ext
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
@@ -378,8 +391,10 @@ tools_dbus_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_polkit_test_LDADD = @DBUS_LIBS@
 
-tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/iptables.c tools/iptables-test.c
-tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ -ldl
+tools_iptables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" @DBUS_CFLAGS@
+tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
+		src/inotify.c src/iptables.c tools/iptables-test.c
+tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
@@ -390,11 +405,13 @@ tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
-		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\"
-tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c \
-		 src/iptables.c src/firewall.c src/nat.c tools/iptables-unit.c
+		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\" \
+		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\""
+tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
+		src/inotify.c src/iptables.c src/firewall.c \
+		src/nat.c tools/iptables-unit.c
 tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
-				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ -ldl
+				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
@@ -553,6 +570,10 @@ include/connman/version.h: include/version.h
 	$(AM_V_GEN)$(LN_S) $(abs_top_builddir)/$< $@
 
 include/connman/%.h: $(abs_top_srcdir)/include/%.h
+	$(AM_V_at)$(MKDIR_P) include/connman
+	$(AM_V_GEN)$(LN_S) $< $@
+
+include/connman/gdbus.h: $(abs_top_srcdir)/gdbus/gdbus.h
 	$(AM_V_at)$(MKDIR_P) include/connman
 	$(AM_V_GEN)$(LN_S) $< $@
 

@@ -13,6 +13,7 @@ Requires:   ofono
 Requires:   pacrunner
 Requires:   connman-configs
 Requires:   systemd
+Requires:   iptables >= 1.6.1
 Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.21
 Requires:   libdbusaccess >= 1.0.2
@@ -20,7 +21,8 @@ Requires:   libgsupplicant >= 1.0.4
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
-BuildRequires:  pkgconfig(xtables)
+BuildRequires:  pkgconfig(xtables) >= 1.6.1
+BuildRequires:	pkgconfig(libiptc)
 BuildRequires:  pkgconfig(glib-2.0) >= 2.28
 BuildRequires:  pkgconfig(gthread-2.0) >= 2.16
 BuildRequires:  pkgconfig(dbus-1) >= 1.4
@@ -126,6 +128,7 @@ Documentation for connman.
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
     --with-tmpfilesdir=%{_libdir}/tmpfiles.d
+    
 
 make %{?_smp_mflags}
 
