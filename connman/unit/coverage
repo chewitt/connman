@@ -10,6 +10,7 @@ TESTS="test-access \
 test-ippool \
 test-dnsproxy \
 test-sailfish_access \
+test-sailfish_iptables_ext \
 test-sailfish_wakeup_timer \
 test-vpn-settings"
 
@@ -33,11 +34,13 @@ rm -fr "$OUT"
 
 # Run the tests
 for t in $TESTS ; do
-    pushd "$TEST_DIR" > /dev/null
-    "$TEST_DIR/$t"
-    RC=$?
-    popd > /dev/null
-    [ $RC = 0 ] || exit 1
+    if [ -x "$TEST_DIR/$t" ] ; then
+        pushd "$TEST_DIR" > /dev/null
+        "$TEST_DIR/$t"
+        RC=$?
+        popd > /dev/null
+        [ $RC = 0 ] || exit 1
+    fi
 done
 
 # LCOV 1.10 has branch coverage disabled per default
