@@ -3998,7 +3998,7 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 	enum connman_service_type type)
 {
 	GList* list = NULL;
-	
+
 	for (list = service_list; list; list = list->next) {
 		struct connman_service *service = list->data;
 
@@ -4055,12 +4055,15 @@ static DBusMessage *set_property(DBusConnection *conn,
 				__connman_service_auto_connect(
 					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		}
-		
-		/* Disable autoconnect for all other VPN providers if autoconnect is
-		 * set true. Only one VPN can have autoconnect enabled.
+
+		/* Disable autoconnect for all other VPN providers
+		 * if autoconnect is set true. Only one VPN can have
+		 * autoconnect enabled.
 		 */
-		if (autoconnect && service->type == CONNMAN_SERVICE_TYPE_VPN)
-			disable_autoconnect_for_services(service, service->type);
+		if (autoconnect && service->type == CONNMAN_SERVICE_TYPE_VPN) {
+			disable_autoconnect_for_services(service,
+							service->type);
+		}
 
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
 		DBusMessageIter entry;
