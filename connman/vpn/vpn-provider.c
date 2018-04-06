@@ -1598,6 +1598,53 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 	return 0;
 }
 
+bool __vpn_provider_set_autoconnect(struct vpn_provider *provider, bool value)
+{
+	gchar **vpn_path_tokens = NULL;
+	gchar *path = NULL;
+	const gchar *key = "AutoConnect";
+	
+	bool rval = false;
+	dbus_bool_t autoconnect = value;
+	gint token_count = 0;
+
+	DBusMessage *msg = NULL;
+	DBusMessageIter iter;
+	
+	DBG("provider %p", provider);
+	
+	vpn_path_tokens = g_strsplit(provider->path, "/", 0);
+	token_count = g_strv_length(vpn_path_tokens);
+	
+	if (!vpn_path_tokens || !token_count)
+		goto out;
+	
+	path = g_strconcat(CONNMAN_PATH, "/service/vpn_",
+		vpn_path_tokens[token_count - 1], NULL);
+		
+	DBG("set autoconnect %s for vpn provider path = %s, service path = %s",
+		autoconnect ? "true" : "false", provider->path, path);
+	
+	msg = dbus_message_new_method_call(CONNMAN_SERVICE, path,
+		CONNMAN_SERVICE ".Service", "SetProperty");
+	
+	if (!msg)
+		goto out;
+		
+	dbus_message_iter_init_append(msg, &iter);
+	
+	connman_dbus_property_append_basic(&iter, key,
+		DBUS_TYPE_BOOLEAN, &autoconnect);
+	
+	rval = g_dbus_send_message(connection, msg);
+
+out:
+	g_free(path);
+	g_strfreev(vpn_path_tokens);
+	
+	return rval;
+}
+
 static int connection_unregister(struct vpn_provider *provider)
 {
 	DBG("provider %p path %s", provider, provider->path);
