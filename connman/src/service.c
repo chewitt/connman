@@ -286,6 +286,8 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 
+static void vpn_auto_connect(void);
+
 struct find_data {
 	const char *path;
 	struct connman_service *service;
@@ -1746,6 +1748,9 @@ static void default_changed(void)
 
 		if (service->domainname)
 			__connman_utsname_set_domainname(service->domainname);
+
+		/* Connect VPN automatically when new default service is set */
+		vpn_auto_connect();
 	}
 
 	__connman_notifier_default_changed(service);
