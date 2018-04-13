@@ -1,5 +1,4 @@
 /*
- *
  *  ConnMan VPN daemon settings
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
@@ -14,10 +13,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -25,7 +20,6 @@
 #endif
 
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 
 #include <connman/log.h>
@@ -107,7 +101,7 @@ const char *__vpn_settings_get_binary_user(struct vpn_plugin_data *data)
 {
 	if (data && data->binary_user)
 		return data->binary_user; 
-		
+
 	return connman_vpn_settings.binary_user;
 }
 
@@ -115,15 +109,16 @@ const char *__vpn_settings_get_binary_group(struct vpn_plugin_data *data)
 {
 	if (data && data->binary_group)
 		return data->binary_group;
-		
+
 	return connman_vpn_settings.binary_group;
 }
 
-char ** __vpn_settings_get_binary_supplementary_groups(struct vpn_plugin_data *data)
+char **__vpn_settings_get_binary_supplementary_groups
+						(struct vpn_plugin_data *data)
 {
 	if (data && data->binary_supplementary_groups)
 		return data->binary_supplementary_groups;
-		
+
 	return connman_vpn_settings.binary_supplementary_groups;
 }
 
@@ -144,15 +139,15 @@ char **__vpn_settings_get_string_list(GKeyFile *config, const char *group,
 {
 	int i = 0;
 	gsize len = 0;
-	
+
 	char **str = g_key_file_get_string_list(config, group, key, &len, NULL);
-	
+
 	if (str)
 	{
 		for (i = 0; i < len ; i++)
 			str[i] = g_strstrip(str[i]);
 	}
-	
+
 	return str;
 }
 
@@ -198,19 +193,19 @@ static void parse_config(GKeyFile *config, const char *file)
 
 	g_clear_error(&error);
 
-	connman_vpn_settings.fs_identity = __vpn_settings_get_string(config, group,
-						"FileSystemIdentity");
-	connman_vpn_settings.storage_root = __vpn_settings_get_string(config, group,
-						"StorageRoot");
-	connman_vpn_settings.state_dir = __vpn_settings_get_string(config, group,
-						"StateDirectory");
-	
+	connman_vpn_settings.fs_identity =
+		__vpn_settings_get_string(config, group, "FileSystemIdentity");
+	connman_vpn_settings.storage_root =
+		__vpn_settings_get_string(config, group, "StorageRoot");
+	connman_vpn_settings.state_dir =
+		__vpn_settings_get_string(config, group, "StateDirectory");
+
 	get_perm(config, group, "StorageDirPermissions",
 			&connman_vpn_settings.storage_dir_permissions);
 	get_perm(config, group, "StorageFilePermissions",
 			&connman_vpn_settings.storage_file_permissions);
 	get_perm(config, group, "Umask", &connman_vpn_settings.umask);
-	
+
 	connman_vpn_settings.binary_user = __vpn_settings_get_string(config,
 						vpn_group, "User");
 	connman_vpn_settings.binary_group = __vpn_settings_get_string(config,
@@ -220,24 +215,24 @@ static void parse_config(GKeyFile *config, const char *file)
 					"SupplementaryGroups");
 }
 
-struct vpn_plugin_data* __vpn_settings_get_vpn_plugin_config(const char *name)
+struct vpn_plugin_data *__vpn_settings_get_vpn_plugin_config(const char *name)
 {
 	struct vpn_plugin_data *data = NULL;
-	
+
 	if (plugin_hash)
 		data = g_hash_table_lookup(plugin_hash, name);
-	
+
 	return data;
 }
 
 void vpn_plugin_data_free(gpointer data)
 {
 	struct vpn_plugin_data *plugin_data = (struct vpn_plugin_data*)data;
-	
+
 	g_free(plugin_data->binary_user);
 	g_free(plugin_data->binary_group);
 	g_strfreev(plugin_data->binary_supplementary_groups);
-	
+
 	g_free(data);
 }
 
@@ -245,40 +240,41 @@ int __vpn_settings_parse_vpn_plugin_config(const char *name)
 {
 	struct vpn_plugin_data *data = NULL;
 	gchar *file = NULL;
-	gchar *cfg_group = "VPNBinary";
-	gchar *cfg_ext = ".conf";
+	gchar *group = "VPNBinary";
+	gchar *ext = ".conf";
 	GKeyFile *config = NULL;
 	gint err = 0;
-	
+
 	if (!name || !*name)
 		return 1;
-		
-	file = g_strconcat(PLUGIN_CONFIGDIR, "/", name, cfg_ext, NULL);
-	
+
+	file = g_strconcat(PLUGIN_CONFIGDIR, "/", name, ext, NULL);
+
 	config =  __vpn_settings_load_config(file);
-	
+
 	if (!config) {
 		err = 1;
 		DBG("Cannot load config %s for %s", file, name);
 		goto out;
 	}
-	
+
 	data = g_try_new0(struct vpn_plugin_data, 1);
-	
-	data->binary_user = __vpn_settings_get_string(config, cfg_group, "User");
-	data->binary_group = __vpn_settings_get_string(config, cfg_group, "Group");
-	data->binary_supplementary_groups = __vpn_settings_get_string_list(config,
-			cfg_group, "SupplementaryGroups");
-	
+
+	data->binary_user = __vpn_settings_get_string(config, group, "User");
+	data->binary_group = __vpn_settings_get_string(config, group, "Group");
+	data->binary_supplementary_groups =
+		__vpn_settings_get_string_list(config, group,
+						"SupplementaryGroups");
+
 	DBG("Loaded settings for %s: %s - %s",
 		name, data->binary_user, data->binary_group);
-	
+
 	if (!plugin_hash)
 		plugin_hash = g_hash_table_new_full(g_str_hash,	g_str_equal,
 			g_free, vpn_plugin_data_free);
-	
+
 	g_hash_table_replace(plugin_hash, g_strdup(name), data);
-	
+
 	g_key_file_unref(config);
 
 out:
@@ -335,7 +331,7 @@ void __vpn_settings_free()
 	g_free(connman_vpn_settings.binary_user);
 	g_free(connman_vpn_settings.binary_group);
 	g_strfreev(connman_vpn_settings.binary_supplementary_groups);
-	
+
 	if (plugin_hash) {
 		g_hash_table_destroy(plugin_hash);
 		plugin_hash = NULL;
