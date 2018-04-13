@@ -224,7 +224,7 @@ struct vpn_plugin_data* __vpn_settings_get_vpn_plugin_config(const char *name)
 {
 	struct vpn_plugin_data *data = NULL;
 	
-	if(plugin_hash)
+	if (plugin_hash)
 		data = g_hash_table_lookup(plugin_hash, name);
 	
 	return data;
@@ -274,11 +274,10 @@ int __vpn_settings_parse_vpn_plugin_config(const char *name)
 		name, data->binary_user, data->binary_group);
 	
 	if (!plugin_hash)
-		plugin_hash = g_hash_table_new_full(g_str_hash,
-			g_str_equal,
-			NULL, vpn_plugin_data_free);
+		plugin_hash = g_hash_table_new_full(g_str_hash,	g_str_equal,
+			g_free, vpn_plugin_data_free);
 	
-	g_hash_table_replace(plugin_hash, (char *)name, data);
+	g_hash_table_replace(plugin_hash, g_strdup(name), data);
 	
 	g_key_file_unref(config);
 
@@ -289,10 +288,8 @@ out:
 
 void __vpn_settings_delete_vpn_plugin_config(const char *name)
 {
-	if (!name)
-		return;
-		
-	g_hash_table_remove(plugin_hash, name);
+	if (plugin_hash && name)
+		g_hash_table_remove(plugin_hash, name);
 }
 
 GKeyFile *__vpn_settings_load_config(const char *file)
@@ -339,6 +336,8 @@ void __vpn_settings_free()
 	g_free(connman_vpn_settings.binary_group);
 	g_strfreev(connman_vpn_settings.binary_supplementary_groups);
 	
-	if(plugin_hash)
-		g_hash_table_remove_all(plugin_hash);
+	if (plugin_hash) {
+		g_hash_table_destroy(plugin_hash);
+		plugin_hash = NULL;
+	}
 }
