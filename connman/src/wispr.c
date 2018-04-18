@@ -648,7 +648,7 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 	}
 
 	/* Restarting the test */
-	__connman_wispr_start(service, wp_context->type);
+	__connman_service_wispr_start(service, wp_context->type);
 	wispr_portal_context_unref(wp_context);
 }
 
