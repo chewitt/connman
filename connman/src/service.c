@@ -8440,7 +8440,13 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	}
 
 	service->type = CONNMAN_SERVICE_TYPE_VPN;
-	service->autoconnect = false;
+
+	/* Try to load modifiable values from storage. If config does not
+	 * exist set current time as modify time if service is saved as is.
+	 */
+	if (__connman_service_load_modifiable(service) != 0)
+		g_get_current_time(&service->modified);
+
 	service->favorite = true;
 
 	service->state_ipv4 = service->state_ipv6 = CONNMAN_SERVICE_STATE_IDLE;
