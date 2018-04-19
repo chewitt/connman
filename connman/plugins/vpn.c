@@ -673,7 +673,8 @@ static void add_connection(const char *path, DBusMessageIter *properties,
 		connman_provider_set_domain(data->provider,
 						data->domain);
 
-	if (data->connect_pending) {
+	if (data->connect_pending ||
+		connman_provider_get_autoconnect(data->provider)) {
 		const char *dbus_sender = NULL;
 
 		if (data->cb_data && data->cb_data->message) {
