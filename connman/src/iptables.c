@@ -1778,21 +1778,24 @@ struct parse_context {
 
 static int prepare_getopt_args(const char *str, struct parse_context *ctx)
 {
-	char **tokens;
+	int ret = 0;
+	gint argc = 0;
+	gchar **argv = 0;
+	GError *error = 0;
 	int i;
 
-	tokens = g_strsplit_set(str, " ", -1);
+	if (!g_shell_parse_argv(str, &argc, &argv, &error)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
-	i = g_strv_length(tokens);
-
-	/* Add space for the argv[0] value */
-	ctx->argc = i + 1;
-
-	/* Don't forget the last NULL entry */
+	/* Add space for the argv[0] value and terminating NULL entry */
+	ctx->argc = argc + 1;
 	ctx->argv = g_try_malloc0((ctx->argc + 1) * sizeof(char *));
+
 	if (!ctx->argv) {
-		g_strfreev(tokens);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	/*
@@ -1800,12 +1803,18 @@ static int prepare_getopt_args(const char *str, struct parse_context *ctx)
 	 * random argv[0] entry.
 	 */
 	ctx->argv[0] = g_strdup("argh");
+
+	/* Arguments are owned by ctx now */
 	for (i = 1; i < ctx->argc; i++)
-		ctx->argv[i] = tokens[i - 1];
+		ctx->argv[i] = argv[i - 1];
 
-	g_free(tokens);
+	g_free(argv), argv = 0;
+out:
+	if (error)
+		g_error_free(error);
 
-	return 0;
+	g_strfreev(argv);
+	return ret;
 }
 
 static int parse_xt_modules(int c, bool invert,

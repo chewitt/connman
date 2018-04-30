@@ -119,10 +119,289 @@ gint stdout_capture_end(output_capture_data *data);
 
 int iptables_check_table(const char *table_name);
 
-int __connman_iptables_init(void);
-void __connman_iptables_cleanup(void);
-
 struct iptables_content* iptables_get_content(GString *output, const gchar* table_name);
+
+
+/* Dummies */
+struct xtc_handle {
+	gint i;
+};
+
+struct xt_counters {
+	__u64 pcnt, bcnt;
+};
+
+struct ipt_entry {
+	gint i;
+};
+
+int xtables_load_ko(const char *name, bool value)
+{
+	return 0;
+}
+
+gboolean check_table(const char *table_name)
+{
+	gint i = 0;
+	const gchar *tables[] = {
+		"filter",
+		"mangle",
+		"nat",
+		"raw",
+		"security",
+		NULL
+		};
+
+	if (!table_name || !*table_name)
+		return FALSE;
+
+	for (i = 0 ; tables[i] && *tables[i] ; i++) {
+		if(g_ascii_strcasecmp(table_name, tables[i]) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+gboolean check_chain(const char *chain)
+{
+	gint i = 0;
+	const gchar *chains[] = {
+		"INPUT",
+		"OUTPUT",
+		"FORWARD",
+		"POSTROUTING",
+		"PREROUTING",
+		NULL
+		};
+
+	if (!chain || !*chain)
+		return FALSE;
+
+	for (i = 0 ; chains[i] && *chains[i] ; i++) {
+		gchar *connman_c = g_strconcat("connman-", chains[i], NULL);
+		if(g_ascii_strcasecmp(chain, chains[i]) == 0 ||
+			g_ascii_strcasecmp(chain, connman_c) == 0)
+			return TRUE;
+		g_free(connman_c);
+	}
+	return FALSE;
+}
+
+gboolean check_policy(const char *policy)
+{
+	gint i = 0;
+	const gchar *policies[] = {
+		"ACCEPT",
+		"DROP",
+		NULL
+		};
+
+	if (!policy || !*policy)
+		return FALSE;
+
+	for (i = 0 ; policies[i] && *policies[i] ; i++) {
+		if(g_ascii_strcasecmp(policy, policies[i]) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+
+struct xtc_handle* iptc_init(const char *table_name)
+{
+	if (!check_table(table_name))
+		return NULL;
+	
+	return g_try_new0(struct xtc_handle,1);
+}
+
+const char* iptc_first_chain(struct xtc_handle *handle)
+{
+	if (!handle)
+		return NULL;
+
+	return "INPUT";
+}
+
+const char* iptc_next_chain(struct xtc_handle *handle)
+{
+	return NULL;
+}
+
+const struct ipt_entry *iptc_first_rule(const char *chain,
+	struct xtc_handle *handle)
+{
+	return NULL;
+}
+
+const struct ipt_entry *iptc_next_rule(const struct ipt_entry *prev,
+	struct xtc_handle *handle)
+{
+	return NULL;
+}
+
+int iptc_is_chain(const char *chain, struct xtc_handle *handle)
+{
+	if (!check_chain(chain) || !handle)
+		return 0;
+
+	return 1;
+}
+
+int iptc_builtin(const char *chain, struct xtc_handle *handle)
+{
+	if (!check_chain(chain) || !handle)
+		return 0;
+
+	return 1;
+}
+
+int iptc_flush_entries(const char* chain, struct xtc_handle *handle)
+{
+	if (!check_chain(chain) || !handle)
+		return 0;
+
+	return 1;
+}
+
+int iptc_commit(struct xtc_handle *handle)
+{
+	return handle ? 1 : 0;
+}
+
+void iptc_free(struct xtc_handle *handle)
+{
+	g_free(handle);
+	return;
+}
+
+int iptc_set_policy(const char *chain, const char *policy,
+	struct xt_counters *counters, struct xtc_handle *handle)
+{
+	if (!check_chain(chain) || !check_policy(policy) ||
+		!counters || !handle)
+		return 0;
+	return 1;
+}
+
+const char *iptc_get_policy(const char *chain,
+	struct xt_counters *counters, struct xtc_handle *handle)
+{
+	if (!check_chain(chain) || !counters || !handle)
+		return NULL;
+	return "TEST_POLICY";
+}
+
+int __connman_iptables_init(void)
+{
+	return 0;
+}
+
+void __connman_iptables_cleanup(void)
+{
+	return;
+}
+
+int __connman_iptables_append(const char *table_name,
+				const char *chain,
+				const char *rule_spec)
+{
+	if (!check_table(table_name) || !check_chain(chain) ||
+		!rule_spec || !*rule_spec)
+		return -1;
+	
+	return 0;
+}
+
+int __connman_iptables_insert(const char *table_name,
+				const char *chain,
+				const char *rule_spec)
+{
+	if (!check_table(table_name) || !check_chain(chain) ||
+		!rule_spec || !*rule_spec)
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_delete(const char *table_name,
+				const char *chain,
+				const char *rule_spec)
+{
+	if (!check_table(table_name) || !check_chain(chain) ||
+		!rule_spec || !*rule_spec)
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_commit(const char *table_name)
+{
+	if (!check_table(table_name))
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_delete_chain(const char *table_name,
+				const char *chain)
+{
+	if (!check_table(table_name) || !check_chain(chain))
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_new_chain(const char *table_name,
+				const char *chain)
+{
+	if (!check_table(table_name) || !check_chain(chain))
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_flush_chain(const char *table_name,
+				const char *chain)
+{
+	if (!check_table(table_name) || !check_chain(chain))
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_find_chain(const char *table_name,
+				const char *chain)
+{
+	if (!check_table(table_name) || !check_chain(chain))
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_iterate_chains(const char *table_name,
+				connman_iptables_iterate_chains_cb_t cb,
+				void *user_data)
+{
+	if (!check_table(table_name))
+		return -1;
+
+	return 0;
+}
+
+int __connman_iptables_change_policy(const char *table_name,
+					const char *chain,
+					const char *policy)
+{
+	if (!check_table(table_name) || !check_chain(chain) ||
+		!check_policy(policy))
+		return -1;
+
+	return 0;
+}
+
+
+/* End dummies */
 
 gchar* setup_test_directory()
 {
@@ -148,6 +427,39 @@ out:
 	return test_path;
 }
 
+/* Thanks Slava Monich */
+int rmdir_r(const gchar* path)
+{
+	DIR *d = opendir(path);
+
+	if (d) {
+		const struct dirent *p;
+		int r = 0;
+
+		while (!r && (p = readdir(d))) {
+			char *buf;
+			struct stat st;
+
+			if (!strcmp(p->d_name, ".") ||
+						!strcmp(p->d_name, "..")) {
+				continue;
+			}
+
+			buf = g_strdup_printf("%s/%s", path, p->d_name);
+			if (!stat(buf, &st)) {
+				r =  S_ISDIR(st.st_mode) ? rmdir_r(buf) :
+								unlink(buf);
+			}
+			g_free(buf);
+		}
+		closedir(d);
+		return r ? r : rmdir(path);
+	} else {
+		return -1;
+	}
+
+}
+
 void cleanup_test_directory(gchar *test_path)
 {
 	gint access_mode = R_OK|W_OK|X_OK;
@@ -155,8 +467,7 @@ void cleanup_test_directory(gchar *test_path)
 	if (g_file_test(test_path, G_FILE_TEST_IS_DIR)) {
 		g_assert(!access(test_path, access_mode));
 		
-		// TODO add recursive deletion of all files in test_path
-		g_rmdir(test_path);
+		rmdir_r(test_path);
 	}
 	
 	g_free(test_path);
@@ -221,6 +532,36 @@ void test_iptables_file_access_fail()
 	cleanup_test_directory(test_path);
 }
 
+void test_iptables_file_access_fail2()
+{	
+	gint i = 0;
+	gchar str[] = "content";
+	gchar *test_path = setup_test_directory();
+	g_assert(test_path);
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	
+	for (i = 0; invalid_paths[i]; i++) {
+		gchar *path = g_strdup_printf("%s%s", test_path,
+			invalid_paths[i]);
+		
+		if (g_file_test(path, G_FILE_TEST_EXISTS) && 
+			g_file_test(path, G_FILE_TEST_IS_DIR))
+			continue;
+		
+		path[strlen(path) -1 ] = '\0';
+		
+		if(g_file_set_contents(path,str,strlen(str),NULL))
+			g_assert(check_save_directory(path));
+
+		g_free(path);
+	}
+	
+	__connman_storage_cleanup();
+	
+	cleanup_test_directory(test_path);
+}
+
 void test_iptables_file_access_write_fail()
 {	
 	gint i = 0, j = 0;
@@ -259,6 +600,36 @@ void test_iptables_file_access_write_fail()
 	
 	cleanup_test_directory(test_path);
 }
+/* Cannot be run, works only when running as root, TODO figure this out
+void test_iptables_file_access_failure()
+{
+	gchar content[] = "content";
+	GString *str = g_string_new(content);
+	gchar *test_path = NULL;
+	gchar *path = NULL;
+	
+	test_path = setup_test_directory();
+	g_assert(test_path);
+	
+	path = g_strconcat(test_path, "/connman/iptables-test/test.file", NULL);
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	
+	printf("path %s\n", path);
+	g_assert(g_mkdir_with_parents(path,R_OK|W_OK|X_OK) == 0);
+
+	g_assert(!check_save_directory(path));
+	
+	g_assert(iptables_set_file_contents(path, str, true));
+	g_assert(g_file_test(path,G_FILE_TEST_EXISTS));
+	
+	g_free(path);
+
+	__connman_storage_cleanup();
+	
+	cleanup_test_directory(test_path);
+}
+*/
 
 void test_iptables_file_access_success()
 {
@@ -302,15 +673,41 @@ void test_iptables_save_fail()
 	g_assert(test_path);
 	
 	__connman_storage_init(test_path, 0700, 0600); // From main.c
-	__connman_iptables_init();
-	
+
 	g_assert(iptables_save(NULL));
 	g_assert(iptables_save(""));
 	g_assert(iptables_save("not-table"));
-	
-	__connman_iptables_cleanup();
+
+	g_assert(iptables_save("filter") == 0);
+
 	__connman_storage_cleanup();
-	g_free(test_path);
+	cleanup_test_directory(test_path);
+}
+
+void test_iptables_save_ok()
+{
+	const char *tables[] = {
+		"filter",
+		"nat",
+		"mangle",
+		"raw",
+		"security",
+		NULL
+	};
+	gint i = 0;
+	
+	char* test_path = setup_test_directory();
+	g_assert(test_path);
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
+
+	for (i = 0 ; tables[i] ; i++) {
+		g_assert(iptables_save(tables[i]) == 0);
+		g_assert(iptables_restore(tables[i]) == 0);
+	}
+
+	__connman_storage_cleanup();
+	cleanup_test_directory(test_path);
 }
 
 void test_iptables_restore_fail()
@@ -319,15 +716,13 @@ void test_iptables_restore_fail()
 	g_assert(test_path);
 	
 	__connman_storage_init(test_path, 0700, 0600); // From main.c
-	__connman_iptables_init();
 	
 	g_assert(iptables_restore(NULL));
 	g_assert(iptables_restore(""));
 	g_assert(iptables_restore("not-table"));
 	
-	__connman_iptables_cleanup();
 	__connman_storage_cleanup();
-	g_free(test_path);
+	cleanup_test_directory(test_path);
 }
 
 void test_iptables_clear_fail()
@@ -336,17 +731,19 @@ void test_iptables_clear_fail()
 	g_assert(test_path);
 	
 	__connman_storage_init(test_path, 0700, 0600); // From main.c
-	__connman_iptables_init();
 	
 	g_assert(connman_iptables_clear(NULL));
 	g_assert(connman_iptables_clear(""));
 	g_assert(connman_iptables_clear("not-table"));
+	g_assert(connman_iptables_clear("mangle"));
+	g_assert(connman_iptables_clear("nat"));
+	g_assert(connman_iptables_clear("security"));
+	g_assert(connman_iptables_clear("raw"));
 	
-	//g_assert(connman_iptables_clear("filter"));
+	g_assert(connman_iptables_clear("filter") == 0);
 	
-	__connman_iptables_cleanup();
 	__connman_storage_cleanup();
-	g_free(test_path);
+	cleanup_test_directory(test_path);
 }
 
 void test_iptables_stdout_capture()
@@ -356,8 +753,8 @@ void test_iptables_stdout_capture()
 	gint error = 0;
 	
 	output_capture_data data = {
-		.stdout_pipes = {0},
-		.stdout_saved = 0,
+		.stdout_pipes = {-1},
+		.stdout_saved = -1,
 		.stdout_read_limit = 2000,
 		.stdout_bytes_read = 0,
 		.stdout_data = NULL
@@ -366,8 +763,6 @@ void test_iptables_stdout_capture()
 	g_assert(!stdout_capture_start(&data));
 	
 	printf("%s", testprint);
-	
-	fflush(stdout);
 	
 	stdout_capture_data(&data);
 	
@@ -383,6 +778,8 @@ void test_iptables_stdout_capture()
 	g_assert(data.stdout_bytes_read);
 	g_assert(data.stdout_bytes_read == strlen(testprint));
 	g_assert(data.stdout_pipes[0] == -1);
+	g_assert(data.stdout_pipes[1] == -1);
+	g_assert(data.stdout_saved == -1);
 	
 	g_assert(!g_ascii_strcasecmp(data.stdout_data, testprint));
 	
@@ -412,10 +809,23 @@ void test_iptables_get_content()
 	g_assert(!connman_iptables_get_content(NULL));
 	
 	// connman_iptables_get_content() returns null as no connection to iptables
-	//content = connman_iptables_get_content("filter");
-	//g_assert(!content);
+	content = connman_iptables_get_content("filter");
+	g_assert(content);
 	
-	// Create output of iptables manually
+	/* Proper chain */
+	g_assert(content->table);
+	g_assert(g_ascii_strcasecmp(content->table, "filter") == 0);
+	
+	/* One chain */
+	g_assert(content->chains);
+	g_assert(g_list_length(content->chains) == 1);
+	
+	/* No rules */
+	g_assert(!content->rules);
+	
+	connman_iptables_free_content(content);
+	
+	/* Create proper output of iptables manually */
 	GString* output = create_iptables_output();
 	g_assert(output);
 	g_assert(output->len);
@@ -459,16 +869,17 @@ void test_iptables_operation_chain(
 	const char *tables[] = {NULL, "", "filter"};
 	const char *chains[] = {NULL, "", "connman-INPUT", "INPUT"};
 	
-	gint i, j;
+	gint i, j, last_table, last_chain;
 	
-	__connman_iptables_init();
+	last_table = G_N_ELEMENTS(tables) - 1;
+	last_chain = G_N_ELEMENTS(chains) - 1;
 	
-	for (i = 0; i < 3 ; i++) {
-		for (j = 0; j < 4; j++)
+	for (i = 0; i < last_table ; i++) {
+		for (j = 0; j < last_chain; j++)
 			g_assert(chainfunc(tables[i], chains[j]) != 0);
 	}
 	
-	__connman_iptables_cleanup();
+	g_assert(chainfunc(tables[last_table], chains[last_chain]) == 0);
 }
 
 void test_iptables_operation_new_chain()
@@ -500,18 +911,23 @@ void test_iptables_operation(
 		"-p tcp -m tcp --dport 443 -j connman-INPUT",
 		"-p tcp -m tcp --dport 443 -j ACCEPT"};
 	
-	gint i, j, k;
+	gint i, j, k, last_table, last_chain, last_rule;
 	
-	__connman_iptables_init();
+	last_table = G_N_ELEMENTS(tables) - 1;
+	last_chain = G_N_ELEMENTS(chains) - 1;
+	last_rule = G_N_ELEMENTS(rules) - 1;
 	
-	for (i = 0 ; i < 3 ; i++) {
-		for (j = 0 ; j < 4 ; j++) {
-			for (k = 0; k < 4 ; k++)
-				g_assert(operation(tables[i], chains[j], rules[k]) != 0);
+	/* fail */
+	for (i = 0 ; i < last_table ; i++) {
+		for (j = 0 ; j < last_chain ; j++) {
+			for (k = 0; k < last_rule ; k++)
+				g_assert(operation(tables[i], chains[j],
+					rules[k]) != 0);
 		}
 	}
-	
-	__connman_iptables_cleanup();
+
+	g_assert(operation(tables[last_table], chains[last_chain],
+		rules[last_rule]) == 0);
 }
 
 void test_iptables_operations_insert()
@@ -531,14 +947,13 @@ void test_iptables_operations_delete()
 
 void test_iptables_operations_commit()
 {
-	__connman_iptables_init();
-	
 	g_assert(connman_iptables_commit(NULL) != 0);
 	g_assert(connman_iptables_commit("") != 0);
 	
 	g_assert(connman_iptables_commit("non-table") != 0);
 	
-	__connman_iptables_cleanup();
+	g_assert(connman_iptables_commit("filter") == 0);
+	
 }
 
 void test_iptables_operations_change_policy()
@@ -547,17 +962,22 @@ void test_iptables_operations_change_policy()
 	const char *chains[] = {NULL, "", "connman-INPUT", "INPUT"};
 	const char *policies[] = {NULL, "", "connman-INPUT", "DROP"};
 	
-	gint i, j, k;
+	gint i, j, k, last_table, last_chain, last_policy;
 	
-	__connman_iptables_init();
+	last_table = G_N_ELEMENTS(tables) - 1;
+	last_chain = G_N_ELEMENTS(chains) - 1;
+	last_policy = G_N_ELEMENTS(policies) - 1;
 	
-	for (i = 0 ; i < 3 ; i++) {
-		for (j = 0 ; j < 4 ; j++) {
-			for (k = 0; k < 4 ; k++)
+	for (i = 0 ; i < last_table ; i++) {
+		for (j = 0 ; j < last_chain ; j++) {
+			for (k = 0; k < last_policy ; k++)
 				g_assert(connman_iptables_change_policy(tables[i], chains[j],
 					policies[k]) != 0);
 		}
 	}
+	
+	g_assert(connman_iptables_change_policy(tables[last_table],
+		chains[last_chain], policies[last_policy]) == 0);
 	
 	__connman_iptables_cleanup();
 }
@@ -581,24 +1001,142 @@ int __connman_iptables_restore_all();
 
 void test_iptables_save_restore_all()
 {
-	__connman_iptables_init();
+	char* test_path = setup_test_directory();
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
 	
 	g_assert(__connman_iptables_save_all());
 	g_assert(__connman_iptables_restore_all());
 	
-	__connman_iptables_cleanup();
+	__connman_storage_cleanup();
+	
+	cleanup_test_directory(test_path);
+}
+
+void test_iptables_restore_rules_1()
+{
+	const char rules[] = "#Generated by test\n*filter\n"
+		":INPUT ACCEPT [0:0]\n"
+		":FORWARD ACCEPT [0:0]\n"
+		":OUTPUT ACCEPT [0:0]\n"
+		":test-INPUT ACCEPT [0:0]\n"
+		":connman-OUTPUT DROP [0:0]\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment --comment \"\" -j DROP\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment --comment a -j DROP\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment --comment \"a\" -j DROP\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment --comment \" \" -j DROP\n"
+		"-I INPUT -p tcp -m tcp --dport 22 -m comment --comment \"\" -j DROP\n"
+		"-I INPUT -p tcp -m tcp --dport 22 -m comment --comment a -j DROP\n"
+		"-I INPUT -p tcp -m tcp --dport 22 -m comment --comment \"a\" -j DROP\n"
+		"-I INPUT -p udp -m udp --dport 80 -m comment --comment \" \" -j DROP\n"
+		"-D INPUT -p udp -m udp --dport 80 -m comment --comment \"\" -j DROP\n"
+		"-D INPUT -p udp -m udp --dport 80 -m comment --comment a -j DROP\n"
+		"-D INPUT -p udp -m udp --dport 80 -m comment --comment \"a\" -j DROP\n"
+		"-D INPUT -p udp -m udp --dport 80 -m comment --comment \" \" -j DROP\n"
+		"-A INPUT -p udp -m comment --comment \"a comment\" -j DROP\n"
+		"-A INPUT -p udp -m comment --comment a comment -j DROP\n"
+		"COMMIT\n#Completed";
+	
+	gchar *test_path = setup_test_directory();
+	g_assert(test_path);
+	
+	gchar *rule_path = g_strconcat(test_path, "/connman/iptables/filter.v4",
+		NULL);
+	
+	GString *str = g_string_new(rules);
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	
+	g_assert(iptables_set_file_contents(rule_path, str, true) == 0);
+
+	g_assert(iptables_restore("filter") == 0);
+	
+	__connman_storage_cleanup();
+	
+	cleanup_test_directory(test_path);
+}
+
+void test_iptables_restore_rules_2()
+{
+	const char rules[] = "#Generated by test\n*filter\n"
+		":INPUT ACCEPT [0:0]\n"
+		":FORWARD ACCEPT [0:0]\n"
+		":OUTPUT ACCEPT [0:0]\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment --comment  -j DROP\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment --comment -j DROP\n"
+		"-A INPUT -p udp -m udp --dport 80 -m comment -j DROP\n"
+		"COMMIT\n#Completed";
+	
+	gchar *test_path = setup_test_directory();
+	g_assert(test_path);
+	
+	gchar *rule_path = g_strconcat(test_path, "/connman/iptables/filter.v4",
+		NULL);
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	
+	GString *str = g_string_new(rules);
+	
+	g_assert(iptables_set_file_contents(rule_path, str, true) == 0);
+	
+	g_assert(iptables_restore("filter") == 0);
+	
+	__connman_storage_cleanup();
+	
+	cleanup_test_directory(test_path);
+}
+
+void test_iptables_restore_rules_3()
+{
+	/* Invalid set of rules */
+	const char rules[] = "#Generated by test\n*filter\n"
+		":INPUT REJECT [0:0]\n"
+		":FORWARD MOVE [0:0]\n"
+		":OUTPUT OK [0:0]\n"
+		"-A connman-INPUT -p tcp -m tcp --dport 23 -j ACCEPT\n"
+		"-F INPUT -p tcp -m tcp --dport 22 -j ACCEPT\n"
+		"COMMIT\n#Completed";
+	
+	gchar *test_path = setup_test_directory();
+	g_assert(test_path);
+	
+	gchar *rule_path = g_strconcat(test_path, "/connman/iptables/filter.v4",
+		NULL);
+	
+	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	
+	GString *str = g_string_new(rules);
+	
+	g_assert(iptables_set_file_contents(rule_path, str, true) == 0);
+	
+	g_assert(iptables_restore("filter") == 0);
+	
+	__connman_storage_cleanup();
+	
+	cleanup_test_directory(test_path);
 }
 
 int main(int argc, char **argv)
 {
+	int rval = 0;
+	
+	__connman_log_init(argv[0], g_test_verbose() ? "*" : NULL,
+		FALSE, FALSE, "connman", CONNMAN_VERSION);
+
 	g_test_init(&argc, &argv, NULL);
 	
 	g_test_add_func(PREFIX "/file_access_basic", test_iptables_file_access_basic);
 	g_test_add_func(PREFIX "/file_access_fail", test_iptables_file_access_fail);
+	g_test_add_func(PREFIX "/file_access_fail2", test_iptables_file_access_fail2);
 	g_test_add_func(PREFIX "/file_access_write_fail", test_iptables_file_access_write_fail);
 	g_test_add_func(PREFIX "/file_access_success", test_iptables_file_access_success);
 	
+	/* disabled for now
+	 * g_test_add_func(PREFIX "/file_access_failure", test_iptables_file_access_failure);
+	*/
+	
 	g_test_add_func(PREFIX "/save_fail", test_iptables_save_fail);
+	g_test_add_func(PREFIX "/save_ok", test_iptables_save_ok);
 	g_test_add_func(PREFIX "/restore_fail", test_iptables_restore_fail);
 	g_test_add_func(PREFIX "/clear_fail", test_iptables_clear_fail);
 	
@@ -627,9 +1165,18 @@ int main(int argc, char **argv)
 	g_test_add_func(PREFIX "/save_path", test_iptables_default_save_path);
 	
 	g_test_add_func(PREFIX "/save_restore", test_iptables_save_restore_all);
+
+	g_test_add_func(PREFIX "rules_1", test_iptables_restore_rules_1);
+
+	g_test_add_func(PREFIX "rules_2", test_iptables_restore_rules_2);
 	
+	g_test_add_func(PREFIX "rules_3", test_iptables_restore_rules_3);
 	
-	return g_test_run();
+	rval =  g_test_run();
+	
+	__connman_log_cleanup(FALSE);
+	
+	return rval;
 }
 
 /*
