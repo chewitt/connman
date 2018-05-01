@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2015-2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2015-2018 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -1087,9 +1087,11 @@ static void ofono_plugin_delete(struct plugin_data *plugin)
 static void ofono_plugin_log_notify(struct connman_debug_desc *desc)
 {
 	if (desc->flags & CONNMAN_DEBUG_FLAG_PRINT) {
-		gofono_log.level = gofono_log.max_level;
+		gofono_log.level = gofonoext_log.level =
+			gofono_log.max_level;
 	} else {
-		gofono_log.level = gutil_log_default.level;
+		gofono_log.level = gofonoext_log.level =
+			gutil_log_default.level;
 	}
 	DBG("%s log level %d", gofono_log.name, gofono_log.level);
 }
