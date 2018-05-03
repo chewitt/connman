@@ -187,7 +187,8 @@ if VPN
 BUILT_SOURCES += vpn/builtin.h
 endif
 
-CLEANFILES = src/connman.conf $(BUILT_SOURCES) $(service_files)
+CLEANFILES = src/connman.conf $(BUILT_SOURCES) $(service_files) \
+	$(shell find . -name "*.gcda") $(shell find . -name "*.gcno")
 
 statedir = $(runstatedir)/connman
 vpn_statedir = $(runstatedir)/connman-vpn
