@@ -598,6 +598,10 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 
 	DBG("conn %p provider %p", conn, provider);
 	
+	/* Set autoconnect regardless of connman state */
+	if (!__vpn_provider_set_autoconnect(provider, true))
+		DBG("cannot set autoconnect for provider %p", provider);
+
 	if (!connman_online) {
 	
 		if (state_query_done) {
@@ -629,7 +633,6 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 
 			return __connman_error_failed(msg, EINPROGRESS);
 		}
-		
 	}
 
 	err = __vpn_provider_connect(provider, msg);
