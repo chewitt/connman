@@ -44,6 +44,7 @@ static GHashTable *provider_hash;
 static GSList *driver_list;
 static int configuration_count;
 static bool handle_routes;
+static bool default_route_set = false;
 
 struct vpn_route {
 	int family;
@@ -1498,6 +1499,12 @@ static void provider_append_routes(gpointer key, gpointer value,
 		return;
 	}
 
+	/* When all are NULL default route with any addresses is added */
+	if (!route->network && !route->gateway && !route->netmask) {
+		DBG("Adding default route for provider %p", provider);
+		default_route_set = true;
+	}
+
 	if (route->family == AF_INET6) {
 		unsigned char prefix_len = atoi(route->netmask);
 
@@ -1519,6 +1526,8 @@ static int set_connected(struct vpn_provider *provider,
 	DBG("provider %p id %s connected %d", provider,
 					provider->identifier, connected);
 
+	default_route_set = false;
+
 	if (connected) {
 		if (provider->family == AF_INET6)
 			ipconfig = provider->ipconfig_ipv6;
@@ -1538,6 +1547,11 @@ static int set_connected(struct vpn_provider *provider,
 
 		g_hash_table_foreach(provider->user_routes,
 					provider_append_routes, provider);
+
+		if (!default_route_set) {
+			DBG("Adding default route for provider %p", provider);
+			connman_inet_add_network_route(0, NULL, NULL, NULL);
+		}
 
 	} else {
 		provider_indicate_state(provider,
