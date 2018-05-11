@@ -1726,6 +1726,31 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
+static void disconnect_vpn_service(struct connman_service *service, void* user_data)
+{
+	if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
+
+		switch(service->state) {
+		case CONNMAN_SERVICE_STATE_ASSOCIATION:
+		case CONNMAN_SERVICE_STATE_CONFIGURATION:
+		case CONNMAN_SERVICE_STATE_DISCONNECT:
+		case CONNMAN_SERVICE_STATE_ONLINE:
+		case CONNMAN_SERVICE_STATE_READY:
+			if (service->provider) {
+				connman_provider_disconnect(service->provider);
+				DBG("disconnecting VPN %s state %d", 
+					service->identifier, service->state);
+			}
+			break;
+		
+		case CONNMAN_SERVICE_STATE_FAILURE:
+		case CONNMAN_SERVICE_STATE_UNKNOWN:
+		case CONNMAN_SERVICE_STATE_IDLE:
+			break;
+		}
+	}
+}
+
 static void default_changed(void)
 {
 	struct connman_service *service = __connman_service_get_default();
@@ -1749,10 +1774,19 @@ static void default_changed(void)
 		if (service->domainname)
 			__connman_utsname_set_domainname(service->domainname);
 
-		/* Connect VPN automatically when new default service is set */
-		vpn_auto_connect();
-	}
+		/* Do not do this if VPN is set as default */
+		if (service->type != CONNMAN_SERVICE_TYPE_VPN) {
+			/* Disconnect VPNs to force VPNs to use the
+			 * default service */
+			__connman_service_foreach(disconnect_vpn_service, NULL);
 
+			/* Connect VPN automatically when new default service
+			 * is set */
+			vpn_auto_connect();
+		}
+	} else {
+		__connman_service_foreach(disconnect_vpn_service, NULL);
+	}
 	__connman_notifier_default_changed(service);
 }
 

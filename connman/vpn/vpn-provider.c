@@ -23,6 +23,14 @@
 #include <config.h>
 #endif
 
+#define STATE_INTERVAL_INIT 		500
+#define STATE_INTERVAL_DEFAULT		0
+
+#define CONNMAN_STATE_ONLINE 		"online"
+#define CONNMAN_STATE_OFFLINE 		"offline"
+#define CONNMAN_STATE_READY 		"ready"
+#define CONNMAN_STATE_IDLE 		"idle"
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -90,8 +98,48 @@ struct vpn_provider {
 	struct connman_ipaddress *prev_ipv6_addr;
 };
 
+struct do_connect_timeout_data {
+	DBusConnection *conn;
+	DBusMessage *msg;
+	struct vpn_provider *provider;
+};
+
+static unsigned int get_connman_state_timeout = 0;
+static unsigned int do_connect_timeout = 0;
+
+static guint connman_signal_watch;
+static guint connman_service_watch;
+
+static bool connman_online = false;
+static bool state_query_done = false;
+
 static void append_properties(DBusMessageIter *iter,
 				struct vpn_provider *provider);
+
+static void get_connman_state(guint interval);
+
+static void set_state(const char* new_state)
+{
+	if (!new_state || !*new_state)
+		return;
+
+	DBG("old state %s new state %s",
+		connman_online ?
+		CONNMAN_STATE_ONLINE "/" CONNMAN_STATE_READY :
+		CONNMAN_STATE_OFFLINE "/" CONNMAN_STATE_IDLE,
+		new_state);
+	
+	/* States "online" and "ready" mean connman is online */
+	if (g_ascii_strcasecmp(new_state, CONNMAN_STATE_ONLINE) == 0 ||
+		g_ascii_strcasecmp(new_state, CONNMAN_STATE_READY) == 0)
+		connman_online = true;
+	/* Everything else means connman is offline */
+	else
+		connman_online = false;
+	
+	DBG("set state %s connman_online=%s ",
+		new_state, connman_online ? "true" : "false");
+}
 
 static void free_route(gpointer data)
 {
@@ -488,6 +536,60 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
+static gboolean do_connect_timeout_function(gpointer data) {
+
+	gboolean rval = FALSE;
+	struct do_connect_timeout_data *t_data = NULL;
+	DBusMessage *error = NULL;
+	int err = 0;
+	
+	DBG("");
+	
+	if (!data)
+		goto out;
+	
+	t_data = data;
+	
+	/* Not enough data set, remove from main event loop */
+	if (!t_data->conn || !t_data->msg || !t_data->provider) {
+		DBG("insufficient data conn %p msg %p data %p "
+			"removing from main loop",
+			t_data->conn, t_data->msg, t_data->provider);
+		goto out;
+	}
+	
+	/* Keep in main loop if connman is not yet online */
+	if (!connman_online) {
+		rval = TRUE;
+		goto out;
+	}
+
+	err = __vpn_provider_connect(t_data->provider, t_data->msg);
+	
+	/* Connected or connecting, remove from main loop */
+	if (err == -EISCONN || err == -EINPROGRESS) {
+		goto out;
+	} else if (err < 0) {
+		/* TODO this may not be necessary as do_connect has already
+		 * returned a reply to caller (or NULL if success) */
+		error = __connman_error_failed(t_data->msg, -err);
+		if (!g_dbus_send_message(t_data->conn, error))
+			DBG("Cannot send error message");
+		rval = TRUE;
+	}
+	
+out:
+	/* If removing from main event loop, free memory */
+	if (!rval) {
+		do_connect_timeout = 0;
+		if (t_data && t_data->msg)
+			dbus_message_unref(t_data->msg);
+		g_free(data);
+	}
+	
+	return rval;
+}
+
 static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
@@ -495,6 +597,40 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 	int err;
 
 	DBG("conn %p provider %p", conn, provider);
+	
+	if (!connman_online) {
+	
+		if (state_query_done) {
+			DBG("Provider %s not started because connman "
+				"not online/ready",
+				provider->identifier);
+			return __connman_error_failed(msg, ENOLINK);
+		} else {
+			DBG("Provider %s start delayed because connman "
+				"state not queried",
+				provider->identifier);
+				
+			struct do_connect_timeout_data *t_data = 
+				g_try_new0(struct do_connect_timeout_data, 1);
+			
+			if (!t_data)
+				return __connman_error_failed(msg, ENOMEM);
+
+			t_data->conn = conn;
+			t_data->msg = dbus_message_ref(msg);
+			t_data->provider = provider;
+			
+			if (!do_connect_timeout) {
+				do_connect_timeout = g_timeout_add_seconds(1,
+					do_connect_timeout_function, t_data);
+			} else {
+				DBG("Timeout function already added");
+			}
+
+			return __connman_error_failed(msg, EINPROGRESS);
+		}
+		
+	}
 
 	err = __vpn_provider_connect(provider, msg);
 	if (err < 0)
@@ -2763,6 +2899,214 @@ static void remove_unprovisioned_providers(void)
 	g_strfreev(providers);
 }
 
+static gboolean connman_property_changed(DBusConnection *conn,
+				DBusMessage *message,
+				void *user_data)
+{
+	DBusMessageIter iter, value;
+	
+	const char *key;
+	const char *str;
+	
+	const char *signature =	DBUS_TYPE_STRING_AS_STRING
+		DBUS_TYPE_VARIANT_AS_STRING;
+
+	if (!dbus_message_has_signature(message, signature)) {
+		connman_error("vpn connman property signature \"%s\" "
+			"does not match expected \"%s\"",
+			dbus_message_get_signature(message), signature);
+		return TRUE;
+	}
+
+	if (!dbus_message_iter_init(message, &iter))
+		return TRUE;
+
+	dbus_message_iter_get_basic(&iter, &key);
+
+	dbus_message_iter_next(&iter);
+	dbus_message_iter_recurse(&iter, &value);
+
+	DBG("key %s", key);
+
+	if (g_ascii_strcasecmp(key, "State") == 0 &&
+		dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING) {
+		dbus_message_iter_get_basic(&value, &str);
+		set_state(str);
+	}
+	
+	return TRUE;
+}
+
+static void get_connman_state_reply(DBusPendingCall *call, void *user_data)
+{
+	DBusMessage *reply = NULL;
+	DBusError error;
+	DBusMessageIter iter, array, dict, value;
+	
+	const char *signature = DBUS_TYPE_ARRAY_AS_STRING
+		DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+		DBUS_TYPE_STRING_AS_STRING
+		DBUS_TYPE_VARIANT_AS_STRING
+		DBUS_DICT_ENTRY_END_CHAR_AS_STRING;
+
+	const char *key;
+	const char *str;
+
+	DBG("");
+
+	if (!dbus_pending_call_get_completed(call))
+		goto done;
+
+	reply = dbus_pending_call_steal_reply(call);
+
+	dbus_error_init(&error);
+
+	if (dbus_set_error_from_message(&error, reply)) {
+		connman_error("%s", error.message);
+
+		/* In case of timeout re-add the state function to main
+		 * event loop */
+		if (g_ascii_strcasecmp(error.name, DBUS_ERROR_TIMEOUT) == 0) {
+			DBG("D-Bus timeout, re-add get_connman_state()");
+			get_connman_state(STATE_INTERVAL_DEFAULT);
+		} else {
+			dbus_error_free(&error);
+			goto done;
+		}
+	}
+
+	if (!dbus_message_has_signature(reply, signature)) {
+		connman_error("vpnd signature \"%s\" does not match "
+							"expected \"%s\"",
+			dbus_message_get_signature(reply), signature);
+		goto done;
+	}
+
+	if (!dbus_message_iter_init(reply, &array))
+		goto done;
+
+	dbus_message_iter_recurse(&array, &dict);
+	
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		dbus_message_iter_recurse(&dict, &iter);
+	
+		dbus_message_iter_get_basic(&iter, &key);
+
+		dbus_message_iter_next(&iter);
+		dbus_message_iter_recurse(&iter, &value);
+		
+		if (g_ascii_strcasecmp(key, "State") == 0 &&
+			dbus_message_iter_get_arg_type(&value) ==
+				DBUS_TYPE_STRING) {
+			dbus_message_iter_get_basic(&value, &str);
+			
+			DBG("Got initial state %s", str);
+			
+			set_state(str);
+			
+			/* No need to process further */
+			break;
+		}
+		
+		dbus_message_iter_next(&dict);
+	}
+	
+done:
+	if (reply)
+		dbus_message_unref(reply);
+
+	if (call)
+		dbus_pending_call_unref(call);
+}
+
+static gboolean run_get_connman_state(gpointer user_data)
+{
+	const char *path = "/";
+	const char *method = "GetProperties";
+	gboolean rval = FALSE;
+
+	DBusMessage *msg = NULL;
+	DBusPendingCall *call = NULL;
+	
+	DBG("");
+
+	msg = dbus_message_new_method_call(CONNMAN_SERVICE, path,
+		CONNMAN_MANAGER_INTERFACE, method);
+
+	if (!msg)
+		goto out;
+
+	if (!(rval = g_dbus_send_message_with_reply(connection, msg,
+		&call, -1))) {
+		connman_error("Cannot call %s on %s",
+			method, CONNMAN_MANAGER_INTERFACE);
+		goto out;
+	}
+
+	if (!call) {
+		connman_error("set pending call failed");
+		goto error;
+	}
+
+	if (!dbus_pending_call_set_notify(call, get_connman_state_reply,
+		NULL, NULL)) {
+		connman_error("set notify to pending call failed");
+		goto error;
+	}
+	
+	state_query_done = true;
+
+out:
+	if (msg)
+		dbus_message_unref(msg);
+	
+	/* In case sending was success, unset timeout function id */
+	if (rval) {
+		DBG("unsetting get_connman_state_timeout id");
+		get_connman_state_timeout = 0;
+	}
+	
+	/* Return FALSE in case of success to remove from main event loop */
+	return !rval;
+
+error:
+	if (call)
+		dbus_pending_call_unref(call);
+
+	rval = FALSE;
+	goto out;
+}
+
+static void get_connman_state(guint interval)
+{
+	if (get_connman_state_timeout)
+		return;
+
+	get_connman_state_timeout = 
+		g_timeout_add(interval, run_get_connman_state, NULL);
+}
+
+static void connman_service_watch_connected(DBusConnection *conn,
+				void *user_data)
+{
+	DBG("");
+
+	/* Request state */
+	get_connman_state(STATE_INTERVAL_DEFAULT);
+}
+
+static void connman_service_watch_disconnected(DBusConnection *conn,
+				void *user_data)
+{
+	DBG("");
+
+	/* No connman, set idle state */
+	set_state(CONNMAN_STATE_IDLE);
+
+	/* Set state query variable to initial state */
+	state_query_done = false;
+}
+
 int __vpn_provider_init(bool do_routes)
 {
 	int err;
@@ -2784,6 +3128,22 @@ int __vpn_provider_init(bool do_routes)
 
 	provider_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						NULL, unregister_provider);
+
+	connman_service_watch = g_dbus_add_service_watch(connection,
+					CONNMAN_SERVICE,
+					connman_service_watch_connected,
+					connman_service_watch_disconnected,
+					NULL, NULL);
+
+	connman_signal_watch = g_dbus_add_signal_watch(connection,
+					CONNMAN_SERVICE, NULL,
+					CONNMAN_MANAGER_INTERFACE,
+					PROPERTY_CHANGED,
+					connman_property_changed,
+					NULL, NULL);
+
+	get_connman_state(STATE_INTERVAL_INIT);
+
 	return 0;
 }
 
@@ -2797,6 +3157,14 @@ void __vpn_provider_cleanup(void)
 
 	g_hash_table_destroy(provider_hash);
 	provider_hash = NULL;
+
+	if (get_connman_state_timeout) {
+		if (!g_source_remove(get_connman_state_timeout))
+			connman_error("connman state timeout not removed");
+	}
+
+	g_dbus_remove_watch(connection, connman_service_watch);
+	g_dbus_remove_watch(connection, connman_signal_watch);
 
 	dbus_connection_unref(connection);
 }
