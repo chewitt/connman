@@ -458,11 +458,15 @@ static int print_match_save(GString *line, const struct xt_entry_match *e,
 		g_string_append_printf(line, " -m %s",
 			match->alias ? match->alias(e) : e->u.user.name);
 		print_match(line, ip, match, e);
-		/* TODO fix xtables_find_match returned content allocation OR
-			devise a way to go around it and enable freeing of match.
-			Currently each found match potentially leaks memory, occurs with
-			comments added to iptables rule. After fixing free match. */
-		//free(match); // xtables_find_match allocates a clone
+
+		/*
+		 * xtables_find_match allocates a clone in case the found
+		 * match has struct xt_entry_match* set (match->m). Otherwise
+		 * an entry from the internal list is returned that must not
+		 * be free'd. (iptables v.1.6.1 libxtables/xtables.c:653)
+		 */
+		if (match->m)
+			free(match);
 	} else {
 		if (e->u.match_size) {
 			ERR("print_match_save() Can't find library for match `%s'\n",
