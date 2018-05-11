@@ -326,7 +326,6 @@ unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLA
 unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
 				unit/test-sailfish_iptables_ext.c \
 				src/log.c src/storage.c src/inotify.c \
-				src/iptables.c src/firewall.c \
 				src/sailfish_iptables_ext.c
 unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
 				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl

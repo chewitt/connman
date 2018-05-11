@@ -82,7 +82,7 @@ gint check_save_directory(const char* fpath)
 		// Try to remove regular file or symlink 
 		if (g_file_test(path,G_FILE_TEST_IS_REGULAR) ||
 			g_file_test(path, G_FILE_TEST_IS_SYMLINK)) {
-			DBG("check_save_directory() Removing %s",path);
+			DBG("Removing %s",path);
 			if (g_remove(path)) {
 				ERR("check_save_directory() Remove of %s failed (%s)",
 					path, strerror(errno));
@@ -101,12 +101,12 @@ gint check_save_directory(const char* fpath)
 				goto out;
 			}
 			
-			DBG("check_save_directory() Dir %s exists, nothing done.", path);
+			DBG("Dir %s exists, nothing done.", path);
 			goto out;
 		}
 	}
 	
-	DBG("check_save_directory() Creating new dir for saving %s", path);
+	DBG("Creating new dir for saving %s", path);
 	rval = g_mkdir_with_parents(path,mode);
 
 out:
@@ -194,37 +194,101 @@ typedef struct output_capture_data {
 	gchar *stdout_data;
 } output_capture_data;
 
+gint stdout_capture_end(output_capture_data *data)
+{
+	gint rval = 0;
+
+	if(!data)
+		return 1;
+
+	if (fflush(stdout))
+		DBG("fflushing stdout failed: %s", strerror(errno));
+
+	if (data->stdout_saved != -1) {
+		if (dup2(data->stdout_saved,fileno(stdout)) == -1) {
+			DBG("Cannot restore stdout: %s", strerror(errno));
+			rval = -1;
+		}
+
+		if (close(data->stdout_saved) == -1) {
+			DBG("Cannot close saved stdout: %s", strerror(errno));
+			rval = -1;
+		} else {
+			data->stdout_saved = -1;
+		}
+	}
+
+	if (data->stdout_pipes[0] != -1) {
+		if (close(data->stdout_pipes[0]) == -1) {
+			DBG("Cannot close stdout_pipes[0]: %s",
+				strerror(errno));
+			rval = -1;
+		}
+
+		data->stdout_pipes[0] = -1;
+	}
+
+	if (data->stdout_pipes[1] != -1 ) {
+		if (close(data->stdout_pipes[1])) {
+			DBG("Cannot close stdout_pipes[1]: %s",
+				strerror(errno));
+			rval = -1;
+		}
+	}
+
+	return rval != -1 ? 0 : 1;
+}
+
 gint stdout_capture_start(output_capture_data *data)
 {
-	if (fflush(stdout))
-		ERR("stdout_capture_start() cannot fflush stdout before use.");
-	
-	data->stdout_saved = dup(fileno(stdout));
-	
-	if (pipe(data->stdout_pipes)) {
-		ERR("stdout_capture_start() cannot create pipe");
-		return 1;
-	}
-	
-	if (dup2(data->stdout_pipes[1], fileno(stdout)) == -1) {
-		ERR("stdout_capture_start() cannot duplicate fp with dup2");
+	if(!data)
 		return -1;
+
+	if (fflush(stdout)) {
+		DBG("fflushing stdout failed: %s", strerror(errno));
+		goto error;
+	}
+
+	data->stdout_saved = dup(fileno(stdout));
+
+	if (data->stdout_saved == -1) {
+		DBG("Cannot copy stdout: %s", strerror(errno));
+		goto error;
+	}
+
+	if (pipe(data->stdout_pipes) == -1) {
+		DBG("cannot create pipe: %s", strerror(errno));
+		goto error;
+	}
+
+	if (dup2(data->stdout_pipes[1], fileno(stdout)) == -1) {
+		DBG("cannot duplicate fp with dup2: %s", strerror(errno));
+		goto error;
 	}
 	
 	if (close(data->stdout_pipes[1])) {
-		ERR("stdout_capture_start() cannot close existing fp");
-		return 1;
+		DBG("cannot close existing fp: %s", strerror(errno));
+		goto error;
 	}
 	
 	data->stdout_pipes[1] = -1;
 	
 	return 0;
+
+error:
+	stdout_capture_end(data);
+	return -1;
 }
 
 void stdout_capture_data(output_capture_data *data)
 {
 	data->stdout_data = g_try_malloc0(data->stdout_read_limit);
 	ssize_t bytes_read = 0;
+
+	if (fflush(stdout)) {
+		DBG("fflushing stdout failed: %s", strerror(errno));
+		return;
+	}
 
 	do {
 		bytes_read = read(data->stdout_pipes[0],
@@ -252,18 +316,9 @@ void stdout_capture_data(output_capture_data *data)
 	if (bytes_read == -1)
 		ERR("stdout_capture_data() error while reading stdout: %s",
 			strerror(errno));
-}
-
-gint stdout_capture_end(output_capture_data *data)
-{
-	gint rval = dup2(data->stdout_saved,fileno(stdout));
 	
-	if (close(data->stdout_pipes[0]))
-		ERR("stdout_capture_end() Cannot close capture fd @ 0");
-	
-	data->stdout_pipes[0] = -1;
-	
-	return rval != -1 ? 0 : 1;
+	if (fflush(stdout))
+		DBG("flushing stdout failed");
 }
 
 /*
@@ -275,8 +330,8 @@ static void print_target_or_match(GString *line, const void *ip,
 	const struct xtables_match *match, const struct xt_entry_match *m_entry)
 {
 	output_capture_data data = {
-		.stdout_pipes = {0},
-		.stdout_saved = 0,
+		.stdout_pipes = {-1},
+		.stdout_saved = -1,
 		.stdout_read_limit = 1024,
 		.stdout_bytes_read = 0,
 		.stdout_data = NULL
@@ -286,8 +341,10 @@ static void print_target_or_match(GString *line, const void *ip,
 		return;
 
 
-	if (stdout_capture_start(&data))
-		return;
+	if (stdout_capture_start(&data)) {
+		ERR("Starting stdout capture failed.");
+		goto out;
+	}
 	
 	// t_entry/m_entry->u.user.revision from iptables 1.6.1 iptables.c:1139
 	if (target && t_entry && target->save &&
@@ -296,19 +353,15 @@ static void print_target_or_match(GString *line, const void *ip,
 	else if (match && m_entry && match->save && 
 		m_entry->u.user.revision == match->revision)
 		match->save(ip,m_entry);
-		
-	if (fflush(stdout)) {
-		stdout_capture_end(&data);
-		return;
-	}
-		
+
 	stdout_capture_data(&data);
 	
 	if (data.stdout_bytes_read > 0) {
 		g_string_append(line,data.stdout_data);
 		g_free(data.stdout_data);
 	}
-		
+
+out:
 	if (stdout_capture_end(&data))
 		ERR("Ending stdout capture failed.");
 }
@@ -424,21 +477,25 @@ static void print_iface(GString* line, char letter, const char *iface,
 	source header include/linux/netfilter/x_tables.h
 */
 static int match_iterate(
-	GString *line, const struct ipt_entry *e,
+	GString *line, const struct ipt_entry *entry, const struct ipt_ip *ip,
 	int (*fn) (
-		GString *line, const struct xt_entry_match *e, 
-		const struct ipt_ip *ip), 
-	 const struct ipt_ip *ip)
+		GString *fn_line,
+		const struct xt_entry_match *fn_entry, 
+		const struct ipt_ip *fn_ip)
+	 )
 {
-	guint i;
+	guint i = 0;
 	gint rval = 0;
-	struct xt_entry_match *match;
+	struct xt_entry_match *match = NULL;
+	
+	if(!line || !entry || !ip || !fn)
+		return 1;
 	
 	for (i = sizeof(struct ipt_entry);
-		i < (e)->target_offset;
-		i += match->u.match_size) {
-		match = (void *)e + i;
-		rval = fn(line,match,ip);
+		i < (entry)->target_offset;
+		i += match ? match->u.match_size : 0) {
+		match = (void *)entry + i;
+		rval = fn(line, match, ip);
 		if (rval != 0)
 			break;
 	}
@@ -516,7 +573,7 @@ void print_iptables_rule(GString* line, const struct ipt_entry *e,
 	
 	/* Print matchinfo part */
 	if (e->target_offset)
-		match_iterate(line, e, print_match_save, &e->ip);
+		match_iterate(line, e, &e->ip, print_match_save);
 
 	/* print counters for iptables -R */
 	if (counters < 0)
@@ -554,6 +611,26 @@ void print_iptables_rule(GString* line, const struct ipt_entry *e,
 	g_string_append(line, "\n");
 }
 
+static struct xtc_handle* get_iptc_handle(const char *table_name)
+{
+	struct xtc_handle *h = NULL;
+
+	if (table_name && *table_name) {
+		h = iptc_init(table_name);
+
+		if (!h) {
+			xtables_load_ko(xtables_modprobe_program, false);
+			h = iptc_init(table_name);
+		}
+		if (!h)
+			ERR("get_iptc_handle() Cannot initialize iptc: %s for table %s\n",
+				iptc_strerror(errno), table_name);
+	}
+
+	return h;
+}
+
+
 /* 	Adapted from GPLv2 iptables source file (v.1.4.15) iptables-save.c:35
 	function for_each_table().
 */
@@ -562,10 +639,18 @@ int iptables_check_table(const char *table_name)
 	int ret = 1;
 	FILE *procfile = NULL;
 	char read_table_name[XT_TABLE_MAXNAMELEN+1];
+	struct xtc_handle *handle = NULL;
 	
 	if (!table_name || !(*table_name))
 		return ret;
 	
+	/* Try to get iptc handle for the table first,
+	 * otherwise read from file */
+	if ((handle = get_iptc_handle(table_name))) {
+		iptc_free(handle);
+		return 0;
+	}
+
 	memset(&read_table_name,0,sizeof(read_table_name));
 
 	procfile = fopen(IPTABLES_NAMES_FILE, "re");
@@ -605,25 +690,6 @@ int iptables_check_table(const char *table_name)
 
 	fclose(procfile);
 	return ret;
-}
-
-static struct xtc_handle* get_iptc_handle(const char *table_name)
-{
-	struct xtc_handle *h = NULL;
-	
-	if (table_name && *table_name) {
-		h = iptc_init(table_name);
-	
-		if (!h) {
-			xtables_load_ko(xtables_modprobe_program, false);
-			h = iptc_init(table_name);
-		}
-		if (!h)
-			ERR("get_iptc_handle() Cannot initialize iptc: %s for table %s\n",
-				iptc_strerror(errno), table_name);
-	}
-	
-	return h;
 }
 
 /* 	Adapted from GPLv2 iptables source file (v.1.4.15) iptables-save.c:59
@@ -768,7 +834,7 @@ static int iptables_iptc_set_policy(const gchar* table_name,
 		return 1;
 
 	if (!iptc_is_chain(chain,h)) {
-		DBG("iptables_iptc_set_policy() chain does not exist, adding new.");
+		DBG("Chain \"%s\" does not exist, adding new.", chain);
 		rval = connman_iptables_new_chain(table_name, chain);
 		goto out; // No policy change for custom chains
 	}
@@ -841,81 +907,178 @@ out:
 	return rval;
 }
 
+static void iptables_append_arg(GString *string, const gchar *arg, bool quote)
+{
+	/* Note: Any characters with high bit set are assumed to be
+	 * part of valid utf8 sequence and are passed through as-is.
+	 */
+	size_t i = 0;
+
+	if (string->len) {
+		/* Separate from previous arg with a space */
+		g_string_append_c(string, ' ');
+	}
+
+	if (!quote) {
+		/* Auto-quote if string contains spaces or control chars */
+		for (i = 0; ; ) {
+			int chr = (unsigned char)arg[i++];
+			if (chr > 32)
+				continue;
+			if (chr > 0)
+				quote = true;
+			break;
+		}
+	}
+
+	if (quote) {
+		/* Note: g_shell_quote() uses single quote escaping, which
+		 * basically means we can't use if if we wish to retain the
+		 * original formatting with the expected inputs where no
+		 * special characters are used except for the spaces within
+		 * quoted comment strings.
+		 */
+		g_string_append_c(string, '"');
+		for (i = 0; ; ) {
+			int chr = (unsigned char)arg[i++];
+			if (chr == 0 ) {
+				break;
+			}
+			if (chr >= 32) {
+				g_string_append_c(string, chr);
+				continue;
+			}
+			switch (chr) {
+			case '\a': chr = 'a'; break;
+			case '\b': chr = 'b'; break;
+			case '\t': chr = 't'; break;
+			case '\n': chr = 'n'; break;
+			case '\v': chr = 'v'; break;
+			case '\f': chr = 'f'; break;
+			case '\r': chr = 'r'; break;
+			case '"': break;
+			default:
+				g_string_append_printf(string, "\\%#o", chr);
+				continue;
+			}
+			g_string_append_c(string, '\\');
+			g_string_append_c(string, chr);
+		}
+		g_string_append_c(string, '"');
+	} else {
+		/* Add as-is */
+		g_string_append(string, arg);
+	}
+}
 static int iptables_parse_rule(const gchar* table_name, gchar* rule)
 {
-	gint rval = 1;
-	gchar unwanted_chars[] = "\\\"";
-	
-	if (table_name && *table_name && rule && *rule) {
-		gint i = 0;
-		
-		// Remove '\' and '"' from rule
-		rule = g_strdelimit(rule, unwanted_chars, ' ');
-		
-		// Format, e.g., -A CHAIN -p tcp -s 1.2.3.4  ... separated with spaces
-		gchar** tokens = g_strsplit_set(rule, " ", -1);
-		 
-		if (tokens && g_strv_length(tokens) > 2) {
-			
-			/* Discard all rules that have prefix "connman-" in chain name or
-			 * target name. Chain = token[1], target = last token.
-			 */
-			
-			if (str_has_connman_prefix(tokens[1]) ||
-				str_has_connman_prefix(tokens[g_strv_length(tokens) - 1])) {
-				DBG("Skipping connman rule");
-				rval = 0; // Not an error situation
+	int rval = 1, i = 0;
+	gint argc = 0;
+	gchar **argv = NULL;
+	GError *error = NULL;
+	GString *rule_str = NULL;
+
+	if (!table_name || !*table_name || !rule || !*rule)
+		goto out;
+
+	/* Format, e.g., -A CHAIN -p tcp -s 1.2.3.4  ... separated with spaces
+	 * However a shell command line parser needs to be used to deal with
+	 * arguments like: ... -m comment --comment "foo bar"
+	 */
+	if (!g_shell_parse_argv(rule, &argc, &argv, &error))
+		goto out;
+
+	if (argc < 4 || !argv[0][0])
+		goto out;
+
+	/* Discard all rules that have prefix "connman-" in chain name or
+	 * target name. Chain = token[1], target = last token.
+	 */
+	if (str_has_connman_prefix(argv[1]) ||
+		str_has_connman_prefix(argv[argc - 1])) {
+		DBG("Skipping connman rule \"%s\"", rule);
+		rval = 0; // Not an error situation
+		goto out;
+	}
+
+	rule_str = g_string_new(NULL);
+
+	/* Match "-m comment" should be checked that it is followed
+	 * by a --comment content section, otherwise iptables will
+	 * call exit as rule is invalid. Any words "comment" in the
+	 * actual comment should not trigger this.
+	 */
+	for (i = 2; i < argc; ) {
+		const char *arg = argv[i++];
+		if (!g_strcmp0(arg, "-m")) {
+			const char *match = argv[i++];
+			if (!match) {
+				DBG("trailing '-m' in rule \"%s\"", rule);
 				goto out;
 			}
-		
-			GString *rule_str = g_string_new(NULL);
-		
-			// Construct rule to be added
-			for (i = 2 ; tokens[i] ; i++) {
-				// Do not add empty content (or spaces)
-				if (*(tokens[i]) && g_strcmp0(tokens[i]," ") != 0)
-					g_string_append_printf(rule_str,"%s ", tokens[i]);
+			iptables_append_arg(rule_str, arg, false);
+			iptables_append_arg(rule_str, match, false);
+			if (!g_strcmp0(match, "comment")) {
+				const char *opt = argv[i++];
+				if (g_strcmp0(opt, "--comment")) {
+					DBG("malformed '-m comment' "
+						"in rule \"%s\"", rule);
+					goto out;
+				}
+				const char *txt = argv[i++];
+				if (!txt || g_str_has_prefix(txt, "-")) {
+					DBG("malformed '--comment' "
+						"in rule \"%s\"", rule);
+					goto out;
+				}
+				iptables_append_arg(rule_str, opt, false);
+				iptables_append_arg(rule_str, txt, true);
 			}
-			
-			// First token contains the mode, prefixed with '-'
-			switch (tokens[0][1]) {
-			// Append
-			case 'A':
-				DBG("Append to table \"%s\" chain \"%s\" rule: %s",
-					table_name, tokens[1], rule_str->str);
-				rval = __connman_iptables_append(table_name, tokens[1],
-						rule_str->str);
-				break;
-			// Insert
-			case 'I':
-				DBG("Insert to table \"%s\" chain \"%s\" rule: %s",
-					table_name, tokens[1], rule_str->str);
-				rval = __connman_iptables_insert(table_name, tokens[1],
-						rule_str->str);
-				break;
-			// Delete
-			case 'D':
-				DBG("Delete from table \"%s\" chain \"%s\" rule: %s",
-					table_name, tokens[1], rule_str->str);
-				rval = __connman_iptables_delete(table_name, tokens[1],
-						rule_str->str);
-				break;
-			default:
-				ERR("iptables_parse_rule() invalid rule prefix %c",
-					rule[1]);
-			}
-			g_string_free(rule_str,true);
+		} else {
+			iptables_append_arg(rule_str, arg, false);
 		}
-out:
-		g_strfreev(tokens);
 	}
-	
+
+	// First token contains the mode, prefixed with '-'
+	switch (argv[0][1]) {
+	// Append
+	case 'A':
+		DBG("Append to table \"%s\" chain \"%s\" rule: %s",
+			table_name, argv[1], rule_str->str);
+		rval = __connman_iptables_append(table_name, argv[1],
+				rule_str->str);
+		break;
+	// Insert
+	case 'I':
+		DBG("Insert to table \"%s\" chain \"%s\" rule: %s",
+			table_name, argv[1], rule_str->str);
+		rval = __connman_iptables_insert(table_name, argv[1],
+				rule_str->str);
+		break;
+	// Delete
+	case 'D':
+		DBG("Delete from table \"%s\" chain \"%s\" rule: %s",
+			table_name, argv[1], rule_str->str);
+		rval = __connman_iptables_delete(table_name, argv[1],
+				rule_str->str);
+		break;
+	default:
+		ERR("iptables_parse_rule() invalid rule prefix %c",
+			rule[1]);
+	}
+
+out:
+	if (rule_str)
+		g_string_free(rule_str, true);
+	if (error)
+		g_error_free(error);
+	g_strfreev(argv);
 	return rval;
 }
 
 static int iptables_restore_table(const char *table_name, const char *fpath)
 {
-	gint rval = 0, i = 0;
+	gint rval = 0, i = 0, rules = 0;
 	gboolean content_matches = false;
 	gboolean process = true;
 	gint table_result = iptables_check_table(table_name);
@@ -948,13 +1111,21 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 			break;
 		// Chain and policy
 		case ':':
-			if (content_matches)
-				rval += iptables_parse_policy(table_name, tokens[i]);
+			if (content_matches) {
+				if (iptables_parse_policy(table_name, tokens[i]))
+					ERR("iptables_restore_table() Invalid policy %s",
+						tokens[i]);
+			}
 			break;
 		// Rule
 		case '-':
-			if (content_matches)
-				rval += iptables_parse_rule(table_name, tokens[i]);
+			if (content_matches) {
+				if (iptables_parse_rule(table_name, tokens[i]))
+					ERR("iptables_restore_table() Invalid rule %s",
+						tokens[i]);
+				else
+					rules++;
+			}
 			break;
 		// If any other prefix for a line is found and we are processing
 		// 'COMMIT' is the last line in iptables saved format, stop processing
@@ -968,11 +1139,16 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 	
 	g_string_free(content,true);
 	
-	if (content_matches)
-		rval += __connman_iptables_commit(table_name);
-	else
+	if (content_matches) {
+		/* Commit fails if there has not been any changes */
+		if (rules) {
+			DBG("Added %d rules to table %s", rules, table_name);
+			rval = __connman_iptables_commit(table_name);
+		}
+	} else {
 		ERR("iptables_restore_table() %s",
 			"requested table name does not match file table name");
+	}
 
 	return rval;
 }
@@ -1001,8 +1177,7 @@ int iptables_save(const char* table_name)
 		}
 	}
 		
-	DBG("connman_iptables_save() saving firewall table %s to %s",
-		table_name, save_file);
+	DBG("saving iptables table %s to %s", table_name, save_file);
 
 	rval = iptables_save_table(save_file, NULL, table_name, true);
 	
@@ -1021,7 +1196,6 @@ int iptables_restore(const char* table_name)
 	if (!table_name || !(*table_name))
 		goto out;
 		
-	// Remove all /./ and /../ and expand symlink
 	load_file = g_strconcat(STORAGEDIR, "/iptables/", table_name, ".v4", NULL);
 
 	// Allow only regular files from connman storage
@@ -1031,14 +1205,19 @@ int iptables_restore(const char* table_name)
 				table_name, load_file);
 			goto out;
 	}
-	
-	DBG("connman_iptables_restore() restoring firewall from %s", load_file);
-		
-	if (!iptables_clear_table(table_name))
-		rval = iptables_restore_table(table_name, load_file);
-	else
-		ERR("connman_iptables_restore() cannot restore table %s", table_name);
-	
+
+	DBG("restoring iptables table %s from %s", table_name, load_file);
+
+	if ((rval = iptables_clear_table(table_name))) {
+		ERR("clearing of table %s failed, cannot restore.",
+			table_name);
+		goto out;
+	}
+
+	if((rval = iptables_restore_table(table_name, load_file)))
+		ERR("connman_iptables_restore() cannot restore table %s",
+			table_name);
+
 out:
 	g_free(load_file);
 	return rval;
@@ -1076,9 +1255,9 @@ int __connman_iptables_save_all()
 	if(!tables || !g_strv_length(tables))
 		return 1;
 	
-	for (i = 0; tables[i]; i++) {
-		if(iptables_save(tables[i]))
-			DBG("cannot save table %s", tables[i]);
+	for (i = 0; tables[i] && *tables[i]; i++) {
+		if (iptables_save(tables[i]))
+			DBG("cannot save table \"%s\"", tables[i]);
 	}
 	
 	g_strfreev(tables);
@@ -1094,7 +1273,7 @@ int __connman_iptables_restore_all()
 	if(!tables || !g_strv_length(tables))
 		return 1;
 	
-	for (i = 0; tables[i]; i++) {
+	for (i = 0; tables[i] && *tables[i]; i++) {
 		if(iptables_restore(tables[i]))
 			DBG("cannot restore table %s", tables[i]);
 	}
@@ -1110,6 +1289,8 @@ int connman_iptables_clear(const char* table_name)
 		g_ascii_strcasecmp(table_name,"filter"))
 		return 1;
 
+	DBG("%s", table_name);
+
 	return iptables_clear_table(table_name);
 }
 
@@ -1121,7 +1302,9 @@ int connman_iptables_new_chain(const char *table_name,
 {
 	if (!table_name || !(*table_name) || !chain || !(*chain))
 		return -1;
-	
+
+	DBG("%s %s", table_name, chain);
+
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
@@ -1136,7 +1319,9 @@ int connman_iptables_delete_chain(const char *table_name,
 {
 	if (!table_name || !(*table_name) || !chain || !(*chain))
 		return -1;
-		
+
+	DBG("%s %s", table_name, chain);
+
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
@@ -1148,10 +1333,12 @@ int connman_iptables_flush_chain(const char *table_name,
 {
 	if (!table_name || !(*table_name) || !chain || !(*chain))
 		return -1;
-		
+
+	DBG("%s %s", table_name, chain);
+
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
-		
+
 	return __connman_iptables_flush_chain(table_name, chain);
 }
 
@@ -1162,7 +1349,9 @@ int connman_iptables_find_chain(const char *table_name, const char *chain)
 {
 	if (!table_name || !(*table_name) || !chain || !(*chain))
 		return -EINVAL;
-	
+
+	DBG("%s %s", table_name, chain);
+
 	return __connman_iptables_find_chain(table_name, chain);
 }
 
@@ -1173,7 +1362,9 @@ int connman_iptables_insert(const char *table_name,
 	if (!table_name || !chain || !rule_spec || 
 		!(*table_name) || !(*chain) || !(*rule_spec))
 		return -EINVAL;
-	
+
+	DBG("%s %s %s", table_name, chain, rule_spec);
+
 	if (str_has_connman_prefix(chain) || str_contains_connman(rule_spec))
 		return -EINVAL;
 
@@ -1187,6 +1378,8 @@ int connman_iptables_append(const char *table_name,
 	if (!table_name || !chain || !rule_spec || 
 		!(*table_name) || !(*chain) || !(*rule_spec))
 		return -EINVAL;
+
+	DBG("%s %s %s", table_name, chain, rule_spec);
 
 	if (str_has_connman_prefix(chain) || str_contains_connman(rule_spec))
 		return -EINVAL;
@@ -1202,6 +1395,8 @@ int connman_iptables_delete(const char *table_name,
 		!(*table_name) || !(*chain) || !(*rule_spec))
 		return -EINVAL;
 
+	DBG("%s %s %s", table_name, chain, rule_spec);
+
 	if (str_has_connman_prefix(chain) || str_contains_connman(rule_spec))
 		return -EINVAL;
 
@@ -1213,6 +1408,8 @@ int connman_iptables_commit(const char *table_name)
 	if (!table_name || !(*table_name))
 		return -EINVAL;
 
+		DBG("%s", table_name);
+
 	return __connman_iptables_commit(table_name);
 }
 
@@ -1223,7 +1420,9 @@ int connman_iptables_change_policy(const char *table_name,
 	if (!table_name || !chain || !policy || 
 		!(*table_name) || !(*chain) || !(*policy))
 		return -EINVAL;
-		
+
+	DBG("%s %s %s", table_name, chain, policy);
+
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
@@ -1305,6 +1504,8 @@ void connman_iptables_free_content(struct iptables_content *content)
 {
 	if (!content)
 		return;
+
+	DBG("");
 	
 	g_list_free_full(content->chains, g_free);
 	g_list_free_full(content->rules, g_free);
@@ -1319,6 +1520,8 @@ struct iptables_content* connman_iptables_get_content(const char *table_name)
 	
 	if(!table_name || !(*table_name))
 		return NULL;
+
+	DBG("%s", table_name);
 	
 	output = g_string_new(NULL);
 	
