@@ -327,9 +327,6 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 					index, -err, strerror(-err));
 		}
 
-		if (!__vpn_provider_set_autoconnect(provider, true))
-			DBG("cannot set autoconnect for provider %p", provider);
-
 		break;
 
 	case VPN_STATE_UNKNOWN:
