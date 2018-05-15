@@ -13,7 +13,8 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h \
 			include/technology.h include/iptables_ext.h \
-			include/dbus.h gdbus/gdbus.h include/nat.h
+			include/dbus.h gdbus/gdbus.h include/nat.h \
+			include/acd.h
 
 if VPN
 include_HEADERS += include/task.h include/setting.h \
@@ -144,7 +145,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(stats_sources) \
 			src/6to4.c src/ippool.c src/bridge.c src/nat.c \
 			src/ipaddress.c src/inotify.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
-			src/wakeup_timer.c src/fsid.c \
+			src/acd.c src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c vpn/vpn-util.c \
 			src/sailfish_iptables_ext.c src/iptables-validate.c \
 			src/login_manager.c
