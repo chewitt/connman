@@ -3658,6 +3658,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	connman_dbus_dict_append_dict(dict, "Provider",
 						append_provider, service);
 
+	if (service->network)
+		connman_network_append_acddbus(dict, service->network);
+
 	service_append_boolean(service, &service_available, dict);
 	service_append_boolean(service, &service_saved, dict);
 	append_restricted_string(dict, service, PROP_ACCESS,
@@ -3830,6 +3833,14 @@ const char *connman_service_get_domainname(struct connman_service *service)
 		return service->domains[0];
 	else
 		return service->domainname;
+}
+
+const char *connman_service_get_dbuspath(struct connman_service *service)
+{
+	if (!service)
+		return NULL;
+
+	return service->path;
 }
 
 char **connman_service_get_nameservers(struct connman_service *service)
