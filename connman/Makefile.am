@@ -47,7 +47,7 @@ backtrace_sources = src/backtrace.c
 endif
 
 gdhcp_sources = gdhcp/gdhcp.h gdhcp/common.h gdhcp/common.c gdhcp/client.c \
-		gdhcp/server.c gdhcp/ipv4ll.h gdhcp/ipv4ll.c gdhcp/unaligned.h
+		gdhcp/server.c gdhcp/unaligned.h
 
 gweb_sources = gweb/gweb.h gweb/gweb.c gweb/gresolv.h gweb/gresolv.c
 
@@ -403,22 +403,14 @@ tools_wpad_test_LDADD = @GLIB_LIBS@ -lresolv
 
 tools_stats_tool_LDADD = @GLIB_LIBS@
 
-<<<<<<< HEAD:connman/Makefile.am
-tools_dhcp_test_SOURCES = $(backtrace_sources) src/wakeup_timer.c src/log.c \
-		 src/util.c $(gdhcp_sources) tools/dhcp-test.c src/shared/arp.c
-tools_dhcp_test_LDADD = @GLIB_LIBS@ -ldl
-
-tools_dhcp_server_test_SOURCES =  $(backtrace_sources) src/log.c src/util.c \
-		$(gdhcp_sources) tools/dhcp-server-test.c src/shared/arp.c \
-		src/wakeup_timer.c 
-=======
 tools_dhcp_test_SOURCES = $(backtrace_sources) src/log.c src/util.c \
-		 $(gdhcp_sources) src/inet.c tools/dhcp-test.c src/shared/arp.c
+		 $(gdhcp_sources) src/inet.c tools/dhcp-test.c src/shared/arp.c \
+		src/wakeup_timer.c
 tools_dhcp_test_LDADD = @GLIB_LIBS@ -ldl
 
 tools_dhcp_server_test_SOURCES =  $(backtrace_sources) src/log.c src/util.c \
-		$(gdhcp_sources) src/inet.c tools/dhcp-server-test.c src/shared/arp.c
->>>>>>> 577def1... inet: Add __connman_inet_get_interface_mac_address():Makefile.am
+		$(gdhcp_sources) src/inet.c tools/dhcp-server-test.c src/shared/arp.c \
+		src/wakeup_timer.c 
 tools_dhcp_server_test_LDADD = @GLIB_LIBS@ -ldl
 
 tools_dbus_test_SOURCES = tools/dbus-test.c
@@ -451,7 +443,8 @@ tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
 
-tools_netlink_test_SOURCES =$(shared_sources) tools/netlink-test.c
+tools_netlink_test_SOURCES = src/shared/util.c src/shared/netlink.c \
+		tools/netlink-test.c
 tools_netlink_test_LDADD = @GLIB_LIBS@
 
 endif
