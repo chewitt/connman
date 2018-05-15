@@ -62,7 +62,8 @@ backtrace_sources = src/backtrace.c
 endif
 
 shared_sources = src/shared/util.h src/shared/util.c \
-		src/shared/netlink.h src/shared/netlink.c
+		src/shared/netlink.h src/shared/netlink.c \
+		src/shared/arp.h src/shared/arp.c
 
 if DATAFILES
 
@@ -324,7 +325,8 @@ unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
 unit_test_service_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DSTATEDIR=\""$(statedir)"\"
 unit_test_service_SOURCES = $(backtrace_sources) $(gdhcp_sources) \
-				$(gweb_sources) unit/test-service.c \
+				$(gweb_sources) $(shared_sources) \
+				unit/test-service.c \
 				src/connman.h src/log.c src/error.c src/task.c \
 				src/device.c src/network.c src/connection.c \
 				src/manager.c src/agent-connman.c src/clock.c \
@@ -402,11 +404,12 @@ tools_wpad_test_LDADD = @GLIB_LIBS@ -lresolv
 tools_stats_tool_LDADD = @GLIB_LIBS@
 
 tools_dhcp_test_SOURCES = $(backtrace_sources) src/wakeup_timer.c src/log.c \
-		 src/util.c $(gdhcp_sources) tools/dhcp-test.c
+		 src/util.c $(gdhcp_sources) tools/dhcp-test.c src/shared/arp.c
 tools_dhcp_test_LDADD = @GLIB_LIBS@ -ldl
 
 tools_dhcp_server_test_SOURCES =  $(backtrace_sources) src/log.c src/util.c \
-		$(gdhcp_sources) src/wakeup_timer.c tools/dhcp-server-test.c
+		$(gdhcp_sources) tools/dhcp-server-test.c src/shared/arp.c \
+		src/wakeup_timer.c 
 tools_dhcp_server_test_LDADD = @GLIB_LIBS@ -ldl
 
 tools_dbus_test_SOURCES = tools/dbus-test.c
