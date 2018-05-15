@@ -403,6 +403,7 @@ tools_wpad_test_LDADD = @GLIB_LIBS@ -lresolv
 
 tools_stats_tool_LDADD = @GLIB_LIBS@
 
+<<<<<<< HEAD:connman/Makefile.am
 tools_dhcp_test_SOURCES = $(backtrace_sources) src/wakeup_timer.c src/log.c \
 		 src/util.c $(gdhcp_sources) tools/dhcp-test.c src/shared/arp.c
 tools_dhcp_test_LDADD = @GLIB_LIBS@ -ldl
@@ -410,6 +411,14 @@ tools_dhcp_test_LDADD = @GLIB_LIBS@ -ldl
 tools_dhcp_server_test_SOURCES =  $(backtrace_sources) src/log.c src/util.c \
 		$(gdhcp_sources) tools/dhcp-server-test.c src/shared/arp.c \
 		src/wakeup_timer.c 
+=======
+tools_dhcp_test_SOURCES = $(backtrace_sources) src/log.c src/util.c \
+		 $(gdhcp_sources) src/inet.c tools/dhcp-test.c src/shared/arp.c
+tools_dhcp_test_LDADD = @GLIB_LIBS@ -ldl
+
+tools_dhcp_server_test_SOURCES =  $(backtrace_sources) src/log.c src/util.c \
+		$(gdhcp_sources) src/inet.c tools/dhcp-server-test.c src/shared/arp.c
+>>>>>>> 577def1... inet: Add __connman_inet_get_interface_mac_address():Makefile.am
 tools_dhcp_server_test_LDADD = @GLIB_LIBS@ -ldl
 
 tools_dbus_test_SOURCES = tools/dbus-test.c
