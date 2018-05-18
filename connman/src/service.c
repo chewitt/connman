@@ -1733,7 +1733,6 @@ static void disconnect_vpn_service(struct connman_service *service, void* user_d
 		switch(service->state) {
 		case CONNMAN_SERVICE_STATE_ASSOCIATION:
 		case CONNMAN_SERVICE_STATE_CONFIGURATION:
-		case CONNMAN_SERVICE_STATE_DISCONNECT:
 		case CONNMAN_SERVICE_STATE_ONLINE:
 		case CONNMAN_SERVICE_STATE_READY:
 			if (service->provider) {
@@ -1742,7 +1741,7 @@ static void disconnect_vpn_service(struct connman_service *service, void* user_d
 					service->identifier, service->state);
 			}
 			break;
-		
+		case CONNMAN_SERVICE_STATE_DISCONNECT:
 		case CONNMAN_SERVICE_STATE_FAILURE:
 		case CONNMAN_SERVICE_STATE_UNKNOWN:
 		case CONNMAN_SERVICE_STATE_IDLE:
