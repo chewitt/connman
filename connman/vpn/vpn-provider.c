@@ -1630,6 +1630,40 @@ static bool check_host(char **hosts, char *host)
 	return false;
 }
 
+static bool is_any_addr(const char *address, int family)
+{
+	bool rval = false;
+	struct addrinfo hints;
+	struct addrinfo *result = NULL;
+	struct sockaddr_in6 *in6 = NULL;
+	struct sockaddr_in *in4 = NULL;
+
+	if (!address || !*address)
+		goto out;
+
+	memset(&hints, 0, sizeof(struct addrinfo));
+
+	hints.ai_family = family;
+
+	if (getaddrinfo(address, NULL, &hints, &result))
+		goto out;
+
+	if (result) {
+		if (result->ai_family == AF_INET6) {
+			in6 = (struct sockaddr_in6*)result->ai_addr;
+			rval = IN6_IS_ADDR_UNSPECIFIED(&in6->sin6_addr);
+		} else {
+			in4 = (struct sockaddr_in*)result->ai_addr;
+			rval = in4->sin_addr.s_addr == INADDR_ANY;
+		}
+
+		freeaddrinfo(result);
+	}
+
+out:
+	return rval;
+}
+
 static void provider_append_routes(gpointer key, gpointer value,
 					gpointer user_data)
 {
@@ -1651,8 +1685,13 @@ static void provider_append_routes(gpointer key, gpointer value,
 		return;
 	}
 
-	/* When all are NULL default route with any addresses is added */
-	if (!route->network && !route->gateway && !route->netmask) {
+	/*
+	 * When network and netmask are INADDR_ANY and gateway is NULL then
+	 * default route is being added
+	 */
+	if (is_any_addr(route->network, provider->family) == 0 &&
+		!route->gateway &&
+		is_any_addr(route->netmask, provider->family) == 0) {
 		DBG("Adding default route for provider %p", provider);
 		default_route_set = true;
 	}
@@ -1674,6 +1713,8 @@ static int set_connected(struct vpn_provider *provider,
 					bool connected)
 {
 	struct vpn_ipconfig *ipconfig;
+	const gchar *ipaddr_any = provider->family == AF_INET6 ?
+		"::" : "0.0.0.0";
 
 	DBG("provider %p id %s connected %d", provider,
 					provider->identifier, connected);
@@ -1702,7 +1743,24 @@ static int set_connected(struct vpn_provider *provider,
 
 		if (!default_route_set) {
 			DBG("Adding default route for provider %p", provider);
-			connman_inet_add_network_route(0, NULL, NULL, NULL);
+
+			if (provider->family == AF_INET6) {
+				/*
+				 * In routing IPv6 any (::) address prefix is 0
+				 * http://www.tldp.org/HOWTO/Linux+IPv6-HOWTO/
+				 */
+				connman_inet_add_ipv6_network_route(
+						provider->index,
+						ipaddr_any,
+						NULL,
+						0);
+			} else {
+				connman_inet_add_network_route(
+						provider->index,
+						ipaddr_any,
+						NULL,
+						ipaddr_any);
+			}
 		}
 
 	} else {
