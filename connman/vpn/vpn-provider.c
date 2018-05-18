@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define STATE_INTERVAL_INIT 		500
 #define STATE_INTERVAL_DEFAULT		0
 
 #define CONNMAN_STATE_ONLINE 		"online"
@@ -111,12 +110,12 @@ static guint connman_signal_watch;
 static guint connman_service_watch;
 
 static bool connman_online = false;
-static bool state_query_done = false;
+static bool state_query_completed = false;
 
 static void append_properties(DBusMessageIter *iter,
 				struct vpn_provider *provider);
 
-static void get_connman_state(guint interval);
+static void get_connman_state();
 
 static void set_state(const char* new_state)
 {
@@ -558,9 +557,12 @@ static gboolean do_connect_timeout_function(gpointer data) {
 		goto out;
 	}
 	
-	/* Keep in main loop if connman is not yet online */
-	if (!connman_online) {
-		rval = TRUE;
+	/*
+	 * Keep in main loop if no agents are present yet or if connman is not
+	 * yet online
+	 */
+	if (!connman_agent_get_info(NULL, NULL, NULL) || !connman_online) {
+		rval = G_SOURCE_CONTINUE;
 		goto out;
 	}
 
@@ -575,12 +577,12 @@ static gboolean do_connect_timeout_function(gpointer data) {
 		error = __connman_error_failed(t_data->msg, -err);
 		if (!g_dbus_send_message(t_data->conn, error))
 			DBG("Cannot send error message");
-		rval = TRUE;
+		rval = G_SOURCE_CONTINUE;
 	}
 	
 out:
 	/* If removing from main event loop, free memory */
-	if (!rval) {
+	if (rval == G_SOURCE_REMOVE) {
 		do_connect_timeout = 0;
 		if (t_data && t_data->msg)
 			dbus_message_unref(t_data->msg);
@@ -594,6 +596,7 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
 	struct vpn_provider *provider = data;
+	struct do_connect_timeout_data *t_data = NULL;
 	int err;
 
 	DBG("conn %p provider %p", conn, provider);
@@ -602,9 +605,16 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 	if (!__vpn_provider_set_autoconnect(provider, true))
 		DBG("cannot set autoconnect for provider %p", provider);
 
+	/* Check if any agents have been added, otherwise delay connecting */
+	if (!connman_agent_get_info(NULL, NULL, NULL)) {
+		DBG("Provider %s start delayed because no VPN agent is present",
+			provider->identifier);
+		goto delay_connect;
+	}
+
 	if (!connman_online) {
 	
-		if (state_query_done) {
+		if (state_query_completed) {
 			DBG("Provider %s not started because connman "
 				"not online/ready",
 				provider->identifier);
@@ -613,25 +623,8 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 			DBG("Provider %s start delayed because connman "
 				"state not queried",
 				provider->identifier);
-				
-			struct do_connect_timeout_data *t_data = 
-				g_try_new0(struct do_connect_timeout_data, 1);
 			
-			if (!t_data)
-				return __connman_error_failed(msg, ENOMEM);
-
-			t_data->conn = conn;
-			t_data->msg = dbus_message_ref(msg);
-			t_data->provider = provider;
-			
-			if (!do_connect_timeout) {
-				do_connect_timeout = g_timeout_add_seconds(1,
-					do_connect_timeout_function, t_data);
-			} else {
-				DBG("Timeout function already added");
-			}
-
-			return __connman_error_failed(msg, EINPROGRESS);
+			goto delay_connect;
 		}
 	}
 
@@ -640,6 +633,26 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 		return __connman_error_failed(msg, -err);
 
 	return NULL;
+
+delay_connect:
+
+	t_data = g_try_new0(struct do_connect_timeout_data, 1);
+
+	if (!t_data)
+		return __connman_error_failed(msg, ENOMEM);
+
+	t_data->conn = conn;
+	t_data->msg = dbus_message_ref(msg);
+	t_data->provider = provider;
+	
+	if (!do_connect_timeout) {
+		do_connect_timeout = g_timeout_add_seconds(1,
+			do_connect_timeout_function, t_data);
+	} else {
+		DBG("Timeout function already added");
+	}
+
+	return __connman_error_in_progress(msg);
 }
 
 static DBusMessage *do_connect2(DBusConnection *conn, DBusMessage *msg,
@@ -2971,7 +2984,7 @@ static void get_connman_state_reply(DBusPendingCall *call, void *user_data)
 		 * event loop */
 		if (g_ascii_strcasecmp(error.name, DBUS_ERROR_TIMEOUT) == 0) {
 			DBG("D-Bus timeout, re-add get_connman_state()");
-			get_connman_state(STATE_INTERVAL_DEFAULT);
+			get_connman_state();
 		} else {
 			dbus_error_free(&error);
 			goto done;
@@ -3014,6 +3027,8 @@ static void get_connman_state_reply(DBusPendingCall *call, void *user_data)
 		dbus_message_iter_next(&dict);
 	}
 	
+	state_query_completed = true;
+
 done:
 	if (reply)
 		dbus_message_unref(reply);
@@ -3056,8 +3071,6 @@ static gboolean run_get_connman_state(gpointer user_data)
 		connman_error("set notify to pending call failed");
 		goto error;
 	}
-	
-	state_query_done = true;
 
 out:
 	if (msg)
@@ -3076,17 +3089,18 @@ error:
 	if (call)
 		dbus_pending_call_unref(call);
 
-	rval = FALSE;
+	rval = G_SOURCE_REMOVE;
 	goto out;
 }
 
-static void get_connman_state(guint interval)
+static void get_connman_state()
 {
 	if (get_connman_state_timeout)
 		return;
 
 	get_connman_state_timeout = 
-		g_timeout_add(interval, run_get_connman_state, NULL);
+		g_timeout_add(STATE_INTERVAL_DEFAULT,
+			run_get_connman_state, NULL);
 }
 
 static void connman_service_watch_connected(DBusConnection *conn,
@@ -3095,7 +3109,7 @@ static void connman_service_watch_connected(DBusConnection *conn,
 	DBG("");
 
 	/* Request state */
-	get_connman_state(STATE_INTERVAL_DEFAULT);
+	get_connman_state();
 }
 
 static void connman_service_watch_disconnected(DBusConnection *conn,
@@ -3107,7 +3121,7 @@ static void connman_service_watch_disconnected(DBusConnection *conn,
 	set_state(CONNMAN_STATE_IDLE);
 
 	/* Set state query variable to initial state */
-	state_query_done = false;
+	state_query_completed = false;
 }
 
 int __vpn_provider_init(bool do_routes)
@@ -3144,8 +3158,6 @@ int __vpn_provider_init(bool do_routes)
 					PROPERTY_CHANGED,
 					connman_property_changed,
 					NULL, NULL);
-
-	get_connman_state(STATE_INTERVAL_INIT);
 
 	return 0;
 }
