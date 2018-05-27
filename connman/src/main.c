@@ -110,6 +110,7 @@ static struct {
 	bool enable_online_check;
 	bool auto_connect_roaming_services;
 	bool acd;
+	bool use_gateways_as_timeservers;
 	GHashTable *fallback_device_types;
 	bool enable_login_manager;
 	char *localtime;
@@ -140,6 +141,7 @@ static struct {
 	.enable_online_check = true,
 	.auto_connect_roaming_services = false,
 	.acd = false,
+	.use_gateways_as_timeservers = false,
 	.fallback_device_types = NULL,
 	.enable_login_manager = false,
 	.localtime = NULL,
@@ -176,6 +178,7 @@ static struct {
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
+#define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewayAsTimeservers"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
@@ -216,6 +219,7 @@ static const char *supported_options[] = {
 	CONF_ENABLE_ONLINE_CHECK,
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
 	CONF_ACD,
+	CONF_USE_GATEWAYS_AS_TIMESERVERS,
 	CONF_FALLBACK_DEVICE_TYPES,
 	CONF_ENABLE_LOGIN_MANAGER,
 	CONF_LOCALTIME,
@@ -640,6 +644,13 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	boolean = __connman_config_get_bool(config, "General",
+				CONF_USE_GATEWAYS_AS_TIMESERVERS, &error);
+	if (!error)
+		connman_settings.use_gateways_as_timeservers = boolean;
+
+	g_clear_error(&error);
+
 	str_list = __connman_config_get_string_list(config, "General",
 			CONF_FALLBACK_DEVICE_TYPES, &len, &error);
 
@@ -937,6 +948,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ACD))
 		return connman_settings.acd;
+
+	if (g_str_equal(key, CONF_USE_GATEWAYS_AS_TIMESERVERS))
+		return connman_settings.use_gateways_as_timeservers;
 
 	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
 		return connman_settings.enable_login_manager;
