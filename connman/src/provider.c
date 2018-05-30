@@ -52,7 +52,7 @@ struct connman_provider {
 void __connman_provider_append_properties(struct connman_provider *provider,
 							DBusMessageIter *iter)
 {
-	const char *host, *domain, *type;
+	const char *host, *domain, *type, *defaultroute;
 
 	if (!provider->driver || !provider->driver->get_property)
 		return;
@@ -60,6 +60,7 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 	host = provider->driver->get_property(provider, "Host");
 	domain = provider->driver->get_property(provider, "Domain");
 	type = provider->driver->get_property(provider, "Type");
+	defaultroute = provider->driver->get_property(provider, "DefaultRoute");
 
 	if (host)
 		connman_dbus_dict_append_basic(iter, "Host",
@@ -72,6 +73,11 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 	if (type)
 		connman_dbus_dict_append_basic(iter, "Type", DBUS_TYPE_STRING,
 						 &type);
+
+	if (defaultroute)
+		connman_dbus_dict_append_basic(iter, "DefaultRoute",
+						DBUS_TYPE_STRING,
+						&defaultroute);
 }
 
 struct connman_provider *
@@ -448,6 +454,26 @@ const char *connman_provider_get_string(struct connman_provider *provider,
 		return provider->driver->get_property(provider, key);
 
 	return NULL;
+}
+
+bool __connman_provider_is_default_route(struct connman_provider *provider)
+{
+	const char* default_route = NULL;
+
+	if (!provider)
+		return true;
+
+	default_route = connman_provider_get_string(provider, "DefaultRoute");
+	
+	DBG("DefaultRoute:%s", default_route);
+
+	if (!default_route)
+		return true;
+
+	if (g_ascii_strcasecmp(default_route, "true") != 0)
+		return false;
+
+	return true;
 }
 
 bool

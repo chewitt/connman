@@ -159,6 +159,28 @@ static void free_setting(gpointer data)
 	g_free(setting);
 }
 
+static bool provider_is_default_route(struct vpn_provider *provider)
+{
+	const gchar *key = "DefaultRoute";
+	const gchar *value = NULL;
+
+	/* Default action with routes is always true */
+	if (!provider)
+		return true;
+
+	value = vpn_provider_get_string(provider, key);
+
+	if (value && *value) {
+
+		DBG("Provider %p key %s set %s", provider, key, value);
+
+		if (g_ascii_strcasecmp(value, "true") != 0)
+			return false;
+	}
+
+	return true;
+}
+
 static void append_route(DBusMessageIter *iter, void *user_data)
 {
 	struct vpn_route *route = user_data;
@@ -1453,6 +1475,7 @@ static int provider_indicate_state(struct vpn_provider *provider,
 				enum vpn_provider_state state)
 {
 	const char *str;
+	const char *route_value;
 	enum vpn_provider_state old_state;
 
 	str = state2string(state);
@@ -1489,6 +1512,21 @@ static int provider_indicate_state(struct vpn_provider *provider,
 						"Domain",
 						DBUS_TYPE_STRING,
 						&provider->domain);
+
+		route_value = vpn_provider_get_string(provider, "DefaultRoute");
+
+		/* 
+		 * "DefaultRoute" has to be explicitely set in provider strings
+		 * in order to be sent. If "DefaultRoute" is not set it defaults
+		 * to true.
+		 */
+		if (route_value && *route_value) {
+			connman_dbus_property_changed_basic(provider->path,
+						VPN_CONNECTION_INTERFACE,
+						"DefaultRoute",
+						DBUS_TYPE_STRING,
+						&route_value);
+		}
 	}
 
 	if (old_state != state)
@@ -1630,40 +1668,6 @@ static bool check_host(char **hosts, char *host)
 	return false;
 }
 
-static bool is_any_addr(const char *address, int family)
-{
-	bool rval = false;
-	struct addrinfo hints;
-	struct addrinfo *result = NULL;
-	struct sockaddr_in6 *in6 = NULL;
-	struct sockaddr_in *in4 = NULL;
-
-	if (!address || !*address)
-		goto out;
-
-	memset(&hints, 0, sizeof(struct addrinfo));
-
-	hints.ai_family = family;
-
-	if (getaddrinfo(address, NULL, &hints, &result))
-		goto out;
-
-	if (result) {
-		if (result->ai_family == AF_INET6) {
-			in6 = (struct sockaddr_in6*)result->ai_addr;
-			rval = IN6_IS_ADDR_UNSPECIFIED(&in6->sin6_addr);
-		} else {
-			in4 = (struct sockaddr_in*)result->ai_addr;
-			rval = in4->sin_addr.s_addr == INADDR_ANY;
-		}
-
-		freeaddrinfo(result);
-	}
-
-out:
-	return rval;
-}
-
 static void provider_append_routes(gpointer key, gpointer value,
 					gpointer user_data)
 {
@@ -1689,11 +1693,20 @@ static void provider_append_routes(gpointer key, gpointer value,
 	 * When network and netmask are INADDR_ANY and gateway is NULL then
 	 * default route is being added
 	 */
-	if (is_any_addr(route->network, provider->family) == 0 &&
+	if (__connman_ipaddress_is_any_addr(route->network, provider->family) &&
 		!route->gateway &&
-		is_any_addr(route->netmask, provider->family) == 0) {
-		DBG("Adding default route for provider %p", provider);
-		default_route_set = true;
+		__connman_ipaddress_is_any_addr(route->netmask,
+			provider->family)) {
+
+		if (provider_is_default_route(provider)) {
+			DBG("Add default route for provider %p", provider);
+			default_route_set = true;
+		} else {
+			DBG("Not adding default route."
+				"Provider %p is not set as default route.",
+				provider);
+			return;
+		}
 	}
 
 	if (route->family == AF_INET6) {
@@ -1741,7 +1754,11 @@ static int set_connected(struct vpn_provider *provider,
 		g_hash_table_foreach(provider->user_routes,
 					provider_append_routes, provider);
 
-		if (!default_route_set) {
+		/*
+		 * If the provider is set to be default route and default route
+		 * has not been set, add the default route.
+		*/
+		if (provider_is_default_route(provider) && !default_route_set) {
 			DBG("Adding default route for provider %p", provider);
 
 			if (provider->family == AF_INET6) {
