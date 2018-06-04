@@ -46,6 +46,8 @@
 #include "connman.h"
 #include "iptables_ext.h"
 
+#define CONF_ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]) - 1)
+
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
 #define DEFAULT_STOGAGE_ROOT_PERMISSIONS (0755)
@@ -415,7 +417,7 @@ static void parse_config(GKeyFile *config)
 
 	if (!config) {
 		connman_settings.auto_connect =
-			parse_service_types(default_auto_connect, 3);
+			parse_service_types(default_auto_connect, CONF_ARRAY_SIZE(default_auto_connect));
 		connman_settings.blacklisted_interfaces =
 			g_strdupv(default_blacklist);
 		return;
@@ -445,7 +447,7 @@ static void parse_config(GKeyFile *config)
 			parse_service_types(str_list, len);
 	else
 		connman_settings.auto_connect =
-			parse_service_types(default_auto_connect, 3);
+			parse_service_types(default_auto_connect, CONF_ARRAY_SIZE(default_auto_connect));
 
 	g_strfreev(str_list);
 
