@@ -10014,7 +10014,7 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	struct connman_device *device;
 	const char *ident, *group;
 	char *name;
-	unsigned int *auto_connect_types;
+	unsigned int *auto_connect_types, *favorite_types;
 	int i, index;
 
 	DBG("network %p", network);
@@ -10075,21 +10075,13 @@ bool __connman_service_create_from_network(struct connman_network *network)
 		}
 	}
 
-	switch (service->type) {
-	case CONNMAN_SERVICE_TYPE_UNKNOWN:
-	case CONNMAN_SERVICE_TYPE_SYSTEM:
-	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
-	case CONNMAN_SERVICE_TYPE_GPS:
-	case CONNMAN_SERVICE_TYPE_GADGET:
-	case CONNMAN_SERVICE_TYPE_WIFI:
-	case CONNMAN_SERVICE_TYPE_CELLULAR:
-	case CONNMAN_SERVICE_TYPE_P2P:
-		break;
-	case CONNMAN_SERVICE_TYPE_ETHERNET:
-		service->favorite = true;
-		break;
-	case CONNMAN_SERVICE_TYPE_VPN:
-		break;
+	favorite_types = connman_setting_get_uint_list("DefaultFavoriteTechnologies");
+	service->favorite = false;
+	for (i = 0; favorite_types && favorite_types[i] != 0; i++) {
+		if (service->type == favorite_types[i]) {
+			service->favorite = true;
+			break;
+		}
 	}
 
 	service->state_ipv4 = service->state_ipv6 = CONNMAN_SERVICE_STATE_IDLE;
