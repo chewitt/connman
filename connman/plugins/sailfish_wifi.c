@@ -52,6 +52,7 @@
 #define WIFI_NETWORK_MAX_RECOVER_ATTEMPTS (2)
 #define WIFI_AUTOSCAN_MIN_SEC (5)
 #define WIFI_AUTOSCAN_MAX_SEC (300)
+#define WIFI_AUTOSCAN_RESTART_MS (500)
 #define WIFI_AUTOSCAN_MULTIPLIER (2)
 #define WIFI_HIDDEN_CONNECT_TIMEOUT_SEC (300)
 #define WIFI_HIDDEN_CONNECT_SCAN_SEC (2)
@@ -241,6 +242,7 @@ struct wifi_device {
 	guint autoscan_interval_sec;
 	guint autoscan_start_timer_id;
 	guint autoscan_holdoff_timer_id;
+	guint autoscan_restart_id;
 	WIFI_SCAN_STATE scan_state;
 	GSList *active_scans;
 	unsigned int watch;
@@ -2155,6 +2157,10 @@ static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 
 static void wifi_device_autoscan_restart(struct wifi_device *dev)
 {
+	if (dev->autoscan_restart_id) {
+		g_source_remove(dev->autoscan_restart_id);
+		dev->autoscan_restart_id = 0;
+	}
 	wifi_device_autoscan_reset(dev);
 	wifi_device_scan_request(dev);
 }
@@ -3396,6 +3402,16 @@ static void wifi_device_newlink(unsigned int flags, unsigned int change,
 	}
 }
 
+static gboolean wifi_device_autoscan_restart_cb(void *user_data)
+{
+	struct wifi_device *dev = user_data;
+
+	GASSERT(dev->autoscan_restart_id);
+	dev->autoscan_restart_id = 0;
+	wifi_device_autoscan_restart(dev);
+	return G_SOURCE_REMOVE;
+}
+
 static void wifi_device_update_screen_state(struct wifi_device *dev)
 {
 	const gboolean active =
@@ -3406,7 +3422,20 @@ static void wifi_device_update_screen_state(struct wifi_device *dev)
 		DBG("screen %sactive", active ? "" : "in");
 		dev->screen_active = active;
 		if (active) {
-			wifi_device_autoscan_restart(dev);
+			/*
+			 * Don't restart autoscan right away. Lots
+			 * of things are happening right after screen
+			 * unlocks, including UI animation and such.
+			 * Let's postpone scanning a bit. Also, there's
+			 * no need to use wakeup timer here.
+			 */
+			GASSERT(!dev->autoscan_restart_id);
+			dev->autoscan_restart_id =
+				g_timeout_add(WIFI_AUTOSCAN_RESTART_MS,
+					wifi_device_autoscan_restart_cb, dev);
+		} else if (dev->autoscan_restart_id) {
+			g_source_remove(dev->autoscan_restart_id);
+			dev->autoscan_restart_id = 0;
 		}
 	}
 }
@@ -3490,6 +3519,9 @@ static void wifi_device_delete(struct wifi_device *dev)
 	}
 	if (dev->autoscan_holdoff_timer_id) {
 		g_source_remove(dev->autoscan_holdoff_timer_id);
+	}
+	if (dev->autoscan_restart_id) {
+		g_source_remove(dev->autoscan_restart_id);
 	}
 	if (dev->pending) {
 		g_cancellable_cancel(dev->pending);
