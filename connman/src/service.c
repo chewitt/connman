@@ -1750,6 +1750,23 @@ static void disconnect_vpn_service(struct connman_service *service, void* user_d
 	}
 }
 
+struct connman_service *get_connected_default_route_service()
+{
+	GList *iter;
+
+	struct connman_service *service = NULL;
+
+	for (iter = service_list; iter; iter = iter->next) {
+		service = iter->data;
+
+		if (__connman_service_is_default_route(service) &&
+			is_connected(service))
+				break;
+	}
+
+	return service;
+}
+
 static void default_changed(void)
 {
 	struct connman_service *service = __connman_service_get_default();
@@ -1760,6 +1777,24 @@ static void default_changed(void)
 	DBG("current default %p %s", current_default,
 		current_default ? current_default->identifier : "");
 	DBG("new default %p %s", service, service ? service->identifier : "");
+	
+	if (!__connman_service_is_default_route(service)) {
+
+		/*
+		 * If the current_default is not connected and the new service
+		 * is not the default route, find the next connected from
+		 * services list and use that service as new default
+		 */
+		if (current_default && !is_connected(current_default)) {
+			service = get_connected_default_route_service();
+			DBG("Selected new default service %s",
+				service ? service->identifier : "");
+		} else {
+			DBG("Not setting %s as default service",
+				service->identifier);
+			return;
+		}
+	}
 
 	__connman_service_timeserver_changed(current_default, NULL);
 
@@ -3290,6 +3325,16 @@ void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 	proxy_changed(service);
 
 	__connman_notifier_proxy_changed(service);
+}
+
+bool __connman_service_is_default_route(struct connman_service *service)
+{
+	if (!service)
+		return true;
+	
+	DBG("");
+	
+	return __connman_provider_is_default_route(service->provider);
 }
 
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service)
@@ -5241,6 +5286,19 @@ static void switch_default_service(struct connman_service *default_service,
 {
 	struct connman_service *service;
 	GList *src, *dst;
+	
+	/*
+	 * If the service to be used as downgrade service is not set as default
+	 * route revert the order of the services.
+	 */
+	if (!__connman_service_is_default_route(downgrade_service)) {
+		DBG("Not switching non default route downgrade service "
+			"default_service=%s downgrade_service=%s",
+			default_service ? default_service->identifier : "",
+			downgrade_service ? downgrade_service->identifier : "");
+		switch_default_service(downgrade_service, default_service);
+		return;
+	}
 
 	apply_relevant_default_downgrade(default_service);
 	src = g_list_find(service_list, downgrade_service);

@@ -1804,6 +1804,10 @@ static gboolean property_changed(DBusConnection *conn,
 		g_free(data->domain);
 		data->domain = g_strdup(str);
 		connman_provider_set_domain(data->provider, data->domain);
+	} else if (g_str_equal(key, "DefaultRoute")) {
+		dbus_message_iter_get_basic(&value, &str);
+		g_hash_table_replace(data->setting_strings,
+				g_strdup(key), g_strdup(str));
 	}
 
 	if (ip_set && err == 0) {

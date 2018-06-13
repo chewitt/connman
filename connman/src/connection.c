@@ -143,9 +143,19 @@ static void get_gateway_cb(const char *gateway, int index, void *user_data)
 	struct gateway_data *data;
 	struct get_gateway_params *params = user_data;
 	int family;
+	
+	struct connman_service *service;
 
 	if (index < 0)
 		goto out;
+		
+	service = __connman_service_lookup_from_index(params->vpn_index);
+	
+	if (!__connman_service_is_default_route(service)) {
+		DBG("Not setting gateway config of non default service %s",
+			service ? __connman_service_get_ident(service) : "");
+		goto out;
+	}
 
 	DBG("phy index %d phy gw %s vpn index %d vpn gw %s", index, gateway,
 		params->vpn_index, params->vpn_gateway);
@@ -412,6 +422,12 @@ static void set_default_gateway(struct gateway_data *data,
 	int index;
 	int status4 = 0, status6 = 0;
 	bool do_ipv4 = false, do_ipv6 = false;
+	
+	if (data && !__connman_service_is_default_route(data->service)) {
+		DBG("Not setting default gateway for %s",
+			__connman_service_get_ident(data->service));
+		return;
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		do_ipv4 = true;
@@ -845,6 +861,12 @@ int __connman_connection_gateway_add(struct connman_service *service,
 		set_vpn_routes(new_gateway, service, gateway, type, peer,
 							active_gateway);
 
+		if (!__connman_service_is_default_route(service)) {
+			DBG("Not adding gateways for non default VPN %s",
+				service ? __connman_service_get_ident(service) :
+				"");
+			goto done;
+		}
 	} else {
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
 					new_gateway->ipv4_gateway)
@@ -978,6 +1000,23 @@ bool __connman_connection_update_gateway(void)
 	default_gateway = find_default_gateway();
 
 	DBG("default %p", default_gateway);
+	
+	if (default_gateway &&
+		!__connman_service_is_default_route(default_gateway->service)) {
+		DBG("Not updating gateway with non default route %s",
+			default_gateway->service ? 
+			__connman_service_get_ident(default_gateway->service) :
+			"");
+		
+		if (default_gateway->ipv4_gateway)
+			unset_default_gateway(default_gateway,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+
+		if (default_gateway->ipv6_gateway)
+			unset_default_gateway(default_gateway,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+		return true;
+	}
 
 	/*
 	 * There can be multiple active gateways so we need to

@@ -341,6 +341,8 @@ struct connman_ipconfig *__connman_ipconfig_create(int index,
 #define __connman_ipconfig_unref(ipconfig) \
 	__connman_ipconfig_unref_debug(ipconfig, __FILE__, __LINE__, __func__)
 
+bool __connman_ipaddress_is_any_addr(const char *address, int family);
+
 struct connman_ipconfig *
 __connman_ipconfig_ref_debug(struct connman_ipconfig *ipconfig,
 			const char *file, int line, const char *caller);
@@ -667,6 +669,7 @@ void __connman_ipv6pd_cleanup(void);
 
 #include <connman/provider.h>
 
+bool __connman_provider_is_default_route(struct connman_provider *provider);
 bool __connman_provider_check_routes(struct connman_provider *provider);
 int __connman_provider_append_user_route(struct connman_provider *provider,
 			int family, const char *network, const char *netmask);
@@ -819,6 +822,7 @@ void __connman_service_set_domainname(struct connman_service *service,
 const char *__connman_service_get_nameserver(struct connman_service *service);
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url);
+bool __connman_service_is_default_route(struct connman_service *service);
 
 void __connman_service_set_identity(struct connman_service *service,
 					const char *identity);
