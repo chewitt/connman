@@ -137,15 +137,15 @@ char *__vpn_settings_get_string(GKeyFile *config, const char *group,
 char **__vpn_settings_get_string_list(GKeyFile *config, const char *group,
 		const char *key)
 {
-	int i = 0;
 	gsize len = 0;
-
 	char **str = g_key_file_get_string_list(config, group, key, &len, NULL);
 
-	if (str)
-	{
-		for (i = 0; i < len ; i++)
+	if (str) {
+		guint i = 0;
+
+		for (i = 0; i < len ; i++) {
 			str[i] = g_strstrip(str[i]);
+		}
 	}
 
 	return str;

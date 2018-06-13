@@ -776,7 +776,7 @@ void test_iptables_stdout_capture()
 	g_assert(!error);
 	
 	g_assert(data.stdout_bytes_read);
-	g_assert(data.stdout_bytes_read == strlen(testprint));
+	g_assert(data.stdout_bytes_read == (int)strlen(testprint));
 	g_assert(data.stdout_pipes[0] == -1);
 	g_assert(data.stdout_pipes[1] == -1);
 	g_assert(data.stdout_saved == -1);

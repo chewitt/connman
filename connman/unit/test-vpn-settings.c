@@ -89,7 +89,7 @@ void test_vpn_settings_no_config()
 	gchar* test_path = setup_test_directory();
 	gchar* file_path = g_strdup_printf("%s%s", test_path, "/connman-vpn.conf");
 	mode_t dir_p = 0700, file_p = 0600, umask = 0077;
-	gint timeout = 300 * 1000;
+	guint timeout = 300 * 1000;
 	
 	__vpn_settings_init(file_path);
 	
@@ -123,7 +123,7 @@ void test_vpn_settings_empty_config()
 	gchar* test_path = setup_test_directory();
 	gchar* file_path = g_strdup_printf("%s%s", test_path, "/connman-vpn.conf");
 	mode_t dir_p = 0700, file_p = 0600, umask = 0077;
-	gint timeout = 300 * 1000;
+	guint timeout = 300 * 1000;
 	
 	set_and_verify_content(file_path, NULL);
 	
@@ -259,7 +259,7 @@ void test_vpn_settings_min_config()
 	const gchar const * group_verify[] = {"inet", "net_admin", "net_raw", NULL};
 	mode_t dir_p = 0700, file_p = 0600, umask = 0077;
 	gint i = 0;
-	gint timeout = 200 * 1000;
+	guint timeout = 200 * 1000;
 	
 	set_and_verify_content(file_path, content_min);
 	
@@ -320,7 +320,7 @@ void test_vpn_settings_full_config()
 	const gchar const * group_verify[] = {"inet", "net_admin", NULL};
 	mode_t dir_p = 0754, file_p = 0645, umask = 0067;
 	gint i = 0;
-	gint timeout = 100 * 1000;
+	guint timeout = 100 * 1000;
 	
 	set_and_verify_content(file_path, content_full);
 	

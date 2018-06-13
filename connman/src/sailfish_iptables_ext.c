@@ -1,8 +1,8 @@
 /*
  *
  *  Connection Manager wrapper implementation of the exposed iptables
- *  functions
- *  for SailfishOS MDM. Contains save, restore and clear functionality.
+ *  functions for SailfishOS MDM. Contains save, restore and clear
+ *  functionality.
  *
  *  Copyright (C) 2017-2018 Jolla Ltd. All rights reserved.
  *  Contact: Jussi Laakkonen <jussi.laakkonen@jolla.com>
@@ -874,7 +874,8 @@ out:
 
 static int iptables_parse_policy(const gchar* table_name, const gchar* policy)
 {
-	gint rval = 1, policy_tokens = 3;
+	gint rval = 1;
+	guint policy_tokens = 3;
 	
 	if (!table_name || !(*table_name) || !policy || !(*policy))
 		return rval;
