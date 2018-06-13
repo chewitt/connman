@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2018 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -49,7 +49,7 @@
 #define MAX_HANDSHAKE_RETRIES 5
 
 #define WIFI_SCAN_START_TIMEOUT_MS (1000)
-#define WIFI_BSS_REMOVE_TIMEOUT_MS (1000)
+#define WIFI_NETWORK_MAX_RECOVER_ATTEMPTS (2)
 #define WIFI_AUTOSCAN_MIN_SEC (5)
 #define WIFI_AUTOSCAN_MAX_SEC (300)
 #define WIFI_AUTOSCAN_MULTIPLIER (2)
@@ -142,16 +142,10 @@ struct wifi_create_interface_params {
 	char *ifname;
 };
 
-struct wifi_device_bss_data {
-	struct wifi_device *dev;
-	struct wifi_bss *bss;
-};
-
 struct wifi_bss {
 	GSupplicantBSS *bss;
 	GBytes *ssid;
 	gulong event_id[BSS_EVENT_COUNT];
-	guint remove_timeout_id;
 	GUtilIntHistory *history;       /* Signal strength history */
 	guint strength;                 /* Median strength */
 };
@@ -178,6 +172,7 @@ struct wifi_network {
 	gulong iface_event_id[NETWORK_INTERFACE_EVENT_COUNT];
 	GSUPPLICANT_INTERFACE_STATE interface_states[3];
 	GList *bss_list;                /* Contains wifi_bss */
+	int recover_attempt;            /* Passive scans after BSS is gone */
 	int remove_in_process;          /* See wifi_device_remove_network */
 	GCancellable *pending;          /* Pending call */
 	WIFI_NETWORK_STATE state;
@@ -267,6 +262,8 @@ struct wifi_plugin {
 static void wifi_device_scan_check(struct wifi_device *dev);
 static void wifi_device_active_scan_add(struct wifi_device *dev, GBytes *ssid);
 static void wifi_device_connect_next_schedule(struct wifi_device *dev);
+static void wifi_device_remove_network(struct wifi_device *dev,
+						struct wifi_network *net);
 
 /*==========================================================================*
  * Logging
@@ -574,9 +571,6 @@ static void wifi_bss_free(struct wifi_bss *bss_data, struct wifi_device *dev)
 		}
 	}
 
-	if (bss_data->remove_timeout_id) {
-		g_source_remove(bss_data->remove_timeout_id);
-	}
 	gsupplicant_bss_remove_handlers(bss_data->bss, bss_data->event_id,
 					G_N_ELEMENTS(bss_data->event_id));
 	gsupplicant_bss_unref(bss_data->bss);
@@ -940,28 +934,40 @@ static GSupplicantBSS *wifi_network_current_bss(struct wifi_network *net)
 		return net->connecting_to;
 	} else if (net->current_bss && net->current_bss->valid) {
 		return net->current_bss;
-	} else {
+	} else if (net->bss_list) {
 		struct wifi_bss *best = net->bss_list->data;
 
 		return best->bss;
+	} else {
+		return NULL;
 	}
 }
 
 static void wifi_network_update_bssid(struct wifi_network *net)
 {
-	GBytes *bssid = wifi_network_current_bss(net)->bssid;
-	gsize bssid_len;
-	const void *bssid_data = g_bytes_get_data(bssid, &bssid_len);
+	GSupplicantBSS *bss = wifi_network_current_bss(net);
 
-	if (bssid_len == WIFI_BSSID_LEN) {
-		connman_network_set_bssid(net->network, bssid_data);
+	if (bss) {
+		GBytes *bssid = bss->bssid;
+		gsize bssid_len;
+		const void *bssid_data = g_bytes_get_data(bssid, &bssid_len);
+
+		if (bssid_len == WIFI_BSSID_LEN) {
+			connman_network_set_bssid(net->network, bssid_data);
+			return;
+		}
 	}
+
+	connman_network_set_bssid(net->network, NULL);
 }
 
 static void wifi_network_update_frequency(struct wifi_network *net)
 {
-	connman_network_set_frequency(net->network,
-				wifi_network_current_bss(net)->frequency);
+	GSupplicantBSS *bss = wifi_network_current_bss(net);
+
+	if (bss) {
+		connman_network_set_frequency(net->network, bss->frequency);
+	}
 }
 
 static gboolean wifi_network_update_current_bss(struct wifi_network *net)
@@ -1218,6 +1224,16 @@ static int wifi_network_connect(struct wifi_network *net)
 			net->state == WIFI_NETWORK_WAITING_FOR_COMPLETE) {
 		NDBG(net, "already connecting");
 		GASSERT(net->pending);
+		return (-EINPROGRESS);
+	} else if (!net->bss_list) {
+		/*
+		 * wifi_device_bss_add_3() will start the actual connection
+		 * sequence in case if BSS appears before the recovery attempt
+		 * limit is exceeded. If BSS never appears, the network gets
+		 * removed which should cancel the connection.
+		 */
+		NDBG(net, "connect request in recovery state");
+		wifi_network_set_state(net, WIFI_NETWORK_PREPARING_TO_CONNECT);
 		return (-EINPROGRESS);
 	} else {
 		struct wifi_bss *bss_data = net->bss_list->data;
@@ -1852,6 +1868,19 @@ static void wifi_device_drop_interface(struct wifi_device *dev)
 	wifi_device_update_scanning(dev);
 }
 
+static void wifi_device_drop_expired_networks_cb(gpointer netp, gpointer devp)
+{
+	struct wifi_network *net = netp;
+	struct wifi_device *dev = devp;
+
+	if (net->recover_attempt >= WIFI_NETWORK_MAX_RECOVER_ATTEMPTS) {
+		/* Absent for too long, kill the network */
+		DBG("removing %s", net->ident);
+		GASSERT(!net->bss_list);
+		wifi_device_remove_network(dev, net);
+	}
+}
+
 static void wifi_device_scanning_changed(GSupplicantInterface *iface,
 								void *data)
 {
@@ -1863,6 +1892,19 @@ static void wifi_device_scanning_changed(GSupplicantInterface *iface,
 		g_source_remove(dev->scan_start_timeout_id);
 		dev->scan_start_timeout_id = 0;
 	}
+
+	/*
+	 * Quite often WiFi networks disappear from the scan results and
+	 * then re-appear after a scan or two with a different path. When
+	 * that happens connman won't even notice because we keep connman
+	 * network alive. Only after the network is absent from too many
+	 * scans in a row, we declare it dead and notify connman core.
+	 */
+	if (!iface->scanning) {
+		g_list_foreach(dev->networks,
+				wifi_device_drop_expired_networks_cb, dev);
+	}
+
 	wifi_device_update_scanning(dev);
 }
 
@@ -2089,10 +2131,22 @@ static void wifi_device_active_scan_perform(struct wifi_device *dev)
 	}
 }
 
+static void wifi_device_update_recover_attempt_cb(gpointer netp, gpointer dev)
+{
+	struct wifi_network *net = netp;
+
+	if (!net->bss_list) {
+		net->recover_attempt++;
+		DBG("%s recover attempt %d", net->ident, net->recover_attempt);
+	}
+}
+
 static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 {
 	if (gsupplicant_interface_scan(dev->iface, NULL, NULL, NULL)) {
 		DBG("requested passive scan");
+		g_list_foreach(dev->networks,
+				wifi_device_update_recover_attempt_cb, dev);
 		wifi_device_scan_requested(dev);
 		return TRUE;
 	}
@@ -2174,12 +2228,6 @@ static void wifi_device_remove_bss_from_network2(struct wifi_device *dev,
 			break;
 		}
 	}
-
-	if (!net->bss_list) {
-		/* The last BSS is gone, kill the network */
-		DBG("removing %s", net->ident);
-		wifi_device_remove_network(dev, net);
-	}
 }
 
 static void wifi_device_remove_bss_from_network(struct wifi_device *dev,
@@ -2241,75 +2289,24 @@ static void wifi_device_cleanup_bss_list(struct wifi_device *dev,
 			GSupplicantBSS *dump = data->bss;
 
 			DBG("dumping %s", dump->path);
-			if (data->remove_timeout_id) {
-				g_source_remove(data->remove_timeout_id);
-				data->remove_timeout_id = 0;
-			}
 			wifi_device_remove_bss_from_network2(dev, net, dump);
 			break;
 		}
 	}
 }
 
-static gboolean wifi_device_bss_remove_timer(void *user_data)
-{
-	struct wifi_device_bss_data *data = user_data;
-
-	GASSERT(data->bss->remove_timeout_id);
-	data->bss->remove_timeout_id = 0;
-	wifi_device_remove_bss_from_network(data->dev, data->bss->bss);
-	return G_SOURCE_REMOVE;
-}
-
 static void wifi_device_bss_presence_changed(GSupplicantBSS *bss, void *data)
 {
 	struct wifi_device *dev = data;
 
-	/*
-	 * Schedule BSS for removal when it becomes invalid. Still keep
-	 * it around for WIFI_BSS_REMOVE_TIMEOUT_MS so that connman networks
-	 * don't get removed and re-created too often.
-	 *
-	 * Quite often WiFi networks disappear from the scan results and
-	 * then quickly re-appear with a different path. When that happens
-	 * we detect duplicates (by comparing BSSID), get rid of the dead
-	 * BSS and replace it with the brand new one. Connman won't even
-	 * notice because we keep connman network alive. Once the timeout
-	 * experes, the dead BSS actually goes away, possibly taking down
-	 * the entire connman network (if it was the last BSS associated
-	 * with the network).
-	 */
+	/* We assume that BSS never reappeares with the same path */
 	if (!bss->valid || !bss->present) {
 		struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
 
 		GASSERT(bss_data);
 		if (bss_data) {
-			if (!bss_data->remove_timeout_id) {
-				struct wifi_device_bss_data *timer_data =
-					g_new(struct wifi_device_bss_data, 1);
-
-				DBG("%s is gone", bss->path);
-				timer_data->dev = dev;
-				timer_data->bss = bss_data;
-				bss_data->remove_timeout_id =
-					connman_wakeup_timer_add_full(
-						G_PRIORITY_DEFAULT,
-						WIFI_BSS_REMOVE_TIMEOUT_MS,
-						wifi_device_bss_remove_timer,
-						timer_data, g_free);
-			}
-		}
-	} else if (bss->valid && bss->present) {
-		struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
-
-		DBG("%s reappeared", bss->path);
-		GASSERT(bss_data);
-		if (bss_data) {
-			GASSERT(bss_data->remove_timeout_id);
-			if (bss_data->remove_timeout_id) {
-				g_source_remove(bss_data->remove_timeout_id);
-				bss_data->remove_timeout_id = 0;
-			}
+			DBG("%s is gone", bss->path);
+			wifi_device_remove_bss_from_network(dev, bss);
 		}
 	}
 }
@@ -2375,6 +2372,7 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 	GBytes *ssid = bss_data->ssid;
 	char *ident = wifi_bss_ident(bss_data);
 	struct wifi_network *net = g_hash_table_lookup(dev->ident_net, ident);
+	gboolean recovered = FALSE;
 	GSList *bssid_list;
 
 	GASSERT(bss->valid && bss->present);
@@ -2436,6 +2434,16 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 
 	if (net) {
 		DBG("adding %s to %s", bss->path, ident);
+
+		/*
+		 * We are keeping BSS-less networks alive for some time in
+		 * the hope that they will recover. And sometimes they do!
+		 */
+		if (net->recover_attempt) {
+			DBG("%s recovered", ident);
+			net->recover_attempt = 0;
+			recovered = TRUE;
+		}
 		g_free(ident);
 	} else {
 		struct connman_service *service;
@@ -2499,9 +2507,21 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 				connect->passphrase, connect->user_data);
 		connect->user_data = NULL;
 		wifi_hidden_connect_free(connect);
-	} else if (wifi_ssid_hidden(ssid)) {
-		wifi_device_active_scan_init(dev);
-		wifi_device_scan_request(dev);
+	} else {
+		if (wifi_ssid_hidden(ssid)) {
+			wifi_device_active_scan_init(dev);
+			wifi_device_scan_request(dev);
+		}
+
+		/*
+		 * If we received a connect request in the recovery
+		 * state, start the actual connection sequence when
+		 * BSS re-appears.
+		 */
+		if (recovered && net->state == WIFI_NETWORK_DISCONNECTING) {
+			NDBG(net, "starting delayed connect");
+			wifi_network_connect(net);
+		}
 	}
 }
 
