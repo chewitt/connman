@@ -201,12 +201,42 @@ typedef enum wifi_device_state {
 	WIFI_DEVICE_UNDEFINED
 } WIFI_DEVICE_STATE;
 
+/*
+ * The scanning state machine:
+ *
+ *    NONE <-----------------------------------------------------+
+ *    |  ^                                                       |
+ *    |  |                                                       |
+ *    |  +------------------------------------------------+      |
+ *    |                                                   |      |
+ *    +---> SCHEDULED_AUTO ---> ACTIVE_AUTO ---> PASSIVE_AUTO    |
+ *    |         ^                  ^    ^            |    ^      |
+ *    |         |                  |    |            |    |      |
+ *    |         |                  |    +------------+    |      |
+ *    |         |                  |                      |      |
+ *    +---> SCHEDULED_MANUAL -> ACTIVE_MANUAL -> PASSIVE_MANUAL -+
+ *                                      ^            |
+ *                                      |            |
+ *                                      +------------+
+ *
+ * Transitions are performed by wifi_device_scan_request() and
+ * wifi_device_scan_check() functions.
+ */
 typedef enum wifi_scan_state {
-	WIFI_SCAN_NONE,
-	WIFI_SCAN_SCHEDULED,
-	WIFI_SCAN_ACTIVE,
-	WIFI_SCAN_PASSIVE
+	WIFI_SCAN_NONE = 0,
+	WIFI_SCAN_SCHEDULED_AUTO,
+	WIFI_SCAN_ACTIVE_AUTO,
+	WIFI_SCAN_PASSIVE_AUTO,
+	WIFI_SCAN_SCHEDULED_MANUAL,
+	WIFI_SCAN_ACTIVE_MANUAL,
+	WIFI_SCAN_PASSIVE_MANUAL
 } WIFI_SCAN_STATE;
+
+#define WIFI_SCAN_MANUAL(state) (((state) & 0x4) != 0)
+
+/* wifi_device_scan_request() parameter: */
+#define SCAN_MANUAL TRUE
+#define SCAN_AUTO FALSE
 
 struct wifi_device_tp {
 	GSupplicantNetworkParams np;
@@ -1965,9 +1995,11 @@ static void wifi_device_autoscan_stop(struct wifi_device *dev)
 
 static void wifi_device_autoscan_reset(struct wifi_device *dev)
 {
-	DBG("resetting autoscan");
 	wifi_device_autoscan_stop(dev);
-	dev->autoscan_interval_sec = WIFI_AUTOSCAN_MIN_SEC;
+	if (dev->autoscan_interval_sec > WIFI_AUTOSCAN_MIN_SEC) {
+		DBG("resetting autoscan");
+		dev->autoscan_interval_sec = WIFI_AUTOSCAN_MIN_SEC;
+	}
 }
 
 static gboolean wifi_device_autoscan_holdoff_timer_expired(gpointer data)
@@ -2026,30 +2058,39 @@ static void wifi_device_scan_check(struct wifi_device *dev)
 			!dev->autoscan_start_timer_id &&
 				wifi_device_can_autoscan(dev)) {
 		/* Autoscan timer has expired */
-		dev->scan_state = WIFI_SCAN_SCHEDULED;
+		dev->scan_state = WIFI_SCAN_SCHEDULED_AUTO;
 	}
 
-	if (dev->scan_state == WIFI_SCAN_SCHEDULED) {
+	if (dev->scan_state == WIFI_SCAN_SCHEDULED_AUTO ||
+			dev->scan_state == WIFI_SCAN_SCHEDULED_MANUAL) {
 		if (wifi_device_may_have_hidden_networks(dev)) {
 			wifi_device_active_scan_init(dev);
 		}
 		if (dev->active_scans) {
-			dev->scan_state = WIFI_SCAN_ACTIVE;
+			dev->scan_state = WIFI_SCAN_MANUAL(dev->scan_state) ?
+				WIFI_SCAN_ACTIVE_MANUAL :
+				WIFI_SCAN_ACTIVE_AUTO;
 		} else {
-			dev->scan_state = WIFI_SCAN_PASSIVE;
+			dev->scan_state = WIFI_SCAN_MANUAL(dev->scan_state) ?
+				WIFI_SCAN_PASSIVE_MANUAL :
+				WIFI_SCAN_PASSIVE_AUTO;
 		}
 	}
 
-	if (dev->scan_state == WIFI_SCAN_ACTIVE &&
+	if ((dev->scan_state == WIFI_SCAN_ACTIVE_AUTO ||
+			dev->scan_state == WIFI_SCAN_ACTIVE_MANUAL) &&
 					wifi_device_can_active_scan(dev)) {
 		if (dev->active_scans) {
 			wifi_device_active_scan_perform(dev);
 		} else {
-			dev->scan_state = WIFI_SCAN_PASSIVE;
+			dev->scan_state = WIFI_SCAN_MANUAL(dev->scan_state) ?
+				WIFI_SCAN_PASSIVE_MANUAL :
+				WIFI_SCAN_PASSIVE_AUTO;
 		}
 	}
 
-	if (dev->scan_state == WIFI_SCAN_PASSIVE &&
+	if ((dev->scan_state == WIFI_SCAN_PASSIVE_AUTO ||
+			dev->scan_state == WIFI_SCAN_PASSIVE_MANUAL)&&
 					wifi_device_can_scan(dev)) {
 		if (wifi_device_passive_scan_perform(dev)) {
 			if (dev->active_scans) {
@@ -2057,9 +2098,14 @@ static void wifi_device_scan_check(struct wifi_device *dev)
 				 * New active scan was requested while
 				 * we were doing our passive scan.
 				 */
-				dev->scan_state = WIFI_SCAN_ACTIVE;
+				dev->scan_state =
+					WIFI_SCAN_MANUAL(dev->scan_state) ?
+						WIFI_SCAN_ACTIVE_MANUAL :
+						WIFI_SCAN_ACTIVE_AUTO;
 			} else {
-				wifi_device_autoscan_schedule_next(dev);
+				if (!WIFI_SCAN_MANUAL(dev->scan_state)) {
+					wifi_device_autoscan_schedule_next(dev);
+				}
 				dev->scan_state = WIFI_SCAN_NONE;
 			}
 		}
@@ -2092,11 +2138,34 @@ static void wifi_device_scan_requested(struct wifi_device *dev)
 	wifi_device_update_scanning(dev);
 }
 
-static void wifi_device_scan_request(struct wifi_device *dev)
+static void wifi_device_scan_request(struct wifi_device *dev, gboolean manual)
 {
 	if (dev->scan_state == WIFI_SCAN_NONE) {
-		DBG("scheduling autoscan");
-		dev->scan_state = WIFI_SCAN_SCHEDULED;
+		DBG("scheduling %sscan", manual ? "manual " : "auto");
+		dev->scan_state = manual ?
+			WIFI_SCAN_SCHEDULED_MANUAL :
+			WIFI_SCAN_SCHEDULED_AUTO;
+	} else if (!manual) {
+		/*
+		 * Promote manual scan to autoscan to increase the autoscan
+		 * period when this scan completes.
+		 */
+		switch (dev->scan_state) {
+		case WIFI_SCAN_SCHEDULED_MANUAL:
+			DBG("promoting scheduled manual scan to autoscan");
+			dev->scan_state = WIFI_SCAN_SCHEDULED_AUTO;
+			break;
+		case WIFI_SCAN_ACTIVE_MANUAL:
+			DBG("promoting manual active scan to autoscan");
+			dev->scan_state = WIFI_SCAN_ACTIVE_AUTO;
+			break;
+		case WIFI_SCAN_PASSIVE_MANUAL:
+			DBG("promoting manual passive scan to autoscan");
+			dev->scan_state = WIFI_SCAN_PASSIVE_AUTO;
+			break;
+		default:
+			break;
+		}
 	}
 	wifi_device_scan_check(dev);
 }
@@ -2162,7 +2231,7 @@ static void wifi_device_autoscan_restart(struct wifi_device *dev)
 		dev->autoscan_restart_id = 0;
 	}
 	wifi_device_autoscan_reset(dev);
-	wifi_device_scan_request(dev);
+	wifi_device_scan_request(dev, SCAN_AUTO);
 }
 
 static void wifi_device_remove_bss(gpointer bssp, gpointer devp)
@@ -2516,7 +2585,7 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 	} else {
 		if (wifi_ssid_hidden(ssid)) {
 			wifi_device_active_scan_init(dev);
-			wifi_device_scan_request(dev);
+			wifi_device_scan_request(dev, SCAN_MANUAL);
 		}
 
 		/*
@@ -2786,7 +2855,7 @@ static void wifi_device_on_ok(struct wifi_device *dev)
 	if (!connman_device_get_powered(dev->device)) {
 		connman_device_set_powered(dev->device, TRUE);
 	}
-	wifi_device_scan_request(dev);
+	wifi_device_scan_request(dev, SCAN_AUTO);
 	wifi_device_update_bss_list(dev);
 }
 
@@ -3326,7 +3395,7 @@ static void wifi_device_set_state(struct wifi_device *dev,
 		 */
 		wifi_device_autoscan_reset(dev);
 		if (state == WIFI_DEVICE_ON) {
-			wifi_device_scan_request(dev);
+			wifi_device_scan_request(dev, SCAN_AUTO);
 		}
 
 		if (state == WIFI_DEVICE_ON ||
