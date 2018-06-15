@@ -37,6 +37,7 @@
 #include <connman/setting.h>
 #include <connman/agent.h>
 #include <connman/provision.h>
+#include <connman/wakeup_timer.h>
 
 #include "connman.h"
 
@@ -6690,9 +6691,10 @@ static int service_indicate_state(struct connman_service *service)
 
 			DBG("service %p retry timeout %d", service,
 					service->connect_retry_timeout);
-			service->connect_retry_timer = g_timeout_add_seconds(
-				service->connect_retry_timeout,
-				service_retry_connect, service);
+			service->connect_retry_timer =
+				connman_wakeup_timer_add_seconds
+					(service->connect_retry_timeout,
+						service_retry_connect, service);
 		}
 
 		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER &&
@@ -6988,8 +6990,10 @@ int __connman_service_online_check_failed(struct connman_service *service,
 		connman_warn("Online check failed for %p %s", service, service->name);
 
 	int timeout = ONLINE_CHECK_RETRY_COUNT - *online_check_count;
-	DBG("Next online check for service %p type %d in %d seconds", service, type, timeout * timeout);
-	*online_check_timer = g_timeout_add_seconds(timeout * timeout, redo_func, connman_service_ref(service));
+	DBG("Next online check for service %p type %d in %d seconds",
+					service, type, timeout * timeout);
+	*online_check_timer = connman_wakeup_timer_add_seconds
+		(timeout * timeout, redo_func, connman_service_ref(service));
 
 	return -EAGAIN;
 }
@@ -7360,7 +7364,7 @@ int __connman_service_connect(struct connman_service *service,
 
 	if (err == -EINPROGRESS) {
 		if (service->timeout == 0)
-			service->timeout = g_timeout_add_seconds(
+			service->timeout = connman_wakeup_timer_add_seconds(
 				CONNECT_TIMEOUT, connect_timeout, service);
 
 		return -EINPROGRESS;
