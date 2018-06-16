@@ -4663,7 +4663,7 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 			*new_state = service->state_ipv6;
 
 		settings_changed(service, new_ipconfig);
-		address_updated(service, new_method);
+		address_updated(service, type);
 
 		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
