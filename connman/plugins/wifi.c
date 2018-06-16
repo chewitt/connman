@@ -598,10 +598,8 @@ static int peer_register_service(const unsigned char *specification,
 		params = fill_in_peer_service_params(specification,
 						specification_length, query,
 						query_length, version);
-		if (!params) {
-			ret = -ENOMEM;
+		if (!params)
 			continue;
-		}
 
 		if (!found) {
 			ret_f = g_supplicant_interface_p2p_add_service(iface,
@@ -686,10 +684,8 @@ static int peer_unregister_service(const unsigned char *specification,
 		params = fill_in_peer_service_params(specification,
 						specification_length, query,
 						query_length, version);
-		if (!params) {
-			ret = -ENOMEM;
+		if (!params)
 			continue;
-		}
 
 		ret = g_supplicant_interface_p2p_del_service(iface, params);
 		if (ret != 0 && ret != -EINPROGRESS)
