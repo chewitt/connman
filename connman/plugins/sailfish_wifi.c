@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2018 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -49,9 +49,10 @@
 #define MAX_HANDSHAKE_RETRIES 5
 
 #define WIFI_SCAN_START_TIMEOUT_MS (1000)
-#define WIFI_BSS_REMOVE_TIMEOUT_MS (1000)
+#define WIFI_NETWORK_MAX_RECOVER_ATTEMPTS (2)
 #define WIFI_AUTOSCAN_MIN_SEC (5)
 #define WIFI_AUTOSCAN_MAX_SEC (300)
+#define WIFI_AUTOSCAN_RESTART_MS (500)
 #define WIFI_AUTOSCAN_MULTIPLIER (2)
 #define WIFI_HIDDEN_CONNECT_TIMEOUT_SEC (300)
 #define WIFI_HIDDEN_CONNECT_SCAN_SEC (2)
@@ -142,16 +143,10 @@ struct wifi_create_interface_params {
 	char *ifname;
 };
 
-struct wifi_device_bss_data {
-	struct wifi_device *dev;
-	struct wifi_bss *bss;
-};
-
 struct wifi_bss {
 	GSupplicantBSS *bss;
 	GBytes *ssid;
 	gulong event_id[BSS_EVENT_COUNT];
-	guint remove_timeout_id;
 	GUtilIntHistory *history;       /* Signal strength history */
 	guint strength;                 /* Median strength */
 };
@@ -178,6 +173,7 @@ struct wifi_network {
 	gulong iface_event_id[NETWORK_INTERFACE_EVENT_COUNT];
 	GSUPPLICANT_INTERFACE_STATE interface_states[3];
 	GList *bss_list;                /* Contains wifi_bss */
+	int recover_attempt;            /* Passive scans after BSS is gone */
 	int remove_in_process;          /* See wifi_device_remove_network */
 	GCancellable *pending;          /* Pending call */
 	WIFI_NETWORK_STATE state;
@@ -205,12 +201,42 @@ typedef enum wifi_device_state {
 	WIFI_DEVICE_UNDEFINED
 } WIFI_DEVICE_STATE;
 
+/*
+ * The scanning state machine:
+ *
+ *    NONE <-----------------------------------------------------+
+ *    |  ^                                                       |
+ *    |  |                                                       |
+ *    |  +------------------------------------------------+      |
+ *    |                                                   |      |
+ *    +---> SCHEDULED_AUTO ---> ACTIVE_AUTO ---> PASSIVE_AUTO    |
+ *    |         ^                  ^    ^            |    ^      |
+ *    |         |                  |    |            |    |      |
+ *    |         |                  |    +------------+    |      |
+ *    |         |                  |                      |      |
+ *    +---> SCHEDULED_MANUAL -> ACTIVE_MANUAL -> PASSIVE_MANUAL -+
+ *                                      ^            |
+ *                                      |            |
+ *                                      +------------+
+ *
+ * Transitions are performed by wifi_device_scan_request() and
+ * wifi_device_scan_check() functions.
+ */
 typedef enum wifi_scan_state {
-	WIFI_SCAN_NONE,
-	WIFI_SCAN_SCHEDULED,
-	WIFI_SCAN_ACTIVE,
-	WIFI_SCAN_PASSIVE
+	WIFI_SCAN_NONE = 0,
+	WIFI_SCAN_SCHEDULED_AUTO,
+	WIFI_SCAN_ACTIVE_AUTO,
+	WIFI_SCAN_PASSIVE_AUTO,
+	WIFI_SCAN_SCHEDULED_MANUAL,
+	WIFI_SCAN_ACTIVE_MANUAL,
+	WIFI_SCAN_PASSIVE_MANUAL
 } WIFI_SCAN_STATE;
+
+#define WIFI_SCAN_MANUAL(state) (((state) & 0x4) != 0)
+
+/* wifi_device_scan_request() parameter: */
+#define SCAN_MANUAL TRUE
+#define SCAN_AUTO FALSE
 
 struct wifi_device_tp {
 	GSupplicantNetworkParams np;
@@ -246,6 +272,7 @@ struct wifi_device {
 	guint autoscan_interval_sec;
 	guint autoscan_start_timer_id;
 	guint autoscan_holdoff_timer_id;
+	guint autoscan_restart_id;
 	WIFI_SCAN_STATE scan_state;
 	GSList *active_scans;
 	unsigned int watch;
@@ -267,6 +294,8 @@ struct wifi_plugin {
 static void wifi_device_scan_check(struct wifi_device *dev);
 static void wifi_device_active_scan_add(struct wifi_device *dev, GBytes *ssid);
 static void wifi_device_connect_next_schedule(struct wifi_device *dev);
+static void wifi_device_remove_network(struct wifi_device *dev,
+						struct wifi_network *net);
 
 /*==========================================================================*
  * Logging
@@ -574,9 +603,6 @@ static void wifi_bss_free(struct wifi_bss *bss_data, struct wifi_device *dev)
 		}
 	}
 
-	if (bss_data->remove_timeout_id) {
-		g_source_remove(bss_data->remove_timeout_id);
-	}
 	gsupplicant_bss_remove_handlers(bss_data->bss, bss_data->event_id,
 					G_N_ELEMENTS(bss_data->event_id));
 	gsupplicant_bss_unref(bss_data->bss);
@@ -940,28 +966,40 @@ static GSupplicantBSS *wifi_network_current_bss(struct wifi_network *net)
 		return net->connecting_to;
 	} else if (net->current_bss && net->current_bss->valid) {
 		return net->current_bss;
-	} else {
+	} else if (net->bss_list) {
 		struct wifi_bss *best = net->bss_list->data;
 
 		return best->bss;
+	} else {
+		return NULL;
 	}
 }
 
 static void wifi_network_update_bssid(struct wifi_network *net)
 {
-	GBytes *bssid = wifi_network_current_bss(net)->bssid;
-	gsize bssid_len;
-	const void *bssid_data = g_bytes_get_data(bssid, &bssid_len);
+	GSupplicantBSS *bss = wifi_network_current_bss(net);
 
-	if (bssid_len == WIFI_BSSID_LEN) {
-		connman_network_set_bssid(net->network, bssid_data);
+	if (bss) {
+		GBytes *bssid = bss->bssid;
+		gsize bssid_len;
+		const void *bssid_data = g_bytes_get_data(bssid, &bssid_len);
+
+		if (bssid_len == WIFI_BSSID_LEN) {
+			connman_network_set_bssid(net->network, bssid_data);
+			return;
+		}
 	}
+
+	connman_network_set_bssid(net->network, NULL);
 }
 
 static void wifi_network_update_frequency(struct wifi_network *net)
 {
-	connman_network_set_frequency(net->network,
-				wifi_network_current_bss(net)->frequency);
+	GSupplicantBSS *bss = wifi_network_current_bss(net);
+
+	if (bss) {
+		connman_network_set_frequency(net->network, bss->frequency);
+	}
 }
 
 static gboolean wifi_network_update_current_bss(struct wifi_network *net)
@@ -1218,6 +1256,16 @@ static int wifi_network_connect(struct wifi_network *net)
 			net->state == WIFI_NETWORK_WAITING_FOR_COMPLETE) {
 		NDBG(net, "already connecting");
 		GASSERT(net->pending);
+		return (-EINPROGRESS);
+	} else if (!net->bss_list) {
+		/*
+		 * wifi_device_bss_add_3() will start the actual connection
+		 * sequence in case if BSS appears before the recovery attempt
+		 * limit is exceeded. If BSS never appears, the network gets
+		 * removed which should cancel the connection.
+		 */
+		NDBG(net, "connect request in recovery state");
+		wifi_network_set_state(net, WIFI_NETWORK_PREPARING_TO_CONNECT);
 		return (-EINPROGRESS);
 	} else {
 		struct wifi_bss *bss_data = net->bss_list->data;
@@ -1852,6 +1900,19 @@ static void wifi_device_drop_interface(struct wifi_device *dev)
 	wifi_device_update_scanning(dev);
 }
 
+static void wifi_device_drop_expired_networks_cb(gpointer netp, gpointer devp)
+{
+	struct wifi_network *net = netp;
+	struct wifi_device *dev = devp;
+
+	if (net->recover_attempt >= WIFI_NETWORK_MAX_RECOVER_ATTEMPTS) {
+		/* Absent for too long, kill the network */
+		DBG("removing %s", net->ident);
+		GASSERT(!net->bss_list);
+		wifi_device_remove_network(dev, net);
+	}
+}
+
 static void wifi_device_scanning_changed(GSupplicantInterface *iface,
 								void *data)
 {
@@ -1863,6 +1924,19 @@ static void wifi_device_scanning_changed(GSupplicantInterface *iface,
 		g_source_remove(dev->scan_start_timeout_id);
 		dev->scan_start_timeout_id = 0;
 	}
+
+	/*
+	 * Quite often WiFi networks disappear from the scan results and
+	 * then re-appear after a scan or two with a different path. When
+	 * that happens connman won't even notice because we keep connman
+	 * network alive. Only after the network is absent from too many
+	 * scans in a row, we declare it dead and notify connman core.
+	 */
+	if (!iface->scanning) {
+		g_list_foreach(dev->networks,
+				wifi_device_drop_expired_networks_cb, dev);
+	}
+
 	wifi_device_update_scanning(dev);
 }
 
@@ -1921,9 +1995,11 @@ static void wifi_device_autoscan_stop(struct wifi_device *dev)
 
 static void wifi_device_autoscan_reset(struct wifi_device *dev)
 {
-	DBG("resetting autoscan");
 	wifi_device_autoscan_stop(dev);
-	dev->autoscan_interval_sec = WIFI_AUTOSCAN_MIN_SEC;
+	if (dev->autoscan_interval_sec > WIFI_AUTOSCAN_MIN_SEC) {
+		DBG("resetting autoscan");
+		dev->autoscan_interval_sec = WIFI_AUTOSCAN_MIN_SEC;
+	}
 }
 
 static gboolean wifi_device_autoscan_holdoff_timer_expired(gpointer data)
@@ -1982,30 +2058,39 @@ static void wifi_device_scan_check(struct wifi_device *dev)
 			!dev->autoscan_start_timer_id &&
 				wifi_device_can_autoscan(dev)) {
 		/* Autoscan timer has expired */
-		dev->scan_state = WIFI_SCAN_SCHEDULED;
+		dev->scan_state = WIFI_SCAN_SCHEDULED_AUTO;
 	}
 
-	if (dev->scan_state == WIFI_SCAN_SCHEDULED) {
+	if (dev->scan_state == WIFI_SCAN_SCHEDULED_AUTO ||
+			dev->scan_state == WIFI_SCAN_SCHEDULED_MANUAL) {
 		if (wifi_device_may_have_hidden_networks(dev)) {
 			wifi_device_active_scan_init(dev);
 		}
 		if (dev->active_scans) {
-			dev->scan_state = WIFI_SCAN_ACTIVE;
+			dev->scan_state = WIFI_SCAN_MANUAL(dev->scan_state) ?
+				WIFI_SCAN_ACTIVE_MANUAL :
+				WIFI_SCAN_ACTIVE_AUTO;
 		} else {
-			dev->scan_state = WIFI_SCAN_PASSIVE;
+			dev->scan_state = WIFI_SCAN_MANUAL(dev->scan_state) ?
+				WIFI_SCAN_PASSIVE_MANUAL :
+				WIFI_SCAN_PASSIVE_AUTO;
 		}
 	}
 
-	if (dev->scan_state == WIFI_SCAN_ACTIVE &&
+	if ((dev->scan_state == WIFI_SCAN_ACTIVE_AUTO ||
+			dev->scan_state == WIFI_SCAN_ACTIVE_MANUAL) &&
 					wifi_device_can_active_scan(dev)) {
 		if (dev->active_scans) {
 			wifi_device_active_scan_perform(dev);
 		} else {
-			dev->scan_state = WIFI_SCAN_PASSIVE;
+			dev->scan_state = WIFI_SCAN_MANUAL(dev->scan_state) ?
+				WIFI_SCAN_PASSIVE_MANUAL :
+				WIFI_SCAN_PASSIVE_AUTO;
 		}
 	}
 
-	if (dev->scan_state == WIFI_SCAN_PASSIVE &&
+	if ((dev->scan_state == WIFI_SCAN_PASSIVE_AUTO ||
+			dev->scan_state == WIFI_SCAN_PASSIVE_MANUAL)&&
 					wifi_device_can_scan(dev)) {
 		if (wifi_device_passive_scan_perform(dev)) {
 			if (dev->active_scans) {
@@ -2013,9 +2098,14 @@ static void wifi_device_scan_check(struct wifi_device *dev)
 				 * New active scan was requested while
 				 * we were doing our passive scan.
 				 */
-				dev->scan_state = WIFI_SCAN_ACTIVE;
+				dev->scan_state =
+					WIFI_SCAN_MANUAL(dev->scan_state) ?
+						WIFI_SCAN_ACTIVE_MANUAL :
+						WIFI_SCAN_ACTIVE_AUTO;
 			} else {
-				wifi_device_autoscan_schedule_next(dev);
+				if (!WIFI_SCAN_MANUAL(dev->scan_state)) {
+					wifi_device_autoscan_schedule_next(dev);
+				}
 				dev->scan_state = WIFI_SCAN_NONE;
 			}
 		}
@@ -2048,11 +2138,34 @@ static void wifi_device_scan_requested(struct wifi_device *dev)
 	wifi_device_update_scanning(dev);
 }
 
-static void wifi_device_scan_request(struct wifi_device *dev)
+static void wifi_device_scan_request(struct wifi_device *dev, gboolean manual)
 {
 	if (dev->scan_state == WIFI_SCAN_NONE) {
-		DBG("scheduling autoscan");
-		dev->scan_state = WIFI_SCAN_SCHEDULED;
+		DBG("scheduling %sscan", manual ? "manual " : "auto");
+		dev->scan_state = manual ?
+			WIFI_SCAN_SCHEDULED_MANUAL :
+			WIFI_SCAN_SCHEDULED_AUTO;
+	} else if (!manual) {
+		/*
+		 * Promote manual scan to autoscan to increase the autoscan
+		 * period when this scan completes.
+		 */
+		switch (dev->scan_state) {
+		case WIFI_SCAN_SCHEDULED_MANUAL:
+			DBG("promoting scheduled manual scan to autoscan");
+			dev->scan_state = WIFI_SCAN_SCHEDULED_AUTO;
+			break;
+		case WIFI_SCAN_ACTIVE_MANUAL:
+			DBG("promoting manual active scan to autoscan");
+			dev->scan_state = WIFI_SCAN_ACTIVE_AUTO;
+			break;
+		case WIFI_SCAN_PASSIVE_MANUAL:
+			DBG("promoting manual passive scan to autoscan");
+			dev->scan_state = WIFI_SCAN_PASSIVE_AUTO;
+			break;
+		default:
+			break;
+		}
 	}
 	wifi_device_scan_check(dev);
 }
@@ -2089,10 +2202,22 @@ static void wifi_device_active_scan_perform(struct wifi_device *dev)
 	}
 }
 
+static void wifi_device_update_recover_attempt_cb(gpointer netp, gpointer dev)
+{
+	struct wifi_network *net = netp;
+
+	if (!net->bss_list) {
+		net->recover_attempt++;
+		DBG("%s recover attempt %d", net->ident, net->recover_attempt);
+	}
+}
+
 static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 {
 	if (gsupplicant_interface_scan(dev->iface, NULL, NULL, NULL)) {
 		DBG("requested passive scan");
+		g_list_foreach(dev->networks,
+				wifi_device_update_recover_attempt_cb, dev);
 		wifi_device_scan_requested(dev);
 		return TRUE;
 	}
@@ -2101,8 +2226,12 @@ static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 
 static void wifi_device_autoscan_restart(struct wifi_device *dev)
 {
+	if (dev->autoscan_restart_id) {
+		g_source_remove(dev->autoscan_restart_id);
+		dev->autoscan_restart_id = 0;
+	}
 	wifi_device_autoscan_reset(dev);
-	wifi_device_scan_request(dev);
+	wifi_device_scan_request(dev, SCAN_AUTO);
 }
 
 static void wifi_device_remove_bss(gpointer bssp, gpointer devp)
@@ -2174,12 +2303,6 @@ static void wifi_device_remove_bss_from_network2(struct wifi_device *dev,
 			break;
 		}
 	}
-
-	if (!net->bss_list) {
-		/* The last BSS is gone, kill the network */
-		DBG("removing %s", net->ident);
-		wifi_device_remove_network(dev, net);
-	}
 }
 
 static void wifi_device_remove_bss_from_network(struct wifi_device *dev,
@@ -2241,75 +2364,24 @@ static void wifi_device_cleanup_bss_list(struct wifi_device *dev,
 			GSupplicantBSS *dump = data->bss;
 
 			DBG("dumping %s", dump->path);
-			if (data->remove_timeout_id) {
-				g_source_remove(data->remove_timeout_id);
-				data->remove_timeout_id = 0;
-			}
 			wifi_device_remove_bss_from_network2(dev, net, dump);
 			break;
 		}
 	}
 }
 
-static gboolean wifi_device_bss_remove_timer(void *user_data)
-{
-	struct wifi_device_bss_data *data = user_data;
-
-	GASSERT(data->bss->remove_timeout_id);
-	data->bss->remove_timeout_id = 0;
-	wifi_device_remove_bss_from_network(data->dev, data->bss->bss);
-	return G_SOURCE_REMOVE;
-}
-
 static void wifi_device_bss_presence_changed(GSupplicantBSS *bss, void *data)
 {
 	struct wifi_device *dev = data;
 
-	/*
-	 * Schedule BSS for removal when it becomes invalid. Still keep
-	 * it around for WIFI_BSS_REMOVE_TIMEOUT_MS so that connman networks
-	 * don't get removed and re-created too often.
-	 *
-	 * Quite often WiFi networks disappear from the scan results and
-	 * then quickly re-appear with a different path. When that happens
-	 * we detect duplicates (by comparing BSSID), get rid of the dead
-	 * BSS and replace it with the brand new one. Connman won't even
-	 * notice because we keep connman network alive. Once the timeout
-	 * experes, the dead BSS actually goes away, possibly taking down
-	 * the entire connman network (if it was the last BSS associated
-	 * with the network).
-	 */
+	/* We assume that BSS never reappeares with the same path */
 	if (!bss->valid || !bss->present) {
 		struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
 
 		GASSERT(bss_data);
 		if (bss_data) {
-			if (!bss_data->remove_timeout_id) {
-				struct wifi_device_bss_data *timer_data =
-					g_new(struct wifi_device_bss_data, 1);
-
-				DBG("%s is gone", bss->path);
-				timer_data->dev = dev;
-				timer_data->bss = bss_data;
-				bss_data->remove_timeout_id =
-					connman_wakeup_timer_add_full(
-						G_PRIORITY_DEFAULT,
-						WIFI_BSS_REMOVE_TIMEOUT_MS,
-						wifi_device_bss_remove_timer,
-						timer_data, g_free);
-			}
-		}
-	} else if (bss->valid && bss->present) {
-		struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
-
-		DBG("%s reappeared", bss->path);
-		GASSERT(bss_data);
-		if (bss_data) {
-			GASSERT(bss_data->remove_timeout_id);
-			if (bss_data->remove_timeout_id) {
-				g_source_remove(bss_data->remove_timeout_id);
-				bss_data->remove_timeout_id = 0;
-			}
+			DBG("%s is gone", bss->path);
+			wifi_device_remove_bss_from_network(dev, bss);
 		}
 	}
 }
@@ -2375,6 +2447,7 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 	GBytes *ssid = bss_data->ssid;
 	char *ident = wifi_bss_ident(bss_data);
 	struct wifi_network *net = g_hash_table_lookup(dev->ident_net, ident);
+	gboolean recovered = FALSE;
 	GSList *bssid_list;
 
 	GASSERT(bss->valid && bss->present);
@@ -2436,6 +2509,16 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 
 	if (net) {
 		DBG("adding %s to %s", bss->path, ident);
+
+		/*
+		 * We are keeping BSS-less networks alive for some time in
+		 * the hope that they will recover. And sometimes they do!
+		 */
+		if (net->recover_attempt) {
+			DBG("%s recovered", ident);
+			net->recover_attempt = 0;
+			recovered = TRUE;
+		}
 		g_free(ident);
 	} else {
 		struct connman_service *service;
@@ -2499,9 +2582,21 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 				connect->passphrase, connect->user_data);
 		connect->user_data = NULL;
 		wifi_hidden_connect_free(connect);
-	} else if (wifi_ssid_hidden(ssid)) {
-		wifi_device_active_scan_init(dev);
-		wifi_device_scan_request(dev);
+	} else {
+		if (wifi_ssid_hidden(ssid)) {
+			wifi_device_active_scan_init(dev);
+			wifi_device_scan_request(dev, SCAN_MANUAL);
+		}
+
+		/*
+		 * If we received a connect request in the recovery
+		 * state, start the actual connection sequence when
+		 * BSS re-appears.
+		 */
+		if (recovered && net->state == WIFI_NETWORK_DISCONNECTING) {
+			NDBG(net, "starting delayed connect");
+			wifi_network_connect(net);
+		}
 	}
 }
 
@@ -2760,7 +2855,7 @@ static void wifi_device_on_ok(struct wifi_device *dev)
 	if (!connman_device_get_powered(dev->device)) {
 		connman_device_set_powered(dev->device, TRUE);
 	}
-	wifi_device_scan_request(dev);
+	wifi_device_scan_request(dev, SCAN_AUTO);
 	wifi_device_update_bss_list(dev);
 }
 
@@ -3300,7 +3395,7 @@ static void wifi_device_set_state(struct wifi_device *dev,
 		 */
 		wifi_device_autoscan_reset(dev);
 		if (state == WIFI_DEVICE_ON) {
-			wifi_device_scan_request(dev);
+			wifi_device_scan_request(dev, SCAN_AUTO);
 		}
 
 		if (state == WIFI_DEVICE_ON ||
@@ -3376,6 +3471,16 @@ static void wifi_device_newlink(unsigned int flags, unsigned int change,
 	}
 }
 
+static gboolean wifi_device_autoscan_restart_cb(void *user_data)
+{
+	struct wifi_device *dev = user_data;
+
+	GASSERT(dev->autoscan_restart_id);
+	dev->autoscan_restart_id = 0;
+	wifi_device_autoscan_restart(dev);
+	return G_SOURCE_REMOVE;
+}
+
 static void wifi_device_update_screen_state(struct wifi_device *dev)
 {
 	const gboolean active =
@@ -3386,7 +3491,20 @@ static void wifi_device_update_screen_state(struct wifi_device *dev)
 		DBG("screen %sactive", active ? "" : "in");
 		dev->screen_active = active;
 		if (active) {
-			wifi_device_autoscan_restart(dev);
+			/*
+			 * Don't restart autoscan right away. Lots
+			 * of things are happening right after screen
+			 * unlocks, including UI animation and such.
+			 * Let's postpone scanning a bit. Also, there's
+			 * no need to use wakeup timer here.
+			 */
+			GASSERT(!dev->autoscan_restart_id);
+			dev->autoscan_restart_id =
+				g_timeout_add(WIFI_AUTOSCAN_RESTART_MS,
+					wifi_device_autoscan_restart_cb, dev);
+		} else if (dev->autoscan_restart_id) {
+			g_source_remove(dev->autoscan_restart_id);
+			dev->autoscan_restart_id = 0;
 		}
 	}
 }
@@ -3470,6 +3588,9 @@ static void wifi_device_delete(struct wifi_device *dev)
 	}
 	if (dev->autoscan_holdoff_timer_id) {
 		g_source_remove(dev->autoscan_holdoff_timer_id);
+	}
+	if (dev->autoscan_restart_id) {
+		g_source_remove(dev->autoscan_restart_id);
 	}
 	if (dev->pending) {
 		g_cancellable_cancel(dev->pending);
