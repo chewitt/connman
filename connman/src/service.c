@@ -271,6 +271,7 @@ struct connman_service {
 	GBytes *ssid;
 	struct connman_access_service_policy *policy;
 	char *access;
+	struct connman_service *depends_on;
 };
 
 static const char *service_get_access(struct connman_service *service);
@@ -610,6 +611,124 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 }
 
+static void set_vpn_dependency(struct connman_service *vpn_service)
+{
+	struct connman_service *service = __connman_service_get_default();
+
+	if (!vpn_service || !service)
+		return;
+	
+	DBG("vpn service %p default service %p", vpn_service, service);
+
+	if (vpn_service->type != CONNMAN_SERVICE_TYPE_VPN) {
+		DBG("invalid service type %s",
+			__connman_service_type2string(vpn_service->type));
+		return;
+	}
+
+	if (vpn_service->depends_on) {
+		DBG("dependency already set for %s (depends on %s)",
+			vpn_service->identifier,
+			vpn_service->depends_on->identifier);
+		return;
+	}
+
+	switch (service->type) {
+	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+		break;
+	default:
+		DBG("VPN cannot depend on service type %s",
+			__connman_service_type2string(service->type));
+		return;
+	}
+
+	vpn_service->depends_on = service;
+
+	DBG("VPN %s set to depend on %s",
+		vpn_service->identifier, service->identifier);
+}
+
+static bool is_vpn_dependent(struct connman_service *service,
+	struct connman_service *vpn_service)
+{
+	if (!service || !vpn_service)
+		return false;
+	
+	DBG("service %p vpn service %p", service, vpn_service);
+
+	if (service->type == CONNMAN_SERVICE_TYPE_VPN ||
+		vpn_service->type != CONNMAN_SERVICE_TYPE_VPN) {
+		DBG("service %s is VPN or vpn service %s is not VPN",
+			service->identifier, vpn_service->identifier);
+		return false;
+	}
+
+	if (!vpn_service->depends_on) {
+		DBG("VPN service %s dependency not set",
+			vpn_service->identifier);
+		return false;
+	}
+	
+	DBG("VPN %s depends on %s, service %s",
+		vpn_service->identifier, vpn_service->depends_on->identifier,
+		service->identifier);
+
+	return vpn_service->depends_on == service;
+}
+
+static void disconnect_vpn_service(struct connman_service *service,
+	void* user_data)
+{
+	struct connman_service *dep_service = NULL;
+
+	if (!service || service->type != CONNMAN_SERVICE_TYPE_VPN)
+		return;
+
+	if (user_data)
+		dep_service = (struct connman_service *)user_data;
+
+	DBG("%p %s", service, service->identifier);
+
+	switch(service->state) {
+	case CONNMAN_SERVICE_STATE_ASSOCIATION:
+	case CONNMAN_SERVICE_STATE_CONFIGURATION:
+	case CONNMAN_SERVICE_STATE_ONLINE:
+	case CONNMAN_SERVICE_STATE_READY:
+		if (service->provider) {
+
+			if (dep_service &&
+				!is_vpn_dependent(dep_service, service)) {
+				DBG("not disconnecting VPN %s, "
+					"dependency mismatch",
+					service->identifier);
+				break;
+			}
+
+			DBG("disconnecting VPN %s state %d",
+				service->identifier, service->state);
+
+			__connman_service_disconnect(service);
+			service->depends_on = NULL;
+		}
+		break;
+	case CONNMAN_SERVICE_STATE_DISCONNECT:
+	case CONNMAN_SERVICE_STATE_FAILURE:
+	case CONNMAN_SERVICE_STATE_UNKNOWN:
+	case CONNMAN_SERVICE_STATE_IDLE:
+		break;
+	}
+}
+
+static void disconnect_depending_vpn_services(struct connman_service *service)
+{
+	if (service && service->type == CONNMAN_SERVICE_TYPE_VPN)
+		return;
+
+	__connman_service_foreach(disconnect_vpn_service, service);
+}
+
 static void set_split_routing(struct connman_service *service, bool value)
 {
 	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
@@ -694,6 +813,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
+		service->depends_on = NULL;
 		if (!error)
 			connman_service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
@@ -1725,30 +1845,6 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
-static void disconnect_vpn_service(struct connman_service *service, void* user_data)
-{
-	if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
-
-		switch(service->state) {
-		case CONNMAN_SERVICE_STATE_ASSOCIATION:
-		case CONNMAN_SERVICE_STATE_CONFIGURATION:
-		case CONNMAN_SERVICE_STATE_ONLINE:
-		case CONNMAN_SERVICE_STATE_READY:
-			if (service->provider) {
-				connman_provider_disconnect(service->provider);
-				DBG("disconnecting VPN %s state %d", 
-					service->identifier, service->state);
-			}
-			break;
-		case CONNMAN_SERVICE_STATE_DISCONNECT:
-		case CONNMAN_SERVICE_STATE_FAILURE:
-		case CONNMAN_SERVICE_STATE_UNKNOWN:
-		case CONNMAN_SERVICE_STATE_IDLE:
-			break;
-		}
-	}
-}
-
 struct connman_service *get_connected_default_route_service()
 {
 	GList *iter;
@@ -1797,6 +1893,33 @@ static void default_changed(void)
 
 	__connman_service_timeserver_changed(current_default, NULL);
 
+	/*
+	 * Default is going to be changed, if it is not VPN disconnect all
+	 * depending VPN services, otherwise disconnect the VPN
+	 */
+	if (current_default) {
+		if (current_default->type != CONNMAN_SERVICE_TYPE_VPN) {
+			/*
+			 * If the new default is a VPN depending on this
+			 * service skip this phase to prevent connection loop
+			 * for VPN.
+			 */
+			if (service &&
+				service->type == CONNMAN_SERVICE_TYPE_VPN &&
+				is_vpn_dependent(current_default, service)) {
+				DBG("not disconnecting depending services");
+				goto set_default;
+			}
+			DBG("disconnect depending services");
+			disconnect_depending_vpn_services(current_default);
+		} else {
+			DBG("disconnect VPN as current_default");
+			__connman_service_disconnect(current_default);
+		}
+	}
+
+set_default:
+
 	current_default = service;
 
 	if (service) {
@@ -1807,18 +1930,15 @@ static void default_changed(void)
 		if (service->domainname)
 			__connman_utsname_set_domainname(service->domainname);
 
-		/* Do not do this if VPN is set as default */
+		/*
+		 * Connect VPN automatically when new default service
+		 * is set (unless new default is VPN)
+		 */
 		if (service->type != CONNMAN_SERVICE_TYPE_VPN) {
-			/* Disconnect VPNs to force VPNs to use the
-			 * default service */
-			__connman_service_foreach(disconnect_vpn_service, NULL);
-
-			/* Connect VPN automatically when new default service
-			 * is set */
 			vpn_auto_connect();
 		}
 	} else {
-		__connman_service_foreach(disconnect_vpn_service, NULL);
+		disconnect_depending_vpn_services(NULL);
 	}
 	__connman_notifier_default_changed(service);
 }
@@ -5807,6 +5927,8 @@ static void service_initialize(struct connman_service *service)
 	service->provider = NULL;
 
 	service->wps = false;
+
+	service->depends_on = NULL;
 }
 
 /**
@@ -6583,17 +6705,19 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_ASSOCIATION:
-
+		set_vpn_dependency(service);
 		break;
 
 	case CONNMAN_SERVICE_STATE_CONFIGURATION:
-
+		set_vpn_dependency(service);
 		break;
 
 	case CONNMAN_SERVICE_STATE_READY:
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
 		service_set_new_service(service, false);
+
+		set_vpn_dependency(service);
 
 		default_changed();
 
@@ -6659,6 +6783,8 @@ static int service_indicate_state(struct connman_service *service)
 
 		default_changed();
 
+		disconnect_depending_vpn_services(service);
+
 		__connman_wispr_stop(service);
 
 		__connman_wpad_stop(service);
@@ -6701,6 +6827,7 @@ static int service_indicate_state(struct connman_service *service)
 					NULL) == -EINPROGRESS)
 			return 0;
 		service_complete(service);
+		disconnect_depending_vpn_services(service);
 
 		break;
 	}
@@ -7213,6 +7340,7 @@ static int service_connect(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
 	case CONNMAN_SERVICE_TYPE_VPN:
+		set_vpn_dependency(service);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
 		switch (service->security) {
@@ -7341,8 +7469,10 @@ int __connman_service_connect(struct connman_service *service,
 	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
-	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_WIFI:
+		break;
+	case CONNMAN_SERVICE_TYPE_VPN:
+		set_vpn_dependency(service);
 		break;
 	}
 
@@ -7432,6 +7562,8 @@ int __connman_service_disconnect(struct connman_service *service)
 
 	service->connect_reason = CONNMAN_SERVICE_CONNECT_REASON_NONE;
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
+
+	disconnect_depending_vpn_services(service);
 
 	__connman_wispr_stop(service);
 	stop_recurring_online_check(service);
@@ -8309,7 +8441,6 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	case CONNMAN_SERVICE_TYPE_SYSTEM:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 	case CONNMAN_SERVICE_TYPE_GPS:
-	case CONNMAN_SERVICE_TYPE_VPN:
 	case CONNMAN_SERVICE_TYPE_GADGET:
 	case CONNMAN_SERVICE_TYPE_WIFI:
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
@@ -8317,6 +8448,9 @@ bool __connman_service_create_from_network(struct connman_network *network)
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 		service->favorite = true;
+		break;
+	case CONNMAN_SERVICE_TYPE_VPN:
+		service->depends_on = NULL;
 		break;
 	}
 
@@ -8504,6 +8638,7 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	}
 
 	service->type = CONNMAN_SERVICE_TYPE_VPN;
+	service->depends_on = NULL;
 
 	/* Try to load modifiable values from storage. If config does not
 	 * exist set current time as modify time if service is saved as is.
