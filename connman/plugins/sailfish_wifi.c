@@ -3014,6 +3014,17 @@ static int wifi_device_on_start(struct wifi_device *dev)
 	return ret;
 }
 
+static void wifi_device_bridge_check(struct wifi_device *dev)
+{
+	if ((dev->iff & IFF_LOWER_UP) && dev->tethering &&
+					dev->bridge && !dev->bridged) {
+		DBG("index %d bridge %s", dev->ifi, dev->bridge);
+		if (connman_inet_add_to_bridge(dev->ifi, dev->bridge) == 0) {
+			dev->bridged = TRUE;
+		}
+	}
+}
+
 static void wifi_tether_failed(struct wifi_device *dev)
 {
 	DBG("failed to enable tethering");
@@ -3409,6 +3420,15 @@ static void wifi_device_set_state(struct wifi_device *dev,
 			}
 		}
 
+		if (state == WIFI_DEVICE_TETHERING_ON) {
+
+			/*
+			 * AP mode has been set up, check if we need to add
+			 * interface to the bridge.
+			 */
+			wifi_device_bridge_check(dev);
+		}
+
 		if (state != WIFI_DEVICE_TETHERING_ON &&
 				state != WIFI_DEVICE_TURNING_TETHERING_ON) {
 			/*
@@ -3457,14 +3477,7 @@ static void wifi_device_newlink(unsigned int flags, unsigned int change,
 	if ((old_flags & IFF_LOWER_UP) != (flags & IFF_LOWER_UP)) {
 		if (flags & IFF_LOWER_UP) {
 			DBG("carrier on");
-			if (dev->tethering && dev->bridge && !dev->bridged) {
-				DBG("index %d bridge %s", dev->ifi,
-								dev->bridge);
-				if (connman_inet_add_to_bridge(dev->ifi,
-							dev->bridge) == 0) {
-					dev->bridged = TRUE;
-				}
-			}
+			wifi_device_bridge_check(dev);
 		} else {
 			DBG("carrier off");
 		}
