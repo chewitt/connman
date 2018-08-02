@@ -2016,6 +2016,9 @@ static void default_changed(void)
 {
 	struct connman_service *service = __connman_service_get_default();
 
+	DBG("");
+	__connman_service_foreach(print_service, NULL);
+
 	if (service == current_default) {
 		DBG("default not changed %p %s",
 			service, service ? service->identifier : "NULL");
@@ -2030,7 +2033,7 @@ static void default_changed(void)
 	 * If new service is NULL try to get a connected service.
 	 */
 	if (!service) {
-		DBG("new default %p is NULL", service);
+		DBG("new default is %p", service);
 		service = get_connected_default_route_service();
 		DBG("got new connected default route %p", service);
 
@@ -2038,23 +2041,6 @@ static void default_changed(void)
 			DBG("new connected default route == current_default");
 			return;
 		}
-
-		__connman_service_foreach(print_service, NULL);
-
-		switch_default_service(service, current_default);
-
-		__connman_service_foreach(print_service, NULL);
-
-		/*if (current_default) {
-			nameserver_add_all(current_default,
-				CONNMAN_IPCONFIG_TYPE_ALL);
-			//searchdomain_add_all(current_default);
-		}
-
-		if (service) {
-			nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
-			//searchdomain_add_all(service);
-		}*/
 	}
 
 	DBG("current default %p %s", current_default,
@@ -2063,8 +2049,6 @@ static void default_changed(void)
 	
 	if (!__connman_service_is_default_route(service)) {
 
-		__connman_service_foreach(print_service, NULL);
-		
 		/*
 		 * If the current_default is not connected and the new service
 		 * is not the default route, find the next connected from
@@ -2073,39 +2057,41 @@ static void default_changed(void)
 		if (current_default && !is_connected(current_default)) {
 			service = get_connected_default_route_service();
 
+			if (service == current_default) {
+				DBG("Selected new default == current_default");
+				return;
+			}
+			
 			DBG("Selected new default service %s",
 				service ? service->identifier : "");
 		} else {
 			DBG("Not setting %s as default service",
 				service ? service->identifier : "");
 			
-			if (service && service->type ==
-				CONNMAN_SERVICE_TYPE_VPN) {
-				DBG("Adding nameservers of VPN");
-				nameserver_add_all(current_default,
-					CONNMAN_IPCONFIG_TYPE_ALL);
-				nameserver_add_all(service,
-					CONNMAN_IPCONFIG_TYPE_ALL);
-			}
-			
 			switch_services(service, current_default);
 			__connman_notifier_default_changed(current_default);
+			
 			return;
 		}
-
-		__connman_service_foreach(print_service, NULL);
 	}
 
+	/*
+	 * If the change over default service is not allowed change the order
+	 * of the service in the service list in a way that current default
+	 * service remains at the top.and stop processing the default change
+	 * any further.
+	 */
 	if (service && !allow_service_over_default(service)) {
 
 		DBG("service %p %s not allowed over default %p %s",
 			service, service->identifier,
 			current_default, current_default->identifier);
-			
-		__connman_service_foreach(print_service, NULL);
 
-		if (current_default &&
-			current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
+		/*
+		 * VPN as default service. current_default cannot be NULL here
+		 * since the check for preference returns true in such case.
+		 */
+		if (current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
 			current_default->depends_on) {
 
 			/*
@@ -2133,7 +2119,7 @@ static void default_changed(void)
 
 	/*
 	 * Default is going to be changed, if it is not VPN disconnect all
-	 * depending VPN services, otherwise disconnect the VPN
+	 * depending VPN services, otherwise disconnect the VPN as default.
 	 */
 	if (current_default) {
 		if (current_default->type != CONNMAN_SERVICE_TYPE_VPN) {
@@ -2210,6 +2196,7 @@ change:
 	} else {
 		disconnect_depending_vpn_services(NULL);
 	}
+
 	__connman_notifier_default_changed(service);
 }
 
@@ -3542,6 +3529,44 @@ int __connman_service_get_index(struct connman_service *service)
 		return connman_provider_get_index(service->provider);
 
 	return -1;
+}
+
+GSList *__connman_service_get_depending_vpn_index(
+	struct connman_service *service)
+{
+	int index = -1;
+	GSList *index_list = NULL;
+	GList *iter = NULL;
+	struct connman_service *vpn = NULL;
+
+	if (!service || service->type == CONNMAN_SERVICE_TYPE_VPN)
+		goto out;
+
+	for (iter = service_list ; iter ; iter = iter->next) {
+		vpn = iter->data;
+
+		/*
+		 * Add the index of the VPN to the list of indexes if the VPN
+		 * uses service as transport service and is not being used as
+		 * default route. This way dnsproxy can forward messages to the
+		 * DNS servers reported by a VPN not acting as default route
+		 * for all traffic.
+		 */
+		if (vpn->type == CONNMAN_SERVICE_TYPE_VPN &&
+			vpn->depends_on == service &&
+			(is_connecting(service) || is_connected(service)) &&
+			!__connman_service_is_default_route(vpn)) {
+			
+			index = connman_provider_get_index(vpn->provider);
+
+			if (index > 0)
+				index_list = g_slist_append(index_list,
+					GINT_TO_POINTER(index));
+		}
+	}
+
+out:
+	return index_list;
 }
 
 void __connman_service_set_hidden(struct connman_service *service)
