@@ -1880,10 +1880,10 @@ struct connman_service *get_connected_default_route_service()
 
 		if (__connman_service_is_default_route(service) &&
 			is_connected(service))
-			break;
+			return service;
 	}
 
-	return service;
+	return NULL;
 }
 
 static void print_service(struct connman_service *service, void *user_data)
@@ -2000,6 +2000,10 @@ static void switch_services(struct connman_service *service_lower,
 	struct connman_service *service;
 	GList *src, *dst;
 	
+	DBG("switch lower %p %s and upper %p %s",
+		service_lower, service_lower ? service_lower->identifier : "",
+		service_higher, service_higher ? service_higher->identifier : "");
+
 	src = g_list_find(service_list, service_higher);
 	dst = g_list_find(service_list, service_lower);
 
@@ -2046,7 +2050,11 @@ static void default_changed(void)
 	DBG("current default %p %s", current_default,
 		current_default ? current_default->identifier : "");
 	DBG("new default %p %s", service, service ? service->identifier : "");
-	
+
+	/*
+	 * This may not be reached since service that is not default route (VPN)
+	 * should not be on top of service_list. TODO: remove if not reached.
+	 */
 	if (!__connman_service_is_default_route(service)) {
 
 		/*
@@ -6331,6 +6339,14 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	b_connected = is_connected(service_b);
 
 	if (a_connected && b_connected) {
+		if (__connman_service_is_default_route(service_a) &&
+			!__connman_service_is_default_route(service_b))
+			return -1;
+
+		if (!__connman_service_is_default_route(service_a) &&
+			__connman_service_is_default_route(service_b))
+			return 1;
+
 		if (service_a->order > service_b->order)
 			return -1;
 
