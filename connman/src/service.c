@@ -290,6 +290,11 @@ static void vpn_auto_connect(void);
 static bool is_connecting(struct connman_service *service);
 static bool is_connected(struct connman_service *service);
 
+static void switch_default_service(struct connman_service *default_service,
+	struct connman_service *downgrade_service);
+
+static GList* preferred_tech_list_get(void);
+
 struct find_data {
 	const char *path;
 	struct connman_service *service;
@@ -619,7 +624,7 @@ static void set_vpn_dependency(struct connman_service *vpn_service)
 
 	if (!vpn_service || !service)
 		return;
-	
+
 	DBG("vpn service %p default service %p", vpn_service, service);
 
 	if (vpn_service->type != CONNMAN_SERVICE_TYPE_VPN) {
@@ -728,7 +733,6 @@ static void disconnect_vpn_service(struct connman_service *service,
 				service->identifier, service->state);
 
 			__connman_service_disconnect(service);
-			//connman_provider_disconnect(service->provider);
 			unset_vpn_dependency(service);
 		}
 		break;
@@ -1895,10 +1899,17 @@ static void print_service(struct connman_service *service, void *user_data)
 			state2string(service->state));
 }
 
-static void switch_default_service(struct connman_service *default_service,
-	struct connman_service *downgrade_service);
+static void print_service_list_debug()
+{
+	static struct connman_debug_desc debug_desc CONNMAN_DEBUG_ATTR = {
+		.file = __FILE__,
+		.flags = CONNMAN_DEBUG_FLAG_DEFAULT
+	};
 
-static GList* preferred_tech_list_get(void);
+	if (debug_desc.flags && CONNMAN_DEBUG_FLAG_PRINT) {
+		__connman_service_foreach(print_service, NULL);
+	}
+}
 
 static bool service_preferred_over(struct connman_service *a,
 	struct connman_service *b)
@@ -1916,11 +1927,16 @@ static bool service_preferred_over(struct connman_service *a,
 
 	preferred_list = preferred_tech_list_get();
 
+	if (!preferred_list)
+		return true;
+
 	position_a = g_list_index(preferred_list, a);
 	position_b = g_list_index(preferred_list, b);
 
 	DBG("service a %p %s position %d service b %p %s position %d",
 		a, a->identifier, position_a, b, b->identifier, position_b);
+
+	g_list_free(preferred_list);
 
 	/*
 	 * Not found, which means that the service is not available.
@@ -2021,7 +2037,7 @@ static void default_changed(void)
 	struct connman_service *service = __connman_service_get_default();
 
 	DBG("");
-	__connman_service_foreach(print_service, NULL);
+	print_service_list_debug();
 
 	if (service == current_default) {
 		DBG("default not changed %p %s",
@@ -2037,7 +2053,6 @@ static void default_changed(void)
 	 * If new service is NULL try to get a connected service.
 	 */
 	if (!service) {
-		DBG("new default is %p", service);
 		service = get_connected_default_route_service();
 		DBG("got new connected default route %p", service);
 
@@ -2069,13 +2084,13 @@ static void default_changed(void)
 				DBG("Selected new default == current_default");
 				return;
 			}
-			
+
 			DBG("Selected new default service %s",
 				service ? service->identifier : "");
 		} else {
 			DBG("Not setting %s as default service",
 				service ? service->identifier : "");
-			
+
 			switch_services(service, current_default);
 			__connman_notifier_default_changed(current_default);
 			
@@ -2101,7 +2116,6 @@ static void default_changed(void)
 		 */
 		if (current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
 			current_default->depends_on) {
-
 			/*
 			 * First swap the transport service of VPN to default,
 			 * then swap VPN as default again
@@ -2109,7 +2123,7 @@ static void default_changed(void)
 			DBG("swap transport service of VPN to default service");
 			switch_services(service,
 				current_default->depends_on);
-			
+
 			DBG("swap VPN as default service");
 			switch_services(current_default->depends_on,
 				current_default);
@@ -2120,7 +2134,7 @@ static void default_changed(void)
 			switch_services(service, current_default);
 		}
 
-		__connman_service_foreach(print_service, NULL);
+		print_service_list_debug();
 
 		return;
 	}
@@ -2130,6 +2144,7 @@ static void default_changed(void)
 	 * depending VPN services, otherwise disconnect the VPN as default.
 	 */
 	if (current_default) {
+
 		if (current_default->type != CONNMAN_SERVICE_TYPE_VPN) {
 			/*
 			 * If the new default is a VPN depending on this
@@ -2190,8 +2205,7 @@ change:
 		if (service->domainname)
 			__connman_utsname_set_domainname(service->domainname);
 
-		__connman_resolver_redo_servers(
-			__connman_service_get_index(service));
+		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 
 		/*
 		 * Connect VPN automatically when new default service
@@ -3562,6 +3576,7 @@ GSList *__connman_service_get_depending_vpn_index(
 		goto out;
 
 	for (iter = service_list ; iter ; iter = iter->next) {
+
 		vpn = iter->data;
 
 		/*
