@@ -2203,6 +2203,17 @@ change:
 		}
 	} else {
 		disconnect_depending_vpn_services(NULL);
+
+		/*
+		 * Try to autoconnect a service if new default is being
+		 * set as NULL - there may be a situation where, e.g., WLAN is
+		 * disconnected because of lost signal and mobile data is
+		 * enabled but is idle. Mobile data is eventually connected
+		 * using a auto connect timeout but calling this here is faster.
+		 */
+		DBG("Running service auto connect");
+		__connman_service_auto_connect(
+			CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
 
 	__connman_notifier_default_changed(service);
@@ -5137,6 +5148,7 @@ static bool auto_connect_service(GList *services,
 	bool ignore[MAX_CONNMAN_SERVICE_TYPES] = { };
 	bool busy[MAX_CONNMAN_SERVICE_TYPES] = { };
 	bool autoconnecting = false;
+	bool preferred_found = false;
 	GList *list;
 
 	DBG("preferred %d sessions %d reason %s", preferred, active_count,
@@ -5247,10 +5259,27 @@ static bool auto_connect_service(GList *services,
 
 		__connman_service_connect(service, reason);
 
-		if (!active_count)
-			return true;
+		/*
+		 * Stop autoconnection of services if no service is active only
+		 * if not selecting a preferred service or when selecting
+		 * preferred service and such service has been found. Otherwise
+		 * there will be a long delay in dropping out from range of a
+		 * WLAN network and a mobile data connection that is in idle
+		 * state  should be connected. 
+		 */
+		if (!active_count) {
+			if (!preferred || preferred_found) {
+				DBG("active_count %d preferred %s found %s",
+					active_count,
+					preferred ? "true" : "false",
+					preferred_found ? "true" : "false");
+				return true;
+			}
+		}
 
 		ignore[service->type] = true;
+
+		preferred_found = true;
 	}
 
 	return autoconnecting;
