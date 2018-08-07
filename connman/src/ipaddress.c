@@ -228,36 +228,3 @@ connman_ipaddress_copy(struct connman_ipaddress *ipaddress)
 	return copy;
 }
 
-bool __connman_ipaddress_is_any_addr(const char *address, int family)
-{
-	bool rval = false;
-	struct addrinfo hints;
-	struct addrinfo *result = NULL;
-	struct sockaddr_in6 *in6 = NULL;
-	struct sockaddr_in *in4 = NULL;
-
-	if (!address || !*address)
-		goto out;
-
-	memset(&hints, 0, sizeof(struct addrinfo));
-
-	hints.ai_family = family;
-
-	if (getaddrinfo(address, NULL, &hints, &result))
-		goto out;
-
-	if (result) {
-		if (result->ai_family == AF_INET6) {
-			in6 = (struct sockaddr_in6*)result->ai_addr;
-			rval = IN6_IS_ADDR_UNSPECIFIED(&in6->sin6_addr);
-		} else {
-			in4 = (struct sockaddr_in*)result->ai_addr;
-			rval = in4->sin_addr.s_addr == INADDR_ANY;
-		}
-
-		freeaddrinfo(result);
-	}
-
-out:
-	return rval;
-}

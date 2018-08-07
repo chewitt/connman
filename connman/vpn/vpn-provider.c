@@ -1693,9 +1693,9 @@ static void provider_append_routes(gpointer key, gpointer value,
 	 * When network and netmask are INADDR_ANY and gateway is NULL then
 	 * default route is being added
 	 */
-	if (__connman_ipaddress_is_any_addr(route->network, provider->family) &&
+	if (__connman_inet_is_any_addr(route->network, provider->family) &&
 		!route->gateway &&
-		__connman_ipaddress_is_any_addr(route->netmask,
+		__connman_inet_is_any_addr(route->netmask,
 			provider->family)) {
 
 		if (provider_is_default_route(provider)) {

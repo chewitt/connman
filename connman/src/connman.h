@@ -341,8 +341,6 @@ struct connman_ipconfig *__connman_ipconfig_create(int index,
 #define __connman_ipconfig_unref(ipconfig) \
 	__connman_ipconfig_unref_debug(ipconfig, __FILE__, __LINE__, __func__)
 
-bool __connman_ipaddress_is_any_addr(const char *address, int family);
-
 struct connman_ipconfig *
 __connman_ipconfig_ref_debug(struct connman_ipconfig *ipconfig,
 			const char *file, int line, const char *caller);

@@ -645,8 +645,10 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_flags = RTF_UP | RTF_HOST;
 
-	if (gateway && inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) > 0)
+	if (gateway) {
 		rt.rtmsg_flags |= RTF_GATEWAY;
+		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway);
+	}
 
 	rt.rtmsg_metric = 1;
 	rt.rtmsg_ifindex = index;
