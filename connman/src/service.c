@@ -1948,10 +1948,26 @@ static bool service_preferred_over(struct connman_service *a,
 }
 
 
+static bool is_online(struct connman_service *service)
+{
+	return service->state == CONNMAN_SERVICE_STATE_ONLINE;
+}
+
 static bool allow_service_over_default(struct connman_service *new_service)
 {
-	if (!current_default)
+	/*
+	 * Return immediately if the current default is not any more connected.
+	 * In case the current default is VPN is_connected() will also check if
+	 * the transport service is online.
+	 */
+	if (!current_default || !is_connected(current_default)) {
+		DBG("allowing to set %p %s over %p %s (NULL or not connected)",
+			new_service,
+			new_service ? new_service->identifier : "NULL",
+			current_default,
+			current_default ? current_default->identifier : "NULL");
 		return true;
+	}
 
 	if (current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
 		current_default->depends_on) {
@@ -1975,6 +1991,20 @@ static bool allow_service_over_default(struct connman_service *new_service)
 				current_default->depends_on,
 				__connman_service_type2string(
 					current_default->depends_on->type));
+			return false;
+		} else if (is_online(current_default->depends_on) &&
+			!is_online(new_service)) {
+			DBG("trying to set %p %s (%s) over VPN %p %s"
+				"using %p %s (%s), revert order",
+			new_service,
+			__connman_service_type2string(new_service->type),
+			state2string(new_service->state),
+			current_default,
+			__connman_service_type2string(current_default->type),
+			current_default->depends_on,
+			__connman_service_type2string(
+				current_default->depends_on->type),
+			state2string(current_default->depends_on->state));
 			return false;
 		} else {
 			DBG("trying to set %p %s over VPN using %p %s, "
@@ -2002,7 +2032,28 @@ static bool allow_service_over_default(struct connman_service *new_service)
 			__connman_service_type2string(current_default->type));
 		return false;
 	}
+	
+	/*
+	 * If new_service is depends on current_default allow it to be new
+	 * default if it is also being used as default route.
+	 */
+	if (new_service->type == CONNMAN_SERVICE_TYPE_VPN &&
+		is_connected(new_service) &&
+		new_service->depends_on == current_default &&
+		__connman_service_is_default_route(new_service)) {
+		goto allow;
+	} else if (is_online(current_default) && !is_online(new_service)) {
+		DBG("trying to set %p %s (%s) over %p %s (%s), revert order",
+			new_service,
+			__connman_service_type2string(new_service->type),
+			state2string(new_service->state),
+			current_default,
+			__connman_service_type2string(current_default->type),
+			state2string(current_default->state));
+		return false;
+	}
 
+allow:
 	DBG("allowing to set %p %s over %p %s",
 		new_service, new_service ? new_service->identifier : "NULL",
 		current_default, current_default->identifier);
@@ -2042,6 +2093,7 @@ static void default_changed(void)
 	if (service == current_default) {
 		DBG("default not changed %p %s",
 			service, service ? service->identifier : "NULL");
+
 		if (service && service->type != CONNMAN_SERVICE_TYPE_VPN) {
 			DBG("running vpn_auto_connect");
 			vpn_auto_connect();
