@@ -169,6 +169,8 @@ int __connman_inet_modify_address(int cmd, int flags, int index, int family,
 int __connman_inet_get_interface_address(int index, int family, void *address);
 int __connman_inet_get_interface_ll_address(int index, int family, void *address);
 
+bool __connman_inet_is_any_addr(const char *address, int family);
+
 #include <netinet/ip6.h>
 #include <netinet/icmp6.h>
 
