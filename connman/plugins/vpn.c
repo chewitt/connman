@@ -463,6 +463,9 @@ static int errorstr2val(const char *error) {
 	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".AlreadyConnected") == 0)
 		return -EISCONN;
 
+	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".NoCarrier") == 0)
+		return -ENOLINK;
+
 	return -ECONNREFUSED;
 }
 
@@ -484,7 +487,13 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 
 	if (dbus_set_error_from_message(&error, reply)) {
 		int err = errorstr2val(error.name);
-		if (err != -EINPROGRESS) {
+
+		/*
+		 * ENOLINK (No carrier) is not an error situation but is caused
+		 * by connman not being online when VPN is attempted to be
+		 * connected.
+		 */
+		if (err != -EINPROGRESS && err != -ENOLINK) {
 			connman_error("Connect reply: %s (%s)", error.message,
 								error.name);
 			dbus_error_free(&error);
