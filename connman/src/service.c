@@ -6443,6 +6443,24 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 			__connman_service_is_default_route(service_b))
 			return 1;
 
+		if (service_a->type == CONNMAN_SERVICE_TYPE_VPN &&
+			service_b->type != CONNMAN_SERVICE_TYPE_VPN &&
+			service_a->depends_on &&
+			service_a->depends_on != service_b &&
+			is_connected(service_a->depends_on)) {
+			return service_compare(service_a->depends_on,
+				service_b);
+		}
+
+		if (service_b->type == CONNMAN_SERVICE_TYPE_VPN &&
+			service_a->type != CONNMAN_SERVICE_TYPE_VPN &&
+			service_b->depends_on &&
+			service_b->depends_on != service_a &&
+			is_connected(service_b->depends_on)) {
+			return service_compare(service_a,
+				service_b->depends_on);
+		}
+
 		if (service_a->order > service_b->order)
 			return -1;
 
