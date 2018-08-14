@@ -1829,6 +1829,7 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 
         case VPN_PROVIDER_ERROR_LOGIN_FAILED:
         case VPN_PROVIDER_ERROR_AUTH_FAILED:
+		__vpn_provider_set_autoconnect(provider, false);
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
 		break;
 	}
