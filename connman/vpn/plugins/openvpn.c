@@ -405,7 +405,6 @@ static int run_connect(struct ov_private_data *data,
 	struct vpn_provider *provider = data->provider;
 	struct connman_task *task = data->task;
 	const char *option;
-	int fd;
 	int err = 0;
 
 	option = vpn_provider_get_string(provider, "OpenVPN.ConfigFile");
@@ -482,9 +481,7 @@ static int run_connect(struct ov_private_data *data,
 	 */
 	connman_task_add_argument(task, "--ping-restart", "0");
 
-	fd = fileno(stderr);
-	err = connman_task_run(task, ov_died, data,
-			NULL, &fd, &fd);
+	err = connman_task_run(task, ov_died, data, NULL, NULL, NULL);
 	if (err < 0) {
 		connman_error("openvpn failed to start");
 		err = -EIO;
