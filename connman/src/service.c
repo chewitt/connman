@@ -5076,7 +5076,8 @@ static DBusMessage *connect_service(DBusConnection *conn,
 		return __connman_error_permission_denied(msg);
 	}
 
-	if (!service->network)
+	if (!service->network && !(service->provider &&
+				service->type == CONNMAN_SERVICE_TYPE_VPN))
 		return __connman_error_no_carrier(msg);
 
 	if (service->pending)
