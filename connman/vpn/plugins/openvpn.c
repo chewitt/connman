@@ -3,7 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2010-2014  BMW Car IT GmbH.
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2018  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -94,7 +94,6 @@ struct ov_private_data {
 	void *user_data;
 	char *mgmt_path;
 	guint mgmt_timer_id;
-	int mgmt_socket_fd;
 	guint mgmt_event_id;
 	GIOChannel *mgmt_channel;
 	int connect_attempts;
@@ -369,10 +368,6 @@ static void close_management_interface(struct ov_private_data *data)
 	if (data->mgmt_timer_id != 0) {
 		g_source_remove(data->mgmt_timer_id);
 		data->mgmt_timer_id = 0;
-	}
-	if (data->mgmt_socket_fd != -1) {
-		close(data->mgmt_socket_fd);
-		data->mgmt_socket_fd = -1;
 	}
 	if (data->mgmt_event_id) {
 		g_source_remove(data->mgmt_event_id);
@@ -741,34 +736,33 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 static int ov_management_connect_timer_cb(gpointer user_data)
 {
 	struct ov_private_data *data = user_data;
-	struct sockaddr_un remote;
-	int err = 0;
 
-	if (data->mgmt_socket_fd == -1) {
-		data->mgmt_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-		if (data->mgmt_socket_fd == -1) {
-			connman_warn("Unable to create management socket");
-		}
-	}
+	if (!data->mgmt_channel) {
+		int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (fd >= 0) {
+			struct sockaddr_un remote;
+			int err;
 
-	if (data->mgmt_socket_fd != -1) {
-		memset(&remote, 0, sizeof(remote));
-		remote.sun_family = AF_UNIX;
-		g_strlcpy(remote.sun_path, data->mgmt_path,
+			memset(&remote, 0, sizeof(remote));
+			remote.sun_family = AF_UNIX;
+			g_strlcpy(remote.sun_path, data->mgmt_path,
 						sizeof(remote.sun_path));
 
-		err = connect(data->mgmt_socket_fd, (struct sockaddr *)&remote,
-							sizeof(remote));
-		if (err == 0) {
-			data->mgmt_channel =
-				g_io_channel_unix_new(data->mgmt_socket_fd);
-			data->mgmt_event_id = g_io_add_watch(data->mgmt_channel,
-					G_IO_IN | G_IO_ERR | G_IO_HUP,
-					ov_management_handle_input, data);
+			err = connect(fd, (struct sockaddr *)&remote,
+						sizeof(remote));
+			if (err == 0) {
+				data->mgmt_channel = g_io_channel_unix_new(fd);
+				data->mgmt_event_id =
+					g_io_add_watch(data->mgmt_channel,
+						G_IO_IN | G_IO_ERR | G_IO_HUP,
+						ov_management_handle_input,
+						data);
 
-			connman_warn("Connected management socket");
-			data->mgmt_timer_id = 0;
-			return G_SOURCE_REMOVE;
+				connman_warn("Connected management socket");
+				data->mgmt_timer_id = 0;
+				return G_SOURCE_REMOVE;
+			}
+			close(fd);
 		}
 	}
 
@@ -808,13 +802,6 @@ static int ov_connect(struct vpn_provider *provider,
 	data->if_name = g_strdup(if_name);
 	data->cb = cb;
 	data->user_data = user_data;
-	data->mgmt_path = NULL;
-	data->mgmt_timer_id = 0;
-	data->mgmt_socket_fd = -1;
-	data->mgmt_event_id = 0;
-	data->mgmt_channel = NULL;
-	data->connect_attempts = 0;
-	data->failed_attempts = 0;
 
 	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
 	if (option && !strcmp(option, "-")) {
