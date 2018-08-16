@@ -100,8 +100,26 @@ struct ov_private_data {
 	int failed_attempts;
 };
 
+static void ov_connect_done(struct ov_private_data *data, int err)
+{
+	if (data && data->cb) {
+		vpn_provider_connect_cb_t cb = data->cb;
+		void *user_data = data->user_data;
+
+		/* Make sure we don't invoke this callback twice */
+		data->cb = NULL;
+		data->user_data = NULL;
+		cb(data->provider, user_data, err);
+	}
+}
+
 static void free_private_data(struct ov_private_data *data)
 {
+	if (vpn_provider_get_plugin_data(data->provider) == data)
+		vpn_provider_set_plugin_data(data->provider, NULL);
+
+	ov_connect_done(data, EIO);
+	vpn_provider_unref(data->provider);
 	g_free(data->dbus_sender);
 	g_free(data->if_name);
 	g_free(data->mgmt_path);
@@ -194,6 +212,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	char *address = NULL, *gateway = NULL, *peer = NULL, *netmask = NULL;
 	struct connman_ipaddress *ipaddress;
 	GSList *nameserver_list = NULL;
+	struct ov_private_data *data = vpn_provider_get_plugin_data(provider);
 
 	dbus_message_iter_init(msg, &iter);
 
@@ -205,8 +224,12 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		return VPN_STATE_FAILURE;
 	}
 
-	if (strcmp(reason, "up"))
+	DBG("%p %s", vpn_provider_get_name(provider), reason);
+
+	if (strcmp(reason, "up")) {
+		ov_connect_done(data, EIO);
 		return VPN_STATE_DISCONNECT;
+	}
 
 	dbus_message_iter_recurse(&iter, &dict);
 
@@ -298,6 +321,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	g_free(netmask);
 	connman_ipaddress_free(ipaddress);
 
+	ov_connect_done(data, 0);
 	return VPN_STATE_CONNECT;
 }
 
@@ -478,16 +502,15 @@ static int run_connect(struct ov_private_data *data,
 
 	err = connman_task_run(task, ov_died, data, NULL, NULL, NULL);
 	if (err < 0) {
+		data->cb = NULL;
+		data->user_data = NULL;
 		connman_error("openvpn failed to start");
-		err = -EIO;
-		goto done;
+		return -EIO;
+	} else {
+		/* This lets the caller know that the actual result of
+		 * the operation will be reported to the callback */
+		return -EINPROGRESS;
 	}
-
-done:
-	if (cb)
-		cb(provider, user_data, err);
-
-	return err;
 }
 
 static char *ov_quote_credential(char *pos, const char *cred)
@@ -568,11 +591,27 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *password = NULL, *username = NULL;
 	char *key;
 	DBusMessageIter iter, dict;
+	DBusError error;
 
 	DBG("provider %p", data->provider);
 
-	if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
+	if (!reply)
 		goto err;
+
+	dbus_error_init(&error);
+
+	if (dbus_set_error_from_message(&error, reply)) {
+		if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE
+							".Error.Canceled")) {
+			ov_connect_done(data, ECONNABORTED);
+			connman_task_stop(data->task);
+			dbus_error_free(&error);
+			return;
+		}
+
+		dbus_error_free(&error);
+		goto err;
+	}
 
 	if (!vpn_agent_check_reply_has_dict(reply))
 		goto err;
@@ -626,6 +665,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	return;
 
 err:
+	ov_connect_done(data, EACCES);
 	vpn_provider_indicate_error(data->provider,
 			VPN_PROVIDER_ERROR_AUTH_FAILED);
 }
@@ -641,7 +681,7 @@ static int request_credentials_input(struct ov_private_data *data)
 
 	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
 							&agent_path);
-	if (!data->provider || !agent || !agent_path)
+	if (!agent || !agent_path)
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
@@ -776,8 +816,6 @@ static int ov_management_connect_timer_cb(gpointer user_data)
 	return G_SOURCE_CONTINUE;
 }
 
-
-
 static int ov_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,
@@ -796,7 +834,8 @@ static int ov_connect(struct vpn_provider *provider,
 	if (!data)
 		return -ENOMEM;
 
-	data->provider = provider;
+	vpn_provider_set_plugin_data(provider, data);
+	data->provider = vpn_provider_ref(provider);
 	data->task = task;
 	data->dbus_sender = g_strdup(dbus_sender);
 	data->if_name = g_strdup(if_name);

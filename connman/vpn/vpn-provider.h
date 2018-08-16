@@ -97,6 +97,8 @@ int vpn_provider_get_index(struct vpn_provider *provider);
 
 void vpn_provider_set_data(struct vpn_provider *provider, void *data);
 void *vpn_provider_get_data(struct vpn_provider *provider);
+void vpn_provider_set_plugin_data(struct vpn_provider *provider, void *data);
+void *vpn_provider_get_plugin_data(struct vpn_provider *provider);
 int vpn_provider_set_ipaddress(struct vpn_provider *provider,
 					struct connman_ipaddress *ipaddress);
 int vpn_provider_set_pac(struct vpn_provider *provider,
