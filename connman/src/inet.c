@@ -2340,6 +2340,7 @@ static gboolean inet_rtnl_event(GIOChannel *chan, GIOCondition cond,
 		return TRUE;
 
 cleanup:
+	rtnl_data->callback(NULL, rtnl_data->user_data);
 	inet_rtnl_cleanup(rtnl_data);
 	return TRUE;
 }
