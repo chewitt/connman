@@ -127,6 +127,8 @@ const char *connman_service_get_proxy_url(struct connman_service *service);
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service);
 bool connman_service_get_favorite(struct connman_service *service);
 bool connman_service_get_autoconnect(struct connman_service *service);
+bool connman_service_set_autoconnect(struct connman_service *service,
+							bool autoconnect);
 
 struct connman_service *connman_service_lookup_from_network(struct connman_network *network);
 void connman_service_update_strength_from_network(struct connman_network *network);

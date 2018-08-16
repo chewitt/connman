@@ -619,6 +619,13 @@ bool connman_provider_get_autoconnect(struct connman_provider *provider)
 	return connman_service_get_autoconnect(provider->vpn_service);
 }
 
+void connman_provider_set_autoconnect(struct connman_provider *provider,
+								bool flag)
+{
+	if (provider && provider->vpn_service)
+		connman_service_set_autoconnect(provider->vpn_service, flag);
+}
+
 static void unregister_provider(gpointer data)
 {
 	struct connman_provider *provider = data;
