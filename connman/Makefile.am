@@ -286,7 +286,7 @@ client_connmanctl_LDADD = gdbus/libgdbus-internal.la @DBUS_LIBS@ @GLIB_LIBS@ \
 				-lreadline -ldl
 endif
 
-noinst_PROGRAMS += unit/test-access unit/test-dnsproxy unit/test-ippool \
+noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext
 
@@ -311,11 +311,6 @@ unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
 			$(backtrace_sources)
 unit_test_sailfish_access_LDADD = @GLIB_LIBS@ -ldl
 
-unit_test_dnsproxy_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_dnsproxy_SOURCES = unit/test-dnsproxy.c src/log.c \
-				$(backtrace_sources)
-unit_test_dnsproxy_LDADD = @GLIB_LIBS@ -lresolv -ldl
-
 unit_test_vpn_settings_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\"
 unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
@@ -330,7 +325,7 @@ unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
 unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
 				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
-TESTS = unit/test-access unit/test-ippool unit/test-dnsproxy \
+TESTS = unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext
 
