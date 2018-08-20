@@ -2222,37 +2222,27 @@ static void default_changed(void)
 			}
 		} else {
 			/*
-			 * Disconnect orphaned VPN that has no transport service
+			 * If the VPN as current default depends on the new
+			 * default service the change is not done.
 			 */
-			if (!current_default->depends_on) {
-				DBG("disconnect VPN as current default "
-					"with no dependency");
-				disconnect_vpn_service(current_default, NULL);
-				goto change;
-			}
-			
-			/*
-			 * When current_default is VPN and it is not
-			 * depending on the new default service the VPN
-			 * must be disconnected. Otherwise the change of
-			 * default service is not done as VPN depends on the
-			 * service that would be the new default
-			 */
-			if (service && !is_vpn_dependent(service,
-				current_default)) {
-				DBG("disconnect VPN as"
-					"current default");
-				disconnect_vpn_service(current_default,
-					NULL);
-			} else if (service && is_vpn_dependent(service,
-				current_default)) {
+			if (service && is_vpn_dependent(service,
+				current_default) &&
+				is_connected(current_default)) {
 				DBG("not disconnecting depending VPN");
 				return;
 			}
+
+			 /*
+			 * Otherwise disconnect the VPN as current default and
+			 * do the change.
+			 */
+			DBG("disconnect VPN %p as current default, state %s",
+				current_default,
+				state2string(current_default->state));
+			disconnect_vpn_service(current_default, NULL);
 		}
 	}
 
-change:
 	__connman_service_timeserver_changed(current_default, NULL);
 
 	current_default = service;
