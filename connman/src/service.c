@@ -4501,16 +4501,26 @@ error:
 	return -EINVAL;
 }
 
-static void do_auto_connect(struct connman_service *service)
+static void do_auto_connect(struct connman_service *service,
+	enum connman_service_connect_reason reason)
 {
-	if (!service)
+	/*
+	 * CONNMAN_SERVICE_CONNECT_REASON_NONE must be ignored for VPNs. VPNs
+	 * always have reason CONNMAN_SERVICE_CONNECT_REASON_USER/AUTO.
+	 */
+	if (!service || (service->type == CONNMAN_SERVICE_TYPE_VPN &&
+		reason == CONNMAN_SERVICE_CONNECT_REASON_NONE))
 		return;
 
-	if (service->type == CONNMAN_SERVICE_TYPE_VPN)
-			vpn_auto_connect();
-	else
-		__connman_service_auto_connect(
-			CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+	/*
+	 * Run service auto connect when a service is changed. This is not
+	 * needed to be run when VPN service changes, then vpn auto connect is
+	 * sufficient.
+	 */
+	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
+		__connman_service_auto_connect(reason);
+
+	vpn_auto_connect();
 }
 
 int __connman_service_reset_ipconfig(struct connman_service *service,
@@ -4578,7 +4588,7 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 
 		settings_changed(service, new_ipconfig);
 
-		do_auto_connect(service);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
 
 	DBG("err %d ipconfig %p type %d method %d state %s", err,
@@ -4646,7 +4656,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (connman_service_set_autoconnect(service, autoconnect)) {
 			service_save(service);
 			if (autoconnect)
-				do_auto_connect(service);
+				do_auto_connect(service,
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		}
 
 		/* Disable autoconnect for all other VPN providers
@@ -5032,7 +5043,7 @@ static void service_complete(struct connman_service *service)
 	reply_pending(service, EIO);
 
 	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
-		do_auto_connect(service);
+		do_auto_connect(service, service->connect_reason);
 
 	g_get_current_time(&service->modified);
 	service_save(service);
@@ -5606,7 +5617,7 @@ static gboolean service_retry_connect(gpointer data)
 		state_changed(service);
 
 		/* Schedule the next auto-connect round */
-		do_auto_connect(service);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
 
 	return FALSE;
@@ -5648,7 +5659,7 @@ static gboolean connect_timeout(gpointer user_data)
 	if (autoconnect &&
 			service->connect_reason !=
 				CONNMAN_SERVICE_CONNECT_REASON_USER)
-		do_auto_connect(service);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	return FALSE;
 }
@@ -7306,7 +7317,7 @@ static int service_indicate_state(struct connman_service *service)
 		 */
 		downgrade_connected_services();
 
-		do_auto_connect(service);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		break;
 
 	case CONNMAN_SERVICE_STATE_FAILURE:
@@ -8344,7 +8355,7 @@ const char *__connman_service_create(enum connman_service_type type,
 	if (service->autoconnect) {
 		service->favorite = true;
 
-		do_auto_connect(service);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
 
 	/* Save the service */
@@ -8928,7 +8939,8 @@ bool __connman_service_create_from_network(struct connman_network *network)
 		__connman_connection_update_gateway();
 
 		if (service->autoconnect)
-			do_auto_connect(service);
+			do_auto_connect(service,
+				CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 		return true;
 	}
