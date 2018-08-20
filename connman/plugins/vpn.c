@@ -43,6 +43,7 @@
 #include <gweb/gresolv.h>
 
 #define DBUS_TIMEOUT 10000
+#define DBUS_CONNECT_TIMEOUT 300000
 
 static DBusConnection *connection;
 
@@ -466,6 +467,9 @@ static int errorstr2val(const char *error) {
 	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".NoCarrier") == 0)
 		return -ENOLINK;
 
+	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".OperationAborted") == 0)
+		return -ECONNABORTED;
+
 	return -ECONNREFUSED;
 }
 
@@ -489,22 +493,29 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 		int err = errorstr2val(error.name);
 
 		/*
+		 * ECONNABORTED means that user has canceled authentication
+		 * dialog. That's not really an error, it's part of a normal
+		 * workflow. We also take it as a request to turn autoconnect
+		 * off, in case if it was on.
+		 */
+		if (err == -ECONNABORTED) {
+			DBG("%s connect canceled", data->path);
+			connman_provider_set_autoconnect(data->provider, false);
+		/*
 		 * ENOLINK (No carrier) is not an error situation but is caused
 		 * by connman not being online when VPN is attempted to be
 		 * connected.
 		 */
-		if (err != -EINPROGRESS && err != -ENOLINK) {
+		} else if (err != -EINPROGRESS && err != -ENOLINK) {
 			connman_error("Connect reply: %s (%s)", error.message,
 								error.name);
-			dbus_error_free(&error);
-
 			DBG("data %p cb_data %p", data, cb_data);
+
 			if (cb_data) {
 				cb_data->callback(cb_data->message, err, NULL);
 				free_config_cb_data(cb_data);
 				data->cb_data = NULL;
 			}
-			goto done;
 		}
 		dbus_error_free(&error);
 	}
@@ -515,7 +526,6 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 	 * state.
 	 */
 
-done:
 	dbus_message_unref(reply);
 
 	dbus_pending_call_unref(call);
@@ -553,7 +563,7 @@ static int connect_provider(struct connection_data *data, void *user_data,
 		dbus_sender = "";
 
 	if (!dbus_connection_send_with_reply(connection, message,
-						&call, DBUS_TIMEOUT)) {
+						&call, DBUS_CONNECT_TIMEOUT)) {
 		connman_error("Unable to call %s.%s()",
 			VPN_CONNECTION_INTERFACE, VPN_CONNECT2);
 		dbus_message_unref(message);

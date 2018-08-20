@@ -3,7 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2010-2014  BMW Car IT GmbH.
- *  Copyright (C) 2016 Jolla Ltd.
+ *  Copyright (C) 2016-2018  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -94,15 +94,32 @@ struct ov_private_data {
 	void *user_data;
 	char *mgmt_path;
 	guint mgmt_timer_id;
-	int mgmt_socket_fd;
 	guint mgmt_event_id;
 	GIOChannel *mgmt_channel;
 	int connect_attempts;
 	int failed_attempts;
 };
 
+static void ov_connect_done(struct ov_private_data *data, int err)
+{
+	if (data && data->cb) {
+		vpn_provider_connect_cb_t cb = data->cb;
+		void *user_data = data->user_data;
+
+		/* Make sure we don't invoke this callback twice */
+		data->cb = NULL;
+		data->user_data = NULL;
+		cb(data->provider, user_data, err);
+	}
+}
+
 static void free_private_data(struct ov_private_data *data)
 {
+	if (vpn_provider_get_plugin_data(data->provider) == data)
+		vpn_provider_set_plugin_data(data->provider, NULL);
+
+	ov_connect_done(data, EIO);
+	vpn_provider_unref(data->provider);
 	g_free(data->dbus_sender);
 	g_free(data->if_name);
 	g_free(data->mgmt_path);
@@ -195,6 +212,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	char *address = NULL, *gateway = NULL, *peer = NULL, *netmask = NULL;
 	struct connman_ipaddress *ipaddress;
 	GSList *nameserver_list = NULL;
+	struct ov_private_data *data = vpn_provider_get_plugin_data(provider);
 
 	dbus_message_iter_init(msg, &iter);
 
@@ -206,8 +224,12 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		return VPN_STATE_FAILURE;
 	}
 
-	if (strcmp(reason, "up"))
+	DBG("%p %s", vpn_provider_get_name(provider), reason);
+
+	if (strcmp(reason, "up")) {
+		ov_connect_done(data, EIO);
 		return VPN_STATE_DISCONNECT;
+	}
 
 	dbus_message_iter_recurse(&iter, &dict);
 
@@ -299,6 +321,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	g_free(netmask);
 	connman_ipaddress_free(ipaddress);
 
+	ov_connect_done(data, 0);
 	return VPN_STATE_CONNECT;
 }
 
@@ -369,10 +392,6 @@ static void close_management_interface(struct ov_private_data *data)
 	if (data->mgmt_timer_id != 0) {
 		g_source_remove(data->mgmt_timer_id);
 		data->mgmt_timer_id = 0;
-	}
-	if (data->mgmt_socket_fd != -1) {
-		close(data->mgmt_socket_fd);
-		data->mgmt_socket_fd = -1;
 	}
 	if (data->mgmt_event_id) {
 		g_source_remove(data->mgmt_event_id);
@@ -483,16 +502,15 @@ static int run_connect(struct ov_private_data *data,
 
 	err = connman_task_run(task, ov_died, data, NULL, NULL, NULL);
 	if (err < 0) {
+		data->cb = NULL;
+		data->user_data = NULL;
 		connman_error("openvpn failed to start");
-		err = -EIO;
-		goto done;
+		return -EIO;
+	} else {
+		/* This lets the caller know that the actual result of
+		 * the operation will be reported to the callback */
+		return -EINPROGRESS;
 	}
-
-done:
-	if (cb)
-		cb(provider, user_data, err);
-
-	return err;
 }
 
 static char *ov_quote_credential(char *pos, const char *cred)
@@ -573,11 +591,27 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *password = NULL, *username = NULL;
 	char *key;
 	DBusMessageIter iter, dict;
+	DBusError error;
 
 	DBG("provider %p", data->provider);
 
-	if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
+	if (!reply)
 		goto err;
+
+	dbus_error_init(&error);
+
+	if (dbus_set_error_from_message(&error, reply)) {
+		if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE
+							".Error.Canceled")) {
+			ov_connect_done(data, ECONNABORTED);
+			connman_task_stop(data->task);
+			dbus_error_free(&error);
+			return;
+		}
+
+		dbus_error_free(&error);
+		goto err;
+	}
 
 	if (!vpn_agent_check_reply_has_dict(reply))
 		goto err;
@@ -631,6 +665,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	return;
 
 err:
+	ov_connect_done(data, EACCES);
 	vpn_provider_indicate_error(data->provider,
 			VPN_PROVIDER_ERROR_AUTH_FAILED);
 }
@@ -646,7 +681,7 @@ static int request_credentials_input(struct ov_private_data *data)
 
 	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
 							&agent_path);
-	if (!data->provider || !agent || !agent_path)
+	if (!agent || !agent_path)
 		return -ESRCH;
 
 	message = dbus_message_new_method_call(agent_sender, agent_path,
@@ -741,34 +776,33 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 static int ov_management_connect_timer_cb(gpointer user_data)
 {
 	struct ov_private_data *data = user_data;
-	struct sockaddr_un remote;
-	int err = 0;
 
-	if (data->mgmt_socket_fd == -1) {
-		data->mgmt_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-		if (data->mgmt_socket_fd == -1) {
-			connman_warn("Unable to create management socket");
-		}
-	}
+	if (!data->mgmt_channel) {
+		int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (fd >= 0) {
+			struct sockaddr_un remote;
+			int err;
 
-	if (data->mgmt_socket_fd != -1) {
-		memset(&remote, 0, sizeof(remote));
-		remote.sun_family = AF_UNIX;
-		g_strlcpy(remote.sun_path, data->mgmt_path,
+			memset(&remote, 0, sizeof(remote));
+			remote.sun_family = AF_UNIX;
+			g_strlcpy(remote.sun_path, data->mgmt_path,
 						sizeof(remote.sun_path));
 
-		err = connect(data->mgmt_socket_fd, (struct sockaddr *)&remote,
-							sizeof(remote));
-		if (err == 0) {
-			data->mgmt_channel =
-				g_io_channel_unix_new(data->mgmt_socket_fd);
-			data->mgmt_event_id = g_io_add_watch(data->mgmt_channel,
-					G_IO_IN | G_IO_ERR | G_IO_HUP,
-					ov_management_handle_input, data);
+			err = connect(fd, (struct sockaddr *)&remote,
+						sizeof(remote));
+			if (err == 0) {
+				data->mgmt_channel = g_io_channel_unix_new(fd);
+				data->mgmt_event_id =
+					g_io_add_watch(data->mgmt_channel,
+						G_IO_IN | G_IO_ERR | G_IO_HUP,
+						ov_management_handle_input,
+						data);
 
-			connman_warn("Connected management socket");
-			data->mgmt_timer_id = 0;
-			return G_SOURCE_REMOVE;
+				connman_warn("Connected management socket");
+				data->mgmt_timer_id = 0;
+				return G_SOURCE_REMOVE;
+			}
+			close(fd);
 		}
 	}
 
@@ -781,8 +815,6 @@ static int ov_management_connect_timer_cb(gpointer user_data)
 
 	return G_SOURCE_CONTINUE;
 }
-
-
 
 static int ov_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
@@ -802,19 +834,13 @@ static int ov_connect(struct vpn_provider *provider,
 	if (!data)
 		return -ENOMEM;
 
-	data->provider = provider;
+	vpn_provider_set_plugin_data(provider, data);
+	data->provider = vpn_provider_ref(provider);
 	data->task = task;
 	data->dbus_sender = g_strdup(dbus_sender);
 	data->if_name = g_strdup(if_name);
 	data->cb = cb;
 	data->user_data = user_data;
-	data->mgmt_path = NULL;
-	data->mgmt_timer_id = 0;
-	data->mgmt_socket_fd = -1;
-	data->mgmt_event_id = 0;
-	data->mgmt_channel = NULL;
-	data->connect_attempts = 0;
-	data->failed_attempts = 0;
 
 	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
 	if (option && !strcmp(option, "-")) {

@@ -95,16 +95,17 @@ struct vpn_provider {
 	bool immutable;
 	struct connman_ipaddress *prev_ipv4_addr;
 	struct connman_ipaddress *prev_ipv6_addr;
+	void *plugin_data;
+	unsigned int do_connect_timeout;
 };
 
-struct do_connect_timeout_data {
+struct vpn_provider_connect_data {
 	DBusConnection *conn;
 	DBusMessage *msg;
 	struct vpn_provider *provider;
 };
 
 static unsigned int get_connman_state_timeout = 0;
-static unsigned int do_connect_timeout = 0;
 
 static guint connman_signal_watch;
 static guint connman_service_watch;
@@ -557,68 +558,69 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
-static gboolean do_connect_timeout_function(gpointer data) {
-
-	gboolean rval = FALSE;
-	struct do_connect_timeout_data *t_data = NULL;
-	DBusMessage *error = NULL;
-	int err = 0;
-	
+static gboolean do_connect_timeout_function(gpointer data)
+{
 	DBG("");
-	
-	if (!data)
-		goto out;
-	
-	t_data = data;
-	
-	/* Not enough data set, remove from main event loop */
-	if (!t_data->conn || !t_data->msg || !t_data->provider) {
-		DBG("insufficient data conn %p msg %p data %p "
-			"removing from main loop",
-			t_data->conn, t_data->msg, t_data->provider);
-		goto out;
-	}
 	
 	/*
 	 * Keep in main loop if no agents are present yet or if connman is not
 	 * yet online
 	 */
 	if (!connman_agent_get_info(NULL, NULL, NULL) || !connman_online) {
-		rval = G_SOURCE_CONTINUE;
-		goto out;
-	}
+		return G_SOURCE_CONTINUE;
+	} else {
+		struct vpn_provider_connect_data *cdata = data;
+		struct vpn_provider *provider = cdata->provider;
+		int err;
 
-	err = __vpn_provider_connect(t_data->provider, t_data->msg);
-	
-	/* Connected or connecting, remove from main loop */
-	if (err == -EISCONN || err == -EINPROGRESS) {
-		goto out;
-	} else if (err < 0) {
-		/* TODO this may not be necessary as do_connect has already
-		 * returned a reply to caller (or NULL if success) */
-		error = __connman_error_failed(t_data->msg, -err);
-		if (!g_dbus_send_message(t_data->conn, error))
-			DBG("Cannot send error message");
-		rval = G_SOURCE_CONTINUE;
+		provider->do_connect_timeout = 0;
+		err = __vpn_provider_connect(provider, cdata->msg);
+
+		if (err < 0 && err != -EINPROGRESS) {
+			g_dbus_send_message(cdata->conn,
+				__connman_error_failed(cdata->msg, -err));
+			cdata->msg = NULL;
+		}
+
+		return G_SOURCE_REMOVE;
 	}
-	
-out:
-	/* If removing from main event loop, free memory */
-	if (rval == G_SOURCE_REMOVE) {
-		do_connect_timeout = 0;
-		if (t_data && t_data->msg)
-			dbus_message_unref(t_data->msg);
-		g_free(data);
-	}
-	
-	return rval;
+}
+
+static void do_connect_timeout_free(gpointer data)
+{
+	struct vpn_provider_connect_data *cdata = data;
+
+	if (cdata->msg)
+		g_dbus_send_message(cdata->conn,
+			__connman_error_operation_aborted(cdata->msg));
+
+	dbus_connection_unref(cdata->conn);
+	g_free(data);
+}
+
+static void do_connect_later(struct vpn_provider *provider,
+					DBusConnection *conn, DBusMessage *msg)
+{
+	struct vpn_provider_connect_data *cdata =
+		g_try_new0(struct vpn_provider_connect_data, 1);
+
+	cdata->conn = dbus_connection_ref(conn);
+	cdata->msg = dbus_message_ref(msg);
+	cdata->provider = provider;
+
+	if (provider->do_connect_timeout)
+		g_source_remove(provider->do_connect_timeout);
+
+	provider->do_connect_timeout =
+		g_timeout_add_seconds_full(G_PRIORITY_DEFAULT, 1,
+					do_connect_timeout_function, cdata,
+					do_connect_timeout_free);
 }
 
 static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
 	struct vpn_provider *provider = data;
-	struct do_connect_timeout_data *t_data = NULL;
 	int err;
 
 	DBG("conn %p provider %p", conn, provider);
@@ -631,50 +633,28 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 	if (!connman_agent_get_info(NULL, NULL, NULL)) {
 		DBG("Provider %s start delayed because no VPN agent is present",
 			provider->identifier);
-		goto delay_connect;
+		do_connect_later(provider, conn, msg);
+		return NULL;
 	}
 
 	if (!connman_online) {
-	
 		if (state_query_completed) {
 			DBG("Provider %s not started because connman "
-				"not online/ready",
-				provider->identifier);
+				"not online/ready", provider->identifier);
 			return __connman_error_failed(msg, ENOLINK);
 		} else {
 			DBG("Provider %s start delayed because connman "
-				"state not queried",
-				provider->identifier);
-			
-			goto delay_connect;
+				"state not queried", provider->identifier);
+			do_connect_later(provider, conn, msg);
+			return NULL;
 		}
 	}
 
 	err = __vpn_provider_connect(provider, msg);
-	if (err < 0)
+	if (err < 0 && err != -EINPROGRESS)
 		return __connman_error_failed(msg, -err);
 
 	return NULL;
-
-delay_connect:
-
-	t_data = g_try_new0(struct do_connect_timeout_data, 1);
-
-	if (!t_data)
-		return __connman_error_failed(msg, ENOMEM);
-
-	t_data->conn = conn;
-	t_data->msg = dbus_message_ref(msg);
-	t_data->provider = provider;
-	
-	if (!do_connect_timeout) {
-		do_connect_timeout = g_timeout_add_seconds(1,
-			do_connect_timeout_function, t_data);
-	} else {
-		DBG("Timeout function already added");
-	}
-
-	return __connman_error_in_progress(msg);
 }
 
 static DBusMessage *do_connect2(DBusConnection *conn, DBusMessage *msg,
@@ -1173,6 +1153,9 @@ static void provider_destruct(struct vpn_provider *provider)
 {
 	DBG("provider %p", provider);
 
+	if (provider->do_connect_timeout)
+		g_source_remove(provider->do_connect_timeout);
+
 	if (provider->notify_id != 0)
 		g_source_remove(provider->notify_id);
 
@@ -1260,9 +1243,27 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 		if (reply)
 			g_dbus_send_message(connection, reply);
 
-		vpn_provider_indicate_error(provider,
+		if (error == ECONNABORTED) {
+			/*
+			 * Passing VPN_PROVIDER_STATE_DISCONNECT to set_state
+			 * callback (vpn_set_state() that is) sets vpn_data
+			 * state to VPN_STATE_DISCONNECT which (hopefully)
+			 * makes vpn_died() happy when vpn task (hopefully)
+			 * completes and then vpn_died() (hopefully) sets
+			 * provider state to VPN_PROVIDER_STATE_IDLE.
+			 */
+			if (provider->driver->set_state)
+				provider->driver->set_state(provider,
+					VPN_PROVIDER_STATE_DISCONNECT);
+
+			vpn_provider_set_state(provider,
+					VPN_PROVIDER_STATE_DISCONNECT);
+		} else {
+			vpn_provider_indicate_error(provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
-		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
+			vpn_provider_set_state(provider,
+					VPN_PROVIDER_STATE_FAILURE);
+		}
 	} else
 		g_dbus_send_reply(connection, pending, DBUS_TYPE_INVALID);
 
@@ -1477,6 +1478,9 @@ static int provider_indicate_state(struct vpn_provider *provider,
 	const char *str;
 	const char *route_value;
 	enum vpn_provider_state old_state;
+
+	if (provider->state == state)
+		return 0;
 
 	str = state2string(state);
 	DBG("provider %p state %s/%d", provider, str, state);
@@ -2583,6 +2587,16 @@ void *vpn_provider_get_data(struct vpn_provider *provider)
 void vpn_provider_set_data(struct vpn_provider *provider, void *data)
 {
 	provider->driver_data = data;
+}
+
+void *vpn_provider_get_plugin_data(struct vpn_provider *provider)
+{
+	return provider->plugin_data;
+}
+
+void vpn_provider_set_plugin_data(struct vpn_provider *provider, void *data)
+{
+	provider->plugin_data = data;
 }
 
 void vpn_provider_set_index(struct vpn_provider *provider, int index)

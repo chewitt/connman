@@ -276,8 +276,6 @@ struct connman_service {
 static const char *service_get_access(struct connman_service *service);
 static void service_set_access(struct connman_service *service,
 					const char *access);
-static bool service_set_autoconnect(struct connman_service *service,
-					bool autoconnect);
 static void string_changed(struct connman_service *service,
 					const char *name, const char *value);
 static bool allow_property_changed(struct connman_service *service);
@@ -658,7 +656,7 @@ int __connman_service_load_modifiable(struct connman_service *service)
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
-			service_set_autoconnect(service, autoconnect);
+			connman_service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
 		break;
 	}
@@ -697,7 +695,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
-			service_set_autoconnect(service, autoconnect);
+			connman_service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
 		break;
 	case CONNMAN_SERVICE_TYPE_WIFI:
@@ -755,7 +753,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
 		if (!error)
-			service_set_autoconnect(service, autoconnect);
+			connman_service_set_autoconnect(service, autoconnect);
 		g_clear_error(&error);
 		break;
 	}
@@ -1954,7 +1952,7 @@ static const struct connman_service_boolean_property service_saved =
 
 #define autoconnect_changed(s) service_boolean_changed(s, &service_autoconnect)
 
-static bool service_set_autoconnect(struct connman_service *service,
+bool connman_service_set_autoconnect(struct connman_service *service,
 							bool autoconnect)
 {
 	if (service->autoconnect == autoconnect)
@@ -4092,7 +4090,7 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 		if (service == exclude)
 			continue;
 
-		if (service_set_autoconnect(service, false)) {
+		if (connman_service_set_autoconnect(service, false)) {
 			service_save(service);
 			DBG("disabled autoconnect for %s", service->name);
 		}
@@ -4133,7 +4131,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		dbus_message_iter_get_basic(&value, &autoconnect);
 
-		if (service_set_autoconnect(service, autoconnect)) {
+		if (connman_service_set_autoconnect(service, autoconnect)) {
 			service_save(service);
 			if (autoconnect)
 				__connman_service_auto_connect(
@@ -5076,7 +5074,8 @@ static DBusMessage *connect_service(DBusConnection *conn,
 		return __connman_error_permission_denied(msg);
 	}
 
-	if (!service->network)
+	if (!service->network && !(service->provider &&
+				service->type == CONNMAN_SERVICE_TYPE_VPN))
 		return __connman_error_no_carrier(msg);
 
 	if (service->pending)
@@ -5196,7 +5195,7 @@ bool __connman_service_remove(struct connman_service *service)
 	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
 	__connman_service_set_favorite(service, false);
-	service_set_autoconnect(service, false);
+	connman_service_set_autoconnect(service, false);
 
 	__connman_ipconfig_ipv6_reset_privacy(service->ipconfig_ipv6);
 
