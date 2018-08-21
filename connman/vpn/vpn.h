@@ -84,7 +84,6 @@ int __vpn_provider_create_from_config(GHashTable *settings,
 			const char *config_ident, const char *config_entry);
 int __vpn_provider_set_string_immutable(struct vpn_provider *provider,
 					const char *key, const char *value);
-bool __vpn_provider_set_autoconnect(struct vpn_provider *provider, bool value);
 DBusMessage *__vpn_provider_get_connections(DBusMessage *msg);
 const char * __vpn_provider_get_ident(struct vpn_provider *provider);
 struct vpn_provider *__vpn_provider_lookup(const char *identifier);
