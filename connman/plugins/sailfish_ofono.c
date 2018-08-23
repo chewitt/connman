@@ -658,6 +658,14 @@ static void modem_update_country(struct modem_data *md)
 	}
 }
 
+static void modem_update_netreg(struct modem_data *md)
+{
+	modem_update_roaming(md);
+	modem_update_strength(md);
+	modem_update_name(md);
+	modem_update_country(md);
+}
+
 static void connctx_valid_changed(OfonoConnCtx *connctx, void *arg)
 {
 	modem_update_network(arg);
@@ -811,6 +819,11 @@ static void modem_changed(OfonoModem *modem, void *arg)
 	modem_update_network(arg);
 }
 
+static void netreg_valid_changed(OfonoNetReg *netreg, void *arg)
+{
+	modem_update_netreg(arg);
+}
+
 static void netreg_status_changed(OfonoNetReg *netreg, void *arg)
 {
 	modem_update_roaming(arg);
@@ -863,7 +876,7 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 	md->netreg = ofono_netreg_new(path);
 	md->netreg_handler_id[NETREG_HANDLER_VALID] =
 		ofono_netreg_add_valid_changed_handler(md->netreg,
-					netreg_status_changed, md);
+					netreg_valid_changed, md);
 	md->netreg_handler_id[NETREG_HANDLER_STATUS] =
 		ofono_netreg_add_status_changed_handler(md->netreg,
 					netreg_status_changed, md);
@@ -877,7 +890,7 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 		ofono_netreg_add_strength_changed_handler(md->netreg,
 					netreg_strength_changed, md);
 	md->netreg_handler_id[NETREG_HANDLER_NAME] =
-		ofono_netreg_add_strength_changed_handler(md->netreg,
+		ofono_netreg_add_name_changed_handler(md->netreg,
 					netreg_name_changed, md);
 
 	md->simmgr = ofono_simmgr_new(path);
@@ -913,10 +926,7 @@ static void modem_create(struct plugin_data *plugin, OfonoModem *modem)
 		modem_update_context(md);
 	}
 	modem_update_network(md);
-	modem_update_roaming(md);
-	modem_update_strength(md);
-	modem_update_name(md);
-	modem_update_country(md);
+	modem_update_netreg(md);
 }
 
 static void modem_delete(gpointer value)
