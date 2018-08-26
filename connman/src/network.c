@@ -1298,7 +1298,7 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->node);
 	g_free(network->name);
 	g_free(network->identifier);
-	g_free(network->acd_host);
+	acd_host_free(network->acd_host);
 
 	network->device = NULL;
 
