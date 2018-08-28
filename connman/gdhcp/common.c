@@ -311,8 +311,6 @@ void dhcp_add_option_uint32(struct dhcp_packet *packet, uint8_t code,
 	put_be32(data, option + OPT_DATA);
 
 	dhcp_add_binary_option(packet, option);
-
-	return;
 }
 
 void dhcp_add_option_uint16(struct dhcp_packet *packet, uint8_t code,
@@ -328,8 +326,6 @@ void dhcp_add_option_uint16(struct dhcp_packet *packet, uint8_t code,
 	put_be16(data, option + OPT_DATA);
 
 	dhcp_add_binary_option(packet, option);
-
-	return;
 }
 
 void dhcp_add_option_uint8(struct dhcp_packet *packet, uint8_t code,
@@ -345,8 +341,6 @@ void dhcp_add_option_uint8(struct dhcp_packet *packet, uint8_t code,
 	option[OPT_DATA] = data;
 
 	dhcp_add_binary_option(packet, option);
-
-	return;
 }
 
 void dhcp_init_header(struct dhcp_packet *packet, char type)

@@ -161,8 +161,6 @@ static void timeserver_sync_start(void)
 
 	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
 						resolv_result, NULL);
-
-	return;
 }
 
 static gboolean timeserver_sync_restart(gpointer user_data)
@@ -214,8 +212,6 @@ static void sync_next()
 
 	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
 						resolv_result, NULL);
-
-	return;
 }
 
 GSList *__connman_timeserver_add_list(GSList *server_list,

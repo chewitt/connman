@@ -6081,7 +6081,6 @@ void __connman_service_set_provider_pending(struct connman_service *service,
 	}
 
 	service->provider_pending = msg;
-	return;
 }
 
 static void check_pending_msg(struct connman_service *service)
