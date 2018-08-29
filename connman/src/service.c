@@ -8541,6 +8541,7 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	if (__connman_service_load_modifiable(service) != 0)
 		g_get_current_time(&service->modified);
 
+	service->order = service->do_split_routing ? 0 : 10;
 	service->favorite = true;
 
 	service->state_ipv4 = service->state_ipv6 = CONNMAN_SERVICE_STATE_IDLE;
