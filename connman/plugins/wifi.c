@@ -1779,7 +1779,7 @@ static gboolean p2p_find_stop(gpointer data)
 	connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_P2P, false);
 
 	connman_device_unref(device);
-	reset_autoscan(device);
+	start_autoscan(device);
 
 	return FALSE;
 }
