@@ -2118,38 +2118,6 @@ static void default_changed(void)
 	DBG("new default %p %s", service, service ? service->identifier : "");
 
 	/*
-	 * This may not be reached since service that is not default route (VPN)
-	 * should not be on top of service_list. TODO: remove if not reached.
-	 */
-	if (!__connman_service_is_default_route(service)) {
-
-		/*
-		 * If the current_default is not connected and the new service
-		 * is not the default route, find the next connected from
-		 * services list and use that service as new default
-		 */
-		if (current_default && !is_connected(current_default)) {
-			service = get_connected_default_route_service();
-
-			if (service == current_default) {
-				DBG("Selected new default == current_default");
-				return;
-			}
-
-			DBG("Selected new default service %s",
-				service ? service->identifier : "");
-		} else {
-			DBG("Not setting %s as default service",
-				service ? service->identifier : "");
-
-			switch_services(service, current_default);
-			__connman_notifier_default_changed(current_default);
-			
-			return;
-		}
-	}
-
-	/*
 	 * If the change over default service is not allowed change the order
 	 * of the service in the service list in a way that current default
 	 * service remains at the top.and stop processing the default change
@@ -5903,19 +5871,6 @@ static void switch_default_service(struct connman_service *default_service,
 {
 	struct connman_service *service;
 	GList *src, *dst;
-	
-	/*
-	 * If the service to be used as downgrade service is not set as default
-	 * route revert the order of the services.
-	 */
-	if (!__connman_service_is_default_route(downgrade_service)) {
-		DBG("Not switching non default route downgrade service "
-			"default_service=%s downgrade_service=%s",
-			default_service ? default_service->identifier : "",
-			downgrade_service ? downgrade_service->identifier : "");
-		switch_default_service(downgrade_service, default_service);
-		return;
-	}
 
 	apply_relevant_default_downgrade(default_service);
 	src = g_list_find(service_list, downgrade_service);
