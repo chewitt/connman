@@ -288,7 +288,7 @@ endif
 
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
-	unit/test-sailfish_iptables_ext
+	unit/test-sailfish_iptables_ext unit/test-service
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -317,6 +317,29 @@ unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
 				vpn/vpn-settings.c src/log.c
 unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
 
+unit_test_service_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				-DSTATEDIR=\""$(statedir)"\"
+unit_test_service_SOURCES = $(backtrace_sources) $(gdhcp_sources) \
+				$(gweb_sources) unit/test-service.c \
+				src/connman.h src/log.c src/error.c src/task.c \
+				src/device.c src/network.c src/connection.c \
+				src/manager.c src/agent-connman.c src/clock.c \
+				src/timezone.c src/agent.c src/notifier.c \
+				src/resolver.c src/ipconfig.c src/detect.c \
+				src/inet.c src/dhcp.c src/dhcpv6.c src/rtnl.c \
+				src/proxy.c src/utsname.c src/timeserver.c \
+				src/rfkill.c src/storage.c src/dbus.c \
+				src/config.c src/technology.c src/counter.c \
+				src/ntp.c src/wpad.c src/wispr.c \
+				src/dnsproxy.c src/6to4.c src/ippool.c \
+				src/ipaddress.c src/inotify.c src/ipv6pd.c \
+				src/peer.c src/peer_service.c src/machine.c \
+				src/util.c src/wakeup_timer.c \
+				src/jolla-stats.c src/access.c
+unit_test_service_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
+				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ -lresolv \
+				-ldl
+
 unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@
 unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
 				unit/test-sailfish_iptables_ext.c \
@@ -327,7 +350,7 @@ unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
 
 TESTS = unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
-	unit/test-sailfish_iptables_ext
+	unit/test-sailfish_iptables_ext unit/test-service
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
