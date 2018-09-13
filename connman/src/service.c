@@ -6892,8 +6892,19 @@ static int service_update_preferred_order(struct connman_service *default_servic
 	unsigned int *tech_array;
 	int i;
 
+	/*
+	 * Do not update the preferred order if 1) there is no default service,
+	 * 2) there is no change, 3) state is different than the default or 4)
+	 * when VPN is used as the default service and the new_state is
+	 * CONNMAN_SERVICE_STATE_READY, which is the state of VPN when
+	 * connected. The 4) prevents any service to overtake VPNs position as
+	 * default service if that VPN is used as default route.
+	 */
 	if (!default_service || default_service == new_service ||
-			default_service->state != new_state)
+			default_service->state != new_state ||
+			(default_service->type == CONNMAN_SERVICE_TYPE_VPN &&
+			__connman_service_is_default_route(default_service) &&
+			default_service->state == new_state))
 		return 0;
 
 	tech_array = connman_setting_get_uint_list("PreferredTechnologies");
