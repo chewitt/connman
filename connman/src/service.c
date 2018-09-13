@@ -1915,178 +1915,6 @@ static void print_service_list_debug()
 	}
 }
 
-static bool service_preferred_over(struct connman_service *a,
-	struct connman_service *b)
-{
-	GList *preferred_list = NULL;
-	int position_a = -1, position_b = -1;
-
-	/*
-	 * If either or both are NULL or the types match or a is not connected
-	 * when b is connected the service b can be selected over a
-	 */
-	if (!(a && b) || (a->type == b->type) ||
-		(!is_connected(a) && is_connected(b)))
-		return true;
-
-	preferred_list = preferred_tech_list_get();
-
-	if (!preferred_list)
-		return true;
-
-	position_a = g_list_index(preferred_list, a);
-	position_b = g_list_index(preferred_list, b);
-
-	DBG("service a %p %s position %d service b %p %s position %d",
-		a, a->identifier, position_a, b, b->identifier, position_b);
-
-	g_list_free(preferred_list);
-
-	/*
-	 * Not found, which means that the service is not available.
-	 */
-	if (position_a == -1)
-		return true;
-
-	return position_b < position_a;
-}
-
-
-static bool is_online(struct connman_service *service)
-{
-	return service->state == CONNMAN_SERVICE_STATE_ONLINE;
-}
-
-static bool allow_service_over_default(struct connman_service *new_service)
-{
-	/*
-	 * Return immediately if the current default is not any more connected.
-	 * In case the current default is VPN is_connected() will also check if
-	 * the transport service is online.
-	 */
-	if (!current_default || !is_connected(current_default)) {
-		DBG("allowing to set %p %s over %p %s (NULL or not connected)",
-			new_service,
-			new_service ? new_service->identifier : "NULL",
-			current_default,
-			current_default ? current_default->identifier : "NULL");
-		return true;
-	}
-
-	if (current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
-		current_default->depends_on) {
-
-		if (current_default->depends_on == new_service) {
-			DBG("VPN %p %s depends on %p %s (new default), "
-				"revert order",
-				current_default, current_default->identifier,
-				new_service,
-				new_service ? new_service->identifier : "NULL");
-			return false;
-		}
-
-		if (!service_preferred_over(current_default->depends_on,
-			new_service)) {
-			DBG("trying to set %p %s over VPN using %p %s, "
-				"revert order",
-				new_service, new_service ?
-				__connman_service_type2string(
-					new_service->type) : "NULL",
-				current_default->depends_on,
-				__connman_service_type2string(
-					current_default->depends_on->type));
-			return false;
-		} else if (is_online(current_default->depends_on) &&
-			!is_online(new_service)) {
-			DBG("trying to set %p %s (%s) over VPN %p %s"
-				"using %p %s (%s), revert order",
-			new_service,
-			__connman_service_type2string(new_service->type),
-			state2string(new_service->state),
-			current_default,
-			__connman_service_type2string(current_default->type),
-			current_default->depends_on,
-			__connman_service_type2string(
-				current_default->depends_on->type),
-			state2string(current_default->depends_on->state));
-			return false;
-		} else {
-			DBG("trying to set %p %s over VPN using %p %s, "
-				"allowing",
-				new_service, new_service ?
-				__connman_service_type2string(
-					new_service->type) : "NULL",
-				current_default->depends_on,
-				__connman_service_type2string(
-					current_default->depends_on->type));
-			return true;
-		}
-	} else if (current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
-		!current_default->depends_on) {
-		DBG("VPN %p %s has no dependency",
-			current_default, current_default->identifier);
-		return true;
-	}
-
-	if (!service_preferred_over(current_default, new_service)) {
-		DBG("trying to set %p %s over %p %s, revert order",
-			new_service,
-			__connman_service_type2string(new_service->type),
-			current_default,
-			__connman_service_type2string(current_default->type));
-		return false;
-	}
-	
-	/*
-	 * If new_service is depends on current_default allow it to be new
-	 * default if it is also being used as default route.
-	 */
-	if (new_service->type == CONNMAN_SERVICE_TYPE_VPN &&
-		is_connected(new_service) &&
-		new_service->depends_on == current_default &&
-		__connman_service_is_default_route(new_service)) {
-		goto allow;
-	} else if (is_online(current_default) && !is_online(new_service)) {
-		DBG("trying to set %p %s (%s) over %p %s (%s), revert order",
-			new_service,
-			__connman_service_type2string(new_service->type),
-			state2string(new_service->state),
-			current_default,
-			__connman_service_type2string(current_default->type),
-			state2string(current_default->state));
-		return false;
-	}
-
-allow:
-	DBG("allowing to set %p %s over %p %s",
-		new_service, new_service ? new_service->identifier : "NULL",
-		current_default, current_default->identifier);
-
-	return true;
-}
-
-static void switch_services(struct connman_service *service_lower,
-		struct connman_service *service_higher)
-{
-	struct connman_service *service;
-	GList *src, *dst;
-	
-	DBG("switch lower %p %s and upper %p %s",
-		service_lower, service_lower ? service_lower->identifier : "",
-		service_higher, service_higher ? service_higher->identifier : "");
-
-	src = g_list_find(service_list, service_higher);
-	dst = g_list_find(service_list, service_lower);
-
-	/* Nothing to do */
-	if (src == dst || src->next == dst)
-		return;
-
-	service = src->data;
-	service_list = g_list_delete_link(service_list, src);
-	service_list = g_list_insert_before(service_list, dst, service);
-}
-
 static void default_changed(void)
 {
 	struct connman_service *service = __connman_service_get_default();
@@ -2100,9 +1928,7 @@ static void default_changed(void)
 		return;
 	}
 
-	/*
-	 * If new service is NULL try to get a connected service.
-	 */
+	/* If new service is NULL try to get a connected service. */
 	if (!service) {
 		service = get_connected_default_route_service();
 		DBG("got new connected default route %p", service);
@@ -2116,47 +1942,6 @@ static void default_changed(void)
 	DBG("current default %p %s", current_default,
 		current_default ? current_default->identifier : "");
 	DBG("new default %p %s", service, service ? service->identifier : "");
-
-	/*
-	 * If the change over default service is not allowed change the order
-	 * of the service in the service list in a way that current default
-	 * service remains at the top.and stop processing the default change
-	 * any further.
-	 */
-	if (service && !allow_service_over_default(service)) {
-
-		DBG("service %p %s not allowed over default %p %s",
-			service, service->identifier,
-			current_default, current_default->identifier);
-
-		/*
-		 * VPN as default service. current_default cannot be NULL here
-		 * since the check for preference returns true in such case.
-		 */
-		if (current_default->type == CONNMAN_SERVICE_TYPE_VPN &&
-			current_default->depends_on) {
-			/*
-			 * First swap the transport service of VPN to default,
-			 * then swap VPN as default again
-			 */
-			DBG("swap transport service of VPN to default service");
-			switch_services(service,
-				current_default->depends_on);
-
-			DBG("swap VPN as default service");
-			switch_services(current_default->depends_on,
-				current_default);
-		} else {
-			DBG("swap service %p %s and current_default %p %s",
-				service, service ? service->identifier : "",
-				current_default, current_default->identifier);
-			switch_services(service, current_default);
-		}
-
-		print_service_list_debug();
-
-		return;
-	}
 
 	/*
 	 * Default is going to be changed, if it is not VPN disconnect all
@@ -6465,6 +6250,49 @@ void connman_service_unref_debug(struct connman_service *service,
 	service_free(service);
 }
 
+/*
+ * Return -1 b preferred over a
+ * Return 0 a == b, does not apply to sorting
+ * Return 1 a preferred over b
+ */
+static gint service_preferred_over(struct connman_service *a,
+	struct connman_service *b)
+{
+	GList *preferred_list = NULL;
+	int position_a = -1, position_b = -1;
+
+	/*
+	 * If either or both are NULL or the types match preference is not used
+	 * in sorting.
+	 */
+	if (!(a && b) || (a->type == b->type))
+		return 0;
+
+	preferred_list = preferred_tech_list_get();
+
+	if (!preferred_list)
+		return 0;
+
+	position_a = g_list_index(preferred_list, a);
+	position_b = g_list_index(preferred_list, b);
+
+	DBG("service a %p %s position %d service b %p %s position %d",
+		a, a->identifier, position_a, b, b->identifier, position_b);
+
+	g_list_free(preferred_list);
+
+	/* Not found, which means that the service is not available. */
+	if (position_a == -1 || position_b == -1)
+		return 0;
+
+	if (position_b < position_a)
+		return -1;
+	else if (position_b > position_a)
+		return 1;
+
+	return 0;
+}
+
 static gint service_compare(gconstpointer a, gconstpointer b)
 {
 	struct connman_service *service_a = (void *) a;
@@ -6472,6 +6300,7 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	enum connman_service_state state_a, state_b;
 	bool a_connected, b_connected;
 	gint strength;
+	int preference;
 
 	/* Compare availability first */
         const gboolean a_available = is_available(service_a);
@@ -6486,6 +6315,7 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	state_b = service_b->state;
 	a_connected = is_connected(service_a);
 	b_connected = is_connected(service_b);
+	preference = service_preferred_over(service_a, service_b);
 
 	if (a_connected && b_connected) {
 		if (__connman_service_is_default_route(service_a) &&
@@ -6513,6 +6343,10 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 			return service_compare(service_a,
 				service_b->depends_on);
 		}
+
+		/* Set as -1, 0 or 1, return value if preferred list is used */
+		if (preference)
+			return preference;
 
 		if (service_a->order > service_b->order)
 			return -1;
