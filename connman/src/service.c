@@ -4512,11 +4512,13 @@ static void do_auto_connect(struct connman_service *service,
 	 * triggers this via service_complete() that is called for each service
 	 * that is set to failure state in service_indicate_state(). Otherwise
 	 * the timeout of vpn_auto_connect() will be reset and the delays for
-	 * VPN connections are reset likewise.
+	 * VPN connections are reset likewise. User request should reset the
+	 * timer.
 	 */
 	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 		__connman_service_auto_connect(reason);
-	else if (service->state == CONNMAN_SERVICE_STATE_FAILURE)
+	else if (service->state == CONNMAN_SERVICE_STATE_FAILURE &&
+		reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
 		return;
 
 	vpn_auto_connect();
