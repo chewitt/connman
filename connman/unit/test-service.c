@@ -170,6 +170,8 @@ bool __connman_provider_is_default_route(struct connman_provider *provider)
 
 /* EOD - end of dummies */
 
+static gint ident_counter = 0;
+
 static char *create_ident(enum connman_service_type type)
 {
 	int pos = 0;
@@ -200,17 +202,16 @@ static char *create_ident(enum connman_service_type type)
 		"network1",
 		NULL,
 	};
-	gchar *random_string = g_uuid_string_random();
 
 	if (type > CONNMAN_SERVICE_TYPE_P2P)
 		pos = 0;
 	else
 		pos = (int)type;
 
-	ident = g_strdup_printf("%s_%s_%s", prefix[pos], random_string,
-		postfix[pos]);
+	ident_counter++;
 
-	g_free(random_string);
+	ident = g_strdup_printf("%s_%d_%s", prefix[pos], ident_counter,
+		postfix[pos]);
 
 	return ident;
 }
@@ -406,6 +407,7 @@ static void test_service_sort_full_positive()
 	GList *iter = NULL, *iter_next = NULL;
 	struct connman_service *a = NULL, *b = NULL;
 
+	ident_counter = 0;
 	add_services();
 
 	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
@@ -492,6 +494,8 @@ void test_service_sort_with_preferred_list()
 	GList *iter = NULL, *iter_next = NULL;
 	struct connman_service *a = NULL, *b = NULL;
 	
+	ident_counter = 0;
+
 	if (preferred_list)
 		g_free(preferred_list);
 	
