@@ -624,7 +624,7 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 
 static void set_vpn_dependency(struct connman_service *vpn_service)
 {
-	struct connman_service *service = __connman_service_get_default();
+	struct connman_service *service = connman_service_get_default();
 
 	if (!vpn_service || !service)
 		return;
@@ -1850,7 +1850,7 @@ static void reset_stats(struct connman_service *service)
 	g_timer_reset(service->stats_timer);
 }
 
-struct connman_service *__connman_service_get_default(void)
+struct connman_service *connman_service_get_default(void)
 {
 	struct connman_service *service;
 
@@ -1872,7 +1872,7 @@ bool __connman_service_index_is_default(int index)
 	if (index < 0)
 		return false;
 
-	service = __connman_service_get_default();
+	service = connman_service_get_default();
 
 	return __connman_service_get_index(service) == index;
 }
@@ -1917,7 +1917,7 @@ static void print_service_list_debug()
 
 static void default_changed(void)
 {
-	struct connman_service *service = __connman_service_get_default();
+	struct connman_service *service = connman_service_get_default();
 
 	DBG("");
 	print_service_list_debug();
@@ -4543,7 +4543,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		service_save(service);
 		timeservers_configuration_changed(service);
 
-		if (service == __connman_service_get_default())
+		if (service == connman_service_get_default())
 			__connman_timeserver_sync(service);
 
 	} else if (g_str_equal(name, "Domains.Configuration")) {
@@ -5177,7 +5177,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 	struct connman_service *def_service;
 
 	attempts = GPOINTER_TO_INT(data);
-	def_service = __connman_service_get_default();
+	def_service = connman_service_get_default();
 
 	/*
 	 * Stop auto connecting VPN if there is no transport service or the
@@ -5641,7 +5641,7 @@ static void apply_relevant_default_downgrade(struct connman_service *service)
 {
 	struct connman_service *def_service;
 
-	def_service = __connman_service_get_default();
+	def_service = connman_service_get_default();
 	if (!def_service)
 		return;
 
@@ -6989,7 +6989,7 @@ static int service_indicate_state(struct connman_service *service)
 	if (old_state == new_state)
 		return -EALREADY;
 
-	def_service = __connman_service_get_default();
+	def_service = connman_service_get_default();
 
 	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
 		service->connect_retry_timeout = 0;
@@ -7051,7 +7051,7 @@ static int service_indicate_state(struct connman_service *service)
 
 		default_changed();
 
-		def_service = __connman_service_get_default();
+		def_service = connman_service_get_default();
 
 		service_update_preferred_order(def_service, service, new_state);
 
@@ -7104,7 +7104,7 @@ static int service_indicate_state(struct connman_service *service)
 
 		reply_pending(service, ECONNABORTED);
 
-		def_service = __connman_service_get_default();
+		def_service = connman_service_get_default();
 
 		if (!__connman_notifier_is_connected() &&
 			def_service &&
