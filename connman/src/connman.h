@@ -721,7 +721,6 @@ struct connman_ipconfig *__connman_service_get_ipconfig(
 				struct connman_service *service, int family);
 bool __connman_service_is_connected_state(struct connman_service *service,
 					enum connman_ipconfig_type type);
-const char *__connman_service_get_ident(struct connman_service *service);
 const char *__connman_service_get_path(struct connman_service *service);
 const char *__connman_service_get_name(struct connman_service *service);
 struct connman_network *__connman_service_get_network(struct connman_service *service);
