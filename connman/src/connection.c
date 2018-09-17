@@ -153,7 +153,7 @@ static void get_gateway_cb(const char *gateway, int index, void *user_data)
 	
 	if (!__connman_service_is_default_route(service)) {
 		DBG("Not setting gateway config of non default service %s",
-			service ? __connman_service_get_ident(service) : "");
+			service ? connman_service_get_identifier(service) : "");
 		goto out;
 	}
 
@@ -861,7 +861,7 @@ int __connman_connection_gateway_add(struct connman_service *service,
 
 		if (!__connman_service_is_default_route(service)) {
 			DBG("Not adding gateways for non default VPN %s",
-				service ? __connman_service_get_ident(service) :
+				service ? connman_service_get_identifier(service) :
 				"");
 			goto done;
 		}

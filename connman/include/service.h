@@ -141,6 +141,7 @@ int connman_service_iterate_services(connman_service_iterate_cb cb,
 struct connman_service *connman_service_get_default(void);
 struct connman_service *connman_service_lookup_from_network(struct connman_network *network);
 void connman_service_update_strength_from_network(struct connman_network *network);
+struct connman_service *connman_service_lookup_from_identifier(const char* identifier);
 
 void connman_service_create_ip4config(struct connman_service *service,
 								int index);
