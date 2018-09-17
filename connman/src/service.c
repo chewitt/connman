@@ -2855,27 +2855,30 @@ static void __connman_service_counter_append(const char *counter,
 	__connman_counter_send_usage(counter, msg);
 }
 
-static void counter_send(struct connman_service *service, void *counter)
+static int counter_send(struct connman_service *service, void *counter)
 {
 	__connman_service_counter_append(counter, service);
+	return 0;
 }
 
 void __connman_service_counter_send_initial(const char *counter)
 {
-	__connman_service_iterate_services(counter_send, (void*)counter);
+	connman_service_iterate_services(counter_send, (void*)counter);
 }
 
-static void counter_reset_type(struct connman_service *service, void *data)
+static int counter_reset_type(struct connman_service *service, void *data)
 {
 	enum connman_service_type type = GPOINTER_TO_INT(data);
-	if (service->type == type) {
+
+	if (service->type == type)
 		reset_stats(service);
-	}
+
+	return 0;
 }
 
 void __connman_service_counter_reset_all(const char *type)
 {
-	__connman_service_iterate_services(counter_reset_type,
+	connman_service_iterate_services(counter_reset_type,
 			GUINT_TO_POINTER(__connman_service_string2type(type)));
 }
 
@@ -2895,17 +2898,16 @@ void __connman_service_counter_unregister(const char *counter)
 	counter_list = g_slist_remove(counter_list, counter);
 }
 
-int __connman_service_iterate_services(service_iterate_cb cb, void *user_data)
+int connman_service_iterate_services(connman_service_iterate_cb cb,
+							void *user_data)
 {
 	GList *list;
+	int ret = 0;
 
-	for (list = service_list; list; list = list->next) {
-		struct connman_service *service = list->data;
+	for (list = service_list; list && ret == 0; list = list->next)
+		ret = cb((struct connman_service *)list->data, user_data);
 
-		cb(service, user_data);
-	}
-
-	return 0;
+	return ret;
 }
 
 static void append_wifi_ext_info(DBusMessageIter *dict,
