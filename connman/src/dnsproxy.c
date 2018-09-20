@@ -2637,7 +2637,7 @@ static struct server_data *create_server(int index,
 		return NULL;
 	}
 
-	service = __connman_service_get_default();
+	service = connman_service_get_default();
 	vpn_index_list = __connman_service_get_depending_vpn_index(service);
 
 	if (protocol == IPPROTO_UDP) {

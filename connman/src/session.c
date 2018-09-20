@@ -28,8 +28,6 @@
 
 #include <gdbus.h>
 
-#include <connman/session.h>
-
 #include "connman.h"
 
 static DBusConnection *connection;
@@ -1537,7 +1535,7 @@ static void update_session_state(struct connman_session *session)
 	enum connman_session_state state = CONNMAN_SESSION_STATE_DISCONNECTED;
 
 	if (session->service) {
-		service_state = __connman_service_get_state(session->service);
+		service_state = connman_service_get_state(session->service);
 		state = service_to_session_state(service_state);
 		session->info->state = state;
 	}
@@ -1606,7 +1604,7 @@ static void session_activate(struct connman_session *session)
 		struct connman_service_info *info = value;
 		enum connman_service_state state;
 
-		state = __connman_service_get_state(info->service);
+		state = connman_service_get_state(info->service);
 
 		if (is_session_connected(session, state) &&
 				session_match_service(session, info->service)) {

@@ -704,11 +704,9 @@ const char *__connman_service_create(enum connman_service_type type,
 				const char *ident, GKeyFile *settings);
 
 struct connman_service *__connman_service_lookup_from_index(int index);
-struct connman_service *__connman_service_lookup_from_ident(const char *identifier);
 bool __connman_service_create_from_network(struct connman_network *network);
 struct connman_service *__connman_service_create_from_provider(struct connman_provider *provider);
 bool __connman_service_index_is_default(int index);
-struct connman_service *__connman_service_get_default(void);
 void __connman_service_update_from_network(struct connman_network *network);
 void __connman_service_remove_from_network(struct connman_network *network);
 void __connman_service_read_ip4config(struct connman_service *service);
@@ -722,10 +720,8 @@ struct connman_ipconfig *__connman_service_get_ipconfig(
 				struct connman_service *service, int family);
 bool __connman_service_is_connected_state(struct connman_service *service,
 					enum connman_ipconfig_type type);
-const char *__connman_service_get_ident(struct connman_service *service);
 const char *__connman_service_get_path(struct connman_service *service);
 const char *__connman_service_get_name(struct connman_service *service);
-enum connman_service_state __connman_service_get_state(struct connman_service *service);
 struct connman_network *__connman_service_get_network(struct connman_service *service);
 enum connman_service_security __connman_service_get_security(struct connman_service *service);
 const char *__connman_service_get_phase2(struct connman_service *service);
@@ -883,11 +879,6 @@ int __connman_peer_service_unregister(const char *owner,
 					int query_length, int version);
 
 #include <connman/session.h>
-
-typedef void (* service_iterate_cb) (struct connman_service *service,
-					void *user_data);
-
-int __connman_service_iterate_services(service_iterate_cb cb, void *user_data);
 
 void __connman_service_mark_dirty();
 void __connman_service_save(struct connman_service *service);
