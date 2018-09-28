@@ -587,7 +587,8 @@ static int connect_provider(struct connection_data *data, void *user_data,
 	if (!dbus_connection_send_with_reply(connection, message,
 						&call, DBUS_CONNECT_TIMEOUT)) {
 		connman_error("Unable to call %s.%s()",
-			VPN_CONNECTION_INTERFACE, VPN_CONNECT2);
+			VPN_CONNECTION_INTERFACE, dbus_sender && *dbus_sender ?
+						VPN_CONNECT2 : VPN_CONNECT);
 		dbus_message_unref(message);
 		return -EINVAL;
 	}
