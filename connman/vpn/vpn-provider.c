@@ -115,6 +115,7 @@ static bool state_query_completed = false;
 
 static void append_properties(DBusMessageIter *iter,
 				struct vpn_provider *provider);
+static int vpn_provider_save(struct vpn_provider *provider);
 
 static void get_connman_state();
 
@@ -527,6 +528,8 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 		vpn_provider_set_string(provider, name, str);
 	}
 
+	vpn_provider_save(provider);
+
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
@@ -554,6 +557,8 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 	} else {
 		return __connman_error_invalid_property(msg);
 	}
+
+	vpn_provider_save(provider);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
