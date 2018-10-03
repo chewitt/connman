@@ -31,6 +31,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <dlfcn.h>
+#include <signal.h>
 
 #include "connman.h"
 
