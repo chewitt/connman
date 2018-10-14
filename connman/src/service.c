@@ -5753,6 +5753,8 @@ static DBusMessage *move_service(DBusConnection *conn,
 
 	__connman_connection_update_gateway();
 
+	service_schedule_changed();
+
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
