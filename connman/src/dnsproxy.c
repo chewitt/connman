@@ -3031,7 +3031,7 @@ static struct connman_notifier dnsproxy_notifier = {
 	.service_state_changed	= dnsproxy_service_state_changed,
 };
 
-static unsigned char opt_edns0_type[2] = { 0x00, 0x29 };
+static const unsigned char opt_edns0_type[2] = { 0x00, 0x29 };
 
 static int parse_request(unsigned char *buf, size_t len,
 					char *name, unsigned int size)

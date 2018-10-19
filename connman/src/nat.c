@@ -626,7 +626,7 @@ static void cleanup_nat(gpointer data)
 	free_nat(nat);
 }
 
-static struct connman_notifier nat_notifier = {
+static const struct connman_notifier nat_notifier = {
 	.name			= "nat",
 	.default_changed	= update_default_interface,
 };
