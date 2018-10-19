@@ -368,6 +368,22 @@ void __connman_notifier_ipconfig_changed(struct connman_service *service,
 	}
 }
 
+void __connman_notifier_tethering_changed(struct connman_technology* tech,
+								bool on)
+{
+	GSList *l = notifier_list;
+
+	while (l) {
+		GSList *next = l->next;
+		const struct connman_notifier *notifier = l->data;
+
+		if (notifier->tethering_changed)
+			notifier->tethering_changed(tech, on);
+
+		l = next;
+	}
+}
+
 int __connman_notifier_init(void)
 {
 	DBG("");

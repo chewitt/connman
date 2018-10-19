@@ -242,6 +242,14 @@ void connman_technology_tethering_notify(struct connman_technology *technology,
 		__connman_tethering_set_enabled();
 	else
 		__connman_tethering_set_disabled();
+
+	/*
+	 * Notify about tethering having been turned off after it's actually
+	 * been turned off.
+	 */
+	if (!enabled)
+		__connman_notifier_tethering_changed(technology, FALSE);
+
 }
 
 static int set_tethering(struct connman_technology *technology,
@@ -267,6 +275,13 @@ static int set_tethering(struct connman_technology *technology,
 	    (!ident || !passphrase))
 		return -EINVAL;
 
+	/*
+	 * Notify about tethering being turned on before it actually gets
+	 * turned on.
+	 */
+	if (enabled)
+		__connman_notifier_tethering_changed(technology, TRUE);
+
 	for (tech_drivers = technology->driver_list; tech_drivers;
 	     tech_drivers = g_slist_next(tech_drivers)) {
 		struct connman_technology_driver *driver = tech_drivers->data;
@@ -283,6 +298,16 @@ static int set_tethering(struct connman_technology *technology,
 		if (err == -EINPROGRESS || err == 0)
 			result = err;
 	}
+
+	/*
+	 * Let notificants know that we have failed to turn tethering on.
+	 * Note that we won't be able to do that in case if the driver
+	 * returns -EINPROGRESS and then silently fails to actually turn
+	 * tethering on. There's no API in connman for reporting this kind
+	 * of postponed failures. Oh well..
+	 */
+	if (enabled && result < 0 && result != -EINPROGRESS)
+		__connman_notifier_tethering_changed(technology, FALSE);
 
 	return result;
 }
