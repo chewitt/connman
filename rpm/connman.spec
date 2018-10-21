@@ -105,6 +105,7 @@ Documentation for connman.
 
 %build
 %reconfigure --disable-static \
+    --with-version=%{version} \
     --enable-ethernet=builtin \
     --disable-wifi \
     --enable-bluetooth=builtin \
@@ -128,7 +129,6 @@ Documentation for connman.
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
     --with-tmpfilesdir=%{_libdir}/tmpfiles.d
-    
 
 make %{?_smp_mflags}
 
