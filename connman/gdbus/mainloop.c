@@ -67,9 +67,19 @@ static gboolean disconnected_signal(DBusConnection *conn,
 static gboolean message_dispatch(void *data)
 {
 	DBusConnection *conn = data;
+	static gboolean in_dispatch = FALSE;
+
+	if (in_dispatch) {
+		dbus_connection_unref(conn);
+		return FALSE;
+	}
+
+	in_dispatch = TRUE;
 
 	/* Dispatch messages */
 	while (dbus_connection_dispatch(conn) == DBUS_DISPATCH_DATA_REMAINS);
+
+	in_dispatch = FALSE;
 
 	dbus_connection_unref(conn);
 
