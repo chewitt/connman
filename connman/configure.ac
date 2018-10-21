@@ -3,7 +3,7 @@ AC_INIT(connman, 1.32)
 
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
+AM_INIT_AUTOMAKE([foreign subdir-objects color-tests no-define])
 AC_CONFIG_HEADERS([config.h])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -34,6 +34,18 @@ AC_DISABLE_STATIC
 AC_PROG_LIBTOOL
 
 gl_CONFIGMAKE_PREP
+
+AC_ARG_WITH(version, AC_HELP_STRING([--with-version=VERSION],
+		[specify package version]), [connman_version=${withval}])
+
+if (test -z "${connman_version}"); then
+	connman_version="${VERSION}"
+else
+	VERSION="${connman_version}"
+	PACKAGE_VERSION="${connman_version}"
+fi
+
+AC_DEFINE_UNQUOTED([VERSION], ["${connman_version}"], [Actual package version])
 
 AC_ARG_ENABLE(optimization, AC_HELP_STRING([--disable-optimization],
 			[disable code optimization through compiler]), [
