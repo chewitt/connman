@@ -50,9 +50,50 @@ static gint compare_priority(gconstpointer a, gconstpointer b)
 	return plugin2->desc->priority - plugin1->desc->priority;
 }
 
+#define NUM_VER 3
+
+static gboolean parse_version(const char *str, guint *v)
+{
+	gboolean ok = FALSE;
+
+	memset(v, 0, sizeof(v[0]) * NUM_VER);
+	if (str) {
+		int i;
+
+		for (i = 0; i < NUM_VER && *str; i++) {
+			while (*str && !g_ascii_isdigit(*str)) str++;
+			while (*str && g_ascii_isdigit(*str)) {
+				ok = TRUE;
+				v[i] *= 10;
+				v[i] += *str++ - '0';
+				if (v[i] >= 0x7fffffff/10) {
+					return FALSE;
+				}
+			}
+		}
+	}
+
+	return ok;
+}
+
+static int compare_versions(const guint* v1, const guint* v2)
+{
+	int i;
+
+	for (i = 0; i < NUM_VER; i++) {
+		if (v1[i] < v2[i])
+			return -1;
+		else if (v1[i] > v2[i])
+			return 1;
+	}
+
+	return 0;
+}
+
 static bool add_plugin(void *handle, struct connman_plugin_desc *desc)
 {
 	struct connman_plugin *plugin;
+	guint connman_version[NUM_VER], plugin_version[NUM_VER];
 
 	if (!desc->init)
 		return false;
@@ -64,10 +105,23 @@ static bool add_plugin(void *handle, struct connman_plugin_desc *desc)
 		return false;
 	}
 
+	/* This better work */
+	parse_version(CONNMAN_VERSION, connman_version);
+
 	/* Allow older versions (API must be backward compatible) */
-	if (!desc->version || strcmp(desc->version, CONNMAN_VERSION) > 0) {
-		connman_error("Invalid version %s for %s", desc->version,
+	if (!parse_version(desc->version, plugin_version)) {
+		connman_error("Failed to parse version %s of %s", desc->version,
 							desc->description);
+		return false;
+	}
+
+	if (compare_versions(plugin_version, connman_version) > 0) {
+		connman_error("%s version %s (%u.%u.%u) is newer than "
+			"connman version %s (%u.%u.%u)", desc->description,
+			desc->version, plugin_version[0],
+			plugin_version[1], plugin_version[2],
+			CONNMAN_VERSION, connman_version[0],
+			connman_version[1], connman_version[2]);
 		return false;
 	}
 
