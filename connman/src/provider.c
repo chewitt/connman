@@ -634,6 +634,7 @@ static void unregister_provider(gpointer data)
 
 	if (provider->vpn_service) {
 		connman_service_unref(provider->vpn_service);
+		__connman_service_remove(provider->vpn_service);
 		provider->vpn_service = NULL;
 	}
 
