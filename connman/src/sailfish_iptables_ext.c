@@ -806,6 +806,11 @@ static int iptables_clear_table(const char *table_name)
 		return 1;
 	
 	for (chain = iptc_first_chain(h); chain; chain = iptc_next_chain(h)) {
+
+		// Skip chains with connman prefix
+		if (str_has_connman_prefix(chain))
+			continue;
+
 		if (!iptc_flush_entries(chain,h))
 			rval = 1;
 	}
