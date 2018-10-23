@@ -84,8 +84,8 @@ gint check_save_directory(const char* fpath)
 			g_file_test(path, G_FILE_TEST_IS_SYMLINK)) {
 			DBG("Removing %s",path);
 			if (g_remove(path)) {
-				ERR("check_save_directory() Remove of %s failed (%s)",
-					path, strerror(errno));
+				ERR("check_save_directory() Remove of %s "
+					"failed (%s)", path, strerror(errno));
 				rval = -1;
 				goto out;
 			}
@@ -95,8 +95,9 @@ gint check_save_directory(const char* fpath)
 		if (g_file_test(path, G_FILE_TEST_IS_DIR)) {
 			// Check that this dir can be accessed
 			if (access(path, access_mode) == -1) {
-				ERR("check_save_directory() Dir %s cannot be accessed (%s).",
-					path, strerror(errno));
+				ERR("check_save_directory() Dir %s "
+					"cannot be accessed (%s).", path,
+					strerror(errno));
 				rval = -1;
 				goto out;
 			}
@@ -131,7 +132,8 @@ gint iptables_set_file_contents(const gchar *fpath, GString *str,
 	if (!check_save_directory(fpath)) {
 		GError *err = NULL;
 		
-		rval = g_file_set_contents(fpath, str->str, str->len, &err) ? 0 : 1;
+		rval = g_file_set_contents(fpath, str->str, str->len, &err) ?
+				0 : 1;
 			
 		if (rval || err) {
 			ERR("iptables_set_file_contents() %s",
@@ -301,11 +303,12 @@ void stdout_capture_data(output_capture_data *data)
 		if (bytes_read == data->stdout_read_limit) {
 			// Increase size of the data by the amount of read limit
 			data->stdout_data = g_try_realloc(data->stdout_data, 
-				data->stdout_bytes_read + data->stdout_read_limit);
+				data->stdout_bytes_read +
+					data->stdout_read_limit);
 			
-			// g_try_realloc() does not zero bytes, do it with memset
-			memset(&(data->stdout_data[data->stdout_bytes_read]), '\0',
-				data->stdout_read_limit);
+			// g_try_realloc() does not zero content, use memset
+			memset(&(data->stdout_data[data->stdout_bytes_read]),
+				'\0', data->stdout_read_limit);
 		}
 		// Read less than limit, stop
 		else
@@ -326,7 +329,8 @@ void stdout_capture_data(output_capture_data *data)
 	of the save() method and appends it to given GString.
 */
 static void print_target_or_match(GString *line, const void *ip,
-	const struct xtables_target *target, const struct xt_entry_target *t_entry,
+	const struct xtables_target *target,
+	const struct xt_entry_target *t_entry,
 	const struct xtables_match *match, const struct xt_entry_match *m_entry)
 {
 	output_capture_data data = {
@@ -367,7 +371,8 @@ out:
 }
 
 static void print_target(GString *line, const void *ip,
-	const struct xtables_target *target, const struct xt_entry_target *entry)
+	const struct xtables_target *target,
+	const struct xt_entry_target *entry)
 {
 	if (line && ip && target && entry)
 		print_target_or_match(line,ip,target,entry,NULL,NULL);
@@ -391,14 +396,16 @@ static void print_proto(GString* line, uint16_t proto, int invert)
 
 		const struct protoent *pent = getprotobynumber(proto);
 		if (pent) {
-			g_string_append_printf(line,"%s -p %s", invertstr, pent->p_name);
+			g_string_append_printf(line,"%s -p %s", invertstr,
+						pent->p_name);
 			return;
 		}
 
 		for (i = 0; xtables_chain_protos[i].name != NULL; ++i) {
 			if (xtables_chain_protos[i].num == proto) {
 				g_string_append_printf(line,"%s -p %s",
-						invertstr, xtables_chain_protos[i].name);
+						invertstr,
+						xtables_chain_protos[i].name);
 				return;
 			}
 		}
@@ -442,7 +449,8 @@ static void print_ip(GString* line, const char *prefix, uint32_t ip,
 		if (i >= 0)
 			g_string_append_printf(line,"/%u", i);
 		else
-			g_string_append_printf(line,"/%u.%u.%u.%u", IP_PARTS(mask));
+			g_string_append_printf(line,"/%u.%u.%u.%u",
+					IP_PARTS(mask));
 	}
 }
 
@@ -526,8 +534,8 @@ static int print_match_save(GString *line, const struct xt_entry_match *e,
 			free(match);
 	} else {
 		if (e->u.match_size) {
-			ERR("print_match_save() Can't find library for match `%s'\n",
-				e->u.user.name);
+			ERR("print_match_save() Can't find library for match "
+				"`%s'", e->u.user.name);
 			return 1;
 		}
 	}
@@ -591,14 +599,17 @@ void print_iptables_rule(GString* line, const struct ipt_entry *e,
 			xtables_find_target(t->u.user.name, XTF_TRY_LOAD);
 		
 		if (!target) {
-			ERR("print_iptables_rule() can't find library for target `%s'\n",
-				t->u.user.name);
+			ERR("print_iptables_rule() can't find library for "
+				"target `%s'\n", t->u.user.name);
 			return;
 		}
 
 		// Make sure that alias exists or target_name has content
 		if (target->alias || *target_name) {
-			// Iptables v1.6.1 iptables.c:1138 print target info before checks
+			/*
+			 * Iptables v1.6.1 iptables.c:1138 print target info
+			 * before checks
+			 */
 			g_string_append_printf(line, " -j %s",
 				target->alias ? target->alias(t) : target_name);
 		}
@@ -623,8 +634,9 @@ static struct xtc_handle* get_iptc_handle(const char *table_name)
 			h = iptc_init(table_name);
 		}
 		if (!h)
-			ERR("get_iptc_handle() Cannot initialize iptc: %s for table %s\n",
-				iptc_strerror(errno), table_name);
+			ERR("get_iptc_handle() Cannot initialize iptc: %s "
+				"for table %s\n", iptc_strerror(errno),
+				table_name);
 	}
 
 	return h;
@@ -658,24 +670,24 @@ int iptables_check_table(const char *table_name)
 	if (!procfile) {
 		switch (errno) {
 		case ENOENT:
-			ERR("iptables_check_table() names file %s does not exist",
-				IPTABLES_NAMES_FILE);
+			ERR("iptables_check_table() names file %s "
+				"does not exist", IPTABLES_NAMES_FILE);
 			return -ENOENT;
 		case EACCES:
-			ERR("iptables_check_table() names file %s cannot be accessed",
-				IPTABLES_NAMES_FILE);
+			ERR("iptables_check_table() names file %s "
+				"cannot be accessed", IPTABLES_NAMES_FILE);
 			return -EACCES;
 		default:
-			ERR("iptables_check_table() cannot open names file %s, %s",
-				IPTABLES_NAMES_FILE, strerror(errno));
+			ERR("iptables_check_table() cannot open names file "
+				"%s, %s", IPTABLES_NAMES_FILE, strerror(errno));
 			return -1;
 		}
 	}
 	
 	while (fgets(read_table_name, sizeof(read_table_name), procfile)) {
 		if (read_table_name[strlen(read_table_name) - 1] != '\n')
-			ERR("iptables_check_table() Badly formed table_name `%s'",
-				read_table_name);
+			ERR("iptables_check_table() Badly formed table_name "
+				"`%s'", read_table_name);
 		else {
 			read_table_name[strlen(read_table_name) - 1] = '\0';
 		
@@ -832,7 +844,8 @@ static int iptables_iptc_set_policy(const gchar* table_name,
 	struct xtc_handle *h = NULL;
 	struct xt_counters counters = {0};
 	
-	if (!(table_name && *table_name && chain && *chain && policy && *policy))
+	if (!(table_name && *table_name && chain && *chain && policy &&
+		*policy))
 		return 1;
 		
 	if (!(h = get_iptc_handle(table_name)))
@@ -854,7 +867,8 @@ static int iptables_iptc_set_policy(const gchar* table_name,
 
 	DBG("Set to table \"%s\" chain \"%s\" policy \"%s\" counters %llu %llu",
 		table_name, chain, policy,
-		(unsigned long long)packet_counter, (unsigned long long)byte_counter);
+		(unsigned long long)packet_counter,
+		(unsigned long long)byte_counter);
 
 	// returns 1 on success
 	if (!iptc_set_policy(chain, policy, &counters, h)) {
@@ -897,12 +911,17 @@ static int iptables_parse_policy(const gchar* table_name, const gchar* policy)
 		gchar** counter_tokens = g_strsplit_set(tokens[2], "[:]", -1);
 
 		if (counter_tokens && g_strv_length(counter_tokens) > 2) {
-			// counters start with '[' so first token is empty, start from 1
-			guint64 packet_cntr = g_ascii_strtoull(counter_tokens[1],NULL, 10);
-			guint64 byte_cntr = g_ascii_strtoull(counter_tokens[2], NULL, 10);
+			/*
+			 * Counters start with '[' so first token is empty so
+			 * start from 1
+			 */
+			guint64 packet_cntr = g_ascii_strtoull(
+						counter_tokens[1],NULL, 10);
+			guint64 byte_cntr = g_ascii_strtoull(counter_tokens[2],
+						NULL, 10);
 			
-			rval = iptables_iptc_set_policy(table_name, tokens[0], tokens[1],
-					packet_cntr, byte_cntr);
+			rval = iptables_iptc_set_policy(table_name, tokens[0],
+					tokens[1], packet_cntr, byte_cntr);
 		}
 		g_strfreev(counter_tokens);
 	
@@ -1142,8 +1161,10 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 		// Chain and policy
 		case ':':
 			if (content_matches) {
-				if (iptables_parse_policy(table_name, tokens[i]))
-					ERR("iptables_restore_table() Invalid policy %s",
+				if (iptables_parse_policy(table_name,
+						tokens[i]))
+					ERR("iptables_restore_table() "
+						"Invalid policy %s",
 						tokens[i]);
 			}
 			break;
@@ -1151,14 +1172,18 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 		case '-':
 			if (content_matches) {
 				if (iptables_parse_rule(table_name, tokens[i]))
-					ERR("iptables_restore_table() Invalid rule %s",
+					ERR("iptables_restore_table()"
+						"Invalid rule %s",
 						tokens[i]);
 				else
 					rules++;
 			}
 			break;
-		// If any other prefix for a line is found and we are processing
-		// 'COMMIT' is the last line in iptables saved format, stop processing
+		/*
+		 * If any other prefix for a line is found and we are processing
+		 * 'COMMIT' is the last line in iptables saved format, stop
+		 * processing
+		 */
 		default:
 			if (content_matches)
 				process = false;
@@ -1196,13 +1221,14 @@ int iptables_save(const char* table_name)
 	if (!table_name || !(*table_name))
 		goto out;
 	
-	save_file = g_strconcat(STORAGEDIR, "/iptables/", table_name, ".v4", NULL);
+	save_file = g_strconcat(STORAGEDIR, "/iptables/", table_name, ".v4",
+			NULL);
 
 	if (g_file_test(save_file, G_FILE_TEST_EXISTS)) {
 		// Don't allow to overwrite executables
 		if (g_file_test(save_file,G_FILE_TEST_IS_EXECUTABLE)) {
-			ERR("connman_iptables_save() cannot save firewall to %s",
-				save_file);
+			ERR("connman_iptables_save() cannot save firewall to "
+				"%s", save_file);
 			goto out;
 		}
 	}
@@ -1226,7 +1252,8 @@ int iptables_restore(const char* table_name)
 	if (!table_name || !(*table_name))
 		goto out;
 		
-	load_file = g_strconcat(STORAGEDIR, "/iptables/", table_name, ".v4", NULL);
+	load_file = g_strconcat(STORAGEDIR, "/iptables/", table_name, ".v4",
+			NULL);
 
 	// Allow only regular files from connman storage
 	if (!g_file_test(load_file,G_FILE_TEST_EXISTS) ||
@@ -1260,7 +1287,8 @@ static gchar** get_default_tables()
 	gsize length = 0;
 	GError *error = NULL;
 	
-	if (g_file_get_contents(IPTABLES_NAMES_FILE, &content, &length, &error)) {
+	if (g_file_get_contents(IPTABLES_NAMES_FILE, &content, &length,
+		&error)) {
 		tables = g_strsplit(content, "\n", 0);
 		g_free(content);
 	} else {
@@ -1342,8 +1370,11 @@ int connman_iptables_new_chain(const char *table_name,
 }
 
 /*
-	Returns: 0 Ok, -1 Parameter error, -EINVAL or -ENOMEM on error,
-*/
+ * Returns:
+ *   0 Ok
+ *   -1 Parameter error
+ *   -EINVAL or -ENOMEM on error,
+ */
 int connman_iptables_delete_chain(const char *table_name,
 					const char *chain)
 {
@@ -1373,7 +1404,10 @@ int connman_iptables_flush_chain(const char *table_name,
 }
 
 /*
-	Returns: 0 if chain found, -ENOENT if not found, -EINVAL on parameter error
+ * Returns:
+ *   0 if chain found
+ *   -ENOENT if not found
+ *   -EINVAL on parameter error
 */
 int connman_iptables_find_chain(const char *table_name, const char *chain)
 {
@@ -1505,7 +1539,8 @@ struct iptables_content* iptables_get_content(GString *output,
 			if (g_strv_length(policy_tokens) > 2) {
 				content->chains = g_list_prepend(content->chains,
 					g_strdup_printf("%s %s", 
-						policy_tokens[0], policy_tokens[1]));
+						policy_tokens[0],
+						policy_tokens[1]));
 			}
 			g_strfreev(policy_tokens);
 
@@ -1513,7 +1548,7 @@ struct iptables_content* iptables_get_content(GString *output,
 		// Rule
 		case '-':
 			content->rules = g_list_prepend(content->rules,
-				g_strdup(tokens[i]));	
+				g_strdup(tokens[i]));
 			break;
 		// Anything else, stop processing
 		default:
