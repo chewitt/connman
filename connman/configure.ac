@@ -484,11 +484,16 @@ AM_CONDITIONAL(TOOLS, test "${enable_tools}" != "no")
 if (test "${enable_tools}" != "no"); then
 	AC_PATH_PROGS(IPTABLES_SAVE, [iptables-save], [],
 						$PATH:/sbin:/usr/sbin)
+	AC_PATH_PROGS(IP6TABLES_SAVE, [ip6tables-save], [],
+						$PATH:/sbin:/usr/sbin)
 	IPTABLES_SAVE=$ac_cv_path_IPTABLES_SAVE
+	IP6TABLES_SAVE=$ac_cv_path_IP6TABLES_SAVE
 else
 	IPTABLES_SAVE=""
+	IP6TABLES_SAVE=""
 fi
 AC_SUBST(IPTABLES_SAVE)
+AC_SUBST(IP6TABLES_SAVE)
 
 AC_ARG_ENABLE(client, AC_HELP_STRING([--disable-client],
 				[disable command line client]),
