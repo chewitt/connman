@@ -27,12 +27,17 @@
 
 #include <xtables.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
+#include <linux/netfilter_ipv6/ip6_tables.h>
 
 #include "connman.h"
 
 #define CHAIN_PREFIX "connman-"
 #define FW_ALL_RULES -1
 
+/*
+ * All IPv6 equivalents of the indexes used here have the same values as the
+ * IPv4 ones.
+ */
 static const char *builtin_chains[] = {
 	[NF_IP_PRE_ROUTING]	= "PREROUTING",
 	[NF_IP_LOCAL_IN]	= "INPUT",
@@ -42,12 +47,14 @@ static const char *builtin_chains[] = {
 };
 
 struct connman_managed_table {
+	int type;
 	char *name;
 	unsigned int chains[NF_INET_NUMHOOKS];
 };
 
 struct fw_rule {
 	int id;
+	int type;
 	bool enabled;
 	char *table;
 	char *chain;
@@ -87,7 +94,7 @@ static int managed_chain_to_index(const char *chain_name)
 	return chain_to_index(chain_name + strlen(CHAIN_PREFIX));
 }
 
-static int insert_managed_chain(const char *table_name, int id)
+static int insert_managed_chain(int type, const char *table_name, int id)
 {
 	char *rule, *managed_chain;
 	int err;
@@ -95,15 +102,20 @@ static int insert_managed_chain(const char *table_name, int id)
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX,
 					builtin_chains[id]);
 
-	err = __connman_iptables_new_chain(table_name, managed_chain);
+	err = __connman_iptables_new_chain(type, table_name, managed_chain);
+
 	if (err < 0)
 		goto out;
 
 	rule = g_strdup_printf("-j %s", managed_chain);
-	err = __connman_iptables_insert(table_name, builtin_chains[id], rule);
+
+	err = __connman_iptables_insert(type, table_name,
+					builtin_chains[id], rule);
+
 	g_free(rule);
 	if (err < 0) {
-		__connman_iptables_delete_chain(table_name, managed_chain);
+		__connman_iptables_delete_chain(type, table_name,
+						managed_chain);
 		goto out;
 	}
 
@@ -113,7 +125,7 @@ out:
 	return err;
 }
 
-static int delete_managed_chain(const char *table_name, int id)
+static int delete_managed_chain(int type, const char *table_name, int id)
 {
 	char *rule, *managed_chain;
 	int err;
@@ -122,13 +134,15 @@ static int delete_managed_chain(const char *table_name, int id)
 					builtin_chains[id]);
 
 	rule = g_strdup_printf("-j %s", managed_chain);
-	err = __connman_iptables_delete(table_name, builtin_chains[id], rule);
+	err = __connman_iptables_delete(type, table_name,
+					builtin_chains[id], rule);
 	g_free(rule);
 
 	if (err < 0)
 		goto out;
 
-	err =  __connman_iptables_delete_chain(table_name, managed_chain);
+	err =  __connman_iptables_delete_chain(type, table_name,
+					managed_chain);
 
 out:
 	g_free(managed_chain);
@@ -136,7 +150,7 @@ out:
 	return err;
 }
 
-static int insert_managed_rule(const char *table_name,
+static int insert_managed_rule(int type, const char *table_name,
 				const char *chain_name,
 				const char *rule_spec)
 {
@@ -155,7 +169,8 @@ static int insert_managed_rule(const char *table_name,
 	for (list = managed_tables; list; list = list->next) {
 		mtable = list->data;
 
-		if (g_strcmp0(mtable->name, table_name) == 0)
+		if (g_strcmp0(mtable->name, table_name) == 0 &&
+				mtable->type == type)
 			break;
 
 		mtable = NULL;
@@ -164,6 +179,7 @@ static int insert_managed_rule(const char *table_name,
 	if (!mtable) {
 		mtable = g_new0(struct connman_managed_table, 1);
 		mtable->name = g_strdup(table_name);
+		mtable->type = type;
 
 		managed_tables = g_slist_prepend(managed_tables, mtable);
 	}
@@ -172,7 +188,7 @@ static int insert_managed_rule(const char *table_name,
 		DBG("table %s add managed chain for %s",
 			table_name, chain_name);
 
-		err = insert_managed_chain(table_name, id);
+		err = insert_managed_chain(type, table_name, id);
 		if (err < 0)
 			return err;
 	}
@@ -181,14 +197,17 @@ static int insert_managed_rule(const char *table_name,
 	chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
 out:
-	err = __connman_iptables_append(table_name, chain, rule_spec);
+	err = __connman_iptables_append(type, table_name, chain, rule_spec);
+	
+	if (err < 0)
+		DBG("table %s cannot append rule %s", table_name, rule_spec);
 
 	g_free(chain);
 
 	return err;
  }
 
-static int delete_managed_rule(const char *table_name,
+static int delete_managed_rule(int type, const char *table_name,
 				const char *chain_name,
 				const char *rule_spec)
  {
@@ -200,19 +219,24 @@ static int delete_managed_rule(const char *table_name,
 	id = chain_to_index(chain_name);
 	if (id < 0) {
 		/* This chain is not managed */
-		return __connman_iptables_delete(table_name, chain_name,
-							rule_spec);
+		return __connman_iptables_delete(type, table_name,
+						chain_name, rule_spec);
 	}
 
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
-	err = __connman_iptables_delete(table_name, managed_chain,
-					rule_spec);
+	err = __connman_iptables_delete(type, table_name, managed_chain,
+				rule_spec);
+	
+	if (err < 0)
+		DBG("table %s managed rule %s was not removed from ip%stables",
+			table_name, rule_spec, type == AF_INET6 ? "6" : "");
 
 	for (list = managed_tables; list; list = list->next) {
 		mtable = list->data;
 
-		if (g_strcmp0(mtable->name, table_name) == 0)
+		if (g_strcmp0(mtable->name, table_name) == 0 &&
+				mtable->type == type)
 			break;
 
 		mtable = NULL;
@@ -230,7 +254,7 @@ static int delete_managed_rule(const char *table_name,
 	DBG("table %s remove managed chain for %s",
 			table_name, chain_name);
 
-	err = delete_managed_chain(table_name, id);
+	err = delete_managed_chain(type, table_name, id);
 
  out:
 	g_free(managed_chain);
@@ -278,13 +302,16 @@ static int firewall_enable_rule(struct fw_rule *rule)
 	if (rule->enabled)
 		return -EALREADY;
 
-	DBG("%s %s %s", rule->table, rule->chain, rule->rule_spec);
+	DBG("%d %s %s %s", rule->type, rule->table, rule->chain,
+			rule->rule_spec);
 
-	err = insert_managed_rule(rule->table, rule->chain, rule->rule_spec);
+	err = insert_managed_rule(rule->type, rule->table, rule->chain,
+					rule->rule_spec);
 	if (err < 0)
 		return err;
 
-	err = __connman_iptables_commit(rule->table);
+	err = __connman_iptables_commit(rule->type, rule->table);
+
 	if (err < 0)
 		return err;
 
@@ -300,14 +327,16 @@ static int firewall_disable_rule(struct fw_rule *rule)
 	if (!rule->enabled)
 		return -EALREADY;
 
-	err = delete_managed_rule(rule->table, rule->chain, rule->rule_spec);
+	err = delete_managed_rule(rule->type, rule->table, rule->chain,
+					rule->rule_spec);
 	if (err < 0) {
-		connman_error("Cannot remove previously installed "
+		connman_error("pre-commit: Cannot remove previously installed "
 			"iptables rules: %s", strerror(-err));
 		return err;
 	}
 
-	err = __connman_iptables_commit(rule->table);
+	err = __connman_iptables_commit(rule->type, rule->table);
+	
 	if (err < 0) {
 		connman_error("Cannot remove previously installed "
 			"iptables rules: %s", strerror(-err));
@@ -337,6 +366,35 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 	rule = g_new0(struct fw_rule, 1);
 
 	rule->id = firewall_rule_id++;
+	rule->type = AF_INET;
+	rule->enabled = false;
+	rule->table = g_strdup(table);
+	rule->chain = g_strdup(chain);
+	rule->rule_spec = rule_spec;
+
+	ctx->rules = g_list_append(ctx->rules, rule);
+	return rule->id;
+}
+
+int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
+				const char *table,
+				const char *chain,
+				const char *rule_fmt, ...)
+{
+	va_list args;
+	char *rule_spec;
+	struct fw_rule *rule;
+
+	va_start(args, rule_fmt);
+
+	rule_spec = g_strdup_vprintf(rule_fmt, args);
+
+	va_end(args);
+
+	rule = g_new0(struct fw_rule, 1);
+
+	rule->id = firewall_rule_id++;
+	rule->type = AF_INET6;
 	rule->enabled = false;
 	rule->table = g_strdup(table);
 	rule->chain = g_strdup(chain);
@@ -370,6 +428,12 @@ int __connman_firewall_remove_rule(struct firewall_context *ctx, int id)
 	}
 
 	return err;
+}
+
+/* For consistency, both IPv4 and IPv6 rules can be removed in similar way. */
+int __connman_firewall_remove_ipv6_rule(struct firewall_context *ctx, int id)
+{
+	return __connman_firewall_remove_rule(ctx, id);
 }
 
 int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
@@ -462,14 +526,17 @@ static void iterate_chains_cb(const char *chain_name, void *user_data)
 	*chains = g_slist_prepend(*chains, GINT_TO_POINTER(id));
 }
 
-static void flush_table(const char *table_name)
+static void flush_table(int type, const char *table_name)
 {
 	GSList *chains = NULL, *list;
 	char *rule, *managed_chain;
 	int id, err;
 
-	__connman_iptables_iterate_chains(table_name, iterate_chains_cb,
-						&chains);
+	err = __connman_iptables_iterate_chains(type, table_name,
+					iterate_chains_cb, &chains);
+	
+	if (err < 0)
+		DBG("table %s cannot iterate chains", table_name);
 
 	for (list = chains; list; list = list->next) {
 		id = GPOINTER_TO_INT(list->data);
@@ -478,20 +545,28 @@ static void flush_table(const char *table_name)
 						builtin_chains[id]);
 
 		rule = g_strdup_printf("-j %s", managed_chain);
-		err = __connman_iptables_delete(table_name,
-						builtin_chains[id], rule);
+		
+		err = __connman_iptables_delete(type, table_name,
+						builtin_chains[id],
+						rule);
+
 		if (err < 0) {
 			connman_warn("Failed to delete jump rule '%s': %s",
 				rule, strerror(-err));
 		}
 		g_free(rule);
 
-		err = __connman_iptables_flush_chain(table_name, managed_chain);
+		err = __connman_iptables_flush_chain(type, table_name,
+						managed_chain);
+		
 		if (err < 0) {
 			connman_warn("Failed to flush chain '%s': %s",
 				managed_chain, strerror(-err));
 		}
-		err = __connman_iptables_delete_chain(table_name, managed_chain);
+		
+		err = __connman_iptables_delete_chain(type, table_name,
+						managed_chain);
+		
 		if (err < 0) {
 			connman_warn("Failed to delete chain '%s': %s",
 				managed_chain, strerror(-err));
@@ -500,7 +575,7 @@ static void flush_table(const char *table_name)
 		g_free(managed_chain);
 	}
 
-	err = __connman_iptables_commit(table_name);
+	err = __connman_iptables_commit(type, table_name);
 	if (err < 0) {
 		connman_warn("Failed to flush table '%s': %s",
 			table_name, strerror(-err));
@@ -509,7 +584,7 @@ static void flush_table(const char *table_name)
 	g_slist_free(chains);
 }
 
-static void flush_all_tables(void)
+static void flush_all_tables(int type)
 {
 	/* Flush the tables ConnMan might have modified
 	 * But do so if only ConnMan has done something with
@@ -523,16 +598,17 @@ static void flush_all_tables(void)
 
 	firewall_is_up = true;
 
-	flush_table("filter");
-	flush_table("mangle");
-	flush_table("nat");
+	flush_table(type, "filter");
+	flush_table(type, "mangle");
+	flush_table(type, "nat");
 }
 
 int __connman_firewall_init(void)
 {
 	DBG("");
 
-	flush_all_tables();
+	flush_all_tables(AF_INET);
+	flush_all_tables(AF_INET6);
 
 	return 0;
 }
