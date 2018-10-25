@@ -419,22 +419,11 @@ static void modem_create_network(struct modem_data *md)
 static void modem_destroy_network(struct modem_data *md)
 {
 	if (md->network) {
-		struct connman_service *service =
-			connman_service_lookup_from_network(md->network);
-
-		if (service) {
-			connman_service_ref(service);
-		}
-
 		DBG("%s", ofono_modem_path(md->modem));
 		connman_device_remove_network(md->device, md->network);
 		if (md->network) {
 			connman_network_unref(md->network);
 			md->network = NULL;
-		}
-		if (service) {
-			__connman_service_remove(service);
-			connman_service_unref(service);
 		}
 	}
 }
