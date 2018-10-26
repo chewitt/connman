@@ -4946,6 +4946,7 @@ static bool auto_connect_service(GList *services,
 		}
 
 		if (service->new_service &&
+			service->type == CONNMAN_SERVICE_TYPE_WIFI &&
 			reason == CONNMAN_SERVICE_CONNECT_REASON_AUTO) {
 			DBG("service %p type %s new (skipping)", service,
 				__connman_service_type2string(service->type));
