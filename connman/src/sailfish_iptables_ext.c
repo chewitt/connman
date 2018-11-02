@@ -1035,6 +1035,30 @@ static int iptables_parse_rule(const gchar* table_name, gchar* rule)
 				iptables_append_arg(rule_str, opt, false);
 				iptables_append_arg(rule_str, txt, true);
 			}
+		} else if (!g_strcmp0(arg, "-j")) {
+			const char *match = argv[i++];
+			if (!match) {
+				DBG("trailing '-j' in rule \"%s\"", rule);
+				goto out;
+			}
+			iptables_append_arg(rule_str, arg, false);
+			iptables_append_arg(rule_str, match, false);
+			if (!g_strcmp0(match, "REJECT")) {
+				const char *opt = argv[i++];
+				if (g_strcmp0(opt, "--reject-with")) {
+					DBG("malformed '-j REJECT' "
+						"in rule \"%s\"", rule);
+					goto out;
+				}
+				const char *txt = argv[i++];
+				if (!txt || g_str_has_prefix(txt, "-")) {
+					DBG("malformed '--reject-with' "
+						"in rule \"%s\"", rule);
+					goto out;
+				}
+				iptables_append_arg(rule_str, opt, false);
+				iptables_append_arg(rule_str, txt, true);
+			}
 		} else {
 			iptables_append_arg(rule_str, arg, false);
 		}
