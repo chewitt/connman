@@ -1075,21 +1075,21 @@ static int iptables_parse_rule(const gchar* table_name, gchar* rule)
 	case 'A':
 		DBG("Append to table \"%s\" chain \"%s\" rule: %s",
 			table_name, argv[1], rule_str->str);
-		rval = __connman_iptables_append(table_name, argv[1],
+		rval = __connman_iptables_append(AF_INET, table_name, argv[1],
 				rule_str->str);
 		break;
 	// Insert
 	case 'I':
 		DBG("Insert to table \"%s\" chain \"%s\" rule: %s",
 			table_name, argv[1], rule_str->str);
-		rval = __connman_iptables_insert(table_name, argv[1],
+		rval = __connman_iptables_insert(AF_INET, table_name, argv[1],
 				rule_str->str);
 		break;
 	// Delete
 	case 'D':
 		DBG("Delete from table \"%s\" chain \"%s\" rule: %s",
 			table_name, argv[1], rule_str->str);
-		rval = __connman_iptables_delete(table_name, argv[1],
+		rval = __connman_iptables_delete(AF_INET, table_name, argv[1],
 				rule_str->str);
 		break;
 	default:
@@ -1173,7 +1173,7 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 		/* Commit fails if there has not been any changes */
 		if (rules) {
 			DBG("Added %d rules to table %s", rules, table_name);
-			rval = __connman_iptables_commit(table_name);
+			rval = __connman_iptables_commit(AF_INET, table_name);
 		}
 	} else {
 		ERR("iptables_restore_table() %s",
@@ -1338,7 +1338,7 @@ int connman_iptables_new_chain(const char *table_name,
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
-	return __connman_iptables_new_chain(table_name, chain);
+	return __connman_iptables_new_chain(AF_INET, table_name, chain);
 }
 
 /*
@@ -1355,7 +1355,7 @@ int connman_iptables_delete_chain(const char *table_name,
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
-	return __connman_iptables_delete_chain(table_name, chain);
+	return __connman_iptables_delete_chain(AF_INET, table_name, chain);
 }
 
 int connman_iptables_flush_chain(const char *table_name,
@@ -1369,7 +1369,7 @@ int connman_iptables_flush_chain(const char *table_name,
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
-	return __connman_iptables_flush_chain(table_name, chain);
+	return __connman_iptables_flush_chain(AF_INET, table_name, chain);
 }
 
 /*
@@ -1382,7 +1382,7 @@ int connman_iptables_find_chain(const char *table_name, const char *chain)
 
 	DBG("%s %s", table_name, chain);
 
-	return __connman_iptables_find_chain(table_name, chain);
+	return __connman_iptables_find_chain(AF_INET, table_name, chain);
 }
 
 int connman_iptables_insert(const char *table_name,
@@ -1398,7 +1398,7 @@ int connman_iptables_insert(const char *table_name,
 	if (str_has_connman_prefix(chain) || str_contains_connman(rule_spec))
 		return -EINVAL;
 
-	return __connman_iptables_insert(table_name, chain, rule_spec);
+	return __connman_iptables_insert(AF_INET, table_name, chain, rule_spec);
 }
 
 int connman_iptables_append(const char *table_name,
@@ -1414,7 +1414,7 @@ int connman_iptables_append(const char *table_name,
 	if (str_has_connman_prefix(chain) || str_contains_connman(rule_spec))
 		return -EINVAL;
 
-	return __connman_iptables_append(table_name, chain, rule_spec);
+	return __connman_iptables_append(AF_INET, table_name, chain, rule_spec);
 }
 	
 int connman_iptables_delete(const char *table_name,
@@ -1430,7 +1430,7 @@ int connman_iptables_delete(const char *table_name,
 	if (str_has_connman_prefix(chain) || str_contains_connman(rule_spec))
 		return -EINVAL;
 
-	return __connman_iptables_delete(table_name, chain, rule_spec);
+	return __connman_iptables_delete(AF_INET, table_name, chain, rule_spec);
 }
 	
 int connman_iptables_commit(const char *table_name)
@@ -1440,7 +1440,7 @@ int connman_iptables_commit(const char *table_name)
 
 		DBG("%s", table_name);
 
-	return __connman_iptables_commit(table_name);
+	return __connman_iptables_commit(AF_INET, table_name);
 }
 
 int connman_iptables_change_policy(const char *table_name,
@@ -1456,7 +1456,7 @@ int connman_iptables_change_policy(const char *table_name,
 	if (str_has_connman_prefix(chain))
 		return -EINVAL;
 
-	return __connman_iptables_change_policy(table_name, chain, policy);
+	return __connman_iptables_change_policy(AF_INET, table_name, chain, policy);
 }
 
 const char* connman_iptables_default_save_path(int ip_version)
