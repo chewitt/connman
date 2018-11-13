@@ -28,6 +28,38 @@
 
 #include "../src/connman.h"
 
+enum connman_service_type connman_service_get_type(
+						struct connman_service *service)
+{
+	return 0;
+}
+
+const char *__connman_service_type2string(enum connman_service_type type)
+{
+	return "type";
+}
+
+enum connman_service_type __connman_service_string2type(const char *str)
+{
+	return 0;
+}
+
+char *__connman_config_get_string(GKeyFile *key_file,
+	const char *group_name, const char *key, GError **error)
+{
+	return NULL;
+}
+
+char **__connman_config_get_string_list(GKeyFile *key_file,
+	const char *group_name, const char *key, gsize *length, GError **error)
+{
+	return NULL;
+}
+
+const char *__connman_service_get_name(struct connman_service *service) {
+	return NULL;
+}
+
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;

@@ -24,6 +24,7 @@
 #endif
 
 #include <errno.h>
+#include <netdb.h>
 
 #include <xtables.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
@@ -59,6 +60,7 @@ struct fw_rule {
 	char *table;
 	char *chain;
 	char *rule_spec;
+	char *rule_if_info;
 };
 
 struct firewall_context {
@@ -69,6 +71,63 @@ static GSList *managed_tables;
 
 static bool firewall_is_up;
 static unsigned int firewall_rule_id;
+
+#define FIREWALLFILE "firewall.conf"
+#define FIREWALLCONFIGFILE CONFIGDIR "/" FIREWALLFILE
+#define FIREWALLCONFIGDIR CONFIGDIR "/firewall.d/"
+#define GROUP_GENERAL "General"
+#define GENERAL_FIREWALL_POLICIES 3
+
+struct general_firewall_context {
+	char **policies;
+	char **policiesv6;
+	char **restore_policies;
+	char **restore_policiesv6;
+	struct firewall_context *ctx;
+};
+
+static struct general_firewall_context *general_firewall = NULL;
+
+/* The dynamic rules that are loaded from config */
+static struct firewall_context **dynamic_rules = NULL;
+
+static const char *supported_chains[] = {
+	[NF_IP_PRE_ROUTING]	= NULL,
+	[NF_IP_LOCAL_IN]	= "INPUT",
+	[NF_IP_FORWARD]		= "FORWARD",
+	[NF_IP_LOCAL_OUT]	= "OUTPUT",
+	[NF_IP_POST_ROUTING]	= NULL,
+};
+
+static const char *supported_chainsv6[] = {
+	[NF_IP_PRE_ROUTING]	= NULL,
+	[NF_IP_LOCAL_IN]	= "INPUT_IPv6",
+	[NF_IP_FORWARD]		= "FORWARD_IPv6",
+	[NF_IP_LOCAL_OUT]	= "OUTPUT_IPv6",
+	[NF_IP_POST_ROUTING]	= NULL,
+};
+
+static const char *supported_policies[] = {
+	[NF_IP_PRE_ROUTING]	= NULL,
+	[NF_IP_LOCAL_IN]	= "INPUT_POLICY",
+	[NF_IP_FORWARD]		= "FORWARD_POLICY",
+	[NF_IP_LOCAL_OUT]	= "OUTPUT_POLICY",
+	[NF_IP_POST_ROUTING]	= NULL,
+};
+
+static const char *supported_policiesv6[] = {
+	[NF_IP_PRE_ROUTING]	= NULL,
+	[NF_IP_LOCAL_IN]	= "INPUT_POLICY_IPv6",
+	[NF_IP_FORWARD]		= "FORWARD_POLICY_IPv6",
+	[NF_IP_LOCAL_OUT]	= "OUTPUT_POLICY_IPv6",
+	[NF_IP_POST_ROUTING]	= NULL,
+};
+
+/*
+ * The dynamic rules that are currently in use. Service name is used as hash
+ * value and the struct firewall_context is the data held.
+ */
+//static GHashTable *current_dynamic_rules = NULL;
 
 static int chain_to_index(const char *chain_name)
 {
@@ -152,12 +211,20 @@ out:
 
 static int insert_managed_rule(int type, const char *table_name,
 				const char *chain_name,
+				const char *rule_if_info,
 				const char *rule_spec)
 {
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
 	char *chain;
+	char *full_rule_spec = NULL;
 	int id, err;
+
+	if (rule_if_info)
+		full_rule_spec = g_strdup_printf("%s %s", rule_if_info,
+								rule_spec);
+	else
+		full_rule_spec = g_strdup(rule_spec);
 
 	id = chain_to_index(chain_name);
 	if (id < 0) {
@@ -197,36 +264,45 @@ static int insert_managed_rule(int type, const char *table_name,
 	chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
 out:
-	err = __connman_iptables_append(type, table_name, chain, rule_spec);
+	err = __connman_iptables_append(type, table_name, chain, full_rule_spec);
 	
 	if (err < 0)
 		DBG("table %s cannot append rule %s", table_name, rule_spec);
 
 	g_free(chain);
+	g_free(full_rule_spec);
 
 	return err;
  }
 
 static int delete_managed_rule(int type, const char *table_name,
 				const char *chain_name,
+				const char *rule_if_info,
 				const char *rule_spec)
  {
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
 	int id, err;
 	char *managed_chain;
+	char *full_rule_spec = NULL;
+
+	if (rule_if_info)
+		full_rule_spec = g_strdup_printf("%s %s", rule_if_info,
+								rule_spec);
+	else
+		full_rule_spec = g_strdup(rule_spec);
 
 	id = chain_to_index(chain_name);
 	if (id < 0) {
 		/* This chain is not managed */
 		return __connman_iptables_delete(type, table_name,
-						chain_name, rule_spec);
+						chain_name, full_rule_spec);
 	}
 
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
 	err = __connman_iptables_delete(type, table_name, managed_chain,
-				rule_spec);
+				full_rule_spec);
 	
 	if (err < 0)
 		DBG("table %s managed rule %s was not removed from ip%stables",
@@ -258,6 +334,7 @@ static int delete_managed_rule(int type, const char *table_name,
 
  out:
 	g_free(managed_chain);
+	g_free(full_rule_spec);
 
 	return err;
 }
@@ -274,6 +351,7 @@ static void cleanup_fw_rule(gpointer user_data)
 {
 	struct fw_rule *rule = user_data;
 
+	g_free(rule->rule_if_info);
 	g_free(rule->rule_spec);
 	g_free(rule->chain);
 	g_free(rule->table);
@@ -302,18 +380,22 @@ static int firewall_enable_rule(struct fw_rule *rule)
 	if (rule->enabled)
 		return -EALREADY;
 
-	DBG("%d %s %s %s", rule->type, rule->table, rule->chain,
-			rule->rule_spec);
+	DBG("%d %s %s %s %s", rule->type, rule->table, rule->chain,
+					rule->rule_if_info, rule->rule_spec);
 
 	err = insert_managed_rule(rule->type, rule->table, rule->chain,
-					rule->rule_spec);
-	if (err < 0)
+					rule->rule_if_info, rule->rule_spec);
+	if (err < 0) {
+		DBG("cannot insert managed rule %d", err);
 		return err;
+	}
 
 	err = __connman_iptables_commit(rule->type, rule->table);
 
-	if (err < 0)
+	if (err < 0) {
+		DBG("iptables commit failed %d", err);
 		return err;
+	}
 
 	rule->enabled = true;
 
@@ -328,7 +410,7 @@ static int firewall_disable_rule(struct fw_rule *rule)
 		return -EALREADY;
 
 	err = delete_managed_rule(rule->type, rule->table, rule->chain,
-					rule->rule_spec);
+					rule->rule_if_info, rule->rule_spec);
 	if (err < 0) {
 		connman_error("pre-commit: Cannot remove previously installed "
 			"iptables rules: %s", strerror(-err));
@@ -447,8 +529,13 @@ int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
 
 		if (rule->id == id || id == FW_ALL_RULES) {
 			err = firewall_enable_rule(rule);
-			if (err < 0)
+
+			if (err == -EALREADY) {
+				err = 0;
+			} else if (err < 0) {
+				DBG("rule error %d", err);
 				break;
+			}
 
 			if (id != FW_ALL_RULES)
 				break;
@@ -472,8 +559,10 @@ int __connman_firewall_disable_rule(struct firewall_context *ctx, int id)
 		if (rule->id == id || id == FW_ALL_RULES) {
 			e = firewall_disable_rule(rule);
 
-			/* Report last error back */
-			if (e == 0 && err == -ENOENT)
+			/*
+			 * Report last error back, already disabled = no error
+			 */
+			if ((e == 0 && err == -ENOENT) || e == -EALREADY)
 				err = 0;
 			else if (e < 0)
 				err = e;
@@ -603,12 +692,1412 @@ static void flush_all_tables(int type)
 	flush_table(type, "nat");
 }
 
+static bool has_dynamic_rules_set(enum connman_service_type type)
+{
+	if (!dynamic_rules || !dynamic_rules[type])
+		return false;
+
+	if (g_list_length(dynamic_rules[type]->rules) == 0)
+		return false;
+
+	return true;
+}
+
+static int enable_dynamic_rules(struct connman_service *service)
+{
+	struct fw_rule *rule;
+	enum connman_service_type type;
+	GList *list;
+	char *ifname;
+
+	type = connman_service_get_type(service);
+
+	/* No rules set for this type, no error */
+	if (!has_dynamic_rules_set(type)) {
+		DBG("no rules for service %p type %d", service, type);
+		return 0;
+	}
+
+	ifname = connman_service_get_interface(service);
+
+	DBG("service %p type %d ifname %s", service, type, ifname);
+
+	/* Go through list and set interface info for each rule */
+	for (list = g_list_first(dynamic_rules[type]->rules); list;
+			list = g_list_next(list)) {
+		rule = list->data;
+
+		/* If rule is already enabled interface info is already set */
+		if (rule->enabled)
+			continue;
+
+		g_free(rule->rule_if_info);
+
+		switch (chain_to_index(rule->chain)) {
+		case NF_IP_LOCAL_IN:
+			rule->rule_if_info = g_strdup_printf("-i %s", ifname);
+			break;
+		case NF_IP_FORWARD:
+		case NF_IP_LOCAL_OUT:
+			rule->rule_if_info = g_strdup_printf("-o %s", ifname);
+			break;
+		default:
+			DBG("Unsupported chain %s in rule %d:%s", rule->chain,
+						rule->id, rule->rule_spec);
+			rule->rule_if_info = NULL;
+		}
+
+		DBG("rule %d %s %s", rule->id, rule->rule_if_info,
+					rule->rule_spec);
+	}
+
+	g_free(ifname);
+
+	return __connman_firewall_enable(dynamic_rules[type]);
+}
+
+static int disable_dynamic_rules(struct connman_service *service)
+{
+	enum connman_service_type type;
+
+	type = connman_service_get_type(service);
+
+	/* No rules set for this type, no error */
+	if (!has_dynamic_rules_set(type)) {
+		DBG("no rules for service %p type %d", service, type);
+		return 0;
+	}
+
+	DBG("service %p type %d", service, type);
+
+	return __connman_firewall_disable_rule(dynamic_rules[type],
+					FW_ALL_RULES);
+}
+
+static void service_state_changed(struct connman_service *service,
+				enum connman_service_state state)
+{
+	enum connman_service_type type;
+	int err;
+
+	type = connman_service_get_type(service);
+
+	DBG("service %p %s type %d state %d", service,
+				__connman_service_get_name(service), type,
+				state);
+
+	switch (state) {
+	case CONNMAN_SERVICE_STATE_UNKNOWN:
+	case CONNMAN_SERVICE_STATE_ASSOCIATION:
+	case CONNMAN_SERVICE_STATE_CONFIGURATION:
+		break;
+	case CONNMAN_SERVICE_STATE_IDLE:
+	case CONNMAN_SERVICE_STATE_FAILURE:
+	case CONNMAN_SERVICE_STATE_DISCONNECT:
+		err = disable_dynamic_rules(service);
+		if (err)
+			DBG("Cannot disable dynamic rules for type %d error %d",
+						type, err);
+		break;
+	case CONNMAN_SERVICE_STATE_READY:
+	case CONNMAN_SERVICE_STATE_ONLINE:
+		err = enable_dynamic_rules(service);
+
+		if (err == -EALREADY)
+			DBG("dynamic firewall already enabled for service %p",
+						service);
+		else if (err == -ENOMEM)
+			DBG("firewall cloning failed for service %p", service);
+		else if (err)
+			DBG("cannot enable dynamic rules of service %p "
+						", error %d", service, err);
+	}
+}
+
+enum iptables_switch_type {
+	IPTABLES_UNSET    = 0,
+	IPTABLES_SWITCH   = 1,
+	IPTABLES_MATCH    = 2,
+	IPTABLES_TARGET   = 3,
+	IPTABLES_PROTO    = 4,
+	IPTABLES_PORT     = 5,
+};
+
+#define MAX_IPTABLES_SWITCH 6
+
+static bool is_string_digits(const char *str)
+{
+	int i;
+
+	if (!str || !*str)
+		return false;
+
+	for (i = 0; str[i]; i++) {
+		if (!g_ascii_isdigit(str[i]))
+			return false;
+	}
+	return true;
+}
+
+static bool is_supported(int type, enum iptables_switch_type switch_type,
+					const char* group, const char *str)
+{
+	/*
+	 * The switches and matches that are not supported.
+	 * 
+	 * Chain manipulation is not supported, the rules are going to specific
+	 * managed chains within connman.
+	 *
+	 * Setting specific addresses is not supported because the purpose of
+	 * these rules is to set the base line of prevention to be used on both
+	 * IPv4 and IPv6. In the future rules may be separated to have own for
+	 * both of the IP protocols.
+	 
+	 * Setting specific interfaces is not supported for dynamic rules, these
+	 * are added dynamically into the rules when interface comes up. For
+	 * General rules setting interfaces is allowed.
+	 */
+	const char *not_supported_switches[] = { "--source", "--src","-s",
+						"--destination", "--dst", "-d",
+						"--append", "-A",
+						"--delete", "-D",
+						"--delete-chain", "-X",
+						"--flush", "-F",
+						"--insert", "-I",
+						"--new-chain", "-N",
+						"--policy", "-P",
+						"--rename-chain", "-E",
+						"--replace", "-R",
+						"--zero", "-Z",
+						"--to-destination",
+						"--from-destination",
+						NULL
+	};
+	const char *not_supported_dynamic_switches[] = { "--in-interface", "-i",
+						"--out-interface", "-o",
+						NULL
+	};
+
+	/* For unknown reason -m conntrack works with IPv4 but not with IPv6 */
+	const char *not_supported_matches_ipv4[] = { "comment",
+						"state",
+						NULL
+	};
+	const char *not_supported_matches_ipv6[] = { "comment",
+						"state",
+						"conntrack",
+						NULL
+	};
+
+	/*
+	 * Targets that are supported. No targets to custom chains are
+	 * allowed
+	 */
+	const char *supported_targets[] = { "ACCEPT",
+						"DROP",
+						"REJECT",
+						"LOG",
+						"QUEUE",
+						NULL
+	};
+
+	/* Protocols that iptables supports with -p or --protocol switch */
+	const char *supported_protocols[] = { 	"tcp",
+						"udp",
+						"udplite",
+						"icmp",
+						"icmpv6",
+						"ipv6-icmp",
+						"esp",
+						"ah",
+						"sctp",
+						"mh",
+						"all",
+						NULL
+	};
+	struct protoent *p = NULL;
+	bool is_general = false;
+	int protonum = 0;
+	int i = 0;
+
+	/* Do not care about empty or nonexistent content */
+	if (!str || !*str)
+		return true;
+	
+	if (group && !g_strcmp0(group, GROUP_GENERAL))
+		is_general = true;
+
+	switch (switch_type) {
+	case IPTABLES_SWITCH:
+		for (i = 0; not_supported_switches[i]; i++) {
+			if (!g_strcmp0(str, not_supported_switches[i]))
+				return false;
+		}
+
+		/* If the rule is not in Group general */
+		if (!is_general) {
+			for (i = 0; not_supported_dynamic_switches[i]; i++) {
+				if (!g_strcmp0(str,
+					not_supported_dynamic_switches[i]))
+					return false;
+			} 
+		}
+
+		return true;
+	case IPTABLES_MATCH:
+		if (type == AF_INET) {
+			for (i = 0 ; not_supported_matches_ipv4[i] ; i++) {
+				if(!g_strcmp0(str,
+						not_supported_matches_ipv4[i]))
+					return false;
+			}
+		} else if (type == AF_INET6) {
+			for (i = 0 ; not_supported_matches_ipv6[i] ; i++) {
+				if(!g_strcmp0(str,
+						not_supported_matches_ipv6[i]))
+					return false;
+			}
+		} else {
+			return false;
+		}
+
+		return true;
+	case IPTABLES_TARGET:
+		for (i = 0 ; supported_targets[i] ; i++) {
+			if(!g_strcmp0(str, supported_targets[i]))
+				return true;
+		}
+
+		return false;
+	case IPTABLES_PROTO:
+		if (is_string_digits(str))
+			protonum = (int) g_ascii_strtoll(str, NULL, 10);
+
+		for (i = 0; supported_protocols[i]; i++) {
+			/* Protocols can be also capitalized */
+			if (!g_ascii_strcasecmp(str, supported_protocols[i]))
+				return true;
+
+			/* Protocols can be defined by their number. */
+			if (protonum) {
+				p = getprotobyname(supported_protocols[i]);
+				if (p && protonum == p->p_proto)
+					return true;
+			}
+		}
+
+		return false;
+	default:
+		return true;
+	}
+}
+
+static bool is_port_switch(const char *str, bool multiport)
+{
+	const char *multiport_switches[] = { "--destination-ports", "--dports",
+					"--source-ports", "--sports",
+					"--port", "--ports",
+					NULL
+	};
+	const char *port_switches[] = { "--destination-port", "--dport",
+					"--source-port", "--sport",
+					NULL
+	};
+
+	int i;
+
+	if (!str || !*str)
+		return true;
+
+	if (multiport) {
+		for (i = 0; multiport_switches[i]; i++) {
+			if (!g_strcmp0(str, multiport_switches[i]))
+				return true;
+		}
+	}
+
+	/* Normal port switches can be used also with -m multiport */
+	for (i = 0; port_switches[i]; i++) {
+		if (!g_strcmp0(str, port_switches[i])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool validate_ports_or_services(const char *str)
+{
+	gchar **tokens;
+	 /* In iptables ports are separated with commas, ranges with colon. */
+	const char delimiters[] = ",:";
+	struct servent *s;
+	bool ret = true;
+	int portnum;
+	int i;
+
+	if (!str || !*str)
+		return false;
+
+	tokens = g_strsplit_set(str, delimiters, 0);
+
+	if (!tokens)
+		return false;
+
+	for (i = 0; tokens[i]; i++) {
+
+		/* Plain digits, check if port is valid */
+		if (is_string_digits(tokens[i])) {
+			portnum = (int) g_ascii_strtoll(tokens[i], NULL, 10);
+
+			/* Valid port number */
+			if (portnum && portnum < G_MAXUINT16)
+				continue;
+		}
+
+		/* Check if service name is valid with any protocol */
+		s = getservbyname(tokens[i], NULL);
+
+		if (s) {
+			if (!g_strcmp0(tokens[i], s->s_name))
+				continue;
+		}
+
+		/* If one of the ports/services is invalid, rule is invalid */
+		ret = false;
+		DBG("invalid port/service %s in %s", tokens[i], str);
+		break;
+	}
+
+	g_strfreev(tokens);
+
+	return ret;
+}
+
+static bool validate_iptables_rule(int type, const char *group,
+							const char *rule_spec)
+{
+	gchar **argv = NULL;
+	GError *error = NULL;
+	bool ret = false;
+	int i = 0;
+	int argc = 0;
+	unsigned int switch_types_found[MAX_IPTABLES_SWITCH] = { 0 };
+	enum iptables_switch_type switch_type = IPTABLES_UNSET;
+	const char *match = NULL;
+	const char valid_prefix = '-';
+
+	if (!g_shell_parse_argv(rule_spec, &argc, &argv, &error)) {
+		DBG("failed in parsing %s", error ? error->message : "");
+		goto out;
+	}
+
+	/* -j TARGET is the bare minimum of a rule */
+	if (argc < 2 || !argv[0][0]) {
+		DBG("parsed content is invalid");
+		goto out;
+	}
+
+	/* Only '-' prefixed rules are allowed in iptables. */
+	if (argv[0][0] != valid_prefix) {
+		DBG("invalid rule prefix");
+		goto out;
+	}
+
+	for (i = 0; i < argc; ) {
+		const char *arg = argv[i++];
+
+		if (!is_supported(type, IPTABLES_SWITCH, group, arg)) {
+			DBG("switch %s is not supported", arg);
+			goto out;
+		}
+
+		if (!g_strcmp0(arg, "-m")) {
+			switch_type = IPTABLES_MATCH;
+			match = argv[i++];
+
+			if (!match) {
+				DBG("trailing '-m' in rule \"%s\"", rule_spec);
+				goto out;
+			}
+
+			/* multiport match has to have valid port switches */
+			if (!g_strcmp0(match, "multiport")) {
+				const char *opt = argv[i++];
+
+				if (!opt) {
+					DBG("empty %s %s switch", arg, match);
+					goto out;
+				}
+
+				if (!is_port_switch(opt, true)) {
+					DBG("non-supported %s %s switch %s",
+						arg, match, opt);
+					goto out;
+				}
+
+				const char *param = argv[i++];
+				if (!param) {
+					DBG("empty parameter with %s", opt);
+					goto out;
+				}
+
+				/* Negated switch must be skipped */
+				if (!g_strcmp0(param, "!"))
+					param = argv[i++];
+
+				if (!validate_ports_or_services(param)) {
+					DBG("invalid ports %s %s", opt, param);
+					goto out;
+				}
+			}
+		}
+
+		if (!g_strcmp0(arg, "-j")) {
+			switch_type = IPTABLES_TARGET;
+			match = argv[i++];
+
+			if (!match) {
+				DBG("trailing '-j' in rule \"%s\"", rule_spec);
+				goto out;
+			}
+		}
+
+		if (!g_strcmp0(arg, "-p")) {
+			switch_type = IPTABLES_PROTO;
+			match = argv[i++];
+
+			if (!match) {
+				DBG("trailing '-p' in rule \"%s\"", rule_spec);
+				goto out;
+			}
+
+			/* Negated switch must be skipped */
+			if (!g_strcmp0(match, "!"))
+				match = argv[i++];
+		}
+
+		if (is_port_switch(arg, false)) {
+			switch_type = IPTABLES_PORT;
+			match = argv[i++];
+
+			if (!match) {
+				DBG("trailing '%s' in rule \"%s\"", arg,
+					rule_spec);
+				goto out;
+			}
+
+			/* Negated switch must be skipped */
+			if (!g_strcmp0(match, "!"))
+				match = argv[i++];
+
+			if (!validate_ports_or_services(match)) {
+				DBG("invalid ports %s %s", arg, match);
+				goto out;
+			}
+		}
+
+		if (match && !is_supported(type, switch_type, group, match)) {
+			DBG("%s %s is not supported", arg, match);
+			goto out;
+		}
+
+		/* Record the current switch type */
+		switch_types_found[switch_type]++;
+		switch_type = IPTABLES_UNSET;
+		match = NULL;
+	}
+
+	/* There can be 0...2 port switches in rule */
+	if (switch_types_found[IPTABLES_PORT] > 2)
+		goto out;
+
+	/* There should be 0...1 matches in one rule */
+	if (switch_types_found[IPTABLES_MATCH] > 1)
+		goto out;
+
+	/* There should be 0...1 protocols defined in rule */
+	if (switch_types_found[IPTABLES_PROTO] > 1)
+		goto out;
+
+	/* There has to be exactly one target in rule */
+	if (switch_types_found[IPTABLES_TARGET] != 1)
+		goto out;
+
+	ret = true;
+
+out:
+	g_clear_error(&error);
+
+	return ret;
+}
+
+typedef int (*add_rules_cb_t)(int type, const char *group, int chain_id,
+								char** rules);
+
+static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
+								char** rules)
+{
+	enum connman_service_type service_type;
+	char table[] = "filter";
+	int count = 0;
+	int err = 0;
+	int id;
+	int i; 
+
+	if (!dynamic_rules || !rules)
+		return 0;
+
+	service_type = __connman_service_string2type(group);
+
+	if (!dynamic_rules[service_type])
+		dynamic_rules[service_type] = __connman_firewall_create();
+
+	for(i = 0; rules[i] ; i++) {
+
+		DBG("process rule tech %s chain %s rule %s", group,
+					builtin_chains[chain_id], rules[i]);
+
+		if (!validate_iptables_rule(type, group, rules[i])) {
+			DBG("failed to add rule, rule is invalid");
+			continue;
+		}
+
+		switch (type) {
+		case AF_INET:
+			id = __connman_firewall_add_rule(
+						dynamic_rules[service_type],
+						table, builtin_chains[chain_id],
+						rules[i]);
+			break;
+		case AF_INET6:
+			id = __connman_firewall_add_ipv6_rule(
+						dynamic_rules[service_type],
+						table, builtin_chains[chain_id],
+						rules[i]);
+			break;
+		default:
+			id = -1;
+			DBG("invalid IP protocol %d", type);
+			break;
+		}
+
+		if (id < 0) {
+			DBG("failed to add rule to firewall");
+			err = -EINVAL;
+		} else {
+			DBG("added with id %d", id);
+			count++;
+		}
+	}
+
+	if (!err)
+		return count;
+
+	return err;
+}
+
+static int add_general_rules_cb(int type, const char *group, int chain_id,
+								char** rules)
+{
+	char table[] = "filter";
+	int count = 0;
+	int err = 0;
+	int id;
+	int i;
+
+	if (!general_firewall)
+		return -EINVAL;
+
+	general_firewall->ctx = __connman_firewall_create();
+
+	if (!general_firewall->ctx)
+		return -ENOMEM;
+
+	if (!rules)
+		return 0;
+
+	for (i = 0; rules[i]; i++) {
+		DBG("processing type %d group %s rule chain %s rule %s", type,
+					GROUP_GENERAL, builtin_chains[chain_id],
+					rules[i]);
+
+		if (!validate_iptables_rule(type, group, rules[i])) {
+			DBG("invalid general rule");
+			continue;
+		}
+
+		switch (type) {
+		case AF_INET:
+			id = __connman_firewall_add_rule(general_firewall->ctx,
+					table, builtin_chains[chain_id],
+					rules[i]);
+			break;
+		case AF_INET6:
+			id = __connman_firewall_add_ipv6_rule(
+					general_firewall->ctx, table,
+					builtin_chains[chain_id], rules[i]);
+			break;
+		default:
+			id = -1;
+			DBG("invalid IP protocol %d", type);
+			break;
+		}
+
+		if (id < 0) {
+			DBG("failed to add group %s chain_id %d rule %s",
+					GROUP_GENERAL, chain_id, rules[i]);
+			err = -EINVAL;
+		} else {
+			DBG("added with id %d", id);
+			count++;
+		}
+	}
+
+	if (!err)
+		return count;
+
+	return err;
+}
+
+static int add_rules_from_group(GKeyFile *config, const char *group,
+							add_rules_cb_t cb)
+{
+	GError *error = NULL;
+	char** rules;
+	const char *chain_name = NULL;
+	int types[3] = { AF_INET, AF_INET6, 0 };
+	int chain;
+	int count;
+	int err = 0;
+	int i;
+	gsize len;
+
+	DBG("");
+
+	if (!group || !*group || !cb)
+		return 0;
+
+	for (chain = NF_IP_LOCAL_IN; chain < NF_IP_NUMHOOKS - 1; chain++) {
+		for (i = 0; types[i] ; i++) {
+
+			/* Setup chain name based on IP type */
+			switch (types[i]) {
+			case AF_INET:
+				chain_name = supported_chains[chain];
+				break;
+			case AF_INET6:
+				chain_name = supported_chainsv6[chain];
+				break;
+			default:
+				chain_name = NULL;
+			}
+
+			if (!chain_name)
+				continue;
+
+			rules = __connman_config_get_string_list(config, group,
+						chain_name, &len, &error);
+
+			if (rules && len) {
+				DBG("found %d rules in group %s chain %s", len,
+							group, chain_name);
+
+				count = cb(types[i], group, chain, rules);
+			
+				if (count < 0) {
+					DBG("cannot add rules from config");
+					err = -EINVAL;
+				} else if (count < len) {
+					DBG("%d invalid rules were detected,"
+						"%d rules were added",
+						len - count, count);
+				} else {
+					DBG("all %d rules were added", count);
+				}
+			} else if (rules && error) {
+					/* A real error has happened */
+					DBG("group %s chain %s error: %s",
+							group, chain_name,
+							error->message);
+			} else {
+				/*
+				 * Error with rules set as NULL = no such key
+				 * exists in the group specified.
+				 */
+				DBG("type %d no rules found for group %s "
+							"chain %s", types[i],
+							group, chain_name);
+			}
+
+			g_clear_error(&error);
+
+			g_strfreev(rules);
+		}
+	}
+
+	return err;
+}
+
+static bool check_config_key(const char* group, const char* key)
+{
+	bool is_general = false;
+	int i;
+
+	if (group && !g_strcmp0(group, GROUP_GENERAL))
+		is_general = true;
+
+	/*
+	 * Allow only NF_IP_LOCAL_IN...NF_IP_LOCAL_OUT chains since filter
+	 * table has no PRE/POST_ROUTING chains.
+	 *
+	 * The chain ids defined by netfilter are:
+	 * NF_IP_PRE_ROUTING	0
+	 * NF_IP_LOCAL_IN	1
+	 * NF_IP_FORWARD	2
+	 * NF_IP_LOCAL_OUT	3
+	 * NF_IP_POST_ROUTING	4
+	 * NF_IP_NUMHOOKS	5
+	 */
+	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
+		if (!g_strcmp0(key, supported_chains[i]))  {
+			DBG("match key %s chain %s", key, supported_chains[i]);
+			return true;
+		}
+
+		if (!g_strcmp0(key, supported_chainsv6[i])) {
+			DBG("match key %s chain %s", key,
+						supported_chainsv6[i]);
+			return true;
+		}
+
+		/* No other than General group should have policies set. */
+		if (is_general) {
+			if (!g_strcmp0(key, supported_policies[i])) {
+				DBG("match key %s chain %s", key,
+						supported_policies[i]);
+				return true;
+			}
+			
+			if (!g_strcmp0(key, supported_policiesv6[i])) {
+				DBG("match key %s chain %s", key,
+						supported_policiesv6[i]);
+				return true;
+			}
+		}
+	}
+
+	DBG("no match for key %s", key);
+
+	return false;
+}
+
+static bool check_config_group(const char *group)
+{
+	const char *type_str;
+	enum connman_service_type type;
+	
+	if (!g_strcmp0(group, GROUP_GENERAL)) {
+		DBG("match group %s", group);
+		return true;
+	}
+
+	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+				type < MAX_CONNMAN_SERVICE_TYPES; type++) {
+			type_str = __connman_service_type2string(type);
+
+			if (!type_str)
+				continue;
+
+			if (!g_strcmp0(group, type_str)) {
+				DBG("match group %s type %s", group, type_str);
+				return true;
+			}
+	}
+
+	DBG("no match for group %s", group);
+
+	return false;
+}
+
+static bool check_dynamic_rules(GKeyFile *config)
+{
+	enum connman_service_type type;
+	char **keys;
+	int i;
+	bool ret = true;
+	const char *group;
+
+	if (!config)
+		return false;
+
+	keys = g_key_file_get_groups(config, NULL);
+
+	/* Check that there are only valid service types */
+	for (i = 0; keys && keys[i]; i++) {
+		if (!check_config_group(keys[i])) {
+			connman_warn("Unknown group %s in file %s",
+						keys[i], FIREWALLFILE);
+			ret = false;
+		}
+	}
+
+	g_strfreev(keys);
+
+	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+			type < MAX_CONNMAN_SERVICE_TYPES; type++) {
+
+		group = __connman_service_type2string(type);
+
+		if (!group)
+			continue;
+
+		keys = g_key_file_get_keys(config, group, NULL, NULL);
+
+		for (i = 0; keys && keys[i]; i++) {
+			if (!check_config_key(group, keys[i])) {
+				connman_warn("Unknown option %s in group %s "
+							"in %s file", keys[i],
+							group, FIREWALLFILE);
+				ret = false;
+			}
+		}
+
+		g_strfreev(keys);
+	}
+
+	return ret;
+}
+
+static GKeyFile *load_dynamic_rules(const char *file)
+{
+	GError *err = NULL;
+	GKeyFile *keyfile;
+
+	keyfile = g_key_file_new();
+
+	g_key_file_set_list_separator(keyfile, ';');
+
+	if (!g_key_file_load_from_file(keyfile, file, 0, &err)) {
+		if (err->code != G_FILE_ERROR_NOENT) {
+			connman_error("Parsing %s failed: %s", file,
+						err->message);
+		}
+
+		g_error_free(err);
+		g_key_file_unref(keyfile);
+		return NULL;
+	}
+
+	return keyfile;
+}
+
+static int enable_general_firewall_policies(int type, char **policies)
+{
+	char table[] = "filter";
+	int err;
+	int i;
+
+	if (!policies || !g_strv_length(policies))
+		return 0;
+
+	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1 ; i++) {
+		if (!policies[i-1])
+			continue;
+
+		err = __connman_iptables_change_policy(type, table,
+					builtin_chains[i], policies[i-1]);
+
+		if (err)
+			DBG("cannot set type %d chain %s policy %s", type,
+						builtin_chains[i],
+						policies[i-1]);
+		else {
+			DBG("set type %d chain %s policy %s", type,
+						builtin_chains[i],
+						policies[i-1]);
+
+			err = __connman_iptables_commit(type, table);
+
+			if (err) {
+				DBG("commit failed, type %d table %s", type,
+							table);
+				return err;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int enable_general_firewall()
+{
+	int err;
+
+	DBG("");
+
+	if (!general_firewall || !general_firewall->ctx) {
+		DBG("no general firewall or firewall context set");
+		return -EINVAL;
+	}
+
+	err = enable_general_firewall_policies(AF_INET,
+				general_firewall->policies);
+
+	if (err)
+		DBG("cannot enable IPv4 iptables policies, err %d", err);
+
+	err = enable_general_firewall_policies(AF_INET6,
+				general_firewall->policiesv6);
+
+	if (err)
+		DBG("cannot enable IPv6 iptables policies, err %d", err);
+
+	if (!g_list_length(general_firewall->ctx->rules)) {
+		DBG("no general rules set");
+
+		/* No rules defined, no error */
+		return 0; 
+	}
+
+	return __connman_firewall_enable(general_firewall->ctx);
+}
+
+static bool is_valid_policy(char *policy)
+{
+	const char *valid_policies[] = {"ACCEPT", "DROP", NULL};
+
+	if (!policy || !*policy)
+		return false;
+
+	if (!g_strcmp0(policy, valid_policies[0]) || 
+				!g_strcmp0(policy, valid_policies[1]))
+		return true;
+
+	DBG("invalid policy %s", policy);
+
+	return false;
+}
+
+static int load_general_firewall_policies(int type, GKeyFile *config,
+								char **policies)
+{
+	GError *error = NULL;
+	const char *policy;
+	char *load_policy;
+	int i;
+
+	if (!policies)
+		return -EINVAL;
+
+	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
+		switch (type) {
+		case AF_INET:
+			policy = supported_policies[i];
+			break;
+		case AF_INET6:
+			policy = supported_policiesv6[i];
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (!policy)
+			continue;
+
+		load_policy = __connman_config_get_string(config,
+					GROUP_GENERAL, policy, &error);
+
+		if (!load_policy) {
+			DBG("no policy set for type %d chain %s", type,
+						builtin_chains[i]);
+		} else if (!is_valid_policy(load_policy)) {
+			g_free(load_policy);
+		} else {
+			/* When the policy is valid, override existing */
+			if (policies[i-1])
+				g_free(policies[i-1]);
+
+			policies[i-1] = load_policy;
+			DBG("set type %d chain %s policy %s", type,
+					builtin_chains[i], policies[i-1]);
+		}
+
+		/* If policy is read and error is set is is a proper error.*/
+		if (policies[i-1] && error)
+			DBG("failed to read %s: %s", policy, error->message);
+
+		g_clear_error(&error);
+	}
+
+	return 0;
+}
+
+static bool restore_policies_set = false;
+
+static int init_general_firewall_policies(GKeyFile *config)
+{
+	int err = 0;
+	int i;
+
+	DBG("");
+
+	if (!general_firewall || !config)
+		return -EINVAL;
+
+	if (!general_firewall->policies)
+		general_firewall->policies = g_try_new0(char*,
+				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+
+	if (!general_firewall->policies)
+		return -ENOMEM;
+
+	if (!general_firewall->restore_policies)
+		general_firewall->restore_policies = g_try_new0(char*,
+				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+
+	if (!general_firewall->restore_policies)
+		return -ENOMEM;
+	
+	if (!general_firewall->policiesv6)
+		general_firewall->policiesv6 = g_try_new0(char*,
+				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+
+	if (!general_firewall->policiesv6)
+		return -ENOMEM;
+
+	if (!general_firewall->restore_policiesv6)
+		general_firewall->restore_policiesv6 = g_try_new0(char*,
+				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+
+	if (!general_firewall->restore_policiesv6)
+		return -ENOMEM;
+
+	err = load_general_firewall_policies(AF_INET, config,
+				general_firewall->policies);
+	if (err)
+		DBG("failed to load IPv4 iptables chain policies, err %d", err);
+
+	err = load_general_firewall_policies(AF_INET6, config,
+				general_firewall->policiesv6);
+	if (err)
+		DBG("failed to load IPv6 iptables chain policies, err %d", err);
+
+	if (!restore_policies_set) {
+		// TODO add function into iptables.c to get chain policy
+		for (i = 0; i < GENERAL_FIREWALL_POLICIES ; i++) {
+			general_firewall->restore_policies[i] =
+						g_strdup("ACCEPT");
+			general_firewall->restore_policiesv6[i] =
+						g_strdup("ACCEPT");
+		}
+		restore_policies_set = true;
+	}
+
+	return err;
+}
+
+static int init_general_firewall(GKeyFile *config)
+{
+	int err;
+
+	DBG("");
+
+	if (!config)
+		return -EINVAL;
+
+	if (!general_firewall)
+		general_firewall = g_try_new0(struct general_firewall_context,
+									1);
+
+	if (!general_firewall)
+		return -ENOMEM;
+
+	err = init_general_firewall_policies(config);
+
+	if (err)
+		DBG("cannot initialize general policies"); // TODO react to this
+
+	err = add_rules_from_group(config, GROUP_GENERAL, add_general_rules_cb);
+
+	if (err)
+		DBG("cannot setup general firewall rules");
+
+	return err;
+}
+
+static int init_dynamic_firewall_rules(const char *file)
+{
+	GKeyFile *config;
+	enum connman_service_type type;
+	const char *group;
+	int ret = 0;
+
+	DBG("");
+
+	config = load_dynamic_rules(file);
+
+	/* No config is set, no error but dynamic rules are disabled */
+	if (!config) {
+		DBG("no configuration found, file %s", file);
+		goto out;
+	}
+
+	/* The firewall config must be correct */
+	if (!check_dynamic_rules(config)) {
+		connman_error("firewall config %s has errors", file);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (init_general_firewall(config))
+		DBG("Cannot setup general firewall");
+
+	if (!dynamic_rules)
+		dynamic_rules = g_try_new0(struct firewall_context*,
+					sizeof(struct firewall_context*) *
+					MAX_CONNMAN_SERVICE_TYPES);
+
+	if (!dynamic_rules) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+			type < MAX_CONNMAN_SERVICE_TYPES ; type++) {
+
+		group = __connman_service_type2string(type);
+
+		if (!group)
+			continue;
+
+		if (add_rules_from_group(config, group, add_dynamic_rules_cb))
+			DBG("failed to process rules from group type %d", type);
+	}
+
+out:
+	if (config)
+		g_key_file_unref(config);
+
+	return ret;
+}
+
+static int init_all_dynamic_firewall_rules(void)
+{
+	GList *filenames = NULL;
+	GList *iter;
+	GError *error = NULL;
+	GDir *dir;
+	const char *filename = NULL;
+	char *filepath = NULL;
+	int err;
+
+	err = init_dynamic_firewall_rules(FIREWALLCONFIGFILE);
+
+	if (g_file_test(FIREWALLCONFIGDIR, G_FILE_TEST_IS_DIR)) {
+		dir = g_dir_open(FIREWALLCONFIGDIR, 0, &error);
+
+		if (!dir) {
+			if (error) {
+				DBG("cannot open dir, error: %s",
+							error->message);
+				g_clear_error(&error);
+			}
+			goto out;
+		}
+
+		DBG("read configs from %s", FIREWALLCONFIGDIR);
+
+		/*
+		 * Ordering of files is not guaranteed with g_dir_open(). Read
+		 * the filenames into sorted GList.
+		 */
+		while ((filename = g_dir_read_name(dir))) {
+			/* Read configs that have firewall.conf suffix */
+			if (!g_str_has_suffix(filename, FIREWALLFILE))
+				continue;
+
+			/*
+			 * Filename is used for sorting the list, no need to
+			 * allocate a new one.
+			 */
+			filenames = g_list_insert_sorted(filenames,
+						(char*)filename,
+						(GCompareFunc)g_strcmp0);
+		}
+
+		for (iter = filenames; iter ; iter = iter->next) {
+			filename = iter->data;
+
+			filepath = g_strconcat(FIREWALLCONFIGDIR, filename,
+						NULL);
+			DBG("reading config %s", filepath);
+
+			/* Allow also symbolic links in configs */
+			if (g_file_test(filepath, G_FILE_TEST_IS_REGULAR)) {
+				if (init_dynamic_firewall_rules(filepath))
+					DBG("invalid firewall config");
+			}
+
+			g_free(filepath);
+		}
+
+		/* Strings in list are owned by GLib, don't free them. */
+		g_list_free(filenames);
+		g_dir_close(dir);
+	} else {
+		DBG("no config dir %s", FIREWALLCONFIGDIR);
+	}
+
+	/* Error loading main configuration */
+	if (err)
+		return err;
+
+out:
+	err = enable_general_firewall();
+
+	return err;
+}
+
+static int restore_policies(int type, char **policies, char **restore_policies)
+{
+	char table[] = "filter";
+	int err;
+	int i;
+
+	if (!policies && !restore_policies)
+		return -EINVAL;
+
+	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
+		/* If a policy has not been set it has not been changed */
+		if (!policies[i-1])
+			continue;
+
+		g_free(policies[i-1]);
+
+		if (!restore_policies[i-1])
+			continue;
+
+		err = __connman_iptables_change_policy(type, table,
+					builtin_chains[i],
+					restore_policies[i-1]);
+
+		if (err) {
+			/* Ignore this and continue with next */
+			DBG("cannot restore chain %s policy %s",
+				builtin_chains[i], restore_policies[i-1]);
+		} else {
+			err = __connman_iptables_commit(type, table);
+
+			if (err) {
+				DBG("cannot commit policy restore on chain %s"
+							"policy %s",
+							builtin_chains[i],
+							restore_policies[i-1]);
+				/* Commit failures cannot be recovered. */
+				return err;
+			}
+		}
+
+		g_free(restore_policies[i-1]);
+	}
+
+	return 0;
+}
+
+static void cleanup_general_firewall()
+{
+	int err;
+
+	DBG("");
+
+	if (!general_firewall)
+		return;
+
+	if (!general_firewall->ctx)
+		return;
+
+	err = __connman_firewall_disable_rule(general_firewall->ctx,
+			FW_ALL_RULES);
+
+	if (err)
+		DBG("Cannot disable generic firewall rules");
+
+	__connman_firewall_destroy(general_firewall->ctx);
+
+	err = restore_policies(AF_INET, general_firewall->policies,
+				general_firewall->restore_policies);
+
+	if (err)
+		DBG("failed to restore IPv4 iptables policies, err %d", err);
+
+	err = restore_policies(AF_INET6, general_firewall->policiesv6,
+				general_firewall->restore_policiesv6);
+
+	if (err)
+		DBG("failed to restore IPv6 iptables policies, err %d", err);
+
+	g_free(general_firewall->policies);
+	g_free(general_firewall->restore_policies);
+	g_free(general_firewall->policiesv6);
+	g_free(general_firewall->restore_policiesv6);
+
+	g_free(general_firewall);
+}
+
+static void cleanup_dynamic_firewall_rules()
+{
+	enum connman_service_type type;
+	int err;
+
+	DBG("");
+
+	if (!dynamic_rules)
+		return;
+
+	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN + 1;
+			type < MAX_CONNMAN_SERVICE_TYPES ; type++) {
+
+		if (!dynamic_rules[type])
+			continue;
+
+		err = __connman_firewall_disable(dynamic_rules[type]);
+
+		if (err)
+			DBG("Cannot disable type %d dynamic rules", type);
+
+		__connman_firewall_destroy(dynamic_rules[type]);
+		dynamic_rules[type] = NULL;
+	}
+
+	cleanup_general_firewall();
+
+	g_free(dynamic_rules);
+}
+
+static struct connman_notifier firewall_notifier = {
+	.name			= "firewall",
+	.service_state_changed	= service_state_changed,
+};
+
 int __connman_firewall_init(void)
 {
+	int err;
+
 	DBG("");
 
 	flush_all_tables(AF_INET);
 	flush_all_tables(AF_INET6);
+
+	err = init_all_dynamic_firewall_rules();
+
+	if (!err) { 
+		err = connman_notifier_register(&firewall_notifier);
+		if (err < 0) {
+			DBG("cannot register notifier, dynamic rules disabled");
+			cleanup_dynamic_firewall_rules();
+		}
+	}
 
 	return 0;
 }
@@ -617,5 +2106,6 @@ void __connman_firewall_cleanup(void)
 {
 	DBG("");
 
+	cleanup_dynamic_firewall_rules();
 	g_slist_free_full(managed_tables, cleanup_managed_table);
 }
