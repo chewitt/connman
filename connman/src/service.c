@@ -3409,11 +3409,17 @@ enum connman_service_proxy_method connman_service_get_proxy_method(
 
 char **connman_service_get_proxy_servers(struct connman_service *service)
 {
+	if (!service)
+		return NULL;
+
 	return g_strdupv(service->proxies);
 }
 
 char **connman_service_get_proxy_excludes(struct connman_service *service)
 {
+	if (!service)
+		return NULL;
+
 	return g_strdupv(service->excludes);
 }
 

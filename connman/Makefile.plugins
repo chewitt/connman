@@ -302,3 +302,9 @@ if POLKIT
 	$(AM_V_GEN)cp $< $@
 endif
 endif
+
+if GLOBALPROXY
+builtin_modules += globalproxy
+builtin_sources += plugins/globalproxy.c
+src_connmand_CFLAGS += -DGLOBALPROXY_PLUGIN
+endif

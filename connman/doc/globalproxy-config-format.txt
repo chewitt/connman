@@ -1,0 +1,94 @@
+Connman configuration file format for global proxy
+**************************************************
+
+The persistent state of the global proxy is retained in the global proxy
+configuration file. This is expected to have the filename
+STORAGEDIR/global_proxy/settings. STORAGEDIR by default points to
+/var/lib/connman/.
+
+For general information about how connman configuration files are structured,
+please refer to config-format.txt.
+
+If the configuration file is changed, connman will update the global proxy
+settings to reflect the values stored in the file. Contrariwise if the global
+proxy configuration is changed (e.g. in response to a dbus call) the file
+will be updated to reflect the new configuration.
+
+The format of the global proxy configuration file mirrors the fields used in 
+configuration files for services related to proxy configuration. The format of 
+the file can be summarised as follows (with a more detailed explanation below).
+
+[global proxy]
+Active = <true|false>
+Proxy.Method = <direct|manual|auto>
+Proxy.Servers = <url;...>
+Proxy.Excludes = <domain;...>
+Proxy.URL = <url>
+
+
+Global proxy section [global proxy]
+===================================
+
+This is currently the only section in a global proxy configuration file.
+
+Allowed fields:
+- Active: This field can take a value of "true" or "false". Each service can
+  have its own individual proxy settings, but if the global proxy is active, it
+  will override the proxy configurations of the individual services.
+- Proxy.Method: This field represents the type of proxy to use. It takes one
+  of the values "direct", "manual" or "auto". When the method is "direct", no
+  proxy will be used and requests will be passed directly to their destination.
+  When the method is "manual" a "Proxy.Servers" field must be provided listing
+  the proxies to use for requests; an optional "Proxy.Excludes" field may also
+  be included in this case. When the method is "auto" a "Proxy.URL" field must
+  be included to identify the location of a pac file that will be downloaded and
+  queried in order to determine the appropriate proxy to use.
+- Proxy.Servers: A semicolon-separated list of servers to use as proxies. Each
+  server should include a transport prefix (e.g. "https://") and a port number
+  postfix (e.g. :8080). This field is required if the method is set to "manual",
+  otherwise it's optional.
+- Proxy.Excludes: A semicolon-separated list of domains which are to be
+  contacted directly (i.e. without first going via the proxy). This field
+  applies in the case the method is set to "manual", and is optional.
+- Proxy.URL: A URL pointing to a pac file to query in order to establish the
+  appropriate proxy to use. This field is required if the method is set to
+  "auto", otherwise it's optional.
+
+
+Examples
+========
+
+The following file will override any service-specific proxy settings, so that
+no proxy is used.
+
+[global proxy]
+Active = true
+Proxy.Method = direct
+
+The following file will override any service-specific proxy settings, so that 
+either https://jolla.com, or http://mer.org will be used as a proxy. No proxy 
+will be used for requests to the sailfishos.org domain.
+
+[global proxy]
+Active = true
+Proxy.Method = direct
+Proxy.Servers = https://jolla.com;http://mer.org;
+Proxy.Excludes = sailfishos.org
+
+The following file will override any service-specific proxy settings. The pac
+file located at https://jolla.com/example.pac will be used to determine the
+proxy to use for each request.
+
+[global proxy]
+Active = true
+Proxy.Method = auto
+Proxy.URL = https://jolla.com/example.pac
+
+The following file configures the global proxy, but does not active it.
+
+[global proxy]
+Active = false
+Proxy.Method = manual
+Proxy.Servers = https://jolla.com;http://mer.org;
+Proxy.Excludes = jolla.com;mer.org;
+

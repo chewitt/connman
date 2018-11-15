@@ -295,7 +295,8 @@ endif
 
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
-	unit/test-sailfish_iptables_ext unit/test-service
+	unit/test-sailfish_iptables_ext unit/test-service \
+	unit/test-globalproxy
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -356,9 +357,19 @@ unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
 unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
 				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
+unit_test_globalproxy_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
+				$(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
+				-DSTATEDIR=\""$(statedir)"\"
+unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
+				$(backtrace_sources) \
+				src/connman.h src/log.c src/error.c \
+				src/inotify.c src/storage.c src/dbus.c
+unit_test_globalproxy_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+
 TESTS = unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
-	unit/test-sailfish_iptables_ext unit/test-service
+	unit/test-sailfish_iptables_ext unit/test-service \
+	unit/test-globalproxy
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
@@ -493,7 +504,7 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 				doc/clock-api.txt doc/session-api.txt \
 				doc/session-overview.txt doc/backtrace.txt \
 				doc/advanced-configuration.txt \
-				doc/vpn-config-format.txt \
+				doc/vpn-config-format.txt doc/globalproxy-api.txt\
 				doc/vpn-connection-api.txt \
 				doc/vpn-manager-api.txt doc/vpn-overview.txt \
 				doc/session-policy-format.txt \

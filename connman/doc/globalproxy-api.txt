@@ -1,0 +1,81 @@
+Global proxy
+============
+
+Service		net.connman
+Interface	org.sailfishos.connman.GlobalProxy
+Object path	/
+
+Methods		dict GetProperty(string name)
+
+			Returns properties for the global proxy. The
+			properties are returned independent of whether
+			the global proxy is active or not.
+			
+			See the properties section for possible properties.
+
+			Possible Errors: [service].Error.InvalidArguments
+
+		void SetProperty(string name, variant value)
+
+			Changes the value of the specified property. On 
+			success a PropertyChanged signal will be emitted.
+
+			See the properties section for possible properties.
+
+			Possible Errors: [service].Error.InvalidArguments
+					 [service].Error.InvalidProperty
+
+Signals		PropertyChanged(string name, variant value)
+
+			This signal indicates a changed value of the given
+			property.
+
+Properties	boolean Active [readwrite]
+
+			The active state of the global proxy. If set to true,
+			the global proxy values will be returned by the
+			globalproxy methods. Otherwise the service value
+			will be returned.
+
+		dict Configuration [readwrite]
+
+			The configuration of the global proxy.
+
+			string Method [readwrite]
+
+				Possible values are "direct", "auto" and
+				"manual".
+
+				In case of "auto" method, the URL file can be
+				provided unless you want to let DHCP/WPAD
+				auto-discover to be tried. In such case if DHCP
+				and WPAD auto-discover methods fails then
+				method will be "direct".
+
+				In case of "direct" no additional information
+				are provided. For the "manual" method the
+				Servers have to be set, Excludes is optional.
+
+			string URL [readwrite]
+
+				Automatic proxy configuration URL. Used by
+				"auto" method.
+
+			array{string} Servers [readwrite]
+
+				Used when "manual" method is set.
+
+				List of proxy URIs. The URI without a protocol
+				will be interpreted as the generic proxy URI.
+				All others will target a specific protocol and
+				only once.
+
+				Example for generic proxy server entry would
+				be like this: "server.example.com:911".
+
+			array{string} Excludes [readwrite]
+
+				Used when "manual" method is set.
+
+				List of hosts which can be accessed directly.
+
