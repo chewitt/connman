@@ -60,6 +60,11 @@ const char *__connman_service_get_name(struct connman_service *service) {
 	return NULL;
 }
 
+const char *connman_service_get_identifier(struct connman_service *service)
+{
+	return NULL;
+}
+
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;
