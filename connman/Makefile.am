@@ -384,7 +384,8 @@ noinst_PROGRAMS += tools/supplicant-test \
 			tools/iptables-test tools/tap-test tools/wpad-test \
 			tools/stats-tool tools/private-network-test \
 			tools/session-test tools/iptables-unit \
-			tools/dnsproxy-test tools/netlink-test
+			tools/dnsproxy-test tools/netlink-test \
+			tools/ip6tables-test
 
 tools_supplicant_test_SOURCES = tools/supplicant-test.c \
 			tools/supplicant-dbus.h tools/supplicant-dbus.c \
@@ -423,6 +424,11 @@ tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c tools/iptables-test.c
 tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
+tools_ip6tables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" @DBUS_CFLAGS@
+tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
+		src/inotify.c src/iptables.c tools/ip6tables-test.c
+tools_ip6tables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
+
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_session_test_SOURCES = $(backtrace_sources) src/log.c src/dbus.c src/error.c \
@@ -433,6 +439,7 @@ tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\" \
+		-DIP6TABLES_SAVE=\""${IP6TABLES_SAVE}"\" \
 		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\""
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c src/firewall.c \

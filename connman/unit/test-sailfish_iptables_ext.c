@@ -302,7 +302,8 @@ void __connman_iptables_cleanup(void)
 	return;
 }
 
-int __connman_iptables_append(const char *table_name,
+int __connman_iptables_append(int type,
+				const char *table_name,
 				const char *chain,
 				const char *rule_spec)
 {
@@ -313,7 +314,8 @@ int __connman_iptables_append(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_insert(const char *table_name,
+int __connman_iptables_insert(int type,
+				const char *table_name,
 				const char *chain,
 				const char *rule_spec)
 {
@@ -324,7 +326,8 @@ int __connman_iptables_insert(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_delete(const char *table_name,
+int __connman_iptables_delete(int type,
+				const char *table_name,
 				const char *chain,
 				const char *rule_spec)
 {
@@ -335,7 +338,7 @@ int __connman_iptables_delete(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_commit(const char *table_name)
+int __connman_iptables_commit(int type, const char *table_name)
 {
 	if (!check_table(table_name))
 		return -1;
@@ -343,7 +346,8 @@ int __connman_iptables_commit(const char *table_name)
 	return 0;
 }
 
-int __connman_iptables_delete_chain(const char *table_name,
+int __connman_iptables_delete_chain(int type,
+				const char *table_name,
 				const char *chain)
 {
 	if (!check_table(table_name) || !check_chain(chain))
@@ -352,7 +356,8 @@ int __connman_iptables_delete_chain(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_new_chain(const char *table_name,
+int __connman_iptables_new_chain(int type,
+				const char *table_name,
 				const char *chain)
 {
 	if (!check_table(table_name) || !check_chain(chain))
@@ -361,7 +366,8 @@ int __connman_iptables_new_chain(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_flush_chain(const char *table_name,
+int __connman_iptables_flush_chain(int type,
+				const char *table_name,
 				const char *chain)
 {
 	if (!check_table(table_name) || !check_chain(chain))
@@ -370,7 +376,8 @@ int __connman_iptables_flush_chain(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_find_chain(const char *table_name,
+int __connman_iptables_find_chain(int type,
+				const char *table_name,
 				const char *chain)
 {
 	if (!check_table(table_name) || !check_chain(chain))
@@ -379,7 +386,8 @@ int __connman_iptables_find_chain(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_iterate_chains(const char *table_name,
+int __connman_iptables_iterate_chains(int type,
+				const char *table_name,
 				connman_iptables_iterate_chains_cb_t cb,
 				void *user_data)
 {
@@ -389,7 +397,8 @@ int __connman_iptables_iterate_chains(const char *table_name,
 	return 0;
 }
 
-int __connman_iptables_change_policy(const char *table_name,
+int __connman_iptables_change_policy(int type,
+					const char *table_name,
 					const char *chain,
 					const char *policy)
 {
