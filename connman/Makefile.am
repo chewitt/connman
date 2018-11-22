@@ -14,7 +14,7 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/inotify.h include/peer.h include/machine.h \
 			include/technology.h include/iptables_ext.h \
 			include/dbus.h gdbus/gdbus.h include/nat.h \
-			include/acd.h
+			include/acd.h include/tethering.h
 
 if VPN
 include_HEADERS += include/task.h include/setting.h \
