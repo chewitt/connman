@@ -210,6 +210,8 @@ storageroot = $(localstatedir)/lib
 
 configdir = ${sysconfdir}/connman
 
+testconfigdir = "/tmp/connman_test"
+
 if MAINTAINER_MODE
 if VPN
 build_vpn_plugindir = $(abs_top_srcdir)/vpn/plugins/.libs
@@ -440,7 +442,8 @@ tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\" \
 		-DIP6TABLES_SAVE=\""${IP6TABLES_SAVE}"\" \
-		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\""
+		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
+		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c src/firewall.c \
 		src/nat.c tools/iptables-unit.c

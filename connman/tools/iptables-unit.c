@@ -25,8 +25,112 @@
 
 #include <glib.h>
 #include <errno.h>
+#include <unistd.h>
+#include <glib/gstdio.h>
 
 #include "../src/connman.h"
+
+struct connman_service {
+	char *dummy;
+	char *name;
+	char *identifier;
+	enum connman_service_type type;
+	enum connman_service_state state;
+};
+
+struct connman_service test_service = {
+	.dummy = "dummy",
+	.name = "Ethernet1",
+	.identifier = "eth_123",
+	.type = CONNMAN_SERVICE_TYPE_ETHERNET,
+	.state = CONNMAN_SERVICE_STATE_IDLE,
+};
+
+struct connman_service test_service2 = {
+	.dummy = "dummy2",
+	.name = "cellular1",
+	.identifier = "rmnet_123",
+	.type = CONNMAN_SERVICE_TYPE_CELLULAR,
+	.state = CONNMAN_SERVICE_STATE_IDLE,
+};
+
+enum connman_service_type connman_service_get_type(
+						struct connman_service *service)
+{
+	return service->type;
+}
+
+const char *__connman_service_get_name(struct connman_service *service)
+{
+	return service->identifier;
+}
+
+const char *connman_service_get_identifier(struct connman_service *service)
+{
+	return service->name;
+}
+
+const char *__connman_service_type2string(enum connman_service_type type)
+{
+	if (type == CONNMAN_SERVICE_TYPE_ETHERNET)
+		return "ethernet";
+
+	if (type == CONNMAN_SERVICE_TYPE_CELLULAR)
+		return "cellular";
+
+	return NULL;
+}
+
+enum connman_service_type __connman_service_string2type(const char *str)
+{
+	if (!g_strcmp0(str, "ethernet"))
+		return CONNMAN_SERVICE_TYPE_ETHERNET;
+	
+	if (!g_strcmp0(str, "cellular"))
+		return CONNMAN_SERVICE_TYPE_CELLULAR;
+
+	return CONNMAN_SERVICE_TYPE_UNKNOWN;
+}
+
+char *__connman_config_get_string(GKeyFile *key_file,
+	const char *group_name, const char *key, GError **error)
+{
+	char *str = g_key_file_get_string(key_file, group_name, key, error);
+	if (!str)
+		return NULL;
+
+	return g_strchomp(str);
+}
+
+char **__connman_config_get_string_list(GKeyFile *key_file,
+	const char *group_name, const char *key, gsize *length, GError **error)
+{
+	char **p;
+	char **strlist = g_key_file_get_string_list(key_file, group_name, key,
+		length, error);
+	if (!strlist)
+		return NULL;
+
+	p = strlist;
+	while (*p) {
+		*p = g_strstrip(*p);
+		p++;
+	}
+
+	return strlist;
+}
+
+struct connman_service *connman_service_lookup_from_identifier(
+						const char* identifier)
+{
+	if (!g_strcmp0(identifier, "eth_123"))
+		return &test_service;
+
+	if (!g_strcmp0(identifier, "rmnet_123"))
+		return &test_service2;
+
+	return NULL;
+}
 
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
@@ -351,19 +455,26 @@ static void test_iptables_target0(void)
 }
 
 struct connman_notifier *nat_notifier;
-
-struct connman_service {
-	char *dummy;
-};
+struct connman_notifier *firewall_notifier;
 
 char *connman_service_get_interface(struct connman_service *service)
 {
-	return "eth0";
+	if (!g_strcmp0(service->identifier, "eth_123"))
+		return g_strdup("eth0");
+
+	if (!g_strcmp0(service->identifier, "rmnet_123"))
+		return g_strdup("rmnet0");
+
+	return g_strdup("eth0");
 }
 
 int connman_notifier_register(struct connman_notifier *notifier)
 {
-	nat_notifier = notifier;
+	if (!g_strcmp0(notifier->name, "nat"))
+		nat_notifier = notifier;
+
+	if (!g_strcmp0(notifier->name, "firewall"))
+		firewall_notifier = notifier;
 
 	return 0;
 }
@@ -371,6 +482,7 @@ int connman_notifier_register(struct connman_notifier *notifier)
 void connman_notifier_unregister(struct connman_notifier *notifier)
 {
 	nat_notifier = NULL;
+	firewall_notifier = NULL;
 }
 
 static void test_nat_basic0(void)
@@ -991,6 +1103,565 @@ static void test_firewall_4and6_basic0(void)
 }
 
 
+static const char *general_input[] = {
+		"-p tcp -m tcp --dport 80 -j ACCEPT",
+		"-p udp -m udp --dport 81 -j DROP",
+		"-p all -m conntrack --ctstate RELATED -j ACCEPT",
+		"#-p sctp --dport 69 -j REJECT",
+		NULL
+};
+static const char *general_output[] = {
+		"-p tcp -m tcp --sport 80 -j ACCEPT",
+		"-p udp -m udp --sport 81 -j DROP",
+		"#-p sctp --sport 123 -j REJECT",
+		NULL
+};
+static const char *general_forward[] = {
+		"-p tcp -m tcp -j ACCEPT",
+		"-p udp -m udp -j DROP",
+		NULL
+};
+static const char *eth_input[] = {
+		"-p tcp -m tcp --dport 80 -j ACCEPT",
+		"-p udp -m udp --dport 81 -j DROP",
+		"-p all -m conntrack --ctstate RELATED -j ACCEPT",
+		"#-p sctp --dport 69 -j REJECT",
+		NULL
+};
+static const char *eth_output[] = {
+		"-p tcp -m tcp --sport 80 -j ACCEPT",
+		"-p udp -m udp --sport 81 -j DROP",
+		"#-p sctp --sport 123 -j REJECT",
+		NULL
+};
+static const char *cellular_input[] = {
+		"-p tcp -m tcp --dport 80 -j ACCEPT",
+		"-p udp -m udp --dport 81 -j DROP",
+		"-p all -m conntrack --ctstate RELATED -j ACCEPT",
+		NULL
+};
+static const char *cellular_output[] = {
+		"-p tcp -m tcp --sport 80 -j ACCEPT",
+		"-p udp -m udp --sport 81 -j DROP",
+		NULL
+};
+
+/* Invalid rules */
+static const char *invalid_general_input[] = {
+		"-p tcp -m tcp --dport 80 -j ACCEPT -j DROP",
+		"udp -m udp --dport 81 -j DROP",
+		"-p tcp -p all -m conntrack --ctstate RELATED -j ACCEPT",
+		NULL
+};
+static const char *invalid_general_output[] = {
+		"-p tcp -m tcp --sport 80 -j ACCEPT -j ACCEPT -j DROP",
+		"-p udp -m udp --sport 81 --dport 50 --dport 40 -j DROP",
+		"DROP",
+		NULL
+};
+static const char *invalid_general_forward[] = {
+		"-j ACCEPT -j DROP",
+		"-p udp -m udp -m multiport --dport 654 -j DROP",
+		NULL
+};
+static const char *invalid_eth_input[] = {
+		"-p tcp -m tcp --dport 80 -j ACCEPT -j DROP",
+		"udp -m udp --dport 81 -j DROP",
+		"-p tcp -p all -m conntrack --ctstate RELATED -j ACCEPT",
+		NULL
+};
+static const char *invalid_eth_output[] = {
+		"-p tcp -m tcp --sport 80 -j ACCEPT -j ACCEPT -j DROP",
+		"-p udp -m udp --sport 81 --dport 50 --dport 40 -j DROP",
+		"DROP",
+		NULL
+};
+
+static bool init_firewall_config(bool use_valid_rules)
+{
+	GKeyFile *config;
+	GError *error = NULL;
+	char *filename;
+	bool ret = false;
+	int err;
+
+	config = g_key_file_new();
+
+	g_assert(config);
+
+	if (use_valid_rules) {
+		g_key_file_set_string_list(config, "General", "INPUT",
+					general_input,
+					g_strv_length((char**)general_input));
+
+		g_key_file_set_string_list(config, "General", "OUTPUT",
+					general_output,
+					g_strv_length((char**)general_output));
+
+		g_key_file_set_string_list(config, "General", "FORWARD",
+					general_forward,
+					g_strv_length((char**)general_forward));
+
+		g_key_file_set_string_list(config, "ethernet", "INPUT",
+					eth_input,
+					g_strv_length((char**)eth_input));
+
+		g_key_file_set_string_list(config, "ethernet", "OUTPUT",
+					eth_output,
+					g_strv_length((char**)eth_output));
+
+		g_key_file_set_string_list(config, "cellular", "INPUT",
+					cellular_input,
+					g_strv_length((char**)cellular_input));
+
+		g_key_file_set_string_list(config, "cellular", "OUTPUT",
+					cellular_output,
+					g_strv_length((char**)cellular_output));
+	} else {
+		g_key_file_set_string_list(config, "General", "INPUT",
+					invalid_general_input,
+					g_strv_length(
+					(char**)invalid_general_input));
+
+		g_key_file_set_string_list(config, "General", "OUTPUT",
+					invalid_general_output,
+					g_strv_length(
+					(char**)invalid_general_output));
+
+		g_key_file_set_string_list(config, "General", "FORWARD",
+					invalid_general_forward,
+					g_strv_length(
+					(char**)invalid_general_forward));
+
+		g_key_file_set_string_list(config, "ethernet", "INPUT",
+					invalid_eth_input,
+					g_strv_length(
+					(char**)invalid_eth_input));
+
+		g_key_file_set_string_list(config, "ethernet", "OUTPUT",
+					invalid_eth_output,
+					g_strv_length(
+					(char**)invalid_eth_output));
+	}
+
+	filename = g_strconcat(CONFIGDIR,"/","firewall.conf", NULL);
+
+	if (!g_file_test(CONFIGDIR, G_FILE_TEST_IS_DIR)) {
+		err = g_mkdir_with_parents(CONFIGDIR, R_OK|W_OK|X_OK);
+
+		if (err) {
+			g_printerr("Error creating %s\n", CONFIGDIR);
+			goto out;
+		}
+	}
+
+	ret = g_key_file_save_to_file(config, filename, &error);
+
+	if (error)
+		g_printerr("Error saving %s, %s\n", filename, error->message);
+
+	g_clear_error(&error);
+
+out:
+	g_free(filename);
+
+	g_key_file_free(config);
+
+	return ret;
+}
+
+static bool clean_firewall_config()
+{
+	char *filename;
+	int err = 0;
+	bool ret = false;
+
+	filename = g_strconcat(CONFIGDIR,"/","firewall.conf", NULL);
+
+	if (g_file_test(filename,
+				G_FILE_TEST_EXISTS | G_FILE_TEST_IS_REGULAR)) {
+		err = g_remove(filename);
+
+		if (err && errno)
+			g_printerr("Error removing %s, %s\n", filename,
+						strerror(errno));
+	}
+
+	g_free(filename);
+
+	if (err)
+		goto out;
+
+	if (g_file_test(CONFIGDIR, G_FILE_TEST_IS_DIR)) {
+		err = g_rmdir(CONFIGDIR);
+
+		if (err && errno)
+			g_printerr("Error removing dir %s, %s\n", CONFIGDIR,
+						strerror(errno));
+	}
+
+	ret = !err;
+out:
+	return ret;
+}
+
+static void test_managed_rule_exists(int type, const char *chain,
+					const char *dev, const char *rule)
+{
+	char *test_rule;
+	char *rule_dev = NULL;
+	bool rule_exists = true;
+
+	if (!g_strcmp0(chain, "INPUT") && dev)
+		rule_dev = g_strdup_printf(" -i %s ", dev);
+	else if (!g_strcmp0(chain, "OUTPUT") && dev)
+		rule_dev = g_strdup_printf(" -o %s ", dev);
+	else
+		rule_dev = g_strdup(" ");
+
+	/* Commented out rule, should not exist */
+	if (rule[0] == '#') {
+		test_rule = g_strconcat("-A connman-", chain, rule_dev,
+					&(rule[1]), NULL);
+		rule_exists = false;
+	} else if (g_str_has_prefix(rule, "-p all"))
+		/* -p all is omitted in iptables-save output, skip it */
+		test_rule = g_strconcat("-A connman-", chain, rule_dev,
+					&(rule[7]), NULL);
+	else
+		test_rule = g_strconcat("-A connman-", chain, rule_dev,
+					rule, NULL);
+
+	if (rule_exists)
+		assert_rule_exists(type, "filter", test_rule);
+	else
+		assert_rule_not_exists(type, "filter", test_rule);
+
+	g_free(test_rule);
+	g_free(rule_dev);
+}
+
+static void test_managed_rule_not_exists(int type, const char *chain,
+					const char *dev, const char *rule)
+{
+	char *test_rule;
+	char *rule_dev;
+
+	if (rule[0] == '#')
+		return;
+
+	if (!g_strcmp0(chain, "INPUT") && dev)
+		rule_dev = g_strdup_printf(" -i %s ", dev);
+	else if (!g_strcmp0(chain, "OUTPUT") && dev)
+		rule_dev = g_strdup_printf(" -o %s ", dev);
+	else
+		rule_dev = g_strdup(" ");
+
+	test_rule = g_strconcat("-A connman-", chain, rule_dev, rule,
+				NULL);
+
+	assert_rule_not_exists(type, "filter", test_rule);
+
+	g_free(test_rule);
+	g_free(rule_dev);
+}
+
+static void test_firewall_managed_prep(void)
+{
+	/* It is required to have iptables and firewall empty before setting
+	 * new content for testing
+	 */
+	__connman_firewall_cleanup();
+	__connman_iptables_cleanup();
+
+	g_assert(init_firewall_config(true));
+}
+
+static void test_firewall_managed_rules0(void)
+{
+	int i;
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	for (i = 0; general_input[i]; i++)
+		test_managed_rule_exists(AF_INET, "INPUT", NULL,
+					general_input[i]);
+
+	for (i = 0; general_output[i]; i++)
+		test_managed_rule_exists(AF_INET, "OUTPUT", NULL,
+					general_output[i]);
+
+	for (i = 0; general_forward[i]; i++)
+		test_managed_rule_exists(AF_INET, "FORWARD",  NULL,
+					general_forward[i]);
+
+	__connman_firewall_cleanup();
+	__connman_iptables_cleanup();
+
+	/* Check that iptables is clean */
+	for (i = 0; general_input[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "INPUT", NULL,
+					general_input[i]);
+
+	for (i = 0; general_output[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "OUTPUT", NULL,
+					general_output[i]);
+
+	for (i = 0; general_forward[i]; i++) 
+		test_managed_rule_not_exists(AF_INET, "FORWARD", NULL,
+					general_forward[i]);
+
+	/* Check that iptables is clean */
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A INPUT -j connman-INPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A OUTPUT -j connman-OUTPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A FORWARD -j connman-FORWARD");
+
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-INPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-OUTPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-FORWARD - [0:0]");
+}
+
+static void test_firewall_managed_rules1(void)
+{
+	int i;
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
+
+	firewall_notifier->service_state_changed(&test_service,
+				CONNMAN_SERVICE_STATE_READY);
+
+	for (i = 0; eth_input[i]; i++)
+		test_managed_rule_exists(AF_INET, "INPUT", "eth0",
+					eth_input[i]);
+
+	for (i = 0; eth_output[i]; i++)
+		test_managed_rule_exists(AF_INET, "OUTPUT", "eth0",
+					eth_output[i]);
+
+	test_service.state = CONNMAN_SERVICE_STATE_DISCONNECT;
+
+	firewall_notifier->service_state_changed(&test_service,
+				CONNMAN_SERVICE_STATE_DISCONNECT);
+
+	for (i = 0; eth_input[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "INPUT", "eth0",
+					eth_input[i]);
+
+	for (i = 0; eth_output[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "OUTPUT", "eth0",
+					eth_output[i]);
+
+	__connman_firewall_cleanup();
+	__connman_iptables_cleanup();
+
+	/* Check that iptables is clean */
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A INPUT -j connman-INPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A OUTPUT -j connman-OUTPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A FORWARD -j connman-FORWARD");
+
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-INPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-OUTPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-FORWARD - [0:0]");
+
+}
+
+static void test_firewall_managed_rules2(void)
+{
+	int i;
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	/* Test service 1 ethernet */
+	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
+
+	firewall_notifier->service_state_changed(&test_service,
+				CONNMAN_SERVICE_STATE_READY);
+
+	for (i = 0; eth_input[i]; i++)
+		test_managed_rule_exists(AF_INET, "INPUT", "eth0",
+					eth_input[i]);
+
+	for (i = 0; eth_output[i]; i++)
+		test_managed_rule_exists(AF_INET, "OUTPUT", "eth0",
+					eth_output[i]);
+
+	/* Test service 2 cellular */
+	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
+
+	firewall_notifier->service_state_changed(&test_service2,
+				CONNMAN_SERVICE_STATE_READY);
+
+	for (i = 0; cellular_input[i]; i++)
+		test_managed_rule_exists(AF_INET, "INPUT", "rmnet0",
+					cellular_input[i]);
+
+	for (i = 0; cellular_output[i]; i++)
+		test_managed_rule_exists(AF_INET, "OUTPUT", "rmnet0",
+					cellular_output[i]);
+
+	/* Test service 1 ethernet disconnect*/
+	test_service.state = CONNMAN_SERVICE_STATE_DISCONNECT;
+
+	firewall_notifier->service_state_changed(&test_service,
+				CONNMAN_SERVICE_STATE_DISCONNECT);
+
+	for (i = 0; eth_input[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "INPUT", "eth0",
+					eth_input[i]);
+
+	for (i = 0; eth_output[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "OUTPUT", "eth0",
+					eth_output[i]);
+	
+	/* Test service 2 cellular disconnect */
+	test_service2.state = CONNMAN_SERVICE_STATE_DISCONNECT;
+
+	firewall_notifier->service_state_changed(&test_service2,
+				CONNMAN_SERVICE_STATE_DISCONNECT);
+
+	for (i = 0; cellular_input[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "INPUT", "rmnet0",
+					cellular_input[i]);
+
+	for (i = 0; cellular_output[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "OUTPUT", "rmnet0",
+					cellular_output[i]);
+
+	__connman_firewall_cleanup();
+	__connman_iptables_cleanup();
+
+	/* Check that iptables is clean */
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A INPUT -j connman-INPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A OUTPUT -j connman-OUTPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A FORWARD -j connman-FORWARD");
+
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-INPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-OUTPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-FORWARD - [0:0]");
+}
+
+static void test_firewall_managed_clean(void)
+{
+	g_assert(clean_firewall_config());
+}
+
+static void test_firewall_managed_invalid_prep(void)
+{
+	g_assert(init_firewall_config(false));
+}
+
+static void test_firewall_managed_invalid_rules0(void)
+{
+	int i;
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	for (i = 0; invalid_general_input[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "INPUT", NULL,
+					invalid_general_input[i]);
+
+	for (i = 0; invalid_general_output[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "OUTPUT", NULL,
+					invalid_general_output[i]);
+
+	for (i = 0; invalid_general_forward[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "FORWARD", NULL,
+					invalid_general_forward[i]);
+
+	/* Check that iptables is clean */
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A INPUT -j connman-INPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A OUTPUT -j connman-OUTPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A FORWARD -j connman-FORWARD");
+
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-INPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-OUTPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-FORWARD - [0:0]");
+
+	__connman_firewall_cleanup();
+	__connman_iptables_cleanup();
+}
+
+static void test_firewall_managed_invalid_rules1(void)
+{
+	int i;
+
+	g_assert(init_firewall_config(false));
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
+
+	firewall_notifier->service_state_changed(&test_service,
+				CONNMAN_SERVICE_STATE_READY);
+
+	for (i = 0; invalid_eth_input[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "INPUT", "eth0",
+					invalid_eth_input[i]);
+
+	for (i = 0; invalid_eth_output[i]; i++)
+		test_managed_rule_not_exists(AF_INET, "OUTPUT", "eth0",
+					invalid_eth_output[i]);
+
+	test_service.state = CONNMAN_SERVICE_STATE_DISCONNECT;
+
+	firewall_notifier->service_state_changed(&test_service,
+				CONNMAN_SERVICE_STATE_DISCONNECT);
+
+	/* Check that iptables is clean */
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A INPUT -j connman-INPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A OUTPUT -j connman-OUTPUT");
+	assert_rule_not_exists(AF_INET, "filter",
+				"-A FORWARD -j connman-FORWARD");
+
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-INPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-OUTPUT - [0:0]");
+	assert_rule_not_exists(AF_INET, "filter",
+				":connman-FORWARD - [0:0]");
+
+	__connman_firewall_cleanup();
+	__connman_iptables_cleanup();
+}
+
+static void test_firewall_managed_invalid_clean(void)
+{
+	g_assert(clean_firewall_config());
+}
+
 static gchar *option_debug = NULL;
 
 static bool parse_debug(const char *key, const char *value,
@@ -1067,12 +1738,25 @@ int main(int argc, char *argv[])
 	g_test_add_func("/firewall6/basic2", test_firewall6_basic2);
 	g_test_add_func("/firewall6/basic3", test_firewall6_basic3);
 	g_test_add_func("/firewall4and6/basic4", test_firewall_4and6_basic0);
+	g_test_add_func("/firewallmanaged/prep", test_firewall_managed_prep);
+	g_test_add_func("/firewallmanaged/rule0", test_firewall_managed_rules0);
+	g_test_add_func("/firewallmanaged/rule1", test_firewall_managed_rules1);
+	g_test_add_func("/firewallmanaged/rule2", test_firewall_managed_rules2);
+	g_test_add_func("/firewallmanaged/clean", test_firewall_managed_clean);
+	g_test_add_func("/firewallmanaged/invalid_prep",
+				test_firewall_managed_invalid_prep);
+	g_test_add_func("/firewallmanaged/invalid0",
+				test_firewall_managed_invalid_rules0);
+	g_test_add_func("/firewallmanaged/invalid1",
+				test_firewall_managed_invalid_rules1);
+	g_test_add_func("/firewallmanaged/invalid_clean",
+				test_firewall_managed_invalid_clean);
 
 	err = g_test_run();
 
 	__connman_nat_cleanup();
-	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
+	//__connman_firewall_cleanup();
+	//__connman_iptables_cleanup();
 
 	g_free(option_debug);
 
