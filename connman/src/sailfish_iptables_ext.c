@@ -1112,10 +1112,25 @@ static int iptables_parse_rule(const gchar* table_name, gchar* rule)
 				rule_str->str);
 		break;
 	default:
-		ERR("iptables_parse_rule() invalid rule prefix %c",
-			rule[1]);
+		ERR("iptables_parse_rule() invalid rule prefix %c in rule %s",
+			argv[0][1], rule);
+		goto out;
 	}
 
+	/*
+	 * When iptables operation was a success commit rule. Commit each rule
+	 * one by one to avoid problems with iptables changing in between.
+	 * Only properly processed rules have set the rval. If rule parsing has
+	 * failed this is not executed.
+	 */
+	if (!rval) {
+		rval = __connman_iptables_commit(AF_INET, table_name);
+
+		/* Commit errors are not recoverable */
+		if (rval)
+			ERR("iptables_parse_rule() rule %s commit failed",
+						rule);
+	}
 out:
 	if (rule_str)
 		g_string_free(rule_str, true);
@@ -1127,7 +1142,7 @@ out:
 
 static int iptables_restore_table(const char *table_name, const char *fpath)
 {
-	gint rval = 0, i = 0, rules = 0;
+	gint rval = 0, i = 0, rules = 0, err = 0;
 	gboolean content_matches = false;
 	gboolean process = true;
 	gint table_result = iptables_check_table(table_name);
@@ -1171,12 +1186,21 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 		// Rule
 		case '-':
 			if (content_matches) {
-				if (iptables_parse_rule(table_name, tokens[i]))
-					ERR("iptables_restore_table()"
-						"Invalid rule %s",
-						tokens[i]);
-				else
+				err = iptables_parse_rule(table_name,
+							tokens[i]);
+
+				switch (err) {
+				case 0:
+					/* Added and committed, fallthrough */
 					rules++;
+				case 1:
+					/* Invalid rule, ignore */
+					break;
+				default:
+					/* Error, return error code. */
+					rval = err;
+					goto err;
+				}
 			}
 			break;
 		/*
@@ -1190,17 +1214,16 @@ static int iptables_restore_table(const char *table_name, const char *fpath)
 			break;
 		}
 	}
+
+err:
 	g_strfreev(tokens);
 	
 	g_string_free(content,true);
 	
 	if (content_matches) {
-		/* Commit fails if there has not been any changes */
-		if (rules) {
-			DBG("Added %d rules to table %s", rules, table_name);
-			rval = __connman_iptables_commit(AF_INET, table_name);
-		}
+		DBG("Added %d rules to table %s", rules, table_name);
 	} else {
+		/* TODO set rval = -1 in case of error ? */
 		ERR("iptables_restore_table() %s",
 			"requested table name does not match file table name");
 	}
