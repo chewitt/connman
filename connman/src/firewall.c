@@ -701,13 +701,31 @@ static void flush_table(int type, const char *table_name)
 	g_slist_free(chains);
 }
 
+#define IP_TABLES_NAMES_FILE "/proc/net/ip_tables_names"
+#define IP6_TABLES_NAMES_FILE "/proc/net/ip6_tables_names"
+
 static void flush_all_tables(int type)
 {
-	/* Flush the tables ConnMan might have modified
-	 * But do so if only ConnMan has done something with
-	 * iptables */
+	gchar *content = NULL;
+	gsize len = -1;
+	GError *error = NULL;
+	const char *iptables_file = NULL;
+	const char *tables[] = { "filter", "mangle", "nat", NULL };
+	char **tokens = NULL;
+	int i, j;
 
-	if (!g_file_test("/proc/net/ip_tables_names",
+	switch (type) {
+	case AF_INET:
+		iptables_file = IP_TABLES_NAMES_FILE;
+		break;
+	case AF_INET6:
+		iptables_file = IP6_TABLES_NAMES_FILE;
+		break;
+	default:
+		return;
+	}
+
+	if (!g_file_test(iptables_file,
 			G_FILE_TEST_EXISTS | G_FILE_TEST_IS_REGULAR)) {
 		firewall_is_up = false;
 		return;
@@ -715,9 +733,33 @@ static void flush_all_tables(int type)
 
 	firewall_is_up = true;
 
-	flush_table(type, "filter");
-	flush_table(type, "mangle");
-	flush_table(type, "nat");
+	if (!g_file_get_contents(iptables_file, &content, &len, &error)) {
+		DBG("cannot flush tables, file %s read error: %s",
+					iptables_file, error->message);
+		g_clear_error(&error);
+		goto out;
+	}
+
+	tokens = g_strsplit(content, "\n", -1);
+
+	if (!tokens || !g_strv_length(tokens))
+		goto out;
+
+	/* Flush the tables ConnMan might have modified
+	 * But do so if only ConnMan has done something with
+	 * iptables */
+	for (i = 0; tables[i]; i++) {
+		for (j = 0; tokens[j]; j++) {
+			if (!g_strcmp0(tables[i], tokens[j])) {
+				DBG("flush type %d table %s", type, tables[i]);
+				flush_table(type, tables[i]);
+			}
+		}
+	}
+
+out:
+	g_free(content);
+	g_strfreev(tokens);
 }
 
 static bool has_dynamic_rules_set(enum connman_service_type type)
