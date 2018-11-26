@@ -490,6 +490,24 @@ bool __connman_technology_get_offlinemode(void)
 	return global_offlinemode;
 }
 
+const char *__connman_technology_get_tethering_ident(
+						struct connman_technology *tech)
+{
+	if (!tech)
+		return NULL;
+	
+	return tech->tethering_ident;
+}
+
+enum connman_service_type __connman_technology_get_type(
+						struct connman_technology *tech)
+{
+	if (!tech)
+		return CONNMAN_SERVICE_TYPE_UNKNOWN; /* 0 */
+
+	return tech->type;
+}
+
 static void connman_technology_save_offlinemode(void)
 {
 	GKeyFile *keyfile;
