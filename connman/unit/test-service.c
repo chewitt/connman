@@ -23,6 +23,8 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 
+#include <unistd.h>
+
 #include "src/service.c"
 
 unsigned int *preferred_list = NULL;
@@ -551,9 +553,49 @@ void test_service_sort_vpn_non_default()
 	return;
 }
 
+int rmdir_r(const gchar* path)
+{
+	DIR *d = opendir(path);
+
+	if (d) {
+		const struct dirent *p;
+		int r = 0;
+
+		while (!r && (p = readdir(d))) {
+			char *buf;
+			struct stat st;
+
+			if (!strcmp(p->d_name, ".") ||
+						!strcmp(p->d_name, "..")) {
+				continue;
+			}
+
+			buf = g_strdup_printf("%s/%s", path, p->d_name);
+			if (!stat(buf, &st)) {
+				r =  S_ISDIR(st.st_mode) ? rmdir_r(buf) :
+								unlink(buf);
+			}
+			g_free(buf);
+		}
+		closedir(d);
+		return r ? r : rmdir(path);
+	} else {
+		return -1;
+	}
+
+}
+
 int main(int argc, char **argv)
 {
+	int ret;
+	char* test_dir = g_dir_make_tmp("test_service_XXXXXX", NULL);
+
 	g_test_init(&argc, &argv, NULL);
+
+	__connman_log_init("test-service", g_test_verbose() ? "*" : NULL,
+			FALSE, FALSE, "test-service", CONNMAN_VERSION);
+	__connman_storage_init(test_dir, 0755, 0644);
+	mkdir(STORAGEDIR, 0755);
 
 	g_test_add_func("/service/service_sort_full_positive",
 		test_service_sort_full_positive);
@@ -566,5 +608,11 @@ int main(int argc, char **argv)
 	g_test_add_func("/service/service_sort_vpn_non_default",
 		test_service_sort_vpn_non_default);
 
-	return g_test_run();
+	ret = g_test_run();
+	__connman_log_cleanup(FALSE);
+	__connman_storage_cleanup();
+	rmdir_r(test_dir);
+	g_free(test_dir);
+
+	return ret;
 }
