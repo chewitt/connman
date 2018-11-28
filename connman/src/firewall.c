@@ -547,6 +547,7 @@ int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
 {
 	struct fw_rule *rule;
 	GList *list;
+	int e;
 	int err = -ENOENT;
 	int count = 0;
 
@@ -554,10 +555,13 @@ int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
 		rule = list->data;
 
 		if (rule->id == id || id == FW_ALL_RULES) {
-			err = firewall_enable_rule(rule);
+			e = firewall_enable_rule(rule);
 
-			if (err < 0)
-				break;
+			/* Do not stop if enabling all rules */
+			if (e == 0 && err == -ENOENT)
+				err = 0;
+			else if (e < 0)
+				err = e;
 
 			if (id != FW_ALL_RULES)
 				break;
