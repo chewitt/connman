@@ -1076,6 +1076,7 @@ bool __connman_firewall_is_up(void);
 
 int __connman_firewall_init(void);
 void __connman_firewall_cleanup(void);
+void __connman_firewall_pre_cleanup(void);
 
 typedef int (* connman_nfacct_flush_cb_t) (unsigned int error, void *user_data);
 

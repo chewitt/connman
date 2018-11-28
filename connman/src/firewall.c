@@ -2490,30 +2490,6 @@ static void cleanup_general_firewall()
 	__connman_firewall_destroy(general_firewall->ctx);
 	general_firewall->ctx = NULL;
 
-	err = restore_policies(AF_INET, general_firewall->policies,
-				general_firewall->restore_policies);
-
-	if (err)
-		DBG("failed to restore IPv4 iptables policies, err %d", err);
-
-	err = restore_policies(AF_INET6, general_firewall->policiesv6,
-				general_firewall->restore_policiesv6);
-
-	if (err)
-		DBG("failed to restore IPv6 iptables policies, err %d", err);
-
-	g_free(general_firewall->policies);
-	general_firewall->policies = NULL;
-
-	g_free(general_firewall->restore_policies);
-	general_firewall->restore_policies = NULL;
-
-	g_free(general_firewall->policiesv6);
-	general_firewall->policiesv6 = NULL;
-	
-	g_free(general_firewall->restore_policiesv6);
-	general_firewall->restore_policiesv6 = NULL;
-
 	g_free(general_firewall);
 	general_firewall = NULL;
 }
@@ -2558,6 +2534,38 @@ static void cleanup_dynamic_firewall_rules()
 	dynamic_rules = NULL;
 }
 
+static void firewall_failsafe(const char *chain_name, void *user_data)
+{
+	int err;
+	int type;
+	const char *data = user_data;
+
+	if (!data)
+		return;
+
+	if (!g_strcmp0(data, "AF_INET"))
+		type = AF_INET;
+	else if (!g_strcmp0(data, "AF_INET6"))
+		type = AF_INET6;
+	else
+		return;
+
+	err = __connman_iptables_change_policy(type, "filter", chain_name,
+				"ACCEPT");
+
+	if (err) {
+		DBG("cannot set table filter chain %s policy ACCEPT, error %d",
+					chain_name, err);
+		return;
+	}
+
+	err = __connman_iptables_commit(type, "filter");
+
+	if (err)
+		DBG("cannot commit table filter chain %s policy, error %d",
+					chain_name, err);
+}
+
 static struct connman_notifier firewall_notifier = {
 	.name			= "firewall",
 	.service_state_changed	= service_state_changed,
@@ -2582,9 +2590,50 @@ int __connman_firewall_init(void)
 			DBG("cannot register notifier, dynamic rules disabled");
 			cleanup_dynamic_firewall_rules();
 		}
+	} else {
+		DBG("dynamic rules disabled, policy ACCEPT set for all chains");
+		connman_error("firewall initialization error, reset iptables");
+		__connman_iptables_cleanup();
+		__connman_iptables_init();
+		__connman_iptables_iterate_chains(AF_INET, "filter",
+					firewall_failsafe, "AF_INET");
+		__connman_iptables_iterate_chains(AF_INET6, "filter",
+					firewall_failsafe, "AF_INET6");
 	}
 
 	return 0;
+}
+
+void __connman_firewall_pre_cleanup(void)
+{
+	int err;
+
+	if (!general_firewall)
+		return;
+
+	err = restore_policies(AF_INET, general_firewall->policies,
+				general_firewall->restore_policies);
+
+	if (err)
+		DBG("failed to restore IPv4 iptables policies, err %d", err);
+
+	err = restore_policies(AF_INET6, general_firewall->policiesv6,
+				general_firewall->restore_policiesv6);
+
+	if (err)
+		DBG("failed to restore IPv6 iptables policies, err %d", err);
+
+	g_free(general_firewall->policies);
+	general_firewall->policies = NULL;
+
+	g_free(general_firewall->restore_policies);
+	general_firewall->restore_policies = NULL;
+
+	g_free(general_firewall->policiesv6);
+	general_firewall->policiesv6 = NULL;
+
+	g_free(general_firewall->restore_policiesv6);
+	general_firewall->restore_policiesv6 = NULL;
 }
 
 void __connman_firewall_cleanup(void)
