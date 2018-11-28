@@ -1233,14 +1233,19 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 						NULL
 	};
 
-	/* For unknown reason -m conntrack works with IPv4 but not with IPv6 */
 	const char *not_supported_matches_ipv4[] = { "comment",
 						"state",
 						NULL
 	};
+	/*
+	 * For yet unknown reason following work with IPv4 but not with IPv6:
+	    -m conntrack
+	    -m multiport
+	 */
 	const char *not_supported_matches_ipv6[] = { "comment",
 						"state",
 						"conntrack",
+						"multiport",
 						NULL
 	};
 
@@ -1567,8 +1572,8 @@ static bool validate_iptables_rule(int type, const char *group,
 	if (switch_types_found[IPTABLES_PORT] > 2)
 		goto out;
 
-	/* There should be 0...1 matches in one rule */
-	if (switch_types_found[IPTABLES_MATCH] > 1)
+	/* There should be 0...2 matches in one rule */
+	if (switch_types_found[IPTABLES_MATCH] > 2)
 		goto out;
 
 	/* There should be 0...1 protocols defined in rule */
