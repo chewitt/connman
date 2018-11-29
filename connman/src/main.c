@@ -927,6 +927,7 @@ int main(int argc, char *argv[])
 	__connman_rtnl_cleanup();
 	__connman_resolver_cleanup();
 
+	__connman_firewall_pre_cleanup();
 	__connman_iptables_save_all();
 	
 	__connman_clock_cleanup();

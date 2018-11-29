@@ -132,6 +132,29 @@ struct connman_service *connman_service_lookup_from_identifier(
 	return NULL;
 }
 
+const char *__connman_technology_get_tethering_ident(
+				struct connman_technology *tech)
+{
+	return NULL;
+}
+
+const char *__connman_tethering_get_bridge(void)
+{
+	return "tether";
+}
+
+enum connman_service_type __connman_technology_get_type(
+					struct connman_technology *tech)
+{
+	return 0;
+}
+
+void connman_technology_tethering_notify(struct connman_technology *technology,
+							bool enabled)
+{
+	return;
+}
+
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;

@@ -3804,12 +3804,25 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 
 		for (l = plugin->devices; l && !ap_dev; l = l->next) {
 			struct wifi_device *dev = l->data;
+
+			/*
+			 * Check if either GSupplicantInterface or GSupplicant
+			 * structure has the AP capability.
+			 */
 			GSupplicantInterface* iface = dev->iface;
+			GSupplicant *supplicant = dev->supplicant;
 
 			if (iface && iface->valid && (iface->caps.modes &
 					GSUPPLICANT_INTERFACE_CAPS_MODES_AP)) {
 				ap_dev = dev;
 			}
+
+			if (supplicant && supplicant->valid &&
+						(dev->supplicant->caps &
+						GSUPPLICANT_CAPS_AP)) {
+				ap_dev = dev;
+			}
+
 		}
 
 		if (!ap_dev) {

@@ -577,6 +577,10 @@ void __connman_technology_remove_interface(enum connman_service_type type,
 				int index, const char *ident);
 void __connman_technology_notify_regdom_by_device(struct connman_device *device,
 						int result, const char *alpha2);
+const char *__connman_technology_get_tethering_ident(
+					struct connman_technology *tech);
+enum connman_service_type __connman_technology_get_type(
+					struct connman_technology *tech);
 
 #include <connman/device.h>
 
@@ -1072,6 +1076,7 @@ bool __connman_firewall_is_up(void);
 
 int __connman_firewall_init(void);
 void __connman_firewall_cleanup(void);
+void __connman_firewall_pre_cleanup(void);
 
 typedef int (* connman_nfacct_flush_cb_t) (unsigned int error, void *user_data);
 
