@@ -3801,14 +3801,10 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 
 	if (enabled) {
 		struct wifi_device *ap_dev = NULL;
-		bool interface_found = false;
 
 		for (l = plugin->devices; l && !ap_dev; l = l->next) {
 			struct wifi_device *dev = l->data;
 			GSupplicantInterface* iface = dev->iface;
-
-			if (iface)
-				interface_found = true;
 
 			if (iface && iface->valid && (iface->caps.modes &
 					GSUPPLICANT_INTERFACE_CAPS_MODES_AP)) {
@@ -3816,26 +3812,23 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 			}
 		}
 
-		/*
-		 * When there is no interfaces set do not report an error.
-		 * Instead, report plain ok value and do nothing. Tethering will
-		 * be initiated otherwise.
-		 */
-		if (!interface_found) {
-			DBG("no GSupplicantInterface set for any device.");
-			return 0;
-		}
-
 		if (!ap_dev) {
 			DBG("tethering not supported");
 			return (-EOPNOTSUPP);
-		} else if (ap_dev->state == WIFI_DEVICE_TETHERING_ON) {
-			DBG("already tethering");
-			return (-EALREADY);
 		} else {
-			/* Start tethering */
-			return wifi_device_tether_start(ap_dev, plugin->tech,
-						bridge, ssid, passphrase);
+			switch (ap_dev->state) {
+			case WIFI_DEVICE_TETHERING_ON:
+				DBG("already tethering");
+				return (-EALREADY);
+			case WIFI_DEVICE_TURNING_TETHERING_ON:
+				DBG("already turning tethering on");
+				return (-EINPROGRESS);
+			default:
+				/* Start tethering */
+				return wifi_device_tether_start(ap_dev,
+							plugin->tech, bridge,
+							ssid, passphrase);
+			}
 		}
 	} else {
 		for (l = plugin->devices; l; l = l->next) {
