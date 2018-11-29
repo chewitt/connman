@@ -3801,15 +3801,29 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 
 	if (enabled) {
 		struct wifi_device *ap_dev = NULL;
+		bool interface_found = false;
 
 		for (l = plugin->devices; l && !ap_dev; l = l->next) {
 			struct wifi_device *dev = l->data;
 			GSupplicantInterface* iface = dev->iface;
 
+			if (iface)
+				interface_found = true;
+
 			if (iface && iface->valid && (iface->caps.modes &
 					GSUPPLICANT_INTERFACE_CAPS_MODES_AP)) {
 				ap_dev = dev;
 			}
+		}
+
+		/*
+		 * When there is no interfaces set do not report an error.
+		 * Instead, report plain ok value and do nothing. Tethering will
+		 * be initiated otherwise.
+		 */
+		if (!interface_found) {
+			DBG("no GSupplicantInterface set for any device.");
+			return 0;
 		}
 
 		if (!ap_dev) {
