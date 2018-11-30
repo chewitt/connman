@@ -3801,34 +3801,41 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 
 	if (enabled) {
 		struct wifi_device *ap_dev = NULL;
+		gboolean turning_tethering_on = FALSE;
 
 		for (l = plugin->devices; l && !ap_dev; l = l->next) {
 			struct wifi_device *dev = l->data;
 			GSupplicantInterface* iface = dev->iface;
 
-			if (iface && iface->valid && (iface->caps.modes &
+			/*
+			 * GSupplicantInterface pointer can be NULL if
+			 * we are in the process of switching from infra
+			 * to AP mode.
+			 */
+			if (dev->state == WIFI_DEVICE_TURNING_TETHERING_ON) {
+				turning_tethering_on = TRUE;
+			} else if (iface && iface->valid && (iface->caps.modes &
 					GSUPPLICANT_INTERFACE_CAPS_MODES_AP)) {
 				ap_dev = dev;
 			}
 		}
 
-		if (!ap_dev) {
-			DBG("tethering not supported");
-			return (-EOPNOTSUPP);
-		} else {
-			switch (ap_dev->state) {
-			case WIFI_DEVICE_TETHERING_ON:
+		if (ap_dev) {
+			if (ap_dev->state == WIFI_DEVICE_TETHERING_ON) {
 				DBG("already tethering");
 				return (-EALREADY);
-			case WIFI_DEVICE_TURNING_TETHERING_ON:
-				DBG("already turning tethering on");
-				return (-EINPROGRESS);
-			default:
+			} else {
 				/* Start tethering */
 				return wifi_device_tether_start(ap_dev,
 							plugin->tech, bridge,
 							ssid, passphrase);
 			}
+		} else if (turning_tethering_on) {
+			DBG("already turning tethering on");
+			return (-EINPROGRESS);
+		} else {
+			DBG("tethering not supported");
+			return (-EOPNOTSUPP);
 		}
 	} else {
 		for (l = plugin->devices; l; l = l->next) {
