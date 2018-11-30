@@ -1198,6 +1198,21 @@ static bool is_string_digits(const char *str)
 	return true;
 }
 
+/* Protocols that iptables supports with -p or --protocol switch */
+	const char *supported_protocols[] = { 	"tcp",
+						"udp",
+						"udplite",
+						"icmp",
+						"icmpv6",
+						"ipv6-icmp",
+						"esp",
+						"ah",
+						"sctp",
+						"mh",
+						"all",
+						NULL
+	};
+
 static bool is_supported(int type, enum iptables_switch_type switch_type,
 					const char* group, const char *str)
 {
@@ -1239,17 +1254,17 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 
 	const char *not_supported_matches_ipv4[] = { "comment",
 						"state",
+						"iprange",
+						"recent",
+						"owner",
 						NULL
 	};
-	/*
-	 * For yet unknown reason following work with IPv4 but not with IPv6:
-	    -m conntrack
-	    -m multiport
-	 */
 	const char *not_supported_matches_ipv6[] = { "comment",
 						"state",
-						"conntrack",
-						"multiport",
+						"iprange",
+						"recent",
+						"owner",
+						"ttl",
 						NULL
 	};
 
@@ -1265,20 +1280,6 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 						NULL
 	};
 
-	/* Protocols that iptables supports with -p or --protocol switch */
-	const char *supported_protocols[] = { 	"tcp",
-						"udp",
-						"udplite",
-						"icmp",
-						"icmpv6",
-						"ipv6-icmp",
-						"esp",
-						"ah",
-						"sctp",
-						"mh",
-						"all",
-						NULL
-	};
 	struct protoent *p = NULL;
 	bool is_general = false;
 	int protonum = 0;
@@ -1438,6 +1439,47 @@ static bool validate_ports_or_services(const char *str)
 	return ret;
 }
 
+static bool protocol_match_equals(const char *protocol, const char *match)
+{
+	struct protoent *p = NULL;
+	int protonum;
+	int i;
+
+	if (!protocol || !match)
+		return false;
+
+	if (!g_ascii_strcasecmp(protocol, match))
+		return true;
+
+	/* If protocol is integer */
+	if (is_string_digits(protocol)) {
+		protonum = (int) g_ascii_strtoll(protocol, NULL, 10);
+
+		if (!protonum)
+			return false;
+
+		p = getprotobynumber(protonum);
+	} else {
+		p = getprotobyname(protocol);
+	}
+
+	if (!p)
+		return false;
+
+	/* Protocol official name equals */
+	if (!g_ascii_strcasecmp(p->p_name, match))
+		return true;
+
+	/* Check if it is one of the aliases */
+	for (i = 0; p->p_aliases && p->p_aliases[i]; i++) {
+		/* Protocols can be also capitalized */
+		if (!g_ascii_strcasecmp(p->p_aliases[i], match))
+			return true;
+	}
+
+	return false;
+}
+
 static bool validate_iptables_rule(int type, const char *group,
 							const char *rule_spec)
 {
@@ -1446,6 +1488,9 @@ static bool validate_iptables_rule(int type, const char *group,
 	bool ret = false;
 	int i = 0;
 	int argc = 0;
+	int protocol_opt_index = 0;
+	int protocol_match_index = 0;
+	bool multiport_used = false;
 	unsigned int switch_types_found[MAX_IPTABLES_SWITCH] = { 0 };
 	enum iptables_switch_type switch_type = IPTABLES_UNSET;
 	const char *match = NULL;
@@ -1487,6 +1532,15 @@ static bool validate_iptables_rule(int type, const char *group,
 
 			/* multiport match has to have valid port switches */
 			if (!g_strcmp0(match, "multiport")) {
+				multiport_used = true;
+				
+				/* Cannot use -m multiport with -m protocol */
+				if (protocol_match_index) {
+					DBG("-m multiport with -m %s",
+						argv[protocol_match_index]);
+					goto out;
+				}
+				
 				const char *opt = argv[i++];
 
 				if (!opt) {
@@ -1515,6 +1569,37 @@ static bool validate_iptables_rule(int type, const char *group,
 					goto out;
 				}
 			}
+			
+			/* If this is one of the supported protocols */
+			if (is_supported(type, IPTABLES_PROTO, group, match)) {
+				/*
+				 * If no protocol is set before, protocol match
+				 * cannot be used
+				 */
+				if (!switch_types_found[IPTABLES_PROTO]) {
+					DBG("-m %s without -p protocol", match);
+					goto out;
+				}
+
+				/* Check if match protocol equals */
+				if (!protocol_match_equals(
+						argv[protocol_opt_index],
+						match)) {
+					DBG("-p %s -m %s different protocol",
+						argv[protocol_opt_index],
+						match);
+					goto out;
+				}
+
+				if (multiport_used) {
+					DBG("-m multiport -m %s not supported",
+							match);
+					goto out;
+				}
+
+				/* Store the match index for multiport */
+				protocol_match_index = i-1;
+			}
 		}
 
 		if (!g_strcmp0(arg, "-j")) {
@@ -1539,6 +1624,9 @@ static bool validate_iptables_rule(int type, const char *group,
 			/* Negated switch must be skipped */
 			if (!g_strcmp0(match, "!"))
 				match = argv[i++];
+			
+			/* Save the protocol index for -m switch check */
+			protocol_opt_index = i-1;
 		}
 
 		if (is_port_switch(arg, false)) {
@@ -2084,6 +2172,27 @@ static int enable_general_firewall()
 		return -EINVAL;
 	}
 
+	if (!g_list_length(general_firewall->ctx->rules)) {
+		DBG("no general rules set, policies are not set");
+
+		/* No rules defined, no error */
+		return 0;
+	}
+
+	DBG("%d general rules", g_list_length(general_firewall->ctx->rules));
+
+	err = __connman_firewall_enable(general_firewall->ctx);
+
+	/*
+	 * If there is a problem with general firewall, do not apply policies
+	 * since it may result in blocking all incoming traffic and the device
+	 * is not accessible.
+	 */
+	if (err) {
+		DBG("cannot enable general firewall, policies are not changed");
+		return err;
+	}
+
 	err = enable_general_firewall_policies(AF_INET,
 				general_firewall->policies);
 
@@ -2096,17 +2205,8 @@ static int enable_general_firewall()
 	if (err)
 		DBG("cannot enable IPv6 iptables policies, err %d", err);
 
-	if (!g_list_length(general_firewall->ctx->rules)) {
-		DBG("no general rules set");
+	return err;
 
-		/* No rules defined, no error */
-		return 0; 
-	} else {
-		DBG("%d general rules",
-				g_list_length(general_firewall->ctx->rules));
-	}
-
-	return __connman_firewall_enable(general_firewall->ctx);
 }
 
 static bool is_valid_policy(char *policy)
