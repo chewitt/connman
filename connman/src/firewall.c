@@ -2177,6 +2177,27 @@ static int enable_general_firewall()
 		return -EINVAL;
 	}
 
+	if (!g_list_length(general_firewall->ctx->rules)) {
+		DBG("no general rules set, policies are not set");
+
+		/* No rules defined, no error */
+		return 0;
+	}
+
+	DBG("%d general rules", g_list_length(general_firewall->ctx->rules));
+
+	err = __connman_firewall_enable(general_firewall->ctx);
+
+	/*
+	 * If there is a problem with general firewall, do not apply policies
+	 * since it may result in blocking all incoming traffic and the device
+	 * is not accessible.
+	 */
+	if (err) {
+		DBG("cannot enable general firewall, policies are not changed");
+		return err;
+	}
+
 	err = enable_general_firewall_policies(AF_INET,
 				general_firewall->policies);
 
@@ -2189,17 +2210,8 @@ static int enable_general_firewall()
 	if (err)
 		DBG("cannot enable IPv6 iptables policies, err %d", err);
 
-	if (!g_list_length(general_firewall->ctx->rules)) {
-		DBG("no general rules set");
+	return err;
 
-		/* No rules defined, no error */
-		return 0; 
-	} else {
-		DBG("%d general rules",
-				g_list_length(general_firewall->ctx->rules));
-	}
-
-	return __connman_firewall_enable(general_firewall->ctx);
 }
 
 static bool is_valid_policy(char *policy)
