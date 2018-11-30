@@ -1259,16 +1259,11 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 						"owner",
 						NULL
 	};
-	/*
-	 * For yet unknown reason following work with IPv4 but not with IPv6:
-	    -m conntrack
-	 */
 	const char *not_supported_matches_ipv6[] = { "comment",
 						"state",
 						"iprange",
 						"recent",
 						"owner",
-						"conntrack",
 						"ttl",
 						NULL
 	};
