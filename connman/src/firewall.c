@@ -1254,17 +1254,22 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 
 	const char *not_supported_matches_ipv4[] = { "comment",
 						"state",
+						"iprange",
+						"recent",
+						"owner",
 						NULL
 	};
 	/*
 	 * For yet unknown reason following work with IPv4 but not with IPv6:
 	    -m conntrack
-	    -m multiport
 	 */
 	const char *not_supported_matches_ipv6[] = { "comment",
 						"state",
+						"iprange",
+						"recent",
+						"owner",
 						"conntrack",
-						"multiport",
+						"ttl",
 						NULL
 	};
 

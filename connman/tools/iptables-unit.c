@@ -1184,7 +1184,7 @@ static const char *invalid_general_output[] = {
 };
 static const char *invalid_general_forward[] = {
 		"-j ACCEPT -j DROP",
-		"-p udp -m udp -m multiport -m udp --dport 654 -j DROP",
+		"-p udp -m udp -m multiport --dport 654 -j DROP",
 		NULL
 };
 static const char *invalid_eth_input[] = {
