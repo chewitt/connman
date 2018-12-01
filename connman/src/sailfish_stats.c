@@ -27,10 +27,12 @@
 #include <sys/types.h>
 
 struct connman_stats {
+	struct connman_service *service;
 	struct datacounter *counter;
 	struct datacounter_dbus *counter_dbus;
 	struct datacounters_dbus *counters_dbus;
 	GSList *history_dbus_list;
+	gulong cutoff_id;
 };
 
 #define STATS_NAME_HOME     "home"
@@ -51,12 +53,26 @@ static const struct datahistory_type datahistory_types[] = {
 	{ datahistory_file_get_type, "month", {1, TIME_UNIT_MONTH}, 240 }
 };
 
+static void stats_cutoff_update(struct connman_stats *stats)
+{
+	__connman_service_set_disabled(stats->service,
+			stats->counter->cutoff_state == CUTOFF_ACTIVATED);
+}
+
+static void stats_cutoff_event(struct datacounter *counter,
+			enum datacounter_property property, void *arg)
+{
+	stats_cutoff_update((struct connman_stats *)arg);
+}
+
 /** Deletes the leftovers from the older versions of connman */
 static void stats_delete_obsolete_files(const char *dir)
 {
 	int i;
-	for (i=0; i<G_N_ELEMENTS(stats_obsolete); i++) {
-		char *path = g_strconcat(dir, "/", stats_obsolete[i], NULL);
+
+	for (i = 0; i < G_N_ELEMENTS(stats_obsolete); i++) {
+		char *path = g_build_filename(dir, stats_obsolete[i], NULL);
+
 		if (unlink(path) < 0) {
 			if (errno != ENOENT) {
 				connman_error("error deleting %s: %s",
@@ -80,8 +96,13 @@ static struct connman_stats *stats_new(struct connman_service *service,
 	int i;
 	const char *histories[G_N_ELEMENTS(datahistory_types)+1];
 	const char *ident = connman_service_get_identifier(service);
-	struct connman_stats *stats = g_slice_new0(struct connman_stats);
+	struct connman_stats *stats = g_new0(struct connman_stats, 1);
 	struct datacounters *counters = datacounters_new(ident);
+
+	/* It's safe to keep the pointer to struct connman_service - this
+	 * stats thing it owned by the service and will be deleteed before
+	 * the service itself gets deleted */
+	stats->service = service;
 
 	/*
 	 * The datacounters objects are shared by home/roaming counters.
@@ -100,14 +121,14 @@ static struct connman_stats *stats_new(struct connman_service *service,
 	stats->counters_dbus = datacounters_dbus_new(counters);
 	stats->counter = datacounters_get_counter(counters, name);
 	gutil_idle_pool_add_object_ref(stats_idle_pool, stats->counter);
-	for (i=0; i<G_N_ELEMENTS(datahistory_types); i++) {
+	for (i = 0; i < G_N_ELEMENTS(datahistory_types); i++) {
 		histories[i] = datahistory_types[i].name;
 	}
 	histories[i] = NULL;
 	stats->counter_dbus = datacounter_dbus_new(stats->counter, histories);
 
 	/* N.B. datahistory_dbus keeps a reference to datahistory */
-	for (i=0; i<G_N_ELEMENTS(datahistory_types); i++) {
+	for (i = 0; i < G_N_ELEMENTS(datahistory_types); i++) {
 		struct datahistory *h = datahistory_new(stats->counter,
 						datahistory_types + i);
 		stats->history_dbus_list =
@@ -117,6 +138,11 @@ static struct connman_stats *stats_new(struct connman_service *service,
 		gutil_idle_pool_add_object_ref(stats_idle_pool, h);
 		datahistory_unref(h);
 	}
+
+	/* Update the service state and watch for changes */
+	stats_cutoff_update(stats);
+	stats->cutoff_id = datacounter_add_property_handler(stats->counter,
+		DATACOUNTER_PROPERTY_CUTOFF_STATE, stats_cutoff_event, stats);
 
 	datacounters_unref(counters);
 	return stats;
@@ -128,13 +154,13 @@ struct connman_stats *__connman_stats_new(struct connman_service *service,
 	int err = 0;
 	struct connman_stats *stats = NULL;
 	const char *ident = connman_service_get_identifier(service);
-	char *dir = g_strconcat(STORAGEDIR, "/", ident, NULL);
+	char *dir = g_build_filename(STORAGEDIR, ident, NULL);
 
 	DBG("%s %d", ident, roaming);
 
 	/* If the dir doesn't exist, create it */
 	if (!g_file_test(dir, G_FILE_TEST_IS_DIR)) {
-		if (mkdir(dir, STORAGE_DIR_MODE) < 0) {
+		if (g_mkdir_with_parents(dir, STORAGE_DIR_MODE) < 0) {
 			if (errno != EEXIST) {
 				err = -errno;
 			}
@@ -165,8 +191,9 @@ void __connman_stats_free(struct connman_stats *stats)
 						stats_free_history_dbus);
 		datacounters_dbus_free(stats->counters_dbus);
 		datacounter_dbus_free(stats->counter_dbus);
+		datacounter_remove_handler(stats->counter, stats->cutoff_id);
 		datacounter_unref(stats->counter);
-		g_slice_free(struct connman_stats, stats);
+		g_free(stats);
 	}
 }
 
