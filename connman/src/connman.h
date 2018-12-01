@@ -642,6 +642,8 @@ void __connman_config_cleanup(void);
 void __connman_service_foreach(void (*fn) (struct connman_service *service,
 					void *user_data), void *user_data);
 void __connman_service_list_struct(DBusMessageIter *iter);
+void __connman_service_set_disabled(struct connman_service *service,
+						gboolean disabled);
 
 int __connman_config_load_service(GKeyFile *keyfile, const char *group,
 				  bool persistent);

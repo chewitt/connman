@@ -3,7 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
- *  Copyright (C) 2014-2018  Jolla Ltd.
+ *  Copyright (C) 2014-2016  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -280,6 +280,7 @@ struct connman_service {
 	struct connman_access_service_policy *policy;
 	char *access;
 	struct connman_service *depends_on;
+	gboolean disabled;
 };
 
 static const char *service_get_access(struct connman_service *service);
@@ -2774,6 +2775,22 @@ void __connman_service_counter_reset_all(const char *type)
 	g_strfreev(services);
 }
 
+void __connman_service_set_disabled(struct connman_service *service,
+						gboolean disabled)
+{
+	if (service->disabled != disabled) {
+		service->disabled = disabled;
+		DBG("%p %s %s", service, service->name,
+					disabled ? "disabled" : "enabled");
+		if (disabled) {
+			__connman_service_disconnect(service);
+		} else {
+			__connman_service_auto_connect
+				(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+		}
+	}
+}
+
 void __connman_service_counter_unregister(const char *counter)
 {
 	struct connman_service *service;
@@ -4913,6 +4930,9 @@ static bool auto_connect_service(GList *services,
 		 */
 		if (!is_available(service))
 			break;
+
+		if (service->disabled)
+			continue;
 
 		if (ignore[service->type] || busy[service->type])
 			continue;
@@ -7567,6 +7587,9 @@ static int service_connect(struct connman_service *service)
 	int err;
 
 	if (service->hidden)
+		return -EPERM;
+
+	if (service->disabled)
 		return -EPERM;
 
 	switch (service->type) {
