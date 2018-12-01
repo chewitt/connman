@@ -139,7 +139,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
-			src/wakeup_timer.c src/jolla-stats.c src/fsid.c \
+			src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c \
 			src/sailfish_iptables_ext.c src/iptables-validate.c
 
@@ -154,6 +154,21 @@ src_connmand_wait_online_SOURCES = src/connmand-wait-online.c
 
 src_connmand_wait_online_LDADD = gdbus/libgdbus-internal.la \
 			@GLIB_LIBS@ @DBUS_LIBS@
+if SAILFISH_COUNTERS
+src_connmand_SOURCES += src/sailfish_datacounter.c \
+			src/sailfish_datacounter_dbus.c \
+			src/sailfish_datacounters.c \
+			src/sailfish_datacounters_dbus.c \
+			src/sailfish_datacounters_dbus_util.c \
+			src/sailfish_datacounters_util.c \
+			src/sailfish_datahistory.c \
+			src/sailfish_datahistory_dbus.c \
+			src/sailfish_datahistory_file.c \
+			src/sailfish_datahistory_memory.c \
+			src/sailfish_stats.c
+else
+src_connmand_SOURCES += src/jolla-stats.c
+endif
 
 if VPN
 vpn_plugin_LTLIBRARIES =

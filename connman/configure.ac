@@ -447,6 +447,15 @@ if (test "${enable_sailfish_wifi}" = "yes"); then
 	need_glibutil=yes
 fi
 
+AC_ARG_ENABLE(sailfish-counters,
+	AC_HELP_STRING([--enable-sailfish-counters], [enable Sailfish counters]),
+			[enable_sailfish_counters=${enableval}], [enable_sailfish_counters="no"])
+AM_CONDITIONAL(SAILFISH_COUNTERS, test "${enable_sailfish_counters}" != "no")
+
+if (test "${enable_sailfish_counters}" = "yes"); then
+	need_glibutil=yes
+fi
+
 AC_ARG_ENABLE(sailfish-ofono,
 	AC_HELP_STRING([--enable-sailfish-ofono], [enable Sailfish oFono plugin]),
 		[enable_sailfish_ofono=${enableval}], [enable_sailfish_ofono="no"])
