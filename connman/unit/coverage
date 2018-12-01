@@ -14,6 +14,10 @@ test-iptables \
 test-sailfish_access \
 test-sailfish_iptables_ext \
 test-sailfish_wakeup_timer \
+test-sailfish_datacounter \
+test-sailfish_datacounters \
+test-sailfish_datahistory \
+test-sailfish_wakeup_timer \
 test-vpn-settings"
 
 pushd `dirname $0` > /dev/null
