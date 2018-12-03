@@ -225,6 +225,7 @@ systemctl daemon-reload || :
 %{_datadir}/man/man5/connman-service.config.5.gz
 %{_datadir}/man/man5/connman-vpn-provider.config.5.gz
 %{_datadir}/man/man5/connman-vpn.conf.5.gz
+%{_datadir}/man/man5/connman-firewall.config.5.gz
 %{_datadir}/man/man8/connman.8.gz
 %{_datadir}/man/man8/connman-vpn.8.gz
 %{_datadir}/man/man1/connmanctl.1.gz

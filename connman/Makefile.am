@@ -501,7 +501,9 @@ EXTRA_DIST += doc/overview-api.txt doc/behavior-api.txt \
 				doc/connman-service.config.5.in \
 				doc/connman-vpn.conf.5.in \
 				doc/connman-vpn-provider.config.5.in \
-				doc/connman.8.in doc/connman-vpn.8.in
+				doc/connman.8.in doc/connman-vpn.8.in \
+				doc/firewall-config-format.txt \
+				doc/connman-firewall.config.5.in
 
 EXTRA_DIST += src/main.conf \
 		src/eduroam.config \
@@ -510,7 +512,8 @@ EXTRA_DIST += src/main.conf \
 MANUAL_PAGES += doc/connmanctl.1 doc/connman.conf.5 \
 		doc/connman-service.config.5 doc/connman-vpn.conf.5 \
 		doc/connman-vpn-provider.config.5 \
-		doc/connman.8 doc/connman-vpn.8
+		doc/connman.8 doc/connman-vpn.8 \
+		doc/connman-firewall.config.5
 
 nodist_man_MANS = $(MANUAL_PAGES)
 

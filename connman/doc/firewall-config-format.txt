@@ -1,0 +1,182 @@
+Connman firewall configuration in general
+*****************************************
+
+In general the firewall configuration in connman works as follows:
+ - Rules are loaded as general, tethering and service type specific rules
+ - Rules are applied only for the iptables filter table
+ - Rules are added using managed chains only, no chain management with configs
+ - Rules in General section are applied at start and removed at shutdown
+ - Rules in tethering section are enabled/disabled when tethering is on/off
+ - Rules for service types are enabled/disabled when service goes online/offline
+
+Connman firewall configuration file loading
+===========================================
+
+In general the firewall configuration in connman works as follows:
+ - Rules are loaded as general, tethering and service type specific rules
+ - Rules are applied only for the iptables filter table
+ - Rules are added using managed chains only, no chain management with configs
+ - Rules in General section are applied at start and removed at shutdown
+ - Rules in tethering section are enabled/disabled when tethering is on/off
+ - Rules for service types are enabled/disabled when service goes online/offline
+
+Connman supports firewall configurations for both general (permanent) settings
+and for each connected service type. The main configuration is always as
+CONFIGDIR/connman/firewall.conf and rest of the configurations provided by
+packages or installed by user are searched from CONFIGDIR/connman/firewall.d/.
+The configuration files must have *firewall.conf suffix and the file names must
+not include other characters than letters or numbers.
+
+The configuration files from CONFIGDIR/connman/firewall.d/ are read in
+alphabetical order after the main CONFIGDIR/connman/firewall.conf is read. If
+the file CONFIGDIR/connman/firewall.conf is omitted, then only the firewall
+configurations from CONFIGDIR/connman/firewall.d/ are read.
+
+The section names are case sensitive. Regular key file format is used.
+
+Keys in sections
+================
+
+The following keys are supported and the generic format is PROTOCOL.CHAIN.TYPE,
+where:
+ - PROTOCOL = IP protocol, either IPv4 or IPv6
+ - CHAIN = iptables chain name, one of: INPUT, FORWARD, OUTPUT
+ - TYPE = the key type, RULES for setting rules and POLICY for setting policy
+
+Content for each key must be defined on one line and only the first key in a
+group is processed.
+
+The keys are:
+
+IPv4.INPUT = #Rules set into IPv4 filter table INPUT chain.
+IPv4.OUTPUT = #Rules set into IPv4 filter table OUTPUT chain.
+IPv4.FORWARD = #Rules set into IPv4 filter table FORWARD chain.
+IPv4.INPUT.POLICY = #Default policy for filter table INPUT chain.
+IPv4.OUTPUT.POLICY = #Default policy for filter table OUTPUT chain.
+IPv4.FORWARD.POLICY = #Default policy for filter table FORWARD chain.
+IPv6.INPUT = #Rules set into IPv6 filter table INPUT chain.
+IPv6.OUTPUT = #Rules set into IPv6 filter table OUTPUT chain.
+IPv6.FORWARD = #Rules set into IPv6 filter table FORWARD chain.
+IPv6.INPUT.POLICY_IPv6 = #Default policy for IPv6 filter table INPUT chain.
+IPv6.OUTPUT.POLICY_IPv6 = #Default policy for IPv6 filter table OUTPUT chain.
+IPv6.FORWARD.POLICY_IPv6 = #Default policy for IPv6 filter table FORWARD chain.
+
+RULES and POLICY processing differ from each other. RULES are appended to the
+rule list of the section in reading order. But the last POLICY in configuration
+files (only allowed in General section) overrules all previous POLICY keys set
+for the CHAIN with given PROTOCOL.
+
+Rule formatting and exceptions
+==============================
+
+Rules follow iptables rule format, for reference see:
+https://www.frozentux.net/iptables-tutorial/iptables-tutorial.html
+
+Rules are separated with semicolons (;). All rules for a key must be on one
+line.
+
+Each rule:
+ - Has to have one target (-j TARGET) which is the bare minimum of the rule
+ - Can have 0...1 protocol matches (-p protocol)
+ - Can have 0...2 match speficiers (-m match), e.g., to allow one attempt per
+   second to telnet:
+    -p udp -m udp --dport 23 -m limit --limit 1/second --limit-burst 1 -j ACCEPT
+ - Can have 0...2 port switches
+   - with a protocol modifier (-m protocol):
+     --destination-port, --dport, --source-port, --sport 
+   - with multiport modifier (-m multiport):
+     --destination-ports, --dports, --source-ports, --sports, --port, --ports
+
+Rules can be commented out with hash tag (#) as first character. Commented rules
+are simply ignored. For example:
+
+[General]
+IPv4.INPUT.RULES = #-p udp -m udp --dport 23 -j ACCEPT; -p udp -m udp --dport 24 -j ACCEPT
+
+Will discard the first --dport 23 rule and use the second --dport 24 rule.
+
+The targets (-j TARGET) are the same as with default iptables: ACCEPT, DROP,
+REJECT, LOG and QUEUE.
+
+Protocols (-p protocol) are the same as with iptables: tcp, udp, udplite, icmp,
+icmpv6, ipv6-icmp, esp, ah, sctp, mh, dccp and the special keyword all. These
+can be given in numeric format as well.
+
+Following switches are disabled and if a rule contains any of them the rule will
+be ignored:
+
+ - All chain modifiers, since rules are added to managed chains, all chain
+   modifiers are disabled: --append, -A, --delete, -D, --delete-chain, -X, 
+   --flush, -F, --insert, -I, --new-chain, -N, --policy, -P, --rename-chain, -E,
+   --replace, -R, --zero, -Z
+ - Destination speficiers are disabled (enabled later): --source, --src, -s,
+   --destination, --dst, -d, --to-destination, --from-destination
+ - Some matches (with -m) are disabled (cause crash or commit errors):
+   - IPv4: comment, state, iprange, recent, owner
+   - IPv6: comment, state, iprange, recent, owner, ttl
+ - Interface specifiers are not allowed in tethering or service type sections:
+   --in-interface, -i, --out-interface, -o
+
+General section [General]
+=========================
+
+General section contains the main static firewall rules. In this section both
+RULES and POLICY types are allowed.
+
+RULES are read from each General section and added in sequence. The last POLICY
+that is defined for a CHAIN with given PROTOCOL overrules the previous
+definitions.
+
+Being static rules the interface specifiers (--in-interface, -i,
+--out-interface, -o) are allowed in the General section. 
+
+Tethering section [tethering]
+=============================
+
+The tethering mode configuration is included as builtin feature. When tethering
+is enabled a default rules to accept all traffic from the tethering adapter is
+used. The rules for tethering can be added later on to be more restrictive.
+
+Tethering rules are applied only for WiFi tethering, i.e., using a hotspot.
+For usb tethering the default rules apply regardless of the [tethering] rules
+configuration.
+
+The tethering rules must be complete. If there is at least one rule set, no
+default rules will be added as they would make these custom rules set in
+[tethering] unnecessary by allowing all traffic. Only RULES can be defined in
+tethering section.
+
+For this, for example following rules could be enabled to allow only DHCP and
+DNS, into, e.g., /etc/connman/firewall.d/42-tethering-firewall.conf
+
+[tethering]
+
+IPv4.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
+IPv6.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
+
+Service type sections
+=====================
+
+The service type section supports only RULES type keys. The rules defined in
+the service type sections are enabled when a service of that given type becomes
+READY or ONLINE and are disabled when the service becomes IDLE, DISCONNECT or
+FAILURE.
+
+When a rule is enabled, it will have the interface used by the service added
+into the rule. For rules in chain INPUT the interface is added as incoming
+interface (-i <interface>). For rules in chains FORWARD and OUTPUT the interface
+is added as outgoing interface (-o <interface>).
+
+The service types that are supported (defined by enum connman_service_type in
+include/service.h):
+ - unknown
+ - system
+ - ethernet
+ - wifi
+ - bluetooth
+ - cellular
+ - gps
+ - vpn
+ - gadget
+ - p2p
+
