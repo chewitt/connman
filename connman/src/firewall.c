@@ -1680,6 +1680,7 @@ static bool validate_iptables_rule(int type, const char *group,
 
 out:
 	g_clear_error(&error);
+	g_strfreev(argv);
 
 	return ret;
 }
@@ -2419,8 +2420,9 @@ static int init_dynamic_firewall_rules(const char *file)
 		goto out;
 	}
 
-	current_dynamic_rules = g_hash_table_new_full(g_str_hash, g_str_equal,
-							g_free, remove_ctx);
+	if (!current_dynamic_rules)
+		current_dynamic_rules = g_hash_table_new_full(g_str_hash,
+					g_str_equal,g_free, remove_ctx);
 
 	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 			type < MAX_CONNMAN_SERVICE_TYPES ; type++) {
@@ -2525,47 +2527,53 @@ out:
 static int restore_policies(int type, char **policies, char **restore_policies)
 {
 	char table[] = "filter";
-	int err;
+	int commit_err = 0;
+	int err = 0;
 	int i;
 
 	if (!policies && !restore_policies)
 		return -EINVAL;
 
 	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
-		/* If a policy has not been set it has not been changed */
-		if (!policies[i-1])
-			continue;
+		/* Policy is changed only if it has been set */
+		if (policies[i-1]) {
 
-		g_free(policies[i-1]);
+			g_free(policies[i-1]);
 
-		if (!restore_policies[i-1])
-			continue;
+			if (!restore_policies[i-1])
+				continue;
 
-		err = __connman_iptables_change_policy(type, table,
-					builtin_chains[i],
-					restore_policies[i-1]);
+			/* Commit errors are not recoverable */
+			if (!commit_err) {
+				err = __connman_iptables_change_policy(type,
+							table,
+							builtin_chains[i],
+							restore_policies[i-1]);
 
-		if (err) {
-			/* Ignore this and continue with next */
-			DBG("cannot restore chain %s policy %s",
-				builtin_chains[i], restore_policies[i-1]);
-		} else {
-			err = __connman_iptables_commit(type, table);
+				if (err) {
+					/* Ignore this and continue with next */
+					DBG("cannot restore chain %s policy %s",
+							builtin_chains[i],
+							restore_policies[i-1]);
+				} else {
+					commit_err = __connman_iptables_commit(
+								type, table);
 
-			if (err) {
-				DBG("cannot commit policy restore on chain %s"
+					if (commit_err) {
+						DBG("cannot commit policy "
+							"restore on chain %s "
 							"policy %s",
 							builtin_chains[i],
 							restore_policies[i-1]);
-				/* Commit failures cannot be recovered. */
-				return err;
+					}
+				}
 			}
 		}
 
 		g_free(restore_policies[i-1]);
 	}
 
-	return 0;
+	return commit_err;
 }
 
 static void cleanup_general_firewall()
