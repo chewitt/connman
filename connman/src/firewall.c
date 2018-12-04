@@ -98,33 +98,33 @@ static struct firewall_context *tethering_firewall = NULL;
 
 static const char *supported_chains[] = {
 	[NF_IP_PRE_ROUTING]	= NULL,
-	[NF_IP_LOCAL_IN]	= "INPUT",
-	[NF_IP_FORWARD]		= "FORWARD",
-	[NF_IP_LOCAL_OUT]	= "OUTPUT",
+	[NF_IP_LOCAL_IN]	= "IPv4.INPUT.RULES",
+	[NF_IP_FORWARD]		= "IPv4.FORWARD.RULES",
+	[NF_IP_LOCAL_OUT]	= "IPv4.OUTPUT.RULES",
 	[NF_IP_POST_ROUTING]	= NULL,
 };
 
 static const char *supported_chainsv6[] = {
 	[NF_IP_PRE_ROUTING]	= NULL,
-	[NF_IP_LOCAL_IN]	= "INPUT_IPv6",
-	[NF_IP_FORWARD]		= "FORWARD_IPv6",
-	[NF_IP_LOCAL_OUT]	= "OUTPUT_IPv6",
+	[NF_IP_LOCAL_IN]	= "IPv6.INPUT.RULES",
+	[NF_IP_FORWARD]		= "IPv6.FORWARD.RULES",
+	[NF_IP_LOCAL_OUT]	= "IPv6.OUTPUT.RULES",
 	[NF_IP_POST_ROUTING]	= NULL,
 };
 
 static const char *supported_policies[] = {
 	[NF_IP_PRE_ROUTING]	= NULL,
-	[NF_IP_LOCAL_IN]	= "INPUT_POLICY",
-	[NF_IP_FORWARD]		= "FORWARD_POLICY",
-	[NF_IP_LOCAL_OUT]	= "OUTPUT_POLICY",
+	[NF_IP_LOCAL_IN]	= "IPv4.INPUT.POLICY",
+	[NF_IP_FORWARD]		= "IPv4.FORWARD.POLICY",
+	[NF_IP_LOCAL_OUT]	= "IPv4.OUTPUT.POLICY",
 	[NF_IP_POST_ROUTING]	= NULL,
 };
 
 static const char *supported_policiesv6[] = {
 	[NF_IP_PRE_ROUTING]	= NULL,
-	[NF_IP_LOCAL_IN]	= "INPUT_POLICY_IPv6",
-	[NF_IP_FORWARD]		= "FORWARD_POLICY_IPv6",
-	[NF_IP_LOCAL_OUT]	= "OUTPUT_POLICY_IPv6",
+	[NF_IP_LOCAL_IN]	= "IPv6.INPUT.POLICY",
+	[NF_IP_FORWARD]		= "IPv6.FORWARD.POLICY",
+	[NF_IP_LOCAL_OUT]	= "IPv6.OUTPUT.POLICY",
 	[NF_IP_POST_ROUTING]	= NULL,
 };
 
