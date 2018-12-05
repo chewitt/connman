@@ -104,6 +104,7 @@ static void test_sailfish_access_badspec()
 	g_assert(!__connman_access_service_policy_create(DRIVER ":" SPEC_BAD));
 	g_assert(!__connman_access_tech_policy_create(DRIVER ":" SPEC_BAD));
 	g_assert(!__connman_access_manager_policy_create(DRIVER ":" SPEC_BAD));
+	g_assert(!__connman_access_firewall_policy_create(DRIVER ":" SPEC_BAD));
 	__connman_builtin_sailfish_access.exit();
 }
 
@@ -112,30 +113,37 @@ static void test_sailfish_access_default()
 	struct connman_access_service_policy *sp;
 	struct connman_access_manager_policy *mp;
 	struct connman_access_tech_policy *tp;
+	struct connman_access_firewall_policy *fp;
 
 	g_assert(__connman_builtin_sailfish_access.init() == 0);
 
 	sp = __connman_access_service_policy_create(NULL);
 	mp = __connman_access_manager_policy_create(NULL);
 	tp = __connman_access_tech_policy_create(NULL);
+	fp = __connman_access_firewall_policy_create(NULL);
 	g_assert(sp);
 	g_assert(mp);
 	g_assert(tp);
+	g_assert(fp);
 	g_assert(__connman_access_is_default_service_policy(sp));
 	__connman_access_service_policy_free(sp);
 	__connman_access_manager_policy_free(mp);
 	__connman_access_tech_policy_free(tp);
+	__connman_access_firewall_policy_free(fp);
 
 	sp = __connman_access_service_policy_create("");
 	mp = __connman_access_manager_policy_create("");
 	tp = __connman_access_tech_policy_create("");
+	fp = __connman_access_firewall_policy_create("");
 	g_assert(sp);
 	g_assert(mp);
 	g_assert(tp);
+	g_assert(fp);
 	g_assert(__connman_access_is_default_service_policy(sp));
 	__connman_access_service_policy_free(sp);
 	__connman_access_manager_policy_free(mp);
 	__connman_access_tech_policy_free(tp);
+	__connman_access_firewall_policy_free(fp);
 
 	__connman_builtin_sailfish_access.exit();
 }
@@ -177,14 +185,17 @@ static void test_sailfish_access_allow()
 	struct connman_access_service_policy *sp;
 	struct connman_access_manager_policy *mp;
 	struct connman_access_tech_policy *tp;
+	struct connman_access_firewall_policy *fp;
 
 	g_assert(__connman_builtin_sailfish_access.init() == 0);
 	sp = __connman_access_service_policy_create(DRIVER ":" SPEC_ALLOW);
 	mp = __connman_access_manager_policy_create(DRIVER ":" SPEC_ALLOW);
 	tp = __connman_access_tech_policy_create(DRIVER ":" SPEC_ALLOW);
+	fp = __connman_access_firewall_policy_create(DRIVER ":" SPEC_ALLOW);
 	g_assert(sp);
 	g_assert(mp);
 	g_assert(tp);
+	g_assert(fp);
 	g_assert(__connman_access_service_policy_check(sp,
 			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, "foo", "x",
 			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
@@ -201,9 +212,14 @@ static void test_sailfish_access_allow()
 			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
 	g_assert(__connman_access_tech_set_property(tp, "foo", NULL,
 			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+	g_assert(__connman_access_firewall_manage(fp, "foo", "x",
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	g_assert(__connman_access_firewall_manage(fp, "foo", NULL,
+			CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
 	__connman_access_service_policy_free(sp);
 	__connman_access_manager_policy_free(mp);
 	__connman_access_tech_policy_free(tp);
+	__connman_access_firewall_policy_free(fp);
 	__connman_builtin_sailfish_access.exit();
 }
 
@@ -212,11 +228,13 @@ static void test_sailfish_access_deny()
 	struct connman_access_service_policy *sp;
 	struct connman_access_manager_policy *mp;
 	struct connman_access_tech_policy *tp;
+	struct connman_access_firewall_policy *fp;
 
 	g_assert(__connman_builtin_sailfish_access.init() == 0);
 	sp = __connman_access_service_policy_create(DRIVER ":" SPEC_DENY);
 	mp = __connman_access_manager_policy_create(DRIVER ":" SPEC_DENY);
 	tp = __connman_access_tech_policy_create(DRIVER ":" SPEC_DENY);
+	fp = __connman_access_firewall_policy_create(DRIVER ":" SPEC_DENY);
 	g_assert(sp);
 	g_assert(mp);
 	g_assert(tp);
@@ -236,9 +254,14 @@ static void test_sailfish_access_deny()
 			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
 	g_assert(__connman_access_tech_set_property(tp, "foo", NULL,
 			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	g_assert(__connman_access_firewall_manage(fp, "foo", "x",
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	g_assert(__connman_access_firewall_manage(fp, "foo", NULL,
+			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
 	__connman_access_service_policy_free(sp);
 	__connman_access_manager_policy_free(mp);
 	__connman_access_tech_policy_free(tp);
+	__connman_access_firewall_policy_free(fp);
 	__connman_builtin_sailfish_access.exit();
 }
 

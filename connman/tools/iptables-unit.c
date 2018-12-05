@@ -155,6 +155,47 @@ void connman_technology_tethering_notify(struct connman_technology *technology,
 	return;
 }
 
+DBusMessage *__connman_error_invalid_arguments(DBusMessage *msg)
+{
+	return NULL;
+}
+
+DBusMessage *__connman_error_permission_denied(DBusMessage *msg)
+{
+	return NULL;
+}
+
+DBusMessage *__connman_error_failed(DBusMessage *msg, int errnum)
+{
+	return NULL;
+}
+
+DBusConnection *connman_dbus_get_connection(void)
+{
+	return NULL;
+}
+
+struct connman_access_firewall_policy *__connman_access_firewall_policy_create
+		(const char *spec)
+{
+	return NULL;
+}
+
+void __connman_access_firewall_policy_free
+		(struct connman_access_firewall_policy *policy)
+{
+	return;
+}
+
+enum connman_access __connman_access_firewall_manage
+		(const struct connman_access_firewall_policy *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access)
+{
+	return 0;
+}
+
+
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;

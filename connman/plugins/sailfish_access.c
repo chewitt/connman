@@ -42,8 +42,16 @@ struct connman_access_tech_policy_impl {
 	DAPolicy *impl;
 };
 
+struct connman_access_firewall_policy_impl {
+	DAPolicy *impl;
+};
+
 enum sailfish_tech_access_action {
 	TECH_ACCESS_SET_PROPERTY = 1
+};
+
+enum sailfish_firewall_access_action {
+	FIREWALL_ACCESS_RELOAD = 1
 };
 
 #define CONNMAN_BUS DA_BUS_SYSTEM
@@ -110,6 +118,15 @@ static const char *tech_policy_default =
 static const DA_ACTION tech_policy_actions [] = {
         { "set",         TECH_ACCESS_SET_PROPERTY, 1 },
         { "SetProperty", TECH_ACCESS_SET_PROPERTY, 1 },
+        { NULL }
+};
+
+static const char *firewall_policy_default =
+	DA_POLICY_VERSION ";"
+	"Reload(*)=deny;"
+	"group(privileged)=allow";
+static const DA_ACTION firewall_policy_actions [] = {
+        { "Reload", FIREWALL_ACCESS_RELOAD, 1 },
         { NULL }
 };
 
@@ -306,6 +323,53 @@ static enum connman_access sailfish_access_tech_set_property
 		default_access) : CONNMAN_ACCESS_DENY;
 }
 
+static struct connman_access_firewall_policy_impl *
+		sailfish_access_firewall_policy_create(const char *spec)
+{
+	DAPolicy *impl;
+
+	if (!spec || !spec[0]) {
+		/* Empty policy = use default */
+		spec = firewall_policy_default;
+	}
+
+	/* Parse the policy string */
+	impl = da_policy_new_full(spec, firewall_policy_actions);
+	if (impl) {
+		/* String is usable */
+		struct connman_access_firewall_policy_impl *p =
+			g_slice_new0(
+				struct connman_access_firewall_policy_impl);
+
+		p->impl = impl;
+		return p;
+	} else {
+		DBG("invalid spec \"%s\"", spec);
+		return NULL;
+	}
+}
+
+static void sailfish_access_firewall_policy_free
+			(struct connman_access_firewall_policy_impl *p)
+{
+	da_policy_unref(p->impl);
+	g_slice_free(struct connman_access_firewall_policy_impl, p);
+}
+
+static enum connman_access sailfish_access_firewall_manage
+		(const struct connman_access_firewall_policy_impl *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access)
+{
+	/* Don't unref this one: */
+	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
+
+	/* Reject the access if the peer is gone */
+	return peer ? (enum connman_access)da_policy_check(policy->impl,
+		&peer->cred, FIREWALL_ACCESS_RELOAD, name,
+		(DA_ACCESS)default_access) : CONNMAN_ACCESS_DENY;
+}
+
 static const struct connman_access_driver sailfish_connman_access_driver = {
 	.name                   = DRIVER_NAME,
 	.default_service_policy = service_policy_default,
@@ -318,7 +382,10 @@ static const struct connman_access_driver sailfish_connman_access_driver = {
 	.manager_policy_check   = sailfish_access_manager_policy_check,
 	.tech_policy_create     = sailfish_access_tech_policy_create,
 	.tech_policy_free       = sailfish_access_tech_policy_free,
-	.tech_set_property      = sailfish_access_tech_set_property
+	.tech_set_property      = sailfish_access_tech_set_property,
+	.firewall_policy_create = sailfish_access_firewall_policy_create,
+	.firewall_policy_free   = sailfish_access_firewall_policy_free,
+	.firewall_manage        = sailfish_access_firewall_manage
 };
 
 static int sailfish_access_init()

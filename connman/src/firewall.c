@@ -30,6 +30,8 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
 
+#include <gdbus.h>
+
 #include "connman.h"
 
 #define CHAIN_PREFIX "connman-"
@@ -95,6 +97,9 @@ static struct firewall_context **dynamic_rules = NULL;
 
 /* Tethering rules are a special case */
 static struct firewall_context *tethering_firewall = NULL;
+
+/* Configuration files that are read */
+static GList *configuration_files = NULL;
 
 static const char *supported_chains[] = {
 	[NF_IP_PRE_ROUTING]	= NULL,
@@ -1947,14 +1952,6 @@ static int add_rules_from_group(GKeyFile *config, const char *group,
 					DBG("group %s chain %s error: %s",
 							group, chain_name,
 							error->message);
-			} else {
-				/*
-				 * Error with rules set as NULL = no such key
-				 * exists in the group specified.
-				 */
-				DBG("type %d no rules found for group %s "
-							"chain %s", types[i],
-							group, chain_name);
 			}
 
 			g_clear_error(&error);
@@ -2449,7 +2446,6 @@ out:
 
 static int init_all_dynamic_firewall_rules(void)
 {
-	GList *filenames = NULL;
 	GList *iter;
 	GError *error = NULL;
 	GDir *dir;
@@ -2483,15 +2479,20 @@ static int init_all_dynamic_firewall_rules(void)
 				continue;
 
 			/*
-			 * Filename is used for sorting the list, no need to
-			 * allocate a new one.
+			 * Prepend read files into list of configuration
+			 * files to be used in checks when new configurations
+			 * are added to avoid unnecessary reads of already read
+			 * configurations. Sort list after all are added.
 			 */
-			filenames = g_list_insert_sorted(filenames,
-						(char*)filename,
-						(GCompareFunc)g_strcmp0);
+			configuration_files = g_list_prepend(
+						configuration_files,
+						g_strdup(filename));
 		}
 
-		for (iter = filenames; iter ; iter = iter->next) {
+		configuration_files = g_list_sort(configuration_files,
+					(GCompareFunc)g_strcmp0);
+
+		for (iter = configuration_files; iter ; iter = iter->next) {
 			filename = iter->data;
 
 			filepath = g_strconcat(FIREWALLCONFIGDIR, filename,
@@ -2507,8 +2508,6 @@ static int init_all_dynamic_firewall_rules(void)
 			g_free(filepath);
 		}
 
-		/* Strings in list are owned by GLib, don't free them. */
-		g_list_free(filenames);
 		g_dir_close(dir);
 	} else {
 		DBG("no config dir %s", FIREWALLCONFIGDIR);
@@ -2674,6 +2673,200 @@ static void firewall_failsafe(const char *chain_name, void *user_data)
 					chain_name, err);
 }
 
+static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
+			struct firewall_context *srv_ctx, char* ifname)
+{
+	GList *srv_list;
+	GList *dyn_list;
+	struct fw_rule *dyn_rule;
+	struct fw_rule *srv_rule;
+	struct fw_rule *new_rule;
+	int err;
+
+	/* Go over dynamic rules for this type */
+	for (dyn_list = dyn_ctx->rules; dyn_list; dyn_list = dyn_list->next) {
+		dyn_rule = dyn_list->data;
+		bool found = false;
+
+		for (srv_list = srv_ctx->rules; srv_list;
+					srv_list = srv_list->next) {
+
+			srv_rule = srv_list->data;
+			
+			/*
+			 * If rule_spec is identical the do not add dynamic
+			 * rule into this service firewall, it is already added.
+			 */
+			if (!g_strcmp0(dyn_rule->rule_spec,
+						srv_rule->rule_spec)) {
+				found = true;
+				break;
+			}
+		}
+
+		if (found)
+			continue;
+
+		new_rule = copy_fw_rule(dyn_rule, ifname);
+		
+		srv_ctx->rules = g_list_append(srv_ctx->rules, new_rule);
+
+		if (srv_ctx->enabled) {
+			err = firewall_enable_rule(new_rule);
+
+			if (err)
+				DBG("new rule not enabled %d", err);
+		}
+	}
+	
+	return 0;
+}
+
+static int firewall_reload_configurations()
+{
+	GError *error = NULL;
+	GDir *dir;
+	GHashTableIter iter;
+	gpointer key, value;
+	struct connman_service *service;
+	enum connman_service_type type;
+	struct firewall_context *ctx;
+	const char *filename;
+	char *ifname;
+	char *filepath;
+	bool new_configuration_files = false;
+	int err = 0;
+
+	/* Nothing to read */
+	if (!g_file_test(FIREWALLCONFIGDIR, G_FILE_TEST_IS_DIR))
+		return 0;
+
+	dir = g_dir_open(FIREWALLCONFIGDIR, 0, &error);
+
+	if (!dir) {
+		if (error) {
+			DBG("cannot open dir, error: %s", error->message);
+			g_clear_error(&error);
+		}
+
+		/* Ignore dir open error in reload */
+		return 0;
+	}
+
+	DBG("read configs from %s", FIREWALLCONFIGDIR);
+
+	while ((filename = g_dir_read_name(dir))) {
+		/* Read configs that have firewall.conf suffix */
+		if (!g_str_has_suffix(filename, FIREWALLFILE))
+			continue;
+
+		/* If config file is already read */
+		if (g_list_find_custom(configuration_files, filename,
+					(GCompareFunc)g_strcmp0))
+			continue;
+
+		filepath = g_strconcat(FIREWALLCONFIGDIR, filename, NULL);
+
+		if (g_file_test(filepath, G_FILE_TEST_IS_REGULAR)) {
+
+			err = init_dynamic_firewall_rules(filepath);
+
+			if (!err) {
+				DBG("new configuration %s loaded", filepath);
+
+				configuration_files = g_list_insert_sorted(
+						configuration_files,
+						g_strdup(filename),
+						(GCompareFunc)g_strcmp0);
+
+				new_configuration_files = true;
+			}
+		}
+
+		g_free(filepath);
+	}
+
+	g_dir_close(dir);
+
+	if (!new_configuration_files) {
+		DBG("no new configuration was found");
+		return 0;
+	}
+
+	/* Apply general firewall rules that were added */
+	__connman_firewall_enable_rule(general_firewall->ctx, FW_ALL_RULES);
+
+	g_hash_table_iter_init(&iter, current_dynamic_rules);
+
+	/*
+	 * Go through all service specific firewalls and add new rules
+	 * for each.
+	 */
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		service = connman_service_lookup_from_identifier(key);
+
+		if (!service)
+			continue;
+
+		type = connman_service_get_type(service);
+		ifname = connman_service_get_interface(service);
+
+		if (!has_dynamic_rules_set(type))
+			continue;
+
+		ctx = value;
+
+		copy_new_dynamic_rules(dynamic_rules[type], ctx, ifname);
+
+		g_free(ifname);
+	}
+
+	return 0;
+}
+
+static struct connman_access_firewall_policy *firewall_access_policy = NULL;
+
+static struct connman_access_firewall_policy *get_firewall_access_policy()
+{
+	if (!firewall_access_policy) {
+		/* Use the default policy */
+		firewall_access_policy =
+				__connman_access_firewall_policy_create(NULL);
+	}
+	return firewall_access_policy;
+}
+
+static DBusMessage *reload(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	int err;
+
+	DBG("conn %p", conn);
+
+	if (__connman_access_firewall_manage(get_firewall_access_policy(),
+				"Reload", dbus_message_get_sender(msg),
+				CONNMAN_ACCESS_ALLOW) != CONNMAN_ACCESS_ALLOW) {
+		DBG("%s is not allowed to reload firewall configurations",
+				dbus_message_get_sender(msg));
+		return __connman_error_permission_denied(msg);
+	}
+
+	err = firewall_reload_configurations();
+
+	/* TODO proper error reporting if necessary/sensible */
+	if (err)
+		return __connman_error_failed(msg, err);
+
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
+static DBusConnection *connection = NULL;
+
+static const GDBusMethodTable firewall_methods[] = {
+	{ GDBUS_ASYNC_METHOD("Reload", NULL, NULL, reload) },
+	{ },
+};
+
 static struct connman_notifier firewall_notifier = {
 	.name			= "firewall",
 	.service_state_changed	= service_state_changed,
@@ -2697,6 +2890,20 @@ int __connman_firewall_init(void)
 		if (err < 0) {
 			DBG("cannot register notifier, dynamic rules disabled");
 			cleanup_dynamic_firewall_rules();
+		}
+
+		connection = connman_dbus_get_connection();
+
+		if (!g_dbus_register_interface(connection,
+					CONNMAN_FIREWALL_PATH,
+					CONNMAN_FIREWALL_INTERFACE,
+					firewall_methods, NULL, NULL, NULL,
+					NULL)) {
+			DBG("cannot register dbus, new firewall configuration "
+						"cannot be installed runtime");
+
+			dbus_connection_unref(connection);
+			connection = NULL;
 		}
 	} else {
 		DBG("dynamic rules disabled, policy ACCEPT set for all chains");
@@ -2748,7 +2955,22 @@ void __connman_firewall_cleanup(void)
 {
 	DBG("");
 
+	if (connection) {
+		if (!g_dbus_unregister_interface(connection,
+					CONNMAN_FIREWALL_PATH,
+					CONNMAN_FIREWALL_INTERFACE))
+			DBG("dbus unregister failed");
+
+		dbus_connection_unref(connection);
+	}
+
+	__connman_access_firewall_policy_free(firewall_access_policy);
+	firewall_access_policy = NULL;
+
 	cleanup_dynamic_firewall_rules();
+
+	g_list_free_full(configuration_files, g_free);
+	configuration_files = NULL;
 
 	g_slist_free_full(managed_tables, cleanup_managed_table);
 	managed_tables = NULL;

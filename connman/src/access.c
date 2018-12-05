@@ -34,6 +34,11 @@ struct connman_access_tech_policy {
 	const struct connman_access_driver *driver;
 };
 
+struct connman_access_firewall_policy {
+	struct connman_access_firewall_policy_impl *impl;
+	const struct connman_access_driver *driver;
+};
+
 #define DRIVER_NAME_SEPARATOR     ':'
 #define DRIVER_NAME_SEPARATOR_STR ":"
 
@@ -328,6 +333,52 @@ enum connman_access __connman_access_tech_set_property
 {
 	if (p && p->driver->tech_set_property)
 		return p->driver->tech_set_property(p->impl, name, sender,
+							default_access);
+
+	return default_access;
+}
+
+/* Firewall */
+struct connman_access_firewall_policy *__connman_access_firewall_policy_create
+							(const char *spec)
+{
+	struct connman_access_firewall_policy *p = NULL;
+	const struct connman_access_driver *driver =
+		access_get_driver(spec, &spec);
+
+	if (driver && driver->firewall_policy_create) {
+		struct connman_access_firewall_policy_impl *impl =
+			driver->firewall_policy_create(spec);
+
+		if (impl) {
+			p = g_slice_new(struct connman_access_firewall_policy);
+			p->impl = impl;
+			p->driver = driver;
+		}
+	}
+
+	return p;
+}
+
+void __connman_access_firewall_policy_free(
+			struct connman_access_firewall_policy *p)
+{
+	if (p) {
+		if (p->driver->firewall_policy_free)
+			p->driver->firewall_policy_free(p->impl);
+
+		g_slice_free(struct connman_access_firewall_policy, p);
+	}
+}
+
+
+enum connman_access __connman_access_firewall_manage
+			(const struct connman_access_firewall_policy *p,
+			const char *name, const char *sender,
+			enum connman_access default_access)
+{
+	if (p && p->driver->firewall_manage)
+		return p->driver->firewall_manage(p->impl, name, sender,
 							default_access);
 
 	return default_access;
