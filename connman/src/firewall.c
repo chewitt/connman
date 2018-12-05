@@ -1690,6 +1690,28 @@ out:
 	return ret;
 }
 
+static bool is_rule_in_context(struct firewall_context *ctx, int type,
+			const char *table, const char *chain, const char *rule)
+{
+	GList *iter;
+	struct fw_rule *list_rule;
+
+	for (iter = ctx->rules; iter; iter = iter->next) {
+		list_rule = iter->data;
+
+		if (!list_rule)
+			continue;
+
+		if (list_rule->type == type &&
+					!g_strcmp0(list_rule->table, table) &&
+					!g_strcmp0(list_rule->chain, chain) &&
+					!g_strcmp0(list_rule->rule_spec, rule))
+			return true;
+	}
+
+	return false;
+}
+
 typedef int (*add_rules_cb_t)(int type, const char *group, int chain_id,
 								char** rules);
 
@@ -1718,6 +1740,14 @@ static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
 
 		if (!validate_iptables_rule(type, group, rules[i])) {
 			DBG("failed to add rule, rule is invalid");
+			continue;
+		}
+
+		if (is_rule_in_context(dynamic_rules[service_type], type, table,
+						builtin_chains[chain_id],
+						rules[i])) {
+			DBG("ignoring rule %s in service type %d, rule exists",
+						rules[i], service_type);
 			continue;
 		}
 
@@ -1792,6 +1822,14 @@ static int add_general_rules_cb(int type, const char *group, int chain_id,
 			continue;
 		}
 
+		if (is_rule_in_context(general_firewall->ctx, type, table,
+						builtin_chains[chain_id],
+						rules[i])) {
+			DBG("ignoring rule %s in general rules, rule exists",
+						rules[i]);
+			continue;
+		}
+
 		switch (type) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(general_firewall->ctx,
@@ -1856,6 +1894,14 @@ static int add_tethering_rules_cb(int type, const char *group, int chain_id,
 
 		if (!validate_iptables_rule(type, group, rules[i])) {
 			DBG("invalid general rule");
+			continue;
+		}
+
+		if (is_rule_in_context(tethering_firewall, type, table,
+						builtin_chains[chain_id],
+						rules[i])) {
+			DBG("ignoring rule %s in tethering rules, rule exists",
+						rules[i]);
 			continue;
 		}
 
@@ -2676,35 +2722,19 @@ static void firewall_failsafe(const char *chain_name, void *user_data)
 static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 			struct firewall_context *srv_ctx, char* ifname)
 {
-	GList *srv_list;
 	GList *dyn_list;
 	struct fw_rule *dyn_rule;
-	struct fw_rule *srv_rule;
 	struct fw_rule *new_rule;
 	int err;
 
 	/* Go over dynamic rules for this type */
 	for (dyn_list = dyn_ctx->rules; dyn_list; dyn_list = dyn_list->next) {
 		dyn_rule = dyn_list->data;
-		bool found = false;
 
-		for (srv_list = srv_ctx->rules; srv_list;
-					srv_list = srv_list->next) {
-
-			srv_rule = srv_list->data;
-			
-			/*
-			 * If rule_spec is identical the do not add dynamic
-			 * rule into this service firewall, it is already added.
-			 */
-			if (!g_strcmp0(dyn_rule->rule_spec,
-						srv_rule->rule_spec)) {
-				found = true;
-				break;
-			}
-		}
-
-		if (found)
+		/* If the dynamic rule is already added for service firewall */
+		if (is_rule_in_context(srv_ctx, dyn_rule->type,
+					dyn_rule->table, dyn_rule->chain,
+					dyn_rule->rule_spec))
 			continue;
 
 		new_rule = copy_fw_rule(dyn_rule, ifname);
