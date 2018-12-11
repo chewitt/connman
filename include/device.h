@@ -57,6 +57,7 @@ struct connman_device_scan_params {
 	const char *identity;
 	const char* passphrase;
 	const char *security;
+	bool force_full_scan;
 	void *user_data;
 };
 
