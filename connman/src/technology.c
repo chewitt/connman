@@ -1346,7 +1346,7 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 	technology->scan_pending =
 		g_slist_prepend(technology->scan_pending, msg);
 
-	err = __connman_device_request_scan(technology->type);
+	err = __connman_device_request_scan_full(technology->type);
 	if (err < 0)
 		reply_scan_pending(technology, err);
 

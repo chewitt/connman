@@ -663,7 +663,8 @@ bool connman_device_get_powered(struct connman_device *device)
 }
 
 static int device_scan(enum connman_service_type type,
-				struct connman_device *device)
+				struct connman_device *device,
+				bool force_full_scan)
 {
 	struct connman_device_scan_params params;
 
@@ -675,6 +676,7 @@ static int device_scan(enum connman_service_type type,
 
 	memset(&params, 0, sizeof(params));
 	params.type = type;
+	params.force_full_scan = force_full_scan;
 
 	return device->driver->scan(device, &params);
 }
@@ -1201,7 +1203,8 @@ void connman_device_regdom_notify(struct connman_device *device,
 	__connman_technology_notify_regdom_by_device(device, result, alpha2);
 }
 
-int __connman_device_request_scan(enum connman_service_type type)
+static int connman_device_request_scan(enum connman_service_type type,
+					bool force_full_scan)
 {
 	bool success = false;
 	int last_err = -ENOSYS;
@@ -1229,7 +1232,7 @@ int __connman_device_request_scan(enum connman_service_type type)
 		if (!device_has_service_type(device, type))
 			continue;
 
-		err = device_scan(type, device);
+		err = device_scan(type, device, force_full_scan);
 		if (err == 0 || err == -EALREADY || err == -EINPROGRESS) {
 			success = true;
 		} else {
@@ -1242,6 +1245,16 @@ int __connman_device_request_scan(enum connman_service_type type)
 		return 0;
 
 	return last_err;
+}
+
+int __connman_device_request_scan(enum connman_service_type type)
+{
+	return connman_device_request_scan(type, false);
+}
+
+int __connman_device_request_scan_full(enum connman_service_type type)
+{
+	return connman_device_request_scan(type, true);
 }
 
 int __connman_device_request_hidden_scan(struct connman_device *device,
