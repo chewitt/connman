@@ -1848,11 +1848,8 @@ static int p2p_find(struct connman_device *device)
  * Note that the hidden scan is only used when connecting to this specific
  * hidden AP first time. It is not used when system autoconnects to hidden AP.
  */
-static int wifi_scan(enum connman_service_type type,
-			struct connman_device *device,
-			const char *ssid, unsigned int ssid_len,
-			const char *identity, const char* passphrase,
-			const char *security, void *user_data)
+static int wifi_scan(struct connman_device *device,
+			struct connman_device_scan_params *params)
 {
 	struct wifi_data *wifi = connman_device_get_data(device);
 	GSupplicantScanParams *scan_params = NULL;
@@ -1872,14 +1869,15 @@ static int wifi_scan(enum connman_service_type type,
 	if (wifi->tethering)
 		return -EBUSY;
 
-	if (type == CONNMAN_SERVICE_TYPE_P2P)
+	if (params->type == CONNMAN_SERVICE_TYPE_P2P)
 		return p2p_find(device);
 
-	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface, ssid);
+	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface,
+		params->ssid);
 
 	scanning = connman_device_get_scanning(device, CONNMAN_SERVICE_TYPE_WIFI);
 
-	if (!ssid || ssid_len == 0 || ssid_len > 32) {
+	if (!params->ssid || params->ssid_len == 0 || params->ssid_len > 32) {
 		if (scanning)
 			return -EALREADY;
 
@@ -1908,8 +1906,8 @@ static int wifi_scan(enum connman_service_type type,
 			return -ENOMEM;
 		}
 
-		memcpy(scan_ssid->ssid, ssid, ssid_len);
-		scan_ssid->ssid_len = ssid_len;
+		memcpy(scan_ssid->ssid, params->ssid, params->ssid_len);
+		scan_ssid->ssid_len = params->ssid_len;
 		scan_params->ssids = g_slist_prepend(scan_params->ssids,
 								scan_ssid);
 		scan_params->num_ssids = 1;
@@ -1925,12 +1923,12 @@ static int wifi_scan(enum connman_service_type type,
 			wifi->hidden = NULL;
 		}
 
-		memcpy(hidden->ssid, ssid, ssid_len);
-		hidden->ssid_len = ssid_len;
-		hidden->identity = g_strdup(identity);
-		hidden->passphrase = g_strdup(passphrase);
-		hidden->security = g_strdup(security);
-		hidden->user_data = user_data;
+		memcpy(hidden->ssid, params->ssid, params->ssid_len);
+		hidden->ssid_len = params->ssid_len;
+		hidden->identity = g_strdup(params->identity);
+		hidden->passphrase = g_strdup(params->passphrase);
+		hidden->security = g_strdup(params->security);
+		hidden->user_data = params->user_data;
 		wifi->hidden = hidden;
 
 		if (scanning) {
