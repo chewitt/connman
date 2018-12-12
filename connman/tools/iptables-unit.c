@@ -195,6 +195,18 @@ enum connman_access __connman_access_firewall_manage
 	return 0;
 }
 
+int connman_service_iterate_services(connman_service_iterate_cb cb,
+							void *user_data)
+{
+	return 0;
+}
+
+enum connman_service_state connman_service_get_state(
+						struct connman_service *service)
+{
+	return 0;
+}
+
 
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {

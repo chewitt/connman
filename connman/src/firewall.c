@@ -2911,6 +2911,24 @@ static void firewall_config_removed(const char *config_file)
 	}
 }
 
+static int enable_new_firewall_rules(struct connman_service *service,
+								void *data)
+{
+	enum connman_service_state state;
+
+	state = connman_service_get_state(service);
+
+	/*
+	 * Call service_state_changed() although the state has not changed but
+	 * there may be a service which was online before firewall reloading and
+	 * it might now have new rules set. This enables the rules for connected
+	 * services by acting as if the notification of such event was sent.
+	 */
+	service_state_changed(service, state);
+
+	return 0;
+}
+
 static int firewall_reload_configurations()
 {
 	GError *error = NULL;
@@ -3062,6 +3080,9 @@ static int firewall_reload_configurations()
 
 		g_free(ifname);
 	}
+
+	/* Go through existing services that may have new rules set */
+	connman_service_iterate_services(enable_new_firewall_rules, NULL);
 
 	return 0;
 }
