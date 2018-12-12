@@ -1942,7 +1942,7 @@ static int wifi_scan(struct connman_device *device,
 	} else if (wifi->connected) {
 		g_supplicant_free_scan_params(scan_params);
 		return wifi_scan_simple(device);
-	} else {
+	} else if (!params->force_full_scan) {
 		ret = get_latest_connections(driver_max_ssids, scan_params);
 		if (ret <= 0) {
 			g_supplicant_free_scan_params(scan_params);
