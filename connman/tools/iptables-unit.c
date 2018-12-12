@@ -626,7 +626,7 @@ static void test_firewall_basic0(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -657,11 +657,11 @@ static void test_firewall_basic1(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "filter", "OUTPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -682,11 +682,11 @@ static void test_firewall_basic2(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "mangle", "POSTROUTING",
+	err = __connman_firewall_add_rule(ctx, NULL, "mangle", "POSTROUTING",
 					"-j CONNMARK --save-mark");
 	g_assert(err >= 0);
 
@@ -707,7 +707,7 @@ static void test_firewall_basic3(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	id = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
+	id = __connman_firewall_add_rule(ctx, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(id >= 0);
 
@@ -1002,7 +1002,7 @@ static void test_firewall6_basic0(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -1033,11 +1033,11 @@ static void test_firewall6_basic1(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "filter", "OUTPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -1058,11 +1058,11 @@ static void test_firewall6_basic2(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "mangle", "INPUT",
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "mangle", "POSTROUTING",
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, "mangle", "POSTROUTING",
 					"-j CONNMARK --save-mark");
 	g_assert(err >= 0);
 
@@ -1083,7 +1083,7 @@ static void test_firewall6_basic3(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	id = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
+	id = __connman_firewall_add_rule(ctx, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(id >= 0);
 
@@ -1111,24 +1111,24 @@ static void test_firewall_4and6_basic0(void)
 
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "filter", "INPUT",
 			"-p icmp -m icmp "
 			"--icmp-type 8/0 -j DROP");
 
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, "filter", "OUTPUT",
 				"-p icmp -m icmp "
 				"--icmp-type 0/0 -j DROP");
 
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, "filter", "INPUT",
 					"-p icmpv6 -m icmpv6 "
 					"--icmpv6-type 128/0 -j DROP");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, "filter", "OUTPUT",
 					"-p icmpv6 -m icmpv6 "
 					"--icmpv6-type 129/0 -j DROP");
 	g_assert(err >= 0);

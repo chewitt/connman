@@ -63,6 +63,7 @@ struct fw_rule {
 	char *chain;
 	char *rule_spec;
 	char *ifname;
+	char *config_file;
 };
 
 struct firewall_context {
@@ -138,6 +139,22 @@ static const char *supported_policiesv6[] = {
  * value and the struct firewall_context is the data held.
  */
 static GHashTable *current_dynamic_rules = NULL;
+
+static int firewall_rule_compare(gconstpointer a, gconstpointer b)
+{
+	const struct fw_rule *rule_a;
+	const struct fw_rule *rule_b;
+
+	rule_a = a;
+	rule_b = b;
+
+	/*
+	 * g_strcmp0 sorts NULLs before others, the system defined rules that
+	 * are added by connman have no config_file and should be on top of
+	 * other rules.
+	 */
+	return g_strcmp0(rule_a->config_file, rule_b->config_file);
+}
 
 static int chain_to_index(const char *chain_name)
 {
@@ -385,6 +402,7 @@ static void cleanup_fw_rule(gpointer user_data)
 	g_free(rule->rule_spec);
 	g_free(rule->chain);
 	g_free(rule->table);
+	g_free(rule->config_file);
 	g_free(rule);
 }
 
@@ -461,6 +479,7 @@ static int firewall_disable_rule(struct fw_rule *rule)
 }
 
 int __connman_firewall_add_rule(struct firewall_context *ctx,
+				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...)
@@ -480,15 +499,21 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 	rule->id = firewall_rule_id++;
 	rule->type = AF_INET;
 	rule->enabled = false;
+
+	if (config_file)
+		rule->config_file = g_path_get_basename(config_file);
+
 	rule->table = g_strdup(table);
 	rule->chain = g_strdup(chain);
 	rule->rule_spec = rule_spec;
 
-	ctx->rules = g_list_append(ctx->rules, rule);
+	ctx->rules = g_list_insert_sorted(ctx->rules, rule,
+				firewall_rule_compare);
 	return rule->id;
 }
 
 int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
+				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...)
@@ -508,11 +533,16 @@ int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
 	rule->id = firewall_rule_id++;
 	rule->type = AF_INET6;
 	rule->enabled = false;
+
+	if (config_file)
+		rule->config_file = g_path_get_basename(config_file);
+
 	rule->table = g_strdup(table);
 	rule->chain = g_strdup(chain);
 	rule->rule_spec = rule_spec;
 
-	ctx->rules = g_list_append(ctx->rules, rule);
+	ctx->rules = g_list_insert_sorted(ctx->rules, rule,
+				firewall_rule_compare);
 	return rule->id;
 }
 
@@ -829,6 +859,10 @@ static gpointer copy_fw_rule(gconstpointer src, gpointer data)
 	new->id = firewall_rule_id++;
 	new->enabled = false;
 	new->type = old->type;
+
+	if (old->config_file)
+		new->config_file = g_strdup(old->config_file);
+
 	new->table = g_strdup(old->table);
 	new->chain = g_strdup(old->chain);
 	new->rule_spec = g_strdup(old->rule_spec);
@@ -1016,21 +1050,20 @@ static int add_default_tethering_rules(struct firewall_context *ctx,
 
 	/* Add tethering rules for both IPv4 and IPv6 when using usb */
 	for (i = 0; tethering_rules[i]; i++) {
-		id = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+		id = __connman_firewall_add_rule(ctx, NULL, "filter", "INPUT",
 					tethering_rules[i]);
 		if (id < 0)
 			DBG("cannot add IPv4 rule %s",
 						tethering_rules[i]);
 
-		id = __connman_firewall_add_ipv6_rule(ctx, "filter",
+		id = __connman_firewall_add_ipv6_rule(ctx, NULL, "filter",
 					"INPUT", tethering_rules[i]);
 		if (id < 0)
 			DBG("cannot add IPv6 rule %s",
 						tethering_rules[i]);
 	}
 
-	g_list_foreach(ctx->rules, setup_firewall_rule_interface,
-					ifname);
+	g_list_foreach(ctx->rules, setup_firewall_rule_interface, ifname);
 
 	return 0;
 }
@@ -1712,11 +1745,11 @@ static bool is_rule_in_context(struct firewall_context *ctx, int type,
 	return false;
 }
 
-typedef int (*add_rules_cb_t)(int type, const char *group, int chain_id,
-								char** rules);
+typedef int (*add_rules_cb_t)(int type, const char *filename, const char *group,
+						int chain_id, char** rules);
 
-static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
-								char** rules)
+static int add_dynamic_rules_cb(int type, const char *filename,
+				const char *group, int chain_id, char** rules)
 {
 	enum connman_service_type service_type;
 	char table[] = "filter";
@@ -1755,13 +1788,15 @@ static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
 		case AF_INET:
 			id = __connman_firewall_add_rule(
 						dynamic_rules[service_type],
-						table, builtin_chains[chain_id],
+						filename, table,
+						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
 						dynamic_rules[service_type],
-						table, builtin_chains[chain_id],
+						filename, table,
+						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		default:
@@ -1785,8 +1820,8 @@ static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
 	return err;
 }
 
-static int add_general_rules_cb(int type, const char *group, int chain_id,
-								char** rules)
+static int add_general_rules_cb(int type, const char *filename,
+				const char *group, int chain_id, char** rules)
 {
 	char table[] = "filter";
 	int count = 0;
@@ -1833,13 +1868,15 @@ static int add_general_rules_cb(int type, const char *group, int chain_id,
 		switch (type) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(general_firewall->ctx,
-					table, builtin_chains[chain_id],
-					rules[i]);
+						filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
-					general_firewall->ctx, table,
-					builtin_chains[chain_id], rules[i]);
+						general_firewall->ctx, filename,
+						table, builtin_chains[chain_id],
+						rules[i]);
 			break;
 		default:
 			id = -1;
@@ -1863,8 +1900,8 @@ static int add_general_rules_cb(int type, const char *group, int chain_id,
 	return err;
 }
 
-static int add_tethering_rules_cb(int type, const char *group, int chain_id,
-								char** rules)
+static int add_tethering_rules_cb(int type, const char *filename,
+				const char *group, int chain_id, char** rules)
 {
 	char table[] = "filter";
 	int count = 0;
@@ -1908,13 +1945,16 @@ static int add_tethering_rules_cb(int type, const char *group, int chain_id,
 		switch (type) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(tethering_firewall,
-					table, builtin_chains[chain_id],
-					rules[i]);
+						filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
-					tethering_firewall, table,
-					builtin_chains[chain_id], rules[i]);
+						tethering_firewall,
+						filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		default:
 			id = -1;
@@ -1938,8 +1978,8 @@ static int add_tethering_rules_cb(int type, const char *group, int chain_id,
 	return err;
 }
 
-static int add_rules_from_group(GKeyFile *config, const char *group,
-							add_rules_cb_t cb)
+static int add_rules_from_group(const char *filename, GKeyFile *config,
+					const char *group, add_rules_cb_t cb)
 {
 	GError *error = NULL;
 	char** rules;
@@ -1981,7 +2021,8 @@ static int add_rules_from_group(GKeyFile *config, const char *group,
 				DBG("found %d rules in group %s chain %s", len,
 							group, chain_name);
 
-				count = cb(types[i], group, chain, rules);
+				count = cb(types[i], filename, group, chain,
+							rules);
 			
 				if (count < 0) {
 					DBG("cannot add rules from config");
@@ -2387,7 +2428,7 @@ static int init_general_firewall_policies(GKeyFile *config)
 	return err;
 }
 
-static int init_general_firewall(GKeyFile *config)
+static int init_general_firewall(const char *config_file, GKeyFile *config)
 {
 	int err;
 
@@ -2408,7 +2449,8 @@ static int init_general_firewall(GKeyFile *config)
 	if (err)
 		DBG("cannot initialize general policies"); // TODO react to this
 
-	err = add_rules_from_group(config, GROUP_GENERAL, add_general_rules_cb);
+	err = add_rules_from_group(config_file, config, GROUP_GENERAL,
+				add_general_rules_cb);
 
 	if (err)
 		DBG("cannot setup general firewall rules");
@@ -2450,7 +2492,7 @@ static int init_dynamic_firewall_rules(const char *file)
 		goto out;
 	}
 
-	if (init_general_firewall(config))
+	if (init_general_firewall(file, config))
 		DBG("Cannot setup general firewall");
 
 	if (!dynamic_rules)
@@ -2475,11 +2517,12 @@ static int init_dynamic_firewall_rules(const char *file)
 		if (!group)
 			continue;
 
-		if (add_rules_from_group(config, group, add_dynamic_rules_cb))
+		if (add_rules_from_group(file, config, group,
+					add_dynamic_rules_cb))
 			DBG("failed to process rules from group type %d", type);
 	}
 
-	if (add_rules_from_group(config, GROUP_TETHERING,
+	if (add_rules_from_group(file, config, GROUP_TETHERING,
 				add_tethering_rules_cb))
 		DBG("failed to add tethering rules");
 
@@ -2728,7 +2771,8 @@ static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 	int err;
 
 	/* Go over dynamic rules for this type */
-	for (dyn_list = dyn_ctx->rules; dyn_list; dyn_list = dyn_list->next) {
+	for (dyn_list = g_list_first(dyn_ctx->rules); dyn_list;
+				dyn_list = dyn_list->next) {
 		dyn_rule = dyn_list->data;
 
 		/* If the dynamic rule is already added for service firewall */
@@ -2739,7 +2783,8 @@ static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 
 		new_rule = copy_fw_rule(dyn_rule, ifname);
 		
-		srv_ctx->rules = g_list_append(srv_ctx->rules, new_rule);
+		srv_ctx->rules = g_list_insert_sorted(srv_ctx->rules, new_rule,
+					firewall_rule_compare);
 
 		if (srv_ctx->enabled) {
 			err = firewall_enable_rule(new_rule);
@@ -2748,7 +2793,7 @@ static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 				DBG("new rule not enabled %d", err);
 		}
 	}
-	
+
 	return 0;
 }
 

@@ -205,12 +205,12 @@ static int init_firewall(void)
 
 	fw = __connman_firewall_create();
 
-	err = __connman_firewall_add_rule(fw, "mangle", "INPUT",
+	err = __connman_firewall_add_rule(fw, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	if (err < 0)
 		goto err;
 
-	err = __connman_firewall_add_rule(fw, "mangle", "POSTROUTING",
+	err = __connman_firewall_add_rule(fw, NULL, "mangle", "POSTROUTING",
 					"-j CONNMARK --save-mark");
 	if (err < 0)
 		goto err;
@@ -258,13 +258,13 @@ static int init_firewall_session(struct connman_session *session)
 
 	switch (session->policy_config->id_type) {
 	case CONNMAN_SESSION_ID_TYPE_UID:
-		err = __connman_firewall_add_rule(fw, "mangle", "OUTPUT",
+		err = __connman_firewall_add_rule(fw, NULL, "mangle", "OUTPUT",
 				"-m owner --uid-owner %s -j MARK --set-mark %d",
 						session->policy_config->id,
 						session->mark);
 		break;
 	case CONNMAN_SESSION_ID_TYPE_GID:
-		err = __connman_firewall_add_rule(fw, "mangle", "OUTPUT",
+		err = __connman_firewall_add_rule(fw, NULL, "mangle", "OUTPUT",
 				"-m owner --gid-owner %s -j MARK --set-mark %d",
 						session->policy_config->id,
 						session->mark);
@@ -402,8 +402,8 @@ static void add_nat_rules(struct connman_session *session)
 	ifname = connman_inet_ifname(index);
 	addr = __connman_ipconfig_get_local(ipconfig);
 
-	id = __connman_firewall_add_rule(session->fw, "nat", "POSTROUTING",
-				"-o %s -j SNAT --to-source %s",
+	id = __connman_firewall_add_rule(session->fw, NULL, "nat",
+				"POSTROUTING", "-o %s -j SNAT --to-source %s",
 				ifname, addr);
 	g_free(ifname);
 	if (id < 0) {
