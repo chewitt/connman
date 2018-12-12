@@ -14,14 +14,14 @@
  *  GNU General Public License for more details.
  */
 
-#include "src/connman.h"
-
 #include <stdio.h>
 #include <unistd.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <glib/gi18n.h>
 #include "plugins/globalproxy.c"
+
+#define POLICY_FAKE_POINTER (0x6E78B)
 
 DBusMessage *test_message = NULL;
 bool test_enabled = FALSE;
@@ -32,6 +32,8 @@ gchar * test_directory = NULL;
 GDBusMethodFunction get_property_dbus_call = NULL;
 GDBusMethodFunction set_property_dbus_call = NULL;
 void *user_data_dbus_call;
+DA_ACCESS test_access = DA_ACCESS_DENY;
+static DAPeer test_peer;
 
 /*==========================================================================*
  * Dummy functions
@@ -241,6 +243,50 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 	va_end(args);
 
 	return reply;
+}
+
+// Replaces function from libdbusaccess/src/dbusaccess_policy.c
+// Needed to control permissions independent of reality
+DAPolicy* da_policy_new_full(const char* spec, const DA_ACTION* actions)
+{
+	// DAPolicy is an opaque structure
+	return (DAPolicy*)POLICY_FAKE_POINTER;
+}
+
+// Replaces function from libdbusaccess/src/dbusaccess_policy.c
+// Needed to control permissions independent of reality
+void da_policy_unref(DAPolicy* policy)
+{
+	g_assert_cmphex((uint)policy, ==, POLICY_FAKE_POINTER);
+}
+
+// Replaces function from libdbusaccess/src/dbusaccess_policy.c
+// Needed to control permissions independent of reality
+DA_ACCESS da_policy_check(const DAPolicy* policy, const DACred* cred,
+			  guint action, const char* arg, DA_ACCESS def)
+{
+	g_assert_cmphex((uint)policy, ==, POLICY_FAKE_POINTER);
+
+	return test_access;
+}
+
+// Replaces function from libdbusaccess/src/dbusaccess_peer.c
+// Needed to control permissions independent of reality
+DAPeer* da_peer_get(DA_BUS bus, const char* name)
+{
+	// The contents doesn't matter, we just initialise it to broadly
+	// sensible values
+	test_peer.bus = DA_BUS_SYSTEM;
+	test_peer.name = "nemo";
+	test_peer.pid = 1000;
+	test_peer.cred.euid = 1000;
+	test_peer.cred.egid = 1000;
+	test_peer.cred.groups = NULL;
+	test_peer.cred.ngroups = 0;
+	test_peer.cred.caps = 0;
+	test_peer.cred.flags = 0;
+
+	return &test_peer;
 }
 
 /*==========================================================================*
@@ -559,7 +605,7 @@ static DBusMessage *construct_message_get_active()
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &key_active);
 
 	// Close everything off
-	dbus_message_set_serial (msg, 1);
+	dbus_message_set_serial(msg, 1);
 
 	return msg;
 }
@@ -951,6 +997,9 @@ static void test_global_proxy_invalid_arguments_no_key()
 	DBusMessage *msg;
 	DBusMessage *reply;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -976,6 +1025,9 @@ static void test_global_proxy_invalid_arguments_invalid_key()
 	const char * key_invalid = "Stinky";
 	const char * value_method = "direct";
 	DBusMessageIter iter, variant, dict;
+
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
 
 	result = global_proxy_init();
 	g_assert_true(result == 0);
@@ -1017,6 +1069,9 @@ static void test_global_proxy_invalid_arguments_method()
 	const char * value_method = "snufkin";
 	DBusMessageIter iter, variant, dict;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1040,8 +1095,10 @@ static void test_global_proxy_invalid_arguments_method()
 	dbus_message_set_serial (msg, 1);
 
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
+	// The result will depend on the user (access control)
 	g_assert_true(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
-					     ".InvalidArguments"));
+		".InvalidArguments") || dbus_message_is_error(reply,
+			CONNMAN_ERROR_INTERFACE ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1054,6 +1111,9 @@ static void test_global_proxy_valid_arguments_active()
 	DBusMessage *msg;
 	DBusMessage *reply;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1061,6 +1121,8 @@ static void test_global_proxy_valid_arguments_active()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1073,6 +1135,9 @@ static void test_global_proxy_valid_arguments_configuration_direct()
 	DBusMessage *msg;
 	DBusMessage *reply;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1081,6 +1146,8 @@ static void test_global_proxy_valid_arguments_configuration_direct()
 
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 				       ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1093,6 +1160,9 @@ static void test_global_proxy_valid_arguments_configuration_manual()
 	DBusMessage *msg;
 	DBusMessage *reply;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1102,6 +1172,8 @@ static void test_global_proxy_valid_arguments_configuration_manual()
 
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 				       ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1114,6 +1186,9 @@ static void test_global_proxy_valid_arguments_configuration_auto()
 	DBusMessage *msg;
 	DBusMessage *reply;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1123,6 +1198,8 @@ static void test_global_proxy_valid_arguments_configuration_auto()
 
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 				       ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1136,6 +1213,9 @@ static void test_global_proxy_active_sticks()
 	DBusMessage *reply;
 	dbus_bool_t value_active;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1144,6 +1224,8 @@ static void test_global_proxy_active_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1152,10 +1234,10 @@ static void test_global_proxy_active_sticks()
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_active = deconstruct_reply_active(reply);
 	g_assert_true(value_active == FALSE);
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1164,6 +1246,8 @@ static void test_global_proxy_active_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1172,10 +1256,11 @@ static void test_global_proxy_active_sticks()
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_active = deconstruct_reply_active(reply);
+	// The result will depend on the user (access control)
 	g_assert_true(value_active == TRUE);
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1189,6 +1274,9 @@ static void test_global_proxy_configuration_method_sticks()
 	DBusMessage *reply;
 	const char * value_method;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1197,6 +1285,8 @@ static void test_global_proxy_configuration_method_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1205,10 +1295,10 @@ static void test_global_proxy_configuration_method_sticks()
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "direct");
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1217,18 +1307,20 @@ static void test_global_proxy_configuration_method_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
 	// Check configuration is manual
 	msg = construct_message_get_configuration();
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
-	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
-					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,
+		CONNMAN_ERROR_INTERFACE ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "manual");
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1237,6 +1329,8 @@ static void test_global_proxy_configuration_method_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1245,10 +1339,10 @@ static void test_global_proxy_configuration_method_sticks()
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "auto");
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1282,6 +1376,9 @@ static void test_global_proxy_configuration_manual_sticks()
 		NULL
 	};
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1292,6 +1389,8 @@ static void test_global_proxy_configuration_manual_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1300,7 +1399,8 @@ static void test_global_proxy_configuration_manual_sticks()
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "manual");
 
@@ -1313,9 +1413,8 @@ static void test_global_proxy_configuration_manual_sticks()
 	// Check Excludes is set correctly
 	g_assert_true(deconstruct_reply_configuration_excludes_compare(reply,
 							excludes_match));
-	g_assert_false(deconstruct_reply_configuration_excludes_compare(
-			       reply, excludes_nomatch));
-
+	g_assert_false(deconstruct_reply_configuration_excludes_compare(reply,
+							excludes_nomatch));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1330,6 +1429,9 @@ static void test_global_proxy_configuration_auto_url_sticks()
 	const char * value_method;
 	const char * value_url;
 
+	// Privileged access allowed
+	test_access = DA_ACCESS_ALLOW;
+
 	result = global_proxy_init();
 	g_assert_true(result == 0);
 
@@ -1339,6 +1441,8 @@ static void test_global_proxy_configuration_auto_url_sticks()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1347,14 +1451,14 @@ static void test_global_proxy_configuration_auto_url_sticks()
 	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
-
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "auto");
 
 	// Check URL is set correctly
 	value_url = deconstruct_reply_configuration_url(reply);
 	g_assert_cmpstr(value_url, ==, "https://jolla.com/config.pac");
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1367,6 +1471,9 @@ static void test_global_proxy_configfile_read()
 	DBusMessage *msg;
 	DBusMessage *reply;
 	const char * value_method;
+
+	// Privileged access denied
+	test_access = DA_ACCESS_DENY;
 
 	export_config("settings", "auto", "https://jolla.com",
 		      "merproject.org",
@@ -1383,7 +1490,6 @@ static void test_global_proxy_configfile_read()
 
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "auto");
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1403,7 +1509,6 @@ static void test_global_proxy_configfile_read()
 
 	value_method = deconstruct_reply_configuration_method(reply);
 	g_assert_cmpstr(value_method, ==, "direct");
-
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1418,6 +1523,9 @@ static void test_global_proxy_configfile_write()
 	GKeyFile *keyfile;
 	char * filename;
 
+	// Privileged access denied
+	test_access = DA_ACCESS_ALLOW;
+
 	export_config("settings", "manual", "https://jolla.com",
 		      "merproject.org", "https://jolla.com/test.pac");
 
@@ -1429,6 +1537,8 @@ static void test_global_proxy_configfile_write()
 	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
 	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
 					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
 	dbus_message_unref(reply);
 	dbus_message_unref(msg);
 
@@ -1443,10 +1553,159 @@ static void test_global_proxy_configfile_write()
 	result = g_key_file_load_from_file(keyfile, filename, 0, NULL);
 	g_assert_true(result);
 
-	g_assert_cmpstr(g_key_file_get_string(keyfile, CONFIG_GROUP_MAIN,
-					CONFIG_KEY_METHOD, NULL), ==, "direct");
+	g_assert_cmpstr(g_key_file_get_string(
+				keyfile, CONFIG_GROUP_MAIN, CONFIG_KEY_METHOD,
+				NULL), ==, "direct");
 	g_key_file_unref(keyfile);
 	g_free(filename);
+}
+
+static void test_global_proxy_active_access_denied()
+{
+	int result;
+	DBusMessage *msg;
+	DBusMessage *reply;
+	dbus_bool_t value_active;
+
+	// Privileged access denied
+	test_access = DA_ACCESS_DENY;
+
+	result = global_proxy_init();
+	g_assert_true(result == 0);
+
+	// Read current active status
+	msg = construct_message_get_active();
+	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
+	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	value_active = deconstruct_reply_active(reply);
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Attempt to set the same value
+	msg = construct_message_active(value_active);
+	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
+
+	// Ensure we get an Access Denied response
+	g_assert_true(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Attempt to change the value
+	msg = construct_message_active(!value_active);
+	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
+
+	// Ensure we get an Access Denied response
+	g_assert_true(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Check it hasn't actually changed
+	msg = construct_message_get_active();
+	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
+	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	g_assert_cmpuint(value_active, ==, deconstruct_reply_active(reply));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	global_proxy_exit();
+}
+
+static void test_global_proxy_configuration_access_denied()
+{
+	int result;
+	DBusMessage *msg;
+	DBusMessage *reply;
+	const char * value_method;
+
+	// Privileged access denied
+	test_access = DA_ACCESS_DENY;
+
+	result = global_proxy_init();
+	g_assert_true(result == 0);
+
+	// Get the current configuration
+	msg = construct_message_get_configuration();
+	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
+	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	value_method = deconstruct_reply_configuration_method(reply);
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Set configuration to direct
+	msg = construct_message_configuration_direct();
+	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
+
+	// Ensure we get an Access Denied response
+	g_assert_true(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					    ".PermissionDenied"));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Check it hasn't actually changed
+	msg = construct_message_get_configuration();
+	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
+	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	g_assert_cmpstr(value_method, ==, deconstruct_reply_configuration_method(reply));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Set configuration to manual
+	msg = construct_message_configuration_manual("https://jolla.com", "");
+	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
+
+	// Ensure we get an Access Denied response
+	g_assert_true(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					    ".PermissionDenied"));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Check it hasn't actually changed
+	msg = construct_message_get_configuration();
+	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
+	g_assert_false(dbus_message_is_error(reply,
+		CONNMAN_ERROR_INTERFACE ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	g_assert_cmpstr(value_method, ==, deconstruct_reply_configuration_method(reply));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Set configuration to auto
+	msg = construct_message_configuration_auto("");
+	reply = set_property_dbus_call(NULL, msg, user_data_dbus_call);
+
+	// Ensure we get an Access Denied response
+	g_assert_true(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					    ".PermissionDenied"));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	// Check it hasn't actually changed
+	msg = construct_message_get_configuration();
+	reply = get_property_dbus_call(NULL, msg, user_data_dbus_call);
+	g_assert_false(dbus_message_is_error(reply, CONNMAN_ERROR_INTERFACE
+					     ".InvalidArguments"));
+	g_assert_false(dbus_message_is_error(reply,CONNMAN_ERROR_INTERFACE
+					     ".PermissionDenied"));
+	g_assert_cmpstr(value_method, ==, deconstruct_reply_configuration_method(reply));
+	dbus_message_unref(reply);
+	dbus_message_unref(msg);
+
+	global_proxy_exit();
 }
 
 #define PREFIX "/global_proxy/"
@@ -1474,6 +1733,8 @@ int main(int argc, char *argv[])
 	g_test_add_func(PREFIX "manual_servers_sticks", test_global_proxy_configuration_manual_sticks);
 	g_test_add_func(PREFIX "configfile_read", test_global_proxy_configfile_read);
 	g_test_add_func(PREFIX "configfile_write", test_global_proxy_configfile_write);
+	g_test_add_func(PREFIX "active_access_denied", test_global_proxy_active_access_denied);
+	g_test_add_func(PREFIX "configuration_access_denied", test_global_proxy_configuration_access_denied);
 
 	ret = g_test_run();
 

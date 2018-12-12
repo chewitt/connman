@@ -76,6 +76,9 @@
 #define GET_EAP_ACCESS                  CONNMAN_ACCESS_ALLOW
 #define SET_EAP_ACCESS                  CONNMAN_ACCESS_DENY
 
+/* Set properties (Get is always ACCESS_ALLOW for these) */
+#define SET_PROXYCONFIG_ACCESS          CONNMAN_ACCESS_DENY
+
 /* Other methods */
 #define CLEAR_PROPERTY_ACCESS           CONNMAN_ACCESS_ALLOW
 #define CONNECT_ACCESS                  CONNMAN_ACCESS_ALLOW
@@ -4478,6 +4481,9 @@ static DBusMessage *set_property(DBusConnection *conn,
 		service_save(service);
 	} else if (g_str_equal(name, "Proxy.Configuration")) {
 		int err;
+
+		if (!can_set_property(service, name, msg, SET_PROXYCONFIG_ACCESS))
+			return __connman_error_permission_denied(msg);
 
 		if (service->immutable)
 			return __connman_error_not_supported(msg);
