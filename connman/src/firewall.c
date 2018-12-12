@@ -83,6 +83,7 @@ static unsigned int firewall_rule_id;
 #define GROUP_TETHERING "tethering"
 #define GENERAL_FIREWALL_POLICIES 3
 
+/* TODO add all (tethering and dynamic) under this general firewall context */
 struct general_firewall_context {
 	char **policies;
 	char **policiesv6;
@@ -1729,7 +1730,7 @@ static bool is_rule_in_context(struct firewall_context *ctx, int type,
 	GList *iter;
 	struct fw_rule *list_rule;
 
-	for (iter = ctx->rules; iter; iter = iter->next) {
+	for (iter = g_list_first(ctx->rules); iter; iter = iter->next) {
 		list_rule = iter->data;
 
 		if (!list_rule)
@@ -1991,9 +1992,9 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 	int i;
 	gsize len;
 
-	DBG("");
+	DBG("config %s group %s", filename, group);
 
-	if (!group || !*group || !cb)
+	if (!group || !*group || !cb || !filename || !*filename)
 		return 0;
 
 	for (chain = NF_IP_LOCAL_IN; chain < NF_IP_NUMHOOKS - 1; chain++) {
@@ -2028,7 +2029,7 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 					DBG("cannot add rules from config");
 					err = -EINVAL;
 				} else if (count < len) {
-					DBG("%d invalid rules were detected,"
+					DBG("%d invalid rules were detected, "
 						"%d rules were added",
 						len - count, count);
 				} else {
@@ -2797,16 +2798,133 @@ static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 	return 0;
 }
 
+static int remove_config_from_context(struct firewall_context *ctx,
+						const char *config_file,
+						bool disable)
+{
+	GList *iter = NULL;
+	struct fw_rule *rule;
+	int err = 0;
+	int e = 0;
+
+	if (!ctx || !config_file)
+		return e;
+
+	iter = g_list_first(ctx->rules);
+
+	while (iter) {
+		rule = iter->data;
+		iter = iter->next; /* Move to next before removal */
+
+		if (!g_strcmp0(config_file, rule->config_file)) {
+			DBG("removing rule %d table %s chain %s %s",
+						rule->id, rule->table,
+						rule->chain, rule->rule_spec);
+
+			/*
+			 * If the rule was enabled and requested to be disabled
+			 * try to disable it first. If disabling fails, do not
+			 * remove the rule yet so it the rule might be attempted
+			 * to be removed at shutdown.
+			 */
+			if (rule->enabled && disable) {
+				err = __connman_firewall_disable_rule(ctx,
+							rule->id);
+
+				if (err) {
+					DBG("cannot disable rule %d", err);
+					e = err;
+					continue;
+				}
+			}
+
+			switch (rule->type) {
+			case AF_INET:
+				err = __connman_firewall_remove_rule(ctx,
+							rule->id);
+				break;
+			case AF_INET6:
+				err = __connman_firewall_remove_ipv6_rule(ctx,
+							rule->id);
+			}
+
+			if (err) {
+				DBG("cannot remove rule, err %d", err);
+				e = err;
+			}
+		}
+	}
+
+	return e;
+}
+
+static void firewall_config_removed(const char *config_file)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+	enum connman_service_type type;
+	struct firewall_context *ctx;
+	int err;
+
+	DBG("removing config %s rules from general firewall", config_file);
+
+	err = remove_config_from_context(general_firewall->ctx, config_file,
+				true);
+
+	if (err)
+		DBG("cannot remove deleted rules.");
+
+	DBG("removing config %s rules from tethering firewall", config_file);
+
+	err = remove_config_from_context(tethering_firewall, config_file, true);
+
+	if (err)
+		DBG("cannot remove deleted rules.");
+
+	for (type = 0; type < MAX_CONNMAN_SERVICE_TYPES; type++) {
+		if (!dynamic_rules[type] || !dynamic_rules[type]->rules)
+			continue;
+
+		DBG("removing config %s rules from %s dynamic rules",
+					config_file,
+					__connman_service_type2string(type));
+
+		err = remove_config_from_context(dynamic_rules[type],
+					config_file, false);
+
+		if (err)
+			DBG("cannot remove deleted rules");
+	}
+
+	g_hash_table_iter_init(&iter, current_dynamic_rules);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		ctx = value;
+
+		DBG("removing config %s rules from active service %s",
+					config_file, (char*)key);
+
+		err = remove_config_from_context(ctx, config_file, true);
+
+		if (err)
+			DBG("cannot remove deleted rules");
+	}
+}
+
 static int firewall_reload_configurations()
 {
 	GError *error = NULL;
 	GDir *dir;
+	GSList *read_files = NULL;
+	GSList *slist_iter = NULL;
+	GList *list_iter = NULL;
 	GHashTableIter iter;
 	gpointer key, value;
 	struct connman_service *service;
 	enum connman_service_type type;
 	struct firewall_context *ctx;
 	const char *filename;
+	const char *config_file;
 	char *ifname;
 	char *filepath;
 	bool new_configuration_files = false;
@@ -2830,10 +2948,27 @@ static int firewall_reload_configurations()
 
 	DBG("read configs from %s", FIREWALLCONFIGDIR);
 
+	/* Read filenames into ordered list */
 	while ((filename = g_dir_read_name(dir))) {
 		/* Read configs that have firewall.conf suffix */
 		if (!g_str_has_suffix(filename, FIREWALLFILE))
 			continue;
+
+		/*
+		 * Add file name to read file list for checking if config file
+		 * has been removed. At this point ignore file tests.
+		 */
+		read_files = g_slist_prepend(read_files, g_strdup(filename));
+	}
+
+	read_files = g_slist_sort(read_files, (GCompareFunc)g_strcmp0);
+
+	g_dir_close(dir);
+
+	/* Process ordered list of configuration files */
+	for (slist_iter = read_files; slist_iter;
+				slist_iter = slist_iter->next) {
+		filename = slist_iter->data;
 
 		/* If config file is already read */
 		if (g_list_find_custom(configuration_files, filename,
@@ -2842,6 +2977,8 @@ static int firewall_reload_configurations()
 
 		filepath = g_strconcat(FIREWALLCONFIGDIR, filename, NULL);
 
+		DBG("processing new config %s", filepath);
+
 		if (g_file_test(filepath, G_FILE_TEST_IS_REGULAR)) {
 
 			err = init_dynamic_firewall_rules(filepath);
@@ -2849,10 +2986,9 @@ static int firewall_reload_configurations()
 			if (!err) {
 				DBG("new configuration %s loaded", filepath);
 
-				configuration_files = g_list_insert_sorted(
-						configuration_files,
-						g_strdup(filename),
-						(GCompareFunc)g_strcmp0);
+				configuration_files = g_list_prepend(
+							configuration_files,
+							g_strdup(filename));
 
 				new_configuration_files = true;
 			}
@@ -2861,8 +2997,39 @@ static int firewall_reload_configurations()
 		g_free(filepath);
 	}
 
-	g_dir_close(dir);
+	configuration_files = g_list_sort(configuration_files,
+				(GCompareFunc)g_strcmp0);
 
+	list_iter = g_list_last(configuration_files);
+
+	/* First check if any configs has been removed */
+	while (list_iter)
+	{
+		config_file = list_iter->data;
+		GList *list_iter_prev = g_list_previous(list_iter);
+
+		/*
+		 * If no files are read remove all configs. If the file that
+		 * was previously read is not in the list of previosly read
+		 * remove rules read from that removed config file.
+		 */
+		if (!g_slist_find_custom(read_files, config_file,
+					(GCompareFunc)g_strcmp0)) {
+			DBG("config %s removed, deleting rules", config_file);
+
+			firewall_config_removed(config_file);
+
+			g_free(list_iter->data);
+			configuration_files = g_list_remove(configuration_files,
+						config_file);
+		}
+
+		list_iter = list_iter_prev;
+	}
+
+	g_slist_free_full(read_files, g_free);
+
+	/* Then check if there are new configs that were read without errors */
 	if (!new_configuration_files) {
 		DBG("no new configuration was found");
 		return 0;
