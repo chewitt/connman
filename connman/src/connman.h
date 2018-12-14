@@ -984,6 +984,9 @@ int __connman_iptables_delete(int type,
 int __connman_iptables_restore_all();
 int __connman_iptables_save_all();
 
+typedef int (*connman_iptables_manage_cb_t)(int type, const char *table_name,
+				const char *chain, const char *rule_spec);
+
 typedef void (*connman_iptables_iterate_chains_cb_t) (const char *chain_name,
 							void *user_data);
 int __connman_iptables_iterate_chains(int type,
@@ -1059,11 +1062,13 @@ struct firewall_context;
 struct firewall_context *__connman_firewall_create(void);
 void __connman_firewall_destroy(struct firewall_context *ctx);
 int __connman_firewall_add_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
 				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...);
 int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
 				const char *config_file,
 				const char *table,
 				const char *chain,

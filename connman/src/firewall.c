@@ -64,6 +64,7 @@ struct fw_rule {
 	char *rule_spec;
 	char *ifname;
 	char *config_file;
+	connman_iptables_manage_cb_t cb;
 };
 
 struct firewall_context {
@@ -258,7 +259,8 @@ static char *format_new_rule(int chain, const char* ifname, const char* rule)
 	return new_rule;
 }
 
-static int insert_managed_rule(int type,
+static int insert_managed_rule(connman_iptables_manage_cb_t cb,
+				int type,
 				const char *table_name,
 				const char *chain_name,
 				const char *ifname,
@@ -311,8 +313,12 @@ static int insert_managed_rule(int type,
 	chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
 out:
-	err = __connman_iptables_append(type, table_name, chain,
-				full_rule ? full_rule : rule_spec);
+	if (cb)
+		err = cb(type, table_name, chain,
+					full_rule ? full_rule : rule_spec);
+	else
+		err = __connman_iptables_append(type, table_name, chain,
+					full_rule ? full_rule : rule_spec);
 	
 	if (err < 0)
 		DBG("table %s cannot append rule %s", table_name,
@@ -432,8 +438,9 @@ static int firewall_enable_rule(struct fw_rule *rule)
 	DBG("%d %s %s %s %s", rule->type, rule->table, rule->chain,
 					rule->ifname, rule->rule_spec);
 
-	err = insert_managed_rule(rule->type, rule->table, rule->chain,
-					rule->ifname, rule->rule_spec);
+	err = insert_managed_rule(rule->cb, rule->type, rule->table,
+					rule->chain, rule->ifname,
+					rule->rule_spec);
 	if (err < 0) {
 		DBG("cannot insert managed rule %d", err);
 		return err;
@@ -480,6 +487,7 @@ static int firewall_disable_rule(struct fw_rule *rule)
 }
 
 int __connman_firewall_add_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
 				const char *config_file,
 				const char *table,
 				const char *chain,
@@ -500,6 +508,7 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 	rule->id = firewall_rule_id++;
 	rule->type = AF_INET;
 	rule->enabled = false;
+	rule->cb = cb;
 
 	if (config_file)
 		rule->config_file = g_path_get_basename(config_file);
@@ -514,6 +523,7 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 }
 
 int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
 				const char *config_file,
 				const char *table,
 				const char *chain,
@@ -534,6 +544,7 @@ int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
 	rule->id = firewall_rule_id++;
 	rule->type = AF_INET6;
 	rule->enabled = false;
+	rule->cb = cb;
 
 	if (config_file)
 		rule->config_file = g_path_get_basename(config_file);
@@ -860,6 +871,7 @@ static gpointer copy_fw_rule(gconstpointer src, gpointer data)
 	new->id = firewall_rule_id++;
 	new->enabled = false;
 	new->type = old->type;
+	new->cb = old->cb;
 
 	if (old->config_file)
 		new->config_file = g_strdup(old->config_file);
@@ -1046,18 +1058,19 @@ static int add_default_tethering_rules(struct firewall_context *ctx,
 {
 	/* Add more in the future if needed */
 	const char *tethering_rules[] = { "-j ACCEPT", NULL };
+	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
 	int id;
 	int i;
 
 	/* Add tethering rules for both IPv4 and IPv6 when using usb */
 	for (i = 0; tethering_rules[i]; i++) {
-		id = __connman_firewall_add_rule(ctx, NULL, "filter", "INPUT",
-					tethering_rules[i]);
+		id = __connman_firewall_add_rule(ctx, cb, NULL, "filter",
+					"INPUT", tethering_rules[i]);
 		if (id < 0)
 			DBG("cannot add IPv4 rule %s",
 						tethering_rules[i]);
 
-		id = __connman_firewall_add_ipv6_rule(ctx, NULL, "filter",
+		id = __connman_firewall_add_ipv6_rule(ctx, cb, NULL, "filter",
 					"INPUT", tethering_rules[i]);
 		if (id < 0)
 			DBG("cannot add IPv6 rule %s",
@@ -1753,6 +1766,7 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
 	enum connman_service_type service_type;
+	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
 	char table[] = "filter";
 	int count = 0;
 	int err = 0;
@@ -1789,14 +1803,14 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 		case AF_INET:
 			id = __connman_firewall_add_rule(
 						dynamic_rules[service_type],
-						filename, table,
+						cb, filename, table,
 						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
 						dynamic_rules[service_type],
-						filename, table,
+						cb, filename, table,
 						builtin_chains[chain_id],
 						rules[i]);
 			break;
@@ -1824,6 +1838,7 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 static int add_general_rules_cb(int type, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
+	connman_iptables_manage_cb_t cb = __connman_iptables_append;
 	char table[] = "filter";
 	int count = 0;
 	int err = 0;
@@ -1869,14 +1884,15 @@ static int add_general_rules_cb(int type, const char *filename,
 		switch (type) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(general_firewall->ctx,
-						filename, table,
+						cb, filename, table,
 						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
-						general_firewall->ctx, filename,
-						table, builtin_chains[chain_id],
+						general_firewall->ctx, cb,
+						filename, table,
+						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		default:
@@ -1904,6 +1920,7 @@ static int add_general_rules_cb(int type, const char *filename,
 static int add_tethering_rules_cb(int type, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
+	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
 	char table[] = "filter";
 	int count = 0;
 	int err = 0;
@@ -1945,14 +1962,14 @@ static int add_tethering_rules_cb(int type, const char *filename,
 
 		switch (type) {
 		case AF_INET:
-			id = __connman_firewall_add_rule(tethering_firewall,
+			id = __connman_firewall_add_rule(tethering_firewall, cb,
 						filename, table,
 						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
-						tethering_firewall,
+						tethering_firewall, cb,
 						filename, table,
 						builtin_chains[chain_id],
 						rules[i]);

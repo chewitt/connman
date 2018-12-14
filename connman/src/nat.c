@@ -98,7 +98,7 @@ static int enable_nat(struct connman_nat *nat)
 					nat->prefixlen,
 					nat->interface);
 
-	err = __connman_firewall_add_rule(nat->fw, NULL, "nat",
+	err = __connman_firewall_add_rule(nat->fw, NULL, NULL, "nat",
 				"POSTROUTING", cmd);
 	g_free(cmd);
 	if (err < 0)
