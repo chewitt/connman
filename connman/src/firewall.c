@@ -1261,6 +1261,7 @@ static bool is_string_digits(const char *str)
 						"ah",
 						"sctp",
 						"mh",
+						"dccp",
 						"all",
 						NULL
 	};
@@ -1468,7 +1469,7 @@ static bool validate_ports_or_services(const char *str)
 			portnum = (int) g_ascii_strtoll(tokens[i], NULL, 10);
 
 			/* Valid port number */
-			if (portnum && portnum < G_MAXUINT16)
+			if (portnum && portnum <= G_MAXUINT16)
 				continue;
 		}
 
