@@ -155,6 +155,59 @@ void connman_technology_tethering_notify(struct connman_technology *technology,
 	return;
 }
 
+DBusMessage *__connman_error_invalid_arguments(DBusMessage *msg)
+{
+	return NULL;
+}
+
+DBusMessage *__connman_error_permission_denied(DBusMessage *msg)
+{
+	return NULL;
+}
+
+DBusMessage *__connman_error_failed(DBusMessage *msg, int errnum)
+{
+	return NULL;
+}
+
+DBusConnection *connman_dbus_get_connection(void)
+{
+	return NULL;
+}
+
+struct connman_access_firewall_policy *__connman_access_firewall_policy_create
+		(const char *spec)
+{
+	return NULL;
+}
+
+void __connman_access_firewall_policy_free
+		(struct connman_access_firewall_policy *policy)
+{
+	return;
+}
+
+enum connman_access __connman_access_firewall_manage
+		(const struct connman_access_firewall_policy *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access)
+{
+	return 0;
+}
+
+int connman_service_iterate_services(connman_service_iterate_cb cb,
+							void *user_data)
+{
+	return 0;
+}
+
+enum connman_service_state connman_service_get_state(
+						struct connman_service *service)
+{
+	return 0;
+}
+
+
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;
@@ -585,7 +638,7 @@ static void test_firewall_basic0(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -616,11 +669,11 @@ static void test_firewall_basic1(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "OUTPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -641,12 +694,12 @@ static void test_firewall_basic2(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
-					"-j CONNMARK --restore-mark");
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle", "INPUT",
+				"-j CONNMARK --restore-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "mangle", "POSTROUTING",
-					"-j CONNMARK --save-mark");
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle",
+				"POSTROUTING", "-j CONNMARK --save-mark");
 	g_assert(err >= 0);
 
 	err = __connman_firewall_enable(ctx);
@@ -666,7 +719,7 @@ static void test_firewall_basic3(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	id = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
+	id = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(id >= 0);
 
@@ -961,8 +1014,8 @@ static void test_firewall6_basic0(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "INPUT",
-					"-m mark --mark 999 -j LOG");
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+					"INPUT", "-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
 	err = __connman_firewall_enable(ctx);
@@ -992,11 +1045,11 @@ static void test_firewall6_basic1(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "INPUT",
-					"-m mark --mark 999 -j LOG");
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+					"INPUT", "-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "OUTPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
@@ -1017,12 +1070,12 @@ static void test_firewall6_basic2(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "mangle", "INPUT",
-					"-j CONNMARK --restore-mark");
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "mangle",
+				"INPUT", "-j CONNMARK --restore-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "mangle", "POSTROUTING",
-					"-j CONNMARK --save-mark");
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "mangle",
+				"POSTROUTING", "-j CONNMARK --save-mark");
 	g_assert(err >= 0);
 
 	err = __connman_firewall_enable(ctx);
@@ -1042,7 +1095,7 @@ static void test_firewall6_basic3(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	id = __connman_firewall_add_rule(ctx, "mangle", "INPUT",
+	id = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(id >= 0);
 
@@ -1070,25 +1123,25 @@ static void test_firewall_4and6_basic0(void)
 
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "INPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "INPUT",
 			"-p icmp -m icmp "
 			"--icmp-type 8/0 -j DROP");
 
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, "filter", "OUTPUT",
+	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "OUTPUT",
 				"-p icmp -m icmp "
 				"--icmp-type 0/0 -j DROP");
 
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "INPUT",
-					"-p icmpv6 -m icmpv6 "
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+					"INPUT", "-p icmpv6 -m icmpv6 "
 					"--icmpv6-type 128/0 -j DROP");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, "filter", "OUTPUT",
-					"-p icmpv6 -m icmpv6 "
+	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+					"OUTPUT", "-p icmpv6 -m icmpv6 "
 					"--icmpv6-type 129/0 -j DROP");
 	g_assert(err >= 0);
 

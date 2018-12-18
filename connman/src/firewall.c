@@ -30,6 +30,8 @@
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
 
+#include <gdbus.h>
+
 #include "connman.h"
 
 #define CHAIN_PREFIX "connman-"
@@ -61,6 +63,8 @@ struct fw_rule {
 	char *chain;
 	char *rule_spec;
 	char *ifname;
+	char *config_file;
+	connman_iptables_manage_cb_t cb;
 };
 
 struct firewall_context {
@@ -80,6 +84,7 @@ static unsigned int firewall_rule_id;
 #define GROUP_TETHERING "tethering"
 #define GENERAL_FIREWALL_POLICIES 3
 
+/* TODO add all (tethering and dynamic) under this general firewall context */
 struct general_firewall_context {
 	char **policies;
 	char **policiesv6;
@@ -95,6 +100,9 @@ static struct firewall_context **dynamic_rules = NULL;
 
 /* Tethering rules are a special case */
 static struct firewall_context *tethering_firewall = NULL;
+
+/* Configuration files that are read */
+static GList *configuration_files = NULL;
 
 static const char *supported_chains[] = {
 	[NF_IP_PRE_ROUTING]	= NULL,
@@ -133,6 +141,22 @@ static const char *supported_policiesv6[] = {
  * value and the struct firewall_context is the data held.
  */
 static GHashTable *current_dynamic_rules = NULL;
+
+static int firewall_rule_compare(gconstpointer a, gconstpointer b)
+{
+	const struct fw_rule *rule_a;
+	const struct fw_rule *rule_b;
+
+	rule_a = a;
+	rule_b = b;
+
+	/*
+	 * g_strcmp0 sorts NULLs before others, the system defined rules that
+	 * are added by connman have no config_file and should be on top of
+	 * other rules.
+	 */
+	return g_strcmp0(rule_a->config_file, rule_b->config_file);
+}
 
 static int chain_to_index(const char *chain_name)
 {
@@ -235,7 +259,8 @@ static char *format_new_rule(int chain, const char* ifname, const char* rule)
 	return new_rule;
 }
 
-static int insert_managed_rule(int type,
+static int insert_managed_rule(connman_iptables_manage_cb_t cb,
+				int type,
 				const char *table_name,
 				const char *chain_name,
 				const char *ifname,
@@ -288,8 +313,12 @@ static int insert_managed_rule(int type,
 	chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
 out:
-	err = __connman_iptables_append(type, table_name, chain,
-				full_rule ? full_rule : rule_spec);
+	if (cb)
+		err = cb(type, table_name, chain,
+					full_rule ? full_rule : rule_spec);
+	else
+		err = __connman_iptables_append(type, table_name, chain,
+					full_rule ? full_rule : rule_spec);
 	
 	if (err < 0)
 		DBG("table %s cannot append rule %s", table_name,
@@ -380,6 +409,7 @@ static void cleanup_fw_rule(gpointer user_data)
 	g_free(rule->rule_spec);
 	g_free(rule->chain);
 	g_free(rule->table);
+	g_free(rule->config_file);
 	g_free(rule);
 }
 
@@ -408,8 +438,9 @@ static int firewall_enable_rule(struct fw_rule *rule)
 	DBG("%d %s %s %s %s", rule->type, rule->table, rule->chain,
 					rule->ifname, rule->rule_spec);
 
-	err = insert_managed_rule(rule->type, rule->table, rule->chain,
-					rule->ifname, rule->rule_spec);
+	err = insert_managed_rule(rule->cb, rule->type, rule->table,
+					rule->chain, rule->ifname,
+					rule->rule_spec);
 	if (err < 0) {
 		DBG("cannot insert managed rule %d", err);
 		return err;
@@ -456,6 +487,8 @@ static int firewall_disable_rule(struct fw_rule *rule)
 }
 
 int __connman_firewall_add_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
+				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...)
@@ -475,15 +508,23 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 	rule->id = firewall_rule_id++;
 	rule->type = AF_INET;
 	rule->enabled = false;
+	rule->cb = cb;
+
+	if (config_file)
+		rule->config_file = g_path_get_basename(config_file);
+
 	rule->table = g_strdup(table);
 	rule->chain = g_strdup(chain);
 	rule->rule_spec = rule_spec;
 
-	ctx->rules = g_list_append(ctx->rules, rule);
+	ctx->rules = g_list_insert_sorted(ctx->rules, rule,
+				firewall_rule_compare);
 	return rule->id;
 }
 
 int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
+				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...)
@@ -503,11 +544,17 @@ int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
 	rule->id = firewall_rule_id++;
 	rule->type = AF_INET6;
 	rule->enabled = false;
+	rule->cb = cb;
+
+	if (config_file)
+		rule->config_file = g_path_get_basename(config_file);
+
 	rule->table = g_strdup(table);
 	rule->chain = g_strdup(chain);
 	rule->rule_spec = rule_spec;
 
-	ctx->rules = g_list_append(ctx->rules, rule);
+	ctx->rules = g_list_insert_sorted(ctx->rules, rule,
+				firewall_rule_compare);
 	return rule->id;
 }
 
@@ -824,6 +871,11 @@ static gpointer copy_fw_rule(gconstpointer src, gpointer data)
 	new->id = firewall_rule_id++;
 	new->enabled = false;
 	new->type = old->type;
+	new->cb = old->cb;
+
+	if (old->config_file)
+		new->config_file = g_strdup(old->config_file);
+
 	new->table = g_strdup(old->table);
 	new->chain = g_strdup(old->chain);
 	new->rule_spec = g_strdup(old->rule_spec);
@@ -1006,26 +1058,26 @@ static int add_default_tethering_rules(struct firewall_context *ctx,
 {
 	/* Add more in the future if needed */
 	const char *tethering_rules[] = { "-j ACCEPT", NULL };
+	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
 	int id;
 	int i;
 
 	/* Add tethering rules for both IPv4 and IPv6 when using usb */
 	for (i = 0; tethering_rules[i]; i++) {
-		id = __connman_firewall_add_rule(ctx, "filter", "INPUT",
-					tethering_rules[i]);
+		id = __connman_firewall_add_rule(ctx, cb, NULL, "filter",
+					"INPUT", tethering_rules[i]);
 		if (id < 0)
 			DBG("cannot add IPv4 rule %s",
 						tethering_rules[i]);
 
-		id = __connman_firewall_add_ipv6_rule(ctx, "filter",
+		id = __connman_firewall_add_ipv6_rule(ctx, cb, NULL, "filter",
 					"INPUT", tethering_rules[i]);
 		if (id < 0)
 			DBG("cannot add IPv6 rule %s",
 						tethering_rules[i]);
 	}
 
-	g_list_foreach(ctx->rules, setup_firewall_rule_interface,
-					ifname);
+	g_list_foreach(ctx->rules, setup_firewall_rule_interface, ifname);
 
 	return 0;
 }
@@ -1209,6 +1261,7 @@ static bool is_string_digits(const char *str)
 						"ah",
 						"sctp",
 						"mh",
+						"dccp",
 						"all",
 						NULL
 	};
@@ -1416,7 +1469,7 @@ static bool validate_ports_or_services(const char *str)
 			portnum = (int) g_ascii_strtoll(tokens[i], NULL, 10);
 
 			/* Valid port number */
-			if (portnum && portnum < G_MAXUINT16)
+			if (portnum && portnum <= G_MAXUINT16)
 				continue;
 		}
 
@@ -1685,13 +1738,36 @@ out:
 	return ret;
 }
 
-typedef int (*add_rules_cb_t)(int type, const char *group, int chain_id,
-								char** rules);
+static bool is_rule_in_context(struct firewall_context *ctx, int type,
+			const char *table, const char *chain, const char *rule)
+{
+	GList *iter;
+	struct fw_rule *list_rule;
 
-static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
-								char** rules)
+	for (iter = g_list_first(ctx->rules); iter; iter = iter->next) {
+		list_rule = iter->data;
+
+		if (!list_rule)
+			continue;
+
+		if (list_rule->type == type &&
+					!g_strcmp0(list_rule->table, table) &&
+					!g_strcmp0(list_rule->chain, chain) &&
+					!g_strcmp0(list_rule->rule_spec, rule))
+			return true;
+	}
+
+	return false;
+}
+
+typedef int (*add_rules_cb_t)(int type, const char *filename, const char *group,
+						int chain_id, char** rules);
+
+static int add_dynamic_rules_cb(int type, const char *filename,
+				const char *group, int chain_id, char** rules)
 {
 	enum connman_service_type service_type;
+	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
 	char table[] = "filter";
 	int count = 0;
 	int err = 0;
@@ -1716,17 +1792,27 @@ static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
 			continue;
 		}
 
+		if (is_rule_in_context(dynamic_rules[service_type], type, table,
+						builtin_chains[chain_id],
+						rules[i])) {
+			DBG("ignoring rule %s in service type %d, rule exists",
+						rules[i], service_type);
+			continue;
+		}
+
 		switch (type) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(
 						dynamic_rules[service_type],
-						table, builtin_chains[chain_id],
+						cb, filename, table,
+						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
 						dynamic_rules[service_type],
-						table, builtin_chains[chain_id],
+						cb, filename, table,
+						builtin_chains[chain_id],
 						rules[i]);
 			break;
 		default:
@@ -1750,9 +1836,10 @@ static int add_dynamic_rules_cb(int type, const char *group, int chain_id,
 	return err;
 }
 
-static int add_general_rules_cb(int type, const char *group, int chain_id,
-								char** rules)
+static int add_general_rules_cb(int type, const char *filename,
+				const char *group, int chain_id, char** rules)
 {
+	connman_iptables_manage_cb_t cb = __connman_iptables_append;
 	char table[] = "filter";
 	int count = 0;
 	int err = 0;
@@ -1787,16 +1874,27 @@ static int add_general_rules_cb(int type, const char *group, int chain_id,
 			continue;
 		}
 
+		if (is_rule_in_context(general_firewall->ctx, type, table,
+						builtin_chains[chain_id],
+						rules[i])) {
+			DBG("ignoring rule %s in general rules, rule exists",
+						rules[i]);
+			continue;
+		}
+
 		switch (type) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(general_firewall->ctx,
-					table, builtin_chains[chain_id],
-					rules[i]);
+						cb, filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
-					general_firewall->ctx, table,
-					builtin_chains[chain_id], rules[i]);
+						general_firewall->ctx, cb,
+						filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		default:
 			id = -1;
@@ -1820,9 +1918,10 @@ static int add_general_rules_cb(int type, const char *group, int chain_id,
 	return err;
 }
 
-static int add_tethering_rules_cb(int type, const char *group, int chain_id,
-								char** rules)
+static int add_tethering_rules_cb(int type, const char *filename,
+				const char *group, int chain_id, char** rules)
 {
+	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
 	char table[] = "filter";
 	int count = 0;
 	int err = 0;
@@ -1854,16 +1953,27 @@ static int add_tethering_rules_cb(int type, const char *group, int chain_id,
 			continue;
 		}
 
+		if (is_rule_in_context(tethering_firewall, type, table,
+						builtin_chains[chain_id],
+						rules[i])) {
+			DBG("ignoring rule %s in tethering rules, rule exists",
+						rules[i]);
+			continue;
+		}
+
 		switch (type) {
 		case AF_INET:
-			id = __connman_firewall_add_rule(tethering_firewall,
-					table, builtin_chains[chain_id],
-					rules[i]);
+			id = __connman_firewall_add_rule(tethering_firewall, cb,
+						filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		case AF_INET6:
 			id = __connman_firewall_add_ipv6_rule(
-					tethering_firewall, table,
-					builtin_chains[chain_id], rules[i]);
+						tethering_firewall, cb,
+						filename, table,
+						builtin_chains[chain_id],
+						rules[i]);
 			break;
 		default:
 			id = -1;
@@ -1887,8 +1997,8 @@ static int add_tethering_rules_cb(int type, const char *group, int chain_id,
 	return err;
 }
 
-static int add_rules_from_group(GKeyFile *config, const char *group,
-							add_rules_cb_t cb)
+static int add_rules_from_group(const char *filename, GKeyFile *config,
+					const char *group, add_rules_cb_t cb)
 {
 	GError *error = NULL;
 	char** rules;
@@ -1900,9 +2010,9 @@ static int add_rules_from_group(GKeyFile *config, const char *group,
 	int i;
 	gsize len;
 
-	DBG("");
+	DBG("config %s group %s", filename, group);
 
-	if (!group || !*group || !cb)
+	if (!group || !*group || !cb || !filename || !*filename)
 		return 0;
 
 	for (chain = NF_IP_LOCAL_IN; chain < NF_IP_NUMHOOKS - 1; chain++) {
@@ -1930,13 +2040,14 @@ static int add_rules_from_group(GKeyFile *config, const char *group,
 				DBG("found %d rules in group %s chain %s", len,
 							group, chain_name);
 
-				count = cb(types[i], group, chain, rules);
+				count = cb(types[i], filename, group, chain,
+							rules);
 			
 				if (count < 0) {
 					DBG("cannot add rules from config");
 					err = -EINVAL;
 				} else if (count < len) {
-					DBG("%d invalid rules were detected,"
+					DBG("%d invalid rules were detected, "
 						"%d rules were added",
 						len - count, count);
 				} else {
@@ -1947,14 +2058,6 @@ static int add_rules_from_group(GKeyFile *config, const char *group,
 					DBG("group %s chain %s error: %s",
 							group, chain_name,
 							error->message);
-			} else {
-				/*
-				 * Error with rules set as NULL = no such key
-				 * exists in the group specified.
-				 */
-				DBG("type %d no rules found for group %s "
-							"chain %s", types[i],
-							group, chain_name);
 			}
 
 			g_clear_error(&error);
@@ -2294,28 +2397,28 @@ static int init_general_firewall_policies(GKeyFile *config)
 
 	if (!general_firewall->policies)
 		general_firewall->policies = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->policies)
 		return -ENOMEM;
 
 	if (!general_firewall->restore_policies)
 		general_firewall->restore_policies = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->restore_policies)
 		return -ENOMEM;
 	
 	if (!general_firewall->policiesv6)
 		general_firewall->policiesv6 = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->policiesv6)
 		return -ENOMEM;
 
 	if (!general_firewall->restore_policiesv6)
 		general_firewall->restore_policiesv6 = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->restore_policiesv6)
 		return -ENOMEM;
@@ -2344,7 +2447,7 @@ static int init_general_firewall_policies(GKeyFile *config)
 	return err;
 }
 
-static int init_general_firewall(GKeyFile *config)
+static int init_general_firewall(const char *config_file, GKeyFile *config)
 {
 	int err;
 
@@ -2365,7 +2468,8 @@ static int init_general_firewall(GKeyFile *config)
 	if (err)
 		DBG("cannot initialize general policies"); // TODO react to this
 
-	err = add_rules_from_group(config, GROUP_GENERAL, add_general_rules_cb);
+	err = add_rules_from_group(config_file, config, GROUP_GENERAL,
+				add_general_rules_cb);
 
 	if (err)
 		DBG("cannot setup general firewall rules");
@@ -2407,12 +2511,11 @@ static int init_dynamic_firewall_rules(const char *file)
 		goto out;
 	}
 
-	if (init_general_firewall(config))
+	if (init_general_firewall(file, config))
 		DBG("Cannot setup general firewall");
 
 	if (!dynamic_rules)
 		dynamic_rules = g_try_new0(struct firewall_context*,
-					sizeof(struct firewall_context*) *
 					MAX_CONNMAN_SERVICE_TYPES);
 
 	if (!dynamic_rules) {
@@ -2432,11 +2535,12 @@ static int init_dynamic_firewall_rules(const char *file)
 		if (!group)
 			continue;
 
-		if (add_rules_from_group(config, group, add_dynamic_rules_cb))
+		if (add_rules_from_group(file, config, group,
+					add_dynamic_rules_cb))
 			DBG("failed to process rules from group type %d", type);
 	}
 
-	if (add_rules_from_group(config, GROUP_TETHERING,
+	if (add_rules_from_group(file, config, GROUP_TETHERING,
 				add_tethering_rules_cb))
 		DBG("failed to add tethering rules");
 
@@ -2449,7 +2553,6 @@ out:
 
 static int init_all_dynamic_firewall_rules(void)
 {
-	GList *filenames = NULL;
 	GList *iter;
 	GError *error = NULL;
 	GDir *dir;
@@ -2483,15 +2586,20 @@ static int init_all_dynamic_firewall_rules(void)
 				continue;
 
 			/*
-			 * Filename is used for sorting the list, no need to
-			 * allocate a new one.
+			 * Prepend read files into list of configuration
+			 * files to be used in checks when new configurations
+			 * are added to avoid unnecessary reads of already read
+			 * configurations. Sort list after all are added.
 			 */
-			filenames = g_list_insert_sorted(filenames,
-						(char*)filename,
-						(GCompareFunc)g_strcmp0);
+			configuration_files = g_list_prepend(
+						configuration_files,
+						g_strdup(filename));
 		}
 
-		for (iter = filenames; iter ; iter = iter->next) {
+		configuration_files = g_list_sort(configuration_files,
+					(GCompareFunc)g_strcmp0);
+
+		for (iter = configuration_files; iter ; iter = iter->next) {
 			filename = iter->data;
 
 			filepath = g_strconcat(FIREWALLCONFIGDIR, filename,
@@ -2507,8 +2615,6 @@ static int init_all_dynamic_firewall_rules(void)
 			g_free(filepath);
 		}
 
-		/* Strings in list are owned by GLib, don't free them. */
-		g_list_free(filenames);
 		g_dir_close(dir);
 	} else {
 		DBG("no config dir %s", FIREWALLCONFIGDIR);
@@ -2674,6 +2780,373 @@ static void firewall_failsafe(const char *chain_name, void *user_data)
 					chain_name, err);
 }
 
+static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
+			struct firewall_context *srv_ctx, char* ifname)
+{
+	GList *dyn_list;
+	struct fw_rule *dyn_rule;
+	struct fw_rule *new_rule;
+	int err;
+
+	/* Go over dynamic rules for this type */
+	for (dyn_list = g_list_first(dyn_ctx->rules); dyn_list;
+				dyn_list = dyn_list->next) {
+		dyn_rule = dyn_list->data;
+
+		/* If the dynamic rule is already added for service firewall */
+		if (is_rule_in_context(srv_ctx, dyn_rule->type,
+					dyn_rule->table, dyn_rule->chain,
+					dyn_rule->rule_spec))
+			continue;
+
+		new_rule = copy_fw_rule(dyn_rule, ifname);
+		
+		srv_ctx->rules = g_list_insert_sorted(srv_ctx->rules, new_rule,
+					firewall_rule_compare);
+
+		if (srv_ctx->enabled) {
+			err = firewall_enable_rule(new_rule);
+
+			if (err)
+				DBG("new rule not enabled %d", err);
+		}
+	}
+
+	return 0;
+}
+
+static int remove_config_from_context(struct firewall_context *ctx,
+						const char *config_file,
+						bool disable)
+{
+	GList *iter = NULL;
+	struct fw_rule *rule;
+	int err = 0;
+	int e = 0;
+
+	if (!ctx || !config_file)
+		return e;
+
+	iter = g_list_first(ctx->rules);
+
+	while (iter) {
+		rule = iter->data;
+		iter = iter->next; /* Move to next before removal */
+
+		if (!g_strcmp0(config_file, rule->config_file)) {
+			DBG("removing rule %d table %s chain %s %s",
+						rule->id, rule->table,
+						rule->chain, rule->rule_spec);
+
+			/*
+			 * If the rule was enabled and requested to be disabled
+			 * try to disable it first. If disabling fails, do not
+			 * remove the rule yet so it the rule might be attempted
+			 * to be removed at shutdown.
+			 */
+			if (rule->enabled && disable) {
+				err = __connman_firewall_disable_rule(ctx,
+							rule->id);
+
+				if (err) {
+					DBG("cannot disable rule %d", err);
+					e = err;
+					continue;
+				}
+			}
+
+			switch (rule->type) {
+			case AF_INET:
+				err = __connman_firewall_remove_rule(ctx,
+							rule->id);
+				break;
+			case AF_INET6:
+				err = __connman_firewall_remove_ipv6_rule(ctx,
+							rule->id);
+			}
+
+			if (err) {
+				DBG("cannot remove rule, err %d", err);
+				e = err;
+			}
+		}
+	}
+
+	return e;
+}
+
+static void firewall_config_removed(const char *config_file)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+	enum connman_service_type type;
+	struct firewall_context *ctx;
+	int err;
+
+	DBG("removing config %s rules from general firewall", config_file);
+
+	err = remove_config_from_context(general_firewall->ctx, config_file,
+				true);
+
+	if (err)
+		DBG("cannot remove deleted rules.");
+
+	DBG("removing config %s rules from tethering firewall", config_file);
+
+	err = remove_config_from_context(tethering_firewall, config_file, true);
+
+	if (err)
+		DBG("cannot remove deleted rules.");
+
+	for (type = 0; type < MAX_CONNMAN_SERVICE_TYPES; type++) {
+		if (!dynamic_rules[type] || !dynamic_rules[type]->rules)
+			continue;
+
+		DBG("removing config %s rules from %s dynamic rules",
+					config_file,
+					__connman_service_type2string(type));
+
+		err = remove_config_from_context(dynamic_rules[type],
+					config_file, false);
+
+		if (err)
+			DBG("cannot remove deleted rules");
+	}
+
+	g_hash_table_iter_init(&iter, current_dynamic_rules);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		ctx = value;
+
+		DBG("removing config %s rules from active service %s",
+					config_file, (char*)key);
+
+		err = remove_config_from_context(ctx, config_file, true);
+
+		if (err)
+			DBG("cannot remove deleted rules");
+	}
+}
+
+static int enable_new_firewall_rules(struct connman_service *service,
+								void *data)
+{
+	enum connman_service_state state;
+
+	state = connman_service_get_state(service);
+
+	/*
+	 * Call service_state_changed() although the state has not changed but
+	 * there may be a service which was online before firewall reloading and
+	 * it might now have new rules set. This enables the rules for connected
+	 * services by acting as if the notification of such event was sent.
+	 */
+	service_state_changed(service, state);
+
+	return 0;
+}
+
+static int firewall_reload_configurations()
+{
+	GError *error = NULL;
+	GDir *dir;
+	GSList *read_files = NULL;
+	GSList *slist_iter = NULL;
+	GList *list_iter = NULL;
+	GHashTableIter iter;
+	gpointer key, value;
+	struct connman_service *service;
+	enum connman_service_type type;
+	struct firewall_context *ctx;
+	const char *filename;
+	const char *config_file;
+	char *ifname;
+	char *filepath;
+	bool new_configuration_files = false;
+	int err = 0;
+
+	/* Nothing to read */
+	if (!g_file_test(FIREWALLCONFIGDIR, G_FILE_TEST_IS_DIR))
+		return 0;
+
+	dir = g_dir_open(FIREWALLCONFIGDIR, 0, &error);
+
+	if (!dir) {
+		if (error) {
+			DBG("cannot open dir, error: %s", error->message);
+			g_clear_error(&error);
+		}
+
+		/* Ignore dir open error in reload */
+		return 0;
+	}
+
+	DBG("read configs from %s", FIREWALLCONFIGDIR);
+
+	/* Read filenames into ordered list */
+	while ((filename = g_dir_read_name(dir))) {
+		/* Read configs that have firewall.conf suffix */
+		if (!g_str_has_suffix(filename, FIREWALLFILE))
+			continue;
+
+		/*
+		 * Add file name to read file list for checking if config file
+		 * has been removed. At this point ignore file tests.
+		 */
+		read_files = g_slist_prepend(read_files, g_strdup(filename));
+	}
+
+	read_files = g_slist_sort(read_files, (GCompareFunc)g_strcmp0);
+
+	g_dir_close(dir);
+
+	/* Process ordered list of configuration files */
+	for (slist_iter = read_files; slist_iter;
+				slist_iter = slist_iter->next) {
+		filename = slist_iter->data;
+
+		/* If config file is already read */
+		if (g_list_find_custom(configuration_files, filename,
+					(GCompareFunc)g_strcmp0))
+			continue;
+
+		filepath = g_strconcat(FIREWALLCONFIGDIR, filename, NULL);
+
+		DBG("processing new config %s", filepath);
+
+		if (g_file_test(filepath, G_FILE_TEST_IS_REGULAR)) {
+
+			err = init_dynamic_firewall_rules(filepath);
+
+			if (!err) {
+				DBG("new configuration %s loaded", filepath);
+
+				configuration_files = g_list_prepend(
+							configuration_files,
+							g_strdup(filename));
+
+				new_configuration_files = true;
+			}
+		}
+
+		g_free(filepath);
+	}
+
+	configuration_files = g_list_sort(configuration_files,
+				(GCompareFunc)g_strcmp0);
+
+	list_iter = g_list_last(configuration_files);
+
+	/* First check if any configs has been removed */
+	while (list_iter)
+	{
+		config_file = list_iter->data;
+		GList *list_iter_prev = g_list_previous(list_iter);
+
+		/*
+		 * If no files are read remove all configs. If the file that
+		 * was previously read is not in the list of previosly read
+		 * remove rules read from that removed config file.
+		 */
+		if (!g_slist_find_custom(read_files, config_file,
+					(GCompareFunc)g_strcmp0)) {
+			DBG("config %s removed, deleting rules", config_file);
+
+			firewall_config_removed(config_file);
+
+			g_free(list_iter->data);
+			configuration_files = g_list_remove(configuration_files,
+						config_file);
+		}
+
+		list_iter = list_iter_prev;
+	}
+
+	g_slist_free_full(read_files, g_free);
+
+	/* Then check if there are new configs that were read without errors */
+	if (!new_configuration_files) {
+		DBG("no new configuration was found");
+		return 0;
+	}
+
+	/* Apply general firewall rules that were added */
+	__connman_firewall_enable_rule(general_firewall->ctx, FW_ALL_RULES);
+
+	g_hash_table_iter_init(&iter, current_dynamic_rules);
+
+	/*
+	 * Go through all service specific firewalls and add new rules
+	 * for each.
+	 */
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		service = connman_service_lookup_from_identifier(key);
+
+		if (!service)
+			continue;
+
+		type = connman_service_get_type(service);
+		ifname = connman_service_get_interface(service);
+
+		if (!has_dynamic_rules_set(type))
+			continue;
+
+		ctx = value;
+
+		copy_new_dynamic_rules(dynamic_rules[type], ctx, ifname);
+
+		g_free(ifname);
+	}
+
+	/* Go through existing services that may have new rules set */
+	connman_service_iterate_services(enable_new_firewall_rules, NULL);
+
+	return 0;
+}
+
+static struct connman_access_firewall_policy *firewall_access_policy = NULL;
+
+static struct connman_access_firewall_policy *get_firewall_access_policy()
+{
+	if (!firewall_access_policy) {
+		/* Use the default policy */
+		firewall_access_policy =
+				__connman_access_firewall_policy_create(NULL);
+	}
+	return firewall_access_policy;
+}
+
+static DBusMessage *reload(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	int err;
+
+	DBG("conn %p", conn);
+
+	if (__connman_access_firewall_manage(get_firewall_access_policy(),
+				"Reload", dbus_message_get_sender(msg),
+				CONNMAN_ACCESS_ALLOW) != CONNMAN_ACCESS_ALLOW) {
+		DBG("%s is not allowed to reload firewall configurations",
+				dbus_message_get_sender(msg));
+		return __connman_error_permission_denied(msg);
+	}
+
+	err = firewall_reload_configurations();
+
+	/* TODO proper error reporting if necessary/sensible */
+	if (err)
+		return __connman_error_failed(msg, err);
+
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
+static DBusConnection *connection = NULL;
+
+static const GDBusMethodTable firewall_methods[] = {
+	{ GDBUS_ASYNC_METHOD("Reload", NULL, NULL, reload) },
+	{ },
+};
+
 static struct connman_notifier firewall_notifier = {
 	.name			= "firewall",
 	.service_state_changed	= service_state_changed,
@@ -2697,6 +3170,20 @@ int __connman_firewall_init(void)
 		if (err < 0) {
 			DBG("cannot register notifier, dynamic rules disabled");
 			cleanup_dynamic_firewall_rules();
+		}
+
+		connection = connman_dbus_get_connection();
+
+		if (!g_dbus_register_interface(connection,
+					CONNMAN_FIREWALL_PATH,
+					CONNMAN_FIREWALL_INTERFACE,
+					firewall_methods, NULL, NULL, NULL,
+					NULL)) {
+			DBG("cannot register dbus, new firewall configuration "
+						"cannot be installed runtime");
+
+			dbus_connection_unref(connection);
+			connection = NULL;
 		}
 	} else {
 		DBG("dynamic rules disabled, policy ACCEPT set for all chains");
@@ -2748,7 +3235,22 @@ void __connman_firewall_cleanup(void)
 {
 	DBG("");
 
+	if (connection) {
+		if (!g_dbus_unregister_interface(connection,
+					CONNMAN_FIREWALL_PATH,
+					CONNMAN_FIREWALL_INTERFACE))
+			DBG("dbus unregister failed");
+
+		dbus_connection_unref(connection);
+	}
+
+	__connman_access_firewall_policy_free(firewall_access_policy);
+	firewall_access_policy = NULL;
+
 	cleanup_dynamic_firewall_rules();
+
+	g_list_free_full(configuration_files, g_free);
+	configuration_files = NULL;
 
 	g_slist_free_full(managed_tables, cleanup_managed_table);
 	managed_tables = NULL;

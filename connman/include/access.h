@@ -51,6 +51,8 @@ struct connman_access_tech_policy;
 struct connman_access_tech_policy_impl;
 struct connman_access_manager_policy;
 struct connman_access_manager_policy_impl;
+struct connman_access_firewall_policy;
+struct connman_access_firewall_policy_impl;
 
 struct connman_access_driver {
 	const char *name;
@@ -88,6 +90,16 @@ struct connman_access_driver {
 		(struct connman_access_tech_policy_impl *policy);
 	enum connman_access (*tech_set_property)
 		(const struct connman_access_tech_policy_impl *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access);
+
+	/* Firewall */
+	struct connman_access_firewall_policy_impl *(*firewall_policy_create)
+		(const char *spec);
+	void (*firewall_policy_free)
+		(struct connman_access_firewall_policy_impl *policy);
+	enum connman_access (*firewall_manage)
+		(const struct connman_access_firewall_policy_impl *policy,
 			const char *name, const char *sender,
 			enum connman_access default_access);
 };

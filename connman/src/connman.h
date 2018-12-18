@@ -984,6 +984,9 @@ int __connman_iptables_delete(int type,
 int __connman_iptables_restore_all();
 int __connman_iptables_save_all();
 
+typedef int (*connman_iptables_manage_cb_t)(int type, const char *table_name,
+				const char *chain, const char *rule_spec);
+
 typedef void (*connman_iptables_iterate_chains_cb_t) (const char *chain_name,
 							void *user_data);
 int __connman_iptables_iterate_chains(int type,
@@ -1059,10 +1062,14 @@ struct firewall_context;
 struct firewall_context *__connman_firewall_create(void);
 void __connman_firewall_destroy(struct firewall_context *ctx);
 int __connman_firewall_add_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
+				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...);
 int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
+				const char *config_file,
 				const char *table,
 				const char *chain,
 				const char *rule_fmt, ...);
@@ -1151,6 +1158,15 @@ void __connman_access_tech_policy_free
 		(struct connman_access_tech_policy *policy);
 enum connman_access __connman_access_tech_set_property
 		(const struct connman_access_tech_policy *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access);
+
+struct connman_access_firewall_policy *__connman_access_firewall_policy_create
+		(const char *spec);
+void __connman_access_firewall_policy_free
+		(struct connman_access_firewall_policy *policy);
+enum connman_access __connman_access_firewall_manage
+		(const struct connman_access_firewall_policy *policy,
 			const char *name, const char *sender,
 			enum connman_access default_access);
 

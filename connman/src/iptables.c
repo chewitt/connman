@@ -3734,8 +3734,15 @@ int __connman_iptables_commit(int type, const char *table_name)
 
 	err = iptables_replace(table, &repl);
 
+	/*
+	 * Commit errors are not recoverable, remove table so with next change
+	 * the contents for the table is re-initialized. This will make it
+	 * possible to ignore the last changes that were invalid and cannot be
+	 * committed. Then more commits can be made as the table content is
+	 * updated from iptables when next change is done.
+	 */
 	if (err < 0)
-		goto out_free;
+		goto out_hash_remove;
 
 	counters = g_try_malloc0(sizeof(*counters) +
 			sizeof(struct xt_counters) * table->num_entries);
@@ -3771,7 +3778,7 @@ int __connman_iptables_commit(int type, const char *table_name)
 
 out_hash_remove:
 	hash_table_remove(type, table_name);
-out_free:
+
 	if (type == AF_INET && repl.r)
 		g_free(repl.r->counters);
 
