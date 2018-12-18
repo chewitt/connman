@@ -2397,28 +2397,28 @@ static int init_general_firewall_policies(GKeyFile *config)
 
 	if (!general_firewall->policies)
 		general_firewall->policies = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->policies)
 		return -ENOMEM;
 
 	if (!general_firewall->restore_policies)
 		general_firewall->restore_policies = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->restore_policies)
 		return -ENOMEM;
 	
 	if (!general_firewall->policiesv6)
 		general_firewall->policiesv6 = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->policiesv6)
 		return -ENOMEM;
 
 	if (!general_firewall->restore_policiesv6)
 		general_firewall->restore_policiesv6 = g_try_new0(char*,
-				sizeof(char*) * GENERAL_FIREWALL_POLICIES);
+					GENERAL_FIREWALL_POLICIES);
 
 	if (!general_firewall->restore_policiesv6)
 		return -ENOMEM;
@@ -2516,7 +2516,6 @@ static int init_dynamic_firewall_rules(const char *file)
 
 	if (!dynamic_rules)
 		dynamic_rules = g_try_new0(struct firewall_context*,
-					sizeof(struct firewall_context*) *
 					MAX_CONNMAN_SERVICE_TYPES);
 
 	if (!dynamic_rules) {
