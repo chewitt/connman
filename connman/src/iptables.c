@@ -3311,7 +3311,6 @@ static int current_type = -1;
 static int setup_xtables(int type)
 {
 	int err;
-	struct xtables_match *xt_m;
 
 	DBG("%d", type);
 
@@ -3333,13 +3332,6 @@ static int setup_xtables(int type)
 	}
 	
 	if (!err) {
-		/*
-		 * Set the match type, otherwise loading of matches in xtables
-		 * will fail.
-		 */
-		for (xt_m = xtables_matches; xt_m; xt_m = xt_m->next)
-			xt_m->family = type;
-
 		current_type = type;
 	} else {
 		connman_error("error initializing xtables");
