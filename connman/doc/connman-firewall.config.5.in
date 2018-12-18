@@ -1,0 +1,218 @@
+.\" connman-firewall.config(5) manual page
+.\"
+.\" Copyright (C) 2018 Jolla Ltd.
+.\"
+.TH "connman-firewall.config" "5" "2018-12-04" ""
+.SH NAME
+firewall.conf \- ConnMan firewall configuration file
+.SH DESCRIPTION
+.P
+\fIConnMan\fP's firewall is configured with \fI@configdir@/firewall.conf\fP and
+files residing in \fI@configdir@/firewall.d/\fP. The files can be named
+anything, as long as they end in \fBfirewall.conf\fP. Firewall configuration
+files can define policies for managed iptables chains in table filter. Both
+static and dynamic rules for service types can be defined, including tethering.
+The rules defined in each file are added in sequence. Policies in the last read
+configuration file overrule the previous policy setting. Policies can be set
+only in static rules (General section) and are set for the default iptables
+chains INPUT, FORWARD and OUTPUT.
+.SH "DESCRIPTION OF CONNMAN FIREWALL"
+.P
+In general the firewall configuration in connman works as follows:
+.IP
+Rules are loaded as general, tethering and service type specific rules
+.IP
+Rules are applied only for the iptables filter table
+.IP
+Rules are added using managed chains only, no chain management with configs
+.IP
+Rules in General section are applied at start and removed at shutdown
+.IP
+Rules in tethering section are enabled/disabled when tethering is on/off
+.IP
+Rules for service types are enabled/disabled when service goes online/offline
+.SH CONFIGURATION LOADING
+.P
+Connman supports firewall configurations for both general (permanent) settings
+and for each connected service type. The main configuration is always as
+@configdir@/connman/firewall.conf and rest of the configurations provided by
+packages or installed by user are searched from @configdir@/connman/firewall.d/.
+The configuration files must have \fB*firewall.conf\fP suffix and the file names
+must not include other characters than letters or numbers.
+.P
+The configuration files from @configdir@/connman/firewall.d/ are read in
+alphabetical order after the main @configdir@/connman/firewall.conf is read. If
+the file @configdir@/connman/firewall.conf is omitted, then only the firewall
+configurations from @configdir@/connman/firewall.d/ are read.
+.TP
+The section names are case sensitive. Regular key file format is used.
+.SH USED KEYS
+.P
+The following keys are supported and the generic format is PROTOCOL.CHAIN.TYPE,
+where:
+.IP
+PROTOCOL = IP protocol, either IPv4 or IPv6
+.IP
+CHAIN = iptables chain name, one of: INPUT, FORWARD, OUTPUT
+.IP
+TYPE = the key type, RULES for setting rules and POLICY for setting policy
+.P
+Content for each key must be defined on one line and only the first key in a
+group is processed.
+.P
+The keys are:
+.IP
+IPv4.INPUT = #Rules set into IPv4 filter table INPUT chain.
+.IP
+IPv4.OUTPUT = #Rules set into IPv4 filter table OUTPUT chain.
+.IP
+IPv4.FORWARD = #Rules set into IPv4 filter table FORWARD chain.
+.IP
+IPv4.INPUT.POLICY = #Default policy for filter table INPUT chain.
+.IP
+IPv4.OUTPUT.POLICY = #Default policy for filter table OUTPUT chain.
+.IP
+IPv4.FORWARD.POLICY = #Default policy for filter table FORWARD chain.
+.IP
+IPv6.INPUT = #Rules set into IPv6 filter table INPUT chain.
+.IP
+IPv6.OUTPUT = #Rules set into IPv6 filter table OUTPUT chain.
+.IP
+IPv6.FORWARD = #Rules set into IPv6 filter table FORWARD chain.
+.IP
+IPv6.INPUT.POLICY_IPv6 = #Default policy for IPv6 filter table INPUT chain.
+.IP
+IPv6.OUTPUT.POLICY_IPv6 = #Default policy for IPv6 filter table OUTPUT chain.
+.IP
+IPv6.FORWARD.POLICY_IPv6 = #Default policy for IPv6 filter table FORWARD chain.
+.P
+RULES and POLICY processing differ from each other. RULES are appended to the
+rule list of the section in reading order. But the last POLICY in configuration
+files (only allowed in General section) overrules all previous POLICY keys set
+for the CHAIN with given PROTOCOL.
+.SH RULE FORMAT
+.P
+Rules follow iptables rule format, for reference see:
+.URL "https://www.frozentux.net/iptables-tutorial/iptables-tutorial.html" "https://www.frozentux.net/iptables-tutorial/iptables-tutorial.html"
+.P
+Rules are separated with semicolons (;). All rules for a key must be on one 
+line.
+.P
+Rules can be commented out with hash tag (#) as first character. Commented rules
+are simply ignored. For example:
+.IP
+.nf
+
+[General]
+
+IPv4.INPUT.RULES = #-p udp -m udp --dport 23 -j ACCEPT; -p udp -m udp --dport 24 -j ACCEPT
+
+.P
+Will discard the first --dport 23 rule and use the second --dport 24 rule
+.SS
+Each rule:
+.TP
+Has to have one target (-j TARGET) which is the bare minimum of the rule.
+.TP
+Can have 0...1 protocol matches (-p protocol)..
+.TP
+Can have 0...2 match speficiers (-m match)
+.TP
+Can have 0...2 port switches either with a protocol modifier (-m protocol) or with multiport modifier (-m multiport).
+.SS
+Targets:
+.P
+The targets (-j TARGET) are the same as with default iptables: ACCEPT, DROP, REJECT, LOG and QUEUE.
+.SS
+Protocols:
+.P
+Protocols (-p protocol) are the same as with iptables: tcp, udp, udplite, icmp, icmpv6, ipv6-icmp, esp, ah, sctp, mh, dccp and the special keyword all. These can be given in numeric format as well.
+.SS
+Disabled switches:
+.P
+Following switches are disabled and if a rule contains any of them the rule will be ignored:
+.IP
+All chain modifiers, since rules are added to managed chains, following modifiers are disabled: --append, -A, --delete, -D, --delete-chain, -X, --flush, -F, --insert, -I, --new-chain, -N, --policy, -P, --rename-chain, -E, --replace, -R, --zero, -Z
+.IP
+Destination speficiers are disabled (enabled later): --source, --src, -s,
+--destination, --dst, -d, --to-destination, --from-destination
+.IP
+Some matches (with -m) are disabled (cause crash or commit errors). IPv4: comment, state, iprange, recent, owner. IPv6: comment, state, iprange, recent, owner, ttl
+.P
+Interface specifiers (--in-interface, -i, --out-interface, -o) are not allowed in tethering or service type sections: 
+.SH CONFIGURATION: GENERAL SECTION
+.P
+General section contains the main static firewall rules. In this section both
+RULES and POLICY types are allowed.
+.P
+RULES are read from each General section and added in sequence. The last POLICY
+that is defined for a CHAIN with given PROTOCOL overrules the previous
+definitions.
+.P
+Being static rules the interface specifiers (--in-interface, -i,
+--out-interface, -o) are allowed in the General section. 
+.SH CONFIGURATION: TETHERING SECTION
+.P
+The tethering mode configuration is included as builtin feature. When tethering
+is enabled a default rules to accept all traffic from the tethering adapter is
+used. The rules for tethering can be added later on to be more restrictive.
+.P
+Tethering rules are applied only for WiFi tethering, i.e., using a hotspot.
+For usb tethering the default rules apply regardless of the [tethering] rules
+configuration.
+.P
+The tethering rules must be complete. If there is at least one rule set, no
+default rules will be added as they would make these custom rules set in
+[tethering] unnecessary by allowing all traffic. Only RULES can be defined in
+tethering section.
+.P
+For this, for example following rules could be enabled to allow only DHCP and
+DNS, into, e.g., /etc/connman/firewall.d/42-tethering-firewall.conf
+.nf
+.IP
+[tethering]
+
+IPv4.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
+IPv6.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
+.SH CONFIGURATION: SERVICE TYPES
+.P
+The service type section supports only RULES type keys. The rules defined in
+the service type sections are enabled when a service of that given type becomes
+READY or ONLINE and are disabled when the service becomes IDLE, DISCONNECT or
+FAILURE.
+.P
+When a rule is enabled, it will have the interface used by the service added
+into the rule. For rules in chain INPUT the interface is added as incoming
+interface (-i <interface>). For rules in chains FORWARD and OUTPUT the interface
+is added as outgoing interface (-o <interface>).
+.P
+The service types that are supported (defined by enum connman_service_type in
+include/service.h):
+.Bl
+.It
+unknown,
+.It
+system,
+.It
+ethernet,
+.It
+wifi,
+.It
+bluetooth,
+.It
+cellular,
+.It
+gps,
+.It
+vpn,
+.It
+gadget,
+.It
+p2p,
+.El
+.fi
+.SH "SEE ALSO"
+.BR connman (8)
+.BR iptables (5)
+.BR ip6tables (5)
+
