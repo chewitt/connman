@@ -5413,8 +5413,16 @@ bool __connman_service_remove(struct connman_service *service)
 //						CONNMAN_SERVICE_STATE_FAILURE)
 //		return false;
 
-	/* We don't want the service files to stay around forever */
-	__connman_storage_remove_service(service->identifier);
+	/*
+	 * We don't want the service files to stay around forever unless the
+	 * service file belongs to a VPN connection. The VPN connection specific
+	 * configuration files contain autoconnect and split routing information
+	 * that should be kept between connman restarts. Otherwise autoconnect
+	 * for VPNs cannot operate. The VPN connection service file is removed
+	 * when vpnd removes the connection. It should not be removed here.
+	 */
+	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
+		__connman_storage_remove_service(service->identifier);
 
 	__connman_service_disconnect(service);
 
