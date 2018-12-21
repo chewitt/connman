@@ -471,6 +471,12 @@ if (test "${need_glibutil}" = "yes"); then
 	LIBS="$LIBS $GLIBUTIL_LIBS"
 fi
 
+AC_ARG_ENABLE(globalproxy, AC_HELP_STRING([--disable-globalproxy],
+                                [disable global proxy support]),
+                                        [enable_globalproxy=${enableval}])
+AM_CONDITIONAL(GLOBALPROXY, test "${enable_globalproxy}" != "no")
+
+
 AC_ARG_ENABLE(test-coverage,
 	AC_HELP_STRING([--enable-test-coverage], [enable test code coverage]),
 		[enable_test_coverage=${enableval}], [enable_test_coverage="no"])

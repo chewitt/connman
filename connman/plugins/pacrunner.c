@@ -44,6 +44,28 @@
 
 #define DBUS_TIMEOUT	5000
 
+#ifdef GLOBALPROXY_PLUGIN
+	#include "globalproxy.h"
+	#define GET_PROXY_METHOD service_or_global_proxy_get_proxy_method
+	#define GET_PROXY_SERVERS service_or_global_proxy_get_proxy_servers
+	#define GET_PROXY_EXCLUDES service_or_global_proxy_get_proxy_excludes
+	#define GET_PROXY_URL service_or_global_proxy_get_proxy_url
+	#define GET_PROXY_AUTOCONFIG service_or_global_proxy_get_proxy_autoconfig
+	#define GET_PROXY_SERVICE_INTERFACE service_or_global_proxy_get_interface
+	#define GET_PROXY_DOMAINNAME service_or_global_proxy_get_domainname
+	#define GET_PROXY_NAMESERVERS service_or_global_get_nameservers
+#else
+	#define GET_PROXY_METHOD connman_service_get_proxy_method
+	#define GET_PROXY_SERVERS connman_service_get_proxy_servers
+	#define GET_PROXY_EXCLUDES connman_service_get_proxy_excludes
+	#define GET_PROXY_URL connman_service_get_proxy_url
+	#define GET_PROXY_AUTOCONFIG connman_service_get_proxy_autoconfig
+	#define GET_PROXY_SERVICE_INTERFACE connman_service_get_interface
+	#define GET_PROXY_DOMAINNAME connman_service_get_domainname
+	#define GET_PROXY_NAMESERVERS connman_service_get_nameservers
+#endif
+
+
 struct proxy_data {
 	struct connman_service *service;
 	char *url;
@@ -119,7 +141,7 @@ static void create_proxy_configuration(void)
 	dbus_message_iter_init_append(msg, &iter);
 	connman_dbus_dict_open(&iter, &dict);
 
-	switch(connman_service_get_proxy_method(default_service)) {
+	switch(GET_PROXY_METHOD(default_service)) {
 	case CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN:
 		connman_dbus_dict_close(&iter, &dict);
 		goto done;
@@ -129,7 +151,7 @@ static void create_proxy_configuration(void)
 	case CONNMAN_SERVICE_PROXY_METHOD_MANUAL:
 		method = "manual";
 
-		str_list = connman_service_get_proxy_servers(default_service);
+		str_list = GET_PROXY_SERVERS(default_service);
 		if (!str_list) {
 			connman_dbus_dict_close(&iter, &dict);
 			goto done;
@@ -140,7 +162,7 @@ static void create_proxy_configuration(void)
 					str_list);
 		g_strfreev(str_list);
 
-		str_list = connman_service_get_proxy_excludes(default_service);
+		str_list = GET_PROXY_EXCLUDES(default_service);
 		if (!str_list)
 			break;
 
@@ -153,9 +175,9 @@ static void create_proxy_configuration(void)
 	case CONNMAN_SERVICE_PROXY_METHOD_AUTO:
 		method = "auto";
 
-		str = connman_service_get_proxy_url(default_service);
+		str = GET_PROXY_URL(default_service);
 		if (!str) {
-			str = connman_service_get_proxy_autoconfig(
+			str = GET_PROXY_AUTOCONFIG(
 							default_service);
 			if (!str) {
 				connman_dbus_dict_close(&iter, &dict);
@@ -171,19 +193,19 @@ static void create_proxy_configuration(void)
 	connman_dbus_dict_append_basic(&dict, "Method",
 				DBUS_TYPE_STRING, &method);
 
-	interface = connman_service_get_interface(default_service);
+	interface = GET_PROXY_SERVICE_INTERFACE(default_service);
 	if (interface) {
 		connman_dbus_dict_append_basic(&dict, "Interface",
 						DBUS_TYPE_STRING, &interface);
 		g_free(interface);
 	}
 
-	str = connman_service_get_domainname(default_service);
+	str = GET_PROXY_DOMAINNAME(default_service);
 	if (str)
 		connman_dbus_dict_append_array(&dict, "Domains",
 					DBUS_TYPE_STRING, append_string, &str);
 
-	str_list = connman_service_get_nameservers(default_service);
+	str_list = GET_PROXY_NAMESERVERS(default_service);
 	if (str_list)
 		connman_dbus_dict_append_array(&dict, "Nameservers",
 					DBUS_TYPE_STRING, append_string_list,
@@ -292,6 +314,25 @@ static struct connman_notifier pacrunner_notifier = {
 	.default_changed	= default_service_changed,
 	.proxy_changed		= proxy_changed,
 };
+
+#ifdef GLOBALPROXY_PLUGIN
+static void global_proxy_changed()
+{
+	DBG("Global proxy changed");
+
+	if (!daemon_running)
+		return;
+
+	destroy_proxy_configuration();
+
+	create_proxy_configuration();
+}
+
+static struct global_proxy_notifier pacrunner_global_proxy_notifier = {
+	.name			= "pacrunner",
+	.proxy_changed		= global_proxy_changed,
+};
+#endif
 
 static void pacrunner_connect(DBusConnection *conn, void *user_data)
 {
@@ -457,11 +498,19 @@ static int pacrunner_init(void)
 
 	connman_proxy_driver_register(&pacrunner_proxy);
 
+#ifdef GLOBALPROXY_PLUGIN
+	global_proxy_notifier_register(&pacrunner_global_proxy_notifier);
+#endif
+
 	return 0;
 }
 
 static void pacrunner_exit(void)
 {
+#ifdef GLOBALPROXY_PLUGIN
+	global_proxy_notifier_unregister(&pacrunner_global_proxy_notifier);
+#endif
+
 	connman_proxy_driver_unregister(&pacrunner_proxy);
 
 	connman_notifier_unregister(&pacrunner_notifier);

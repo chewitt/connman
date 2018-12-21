@@ -126,6 +126,7 @@ Documentation for connman.
     --enable-sailfish-usb-tethering \
     --enable-sailfish-wifi \
     --enable-sailfish-access \
+    --enable-globalproxy \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
     --enable-systemd \
