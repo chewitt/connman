@@ -145,7 +145,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-			@IPHB_LIBS@ @LIBIPTC_LIBS@ -lresolv -ldl -lrt
+			@IPHB_LIBS@ @LIBIPTC_LIBS@ @DBUSACCESS_LIBS@ -lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
@@ -178,7 +178,7 @@ vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) $(backtrace_sources) \
 			vpn/vpn-config.c src/fsid.c vpn/vpn-settings.c
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
-				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ \
+				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ @DBUSACCESS_LIBS@ \
 				-lresolv -ldl
 
 vpn_connman_vpnd_LDFLAGS = -Wl,--export-dynamic \
@@ -241,7 +241,7 @@ AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
 src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
-				@GNUTLS_CFLAGS@ @IPHB_CFLAGS@ \
+				@GNUTLS_CFLAGS@ @IPHB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				$(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DSTATEDIR=\""$(statedir)"\" \
@@ -257,7 +257,7 @@ EXTRA_DIST = src/genbuiltin src/connman-dbus.conf src/connman-polkit.conf \
 				$(service_files_sources) scripts/connman.in
 
 if VPN
-vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
+vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				$(builtin_vpn_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
@@ -313,11 +313,12 @@ unit_test_access_SOURCES = unit/test-access.c src/access.c src/log.c \
 				$(backtrace_sources)
 unit_test_access_LDADD = @GLIB_LIBS@ -ldl
 
-unit_test_sailfish_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_sailfish_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+			@DBUSACCESS_CFLAGS@
 unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
 			src/log.c src/access.c plugins/sailfish_access.c \
 			$(backtrace_sources)
-unit_test_sailfish_access_LDADD = @GLIB_LIBS@ -ldl
+unit_test_sailfish_access_LDADD = @GLIB_LIBS@ @DBUSACCESS_LIBS@ -ldl
 
 unit_test_vpn_settings_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\"
@@ -358,12 +359,13 @@ unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
 				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 unit_test_globalproxy_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
-				$(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
+				$(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				-DSTATEDIR=\""$(statedir)"\"
 unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
 				$(backtrace_sources) \
 				src/connman.h src/log.c src/error.c \
-				src/inotify.c src/storage.c src/dbus.c
+				src/inotify.c src/storage.c src/dbus.c \
+				src/access.c
 unit_test_globalproxy_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 TESTS = unit/test-access unit/test-ippool \

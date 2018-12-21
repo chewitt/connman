@@ -28,6 +28,10 @@
 #include <connman/dbus.h>
 #include <connman/storage.h>
 #include <connman/inotify.h>
+#include <connman/access.h>
+#include <dbusaccess_peer.h>
+#include <dbusaccess_policy.h>
+#include "../src/connman.h"
 
 #include "globalproxy.h"
 
@@ -109,6 +113,12 @@
 #define CONFIG_KEY_EXCLUDES "Proxy." DBUS_KEY_EXCLUDES
 #define CONFIG_KEY_URL "Proxy." DBUS_KEY_URL
 
+/* Set properties (Get is always ACCESS_ALLOW for these) */
+#define SET_PROXYACTIVE_ACCESS          CONNMAN_ACCESS_DENY
+#define SET_PROXYCONFIG_ACCESS          CONNMAN_ACCESS_DENY
+
+#define CONNMAN_BUS DA_BUS_SYSTEM
+
 struct connman_global_proxy {
 	dbus_bool_t active;
 	enum connman_service_proxy_method config;
@@ -117,11 +127,20 @@ struct connman_global_proxy {
 	char *pac;
 };
 
+enum globalproxy_access_action {
+	GLOBALPROXY_ACCESS_SET_PROPERTY = 1
+};
+
+struct access_globalproxy_policy {
+	DAPolicy *impl;
+};
+
 static DBusConnection *connection = NULL;
 struct connman_global_proxy * proxy;
 static GSList *notifier_list = NULL;
 char *config_dir;
 char *config_file;
+struct access_globalproxy_policy *policy;
 
 // Internal functions
 
@@ -179,6 +198,23 @@ static void notifier_active_changed(bool active);
 static void notifier_config_changed();
 static void notifier_proxy_changed();
 
+// policy functions
+static struct access_globalproxy_policy *
+		access_globalproxy_policy_create(const char *spec);
+static void access_globalproxy_policy_free
+			(struct access_globalproxy_policy *p);
+static enum connman_access access_globalproxy_set_property
+		(const struct access_globalproxy_policy *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access);
+static gboolean check_set_property(const char *name, DBusMessage *msg,
+		enum connman_access default_access);
+static gboolean can_set_property(const char *name, DBusMessage *msg,
+		enum connman_access default_access);
+
+
+
+
 static const GDBusMethodTable global_proxy_methods[] = {
 	{ GDBUS_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
@@ -196,6 +232,18 @@ static const GDBusSignalTable global_proxy_signals[] = {
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" })) },
 	{ },
 };
+
+static const char *globalproxy_policy_default =
+	DA_POLICY_VERSION ";"
+	"SetProperty(*)=deny;"
+	"group(privileged)=allow";
+
+static const DA_ACTION globalproxy_policy_actions [] = {
+	{ "set",         GLOBALPROXY_ACCESS_SET_PROPERTY, 1 },
+	{ "SetProperty", GLOBALPROXY_ACCESS_SET_PROPERTY, 1 },
+	{ NULL }
+};
+
 
 int global_proxy_init(void)
 {
@@ -219,6 +267,9 @@ int global_proxy_init(void)
 	read_configuration();
 	register_handlers();
 
+	policy = access_globalproxy_policy_create(NULL);
+	DBG("Policy is %p", policy);
+
 	return 0;
 }
 
@@ -236,6 +287,9 @@ void global_proxy_exit(void)
 	config_dir = NULL;
 	g_free(config_file);
 	config_file = NULL;
+
+	access_globalproxy_policy_free(policy);
+	policy = NULL;
 }
 
 static void read_configuration()
@@ -509,7 +563,7 @@ static bool compare_configuration(
 			while (result && (first->proxies[pos] || second->proxies[pos])) {
 				// Note that g_strcmp0 handles NULL strings gracefully
 				result = (g_strcmp0(first->proxies[pos],
-									second->proxies[pos]) == 0);
+					second->proxies[pos]) == 0);
 				pos++;
 			}
 		}
@@ -525,8 +579,8 @@ static bool compare_configuration(
 			pos = 0;
 			while (result && first->excludes[pos]) {
 				result = g_strv_contains(
-							(gchar const * const *)second->excludes,
-							first->excludes[pos]);
+					(gchar const * const *)second->excludes,
+					first->excludes[pos]);
 				pos++;
 			}
 		}
@@ -835,6 +889,73 @@ static const char *proxymethod2string(enum connman_service_proxy_method method)
 	return NULL;
 }
 
+static struct access_globalproxy_policy *
+		access_globalproxy_policy_create(const char *spec)
+{
+	DAPolicy *impl;
+
+	if (!spec || !spec[0]) {
+		/* Empty policy = use default */
+		spec = globalproxy_policy_default;
+	}
+
+	/* Parse the policy string */
+	impl = da_policy_new_full(spec, globalproxy_policy_actions);
+	if (impl) {
+		/* String is usable */
+		struct access_globalproxy_policy *p =
+			g_slice_new0(struct access_globalproxy_policy);
+
+		p->impl = impl;
+		return p;
+	} else {
+		DBG("invalid spec \"%s\"", spec);
+		return NULL;
+	}
+}
+
+static void access_globalproxy_policy_free
+			(struct access_globalproxy_policy *p)
+{
+	da_policy_unref(p->impl);
+	g_slice_free(struct access_globalproxy_policy, p);
+}
+
+static enum connman_access access_globalproxy_set_property
+		(const struct access_globalproxy_policy *policy,
+			const char *name, const char *sender,
+			enum connman_access default_access)
+{
+	/* Don't unref this one: */
+	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
+
+	/* Reject the access if the peer is gone */
+	return peer ? (enum connman_access)da_policy_check(policy->impl,
+		&peer->cred, GLOBALPROXY_ACCESS_SET_PROPERTY, name, (DA_ACCESS)
+		default_access) : CONNMAN_ACCESS_DENY;
+}
+
+static gboolean check_set_property(const char *name, DBusMessage *msg,
+		enum connman_access default_access)
+{
+    return access_globalproxy_set_property(policy,
+	    name,
+	    dbus_message_get_sender(msg),
+	    default_access) == CONNMAN_ACCESS_ALLOW;
+}
+
+static gboolean can_set_property(const char *name, DBusMessage *msg,
+		enum connman_access default_access)
+{
+	if (check_set_property(name, msg, default_access)) {
+		return TRUE;
+	} else {
+		connman_warn("%s is not allowed to set %s for the global proxy",
+		    dbus_message_get_sender(msg), name);
+		return FALSE;
+	}
+}
+
 static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 					void *user_data)
 {
@@ -863,6 +984,9 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	if (g_str_equal(name, DBUS_KEY_ACTIVE)) {
 		dbus_bool_t active;
 
+		if (!can_set_property(name, msg, SET_PROXYACTIVE_ACCESS))
+			return __connman_error_permission_denied(msg);
+
 		if (type != DBUS_TYPE_BOOLEAN)
 			return error_invalid_arguments(msg);
 
@@ -873,6 +997,9 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	} else if (g_str_equal(name, DBUS_KEY_CONFIGURATION)) {
 		int err;
 
+		if (!can_set_property(name, msg, SET_PROXYCONFIG_ACCESS))
+			return __connman_error_permission_denied(msg);
+
 		if (type != DBUS_TYPE_ARRAY)
 			return error_invalid_arguments(msg);
 
@@ -880,8 +1007,8 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 
 		if (err < 0) {
 			//return __connman_error_failed(msg, -err);
-			// Invalid arguments (EINVAL) is currently the only error case
-			// supported
+			// Invalid arguments (EINVAL) is currently the only
+			// error case supported
 			return error_invalid_arguments(msg);
 		}
 
