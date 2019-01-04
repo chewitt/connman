@@ -1251,7 +1251,7 @@ static bool is_string_digits(const char *str)
 }
 
 /* Protocols that iptables supports with -p or --protocol switch */
-	const char *supported_protocols[] = { 	"tcp",
+static const char *supported_protocols[] = { 	"tcp",
 						"udp",
 						"udplite",
 						"icmp",
@@ -1264,7 +1264,7 @@ static bool is_string_digits(const char *str)
 						"dccp",
 						"all",
 						NULL
-	};
+};
 
 static bool is_supported(int type, enum iptables_switch_type switch_type,
 					const char* group, const char *str)
