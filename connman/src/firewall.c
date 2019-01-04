@@ -1533,22 +1533,6 @@ static bool protocol_match_equals(const char *protocol, const char *match)
 	return false;
 }
 
-static bool is_supported_ipv6_match(const char *match)
-{
-	int i;
-
-	if (!match)
-		return false;
-
-	/* Protocols are supported, nothing else */
-	for (i = 0; supported_protocols[i]; i++) {
-		if (!g_strcmp0(match, supported_protocols[i]))
-			return true;
-	}
-
-	return false;
-}
-
 static bool validate_iptables_rule(int type, const char *group,
 							const char *rule_spec)
 {
@@ -1593,17 +1577,6 @@ static bool validate_iptables_rule(int type, const char *group,
 		if (!g_strcmp0(arg, "-m")) {
 			switch_type = IPTABLES_MATCH;
 			match = argv[i++];
-
-			/* TODO fix/remove this when match support is fixed */
-			if (type == AF_INET6 &&
-					!is_supported_ipv6_match(match)) {
-				DBG("iptables support for other than protocol "
-							"matches in "
-							"simultaneous use is "
-							"broken, ignore IPv6 "
-							"match %s", match);
-				goto out;
-			}
 
 			if (!match) {
 				DBG("trailing '-m' in rule \"%s\"", rule_spec);
