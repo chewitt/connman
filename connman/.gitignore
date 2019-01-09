@@ -75,6 +75,8 @@ unit/test-sailfish_wakeup_timer
 unit/test-service
 unit/test-vpn-settings
 unit/test-sailfish_iptables_ext
+unit/test-firewall
+unit/test-globalproxy
 
 *.gcda
 *.gcno

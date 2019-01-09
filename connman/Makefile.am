@@ -296,7 +296,7 @@ endif
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy
+	unit/test-globalproxy unit/test-firewall
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -368,10 +368,17 @@ unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
 				src/access.c
 unit_test_globalproxy_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+unit_test_firewall_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
+				@GLIB_CFLAGS@
+unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
+				src/inotify.c src/dbus.c src/error.c \
+				src/firewall.c unit/test-firewall.c
+unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+
 TESTS = unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy
+	unit/test-globalproxy unit/test-firewall
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)

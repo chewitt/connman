@@ -7,6 +7,8 @@
 
 # Tests with coverage enabled:
 TESTS="test-access \
+test-firewall \
+test-globalproxy \
 test-ippool \
 test-sailfish_access \
 test-sailfish_iptables_ext \
