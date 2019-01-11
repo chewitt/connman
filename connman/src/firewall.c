@@ -2762,8 +2762,6 @@ static void cleanup_dynamic_firewall_rules()
 		tethering_firewall = NULL;
 	}
 
-	cleanup_general_firewall();
-
 	g_free(dynamic_rules);
 	dynamic_rules = NULL;
 }
@@ -3271,6 +3269,7 @@ void __connman_firewall_cleanup(void)
 	firewall_access_policy = NULL;
 
 	cleanup_dynamic_firewall_rules();
+	cleanup_general_firewall();
 
 	g_list_free_full(configuration_files, g_free);
 	configuration_files = NULL;
