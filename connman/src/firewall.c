@@ -1250,22 +1250,6 @@ static bool is_string_digits(const char *str)
 	return true;
 }
 
-/* Protocols that iptables supports with -p or --protocol switch */
-	const char *supported_protocols[] = { 	"tcp",
-						"udp",
-						"udplite",
-						"icmp",
-						"icmpv6",
-						"ipv6-icmp",
-						"esp",
-						"ah",
-						"sctp",
-						"mh",
-						"dccp",
-						"all",
-						NULL
-	};
-
 static bool is_supported(int type, enum iptables_switch_type switch_type,
 					const char* group, const char *str)
 {
@@ -1321,6 +1305,38 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 						NULL
 	};
 
+	const char **not_supported_matches = NULL;
+
+	/* Protocols that iptables supports with -p or --protocol switch */
+	const char *supported_protocols_ipv4[] = { "tcp",
+						"udp",
+						"udplite",
+						"icmp",
+						"esp",
+						"ah",
+						"sctp",
+						"dccp",
+						"all",
+						NULL
+	};
+
+	/* Protocols that iptables supports with -p or --protocol switch */
+	const char *supported_protocols_ipv6[] = { "tcp",
+						"udp",
+						"udplite",
+						"icmpv6",
+						"ipv6-icmp",
+						"esp",
+						"ah",
+						"sctp",
+						"mh",
+						"dccp",
+						"all",
+						NULL
+	};
+
+	const char **supported_protocols = NULL;
+
 	/*
 	 * Targets that are supported. No targets to custom chains are
 	 * allowed
@@ -1345,6 +1361,19 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 	if (group && !g_strcmp0(group, GROUP_GENERAL))
 		is_general = true;
 
+	switch (type) {
+	case AF_INET:
+		not_supported_matches = not_supported_matches_ipv4;
+		supported_protocols = supported_protocols_ipv4;
+		break;
+	case AF_INET6:
+		not_supported_matches = not_supported_matches_ipv6;
+		supported_protocols = supported_protocols_ipv6;
+		break;
+	default:
+		return false;
+	}
+
 	switch (switch_type) {
 	case IPTABLES_SWITCH:
 		for (i = 0; not_supported_switches[i]; i++) {
@@ -1363,26 +1392,15 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 
 		return true;
 	case IPTABLES_MATCH:
-		if (type == AF_INET) {
-			for (i = 0 ; not_supported_matches_ipv4[i] ; i++) {
-				if(!g_strcmp0(str,
-						not_supported_matches_ipv4[i]))
-					return false;
-			}
-		} else if (type == AF_INET6) {
-			for (i = 0 ; not_supported_matches_ipv6[i] ; i++) {
-				if(!g_strcmp0(str,
-						not_supported_matches_ipv6[i]))
-					return false;
-			}
-		} else {
-			return false;
+		for (i = 0; not_supported_matches[i]; i++) {
+			if (!g_strcmp0(str, not_supported_matches[i]))
+				return false;
 		}
 
 		return true;
 	case IPTABLES_TARGET:
-		for (i = 0 ; supported_targets[i] ; i++) {
-			if(!g_strcmp0(str, supported_targets[i]))
+		for (i = 0; supported_targets[i]; i++) {
+			if (!g_strcmp0(str, supported_targets[i]))
 				return true;
 		}
 
@@ -1533,22 +1551,6 @@ static bool protocol_match_equals(const char *protocol, const char *match)
 	return false;
 }
 
-static bool is_supported_ipv6_match(const char *match)
-{
-	int i;
-
-	if (!match)
-		return false;
-
-	/* Protocols are supported, nothing else */
-	for (i = 0; supported_protocols[i]; i++) {
-		if (!g_strcmp0(match, supported_protocols[i]))
-			return true;
-	}
-
-	return false;
-}
-
 static bool validate_iptables_rule(int type, const char *group,
 							const char *rule_spec)
 {
@@ -1593,17 +1595,6 @@ static bool validate_iptables_rule(int type, const char *group,
 		if (!g_strcmp0(arg, "-m")) {
 			switch_type = IPTABLES_MATCH;
 			match = argv[i++];
-
-			/* TODO fix/remove this when match support is fixed */
-			if (type == AF_INET6 &&
-					!is_supported_ipv6_match(match)) {
-				DBG("iptables support for other than protocol "
-							"matches in "
-							"simultaneous use is "
-							"broken, ignore IPv6 "
-							"match %s", match);
-				goto out;
-			}
 
 			if (!match) {
 				DBG("trailing '-m' in rule \"%s\"", rule_spec);
@@ -1809,7 +1800,7 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 	if (!dynamic_rules[service_type])
 		dynamic_rules[service_type] = __connman_firewall_create();
 
-	for(i = 0; rules[i] ; i++) {
+	for(i = 0; rules[i]; i++) {
 
 		DBG("process rule tech %s chain %s rule %s", group,
 					builtin_chains[chain_id], rules[i]);
@@ -2043,7 +2034,7 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 		return 0;
 
 	for (chain = NF_IP_LOCAL_IN; chain < NF_IP_NUMHOOKS - 1; chain++) {
-		for (i = 0; types[i] ; i++) {
+		for (i = 0; types[i]; i++) {
 
 			/* Setup chain name based on IP type */
 			switch (types[i]) {
@@ -2263,7 +2254,7 @@ static int enable_general_firewall_policies(int type, char **policies)
 	if (!policies || !g_strv_length(policies))
 		return 0;
 
-	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1 ; i++) {
+	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
 		if (!policies[i-1])
 			continue;
 
@@ -2462,7 +2453,7 @@ static int init_general_firewall_policies(GKeyFile *config)
 
 	if (!restore_policies_set) {
 		// TODO add function into iptables.c to get chain policy
-		for (i = 0; i < GENERAL_FIREWALL_POLICIES ; i++) {
+		for (i = 0; i < GENERAL_FIREWALL_POLICIES; i++) {
 			general_firewall->restore_policies[i] =
 						g_strdup("ACCEPT");
 			general_firewall->restore_policiesv6[i] =
@@ -2555,7 +2546,7 @@ static int init_dynamic_firewall_rules(const char *file)
 					g_str_equal,g_free, remove_ctx);
 
 	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
-			type < MAX_CONNMAN_SERVICE_TYPES ; type++) {
+			type < MAX_CONNMAN_SERVICE_TYPES; type++) {
 
 		group = __connman_service_type2string(type);
 
@@ -2626,7 +2617,7 @@ static int init_all_dynamic_firewall_rules(void)
 		configuration_files = g_list_sort(configuration_files,
 					(GCompareFunc)g_strcmp0);
 
-		for (iter = configuration_files; iter ; iter = iter->next) {
+		for (iter = configuration_files; iter; iter = iter->next) {
 			filename = iter->data;
 
 			filepath = g_strconcat(FIREWALLCONFIGDIR, filename,
@@ -2657,14 +2648,16 @@ out:
 	return err;
 }
 
-static int restore_policies(int type, char **policies, char **restore_policies)
+static int restore_policies(int type, char **policies, char **set_policies)
 {
 	char table[] = "filter";
 	int commit_err = 0;
 	int err = 0;
 	int i;
 
-	if (!policies && !restore_policies)
+	DBG("");
+
+	if (!policies && !set_policies)
 		return -EINVAL;
 
 	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
@@ -2673,7 +2666,7 @@ static int restore_policies(int type, char **policies, char **restore_policies)
 
 			g_free(policies[i-1]);
 
-			if (!restore_policies[i-1])
+			if (!set_policies[i-1])
 				continue;
 
 			/* Commit errors are not recoverable */
@@ -2681,13 +2674,13 @@ static int restore_policies(int type, char **policies, char **restore_policies)
 				err = __connman_iptables_change_policy(type,
 							table,
 							builtin_chains[i],
-							restore_policies[i-1]);
+							set_policies[i-1]);
 
 				if (err) {
 					/* Ignore this and continue with next */
 					DBG("cannot restore chain %s policy %s",
 							builtin_chains[i],
-							restore_policies[i-1]);
+							set_policies[i-1]);
 				} else {
 					commit_err = __connman_iptables_commit(
 								type, table);
@@ -2697,13 +2690,13 @@ static int restore_policies(int type, char **policies, char **restore_policies)
 							"restore on chain %s "
 							"policy %s",
 							builtin_chains[i],
-							restore_policies[i-1]);
+							set_policies[i-1]);
 					}
 				}
 			}
 		}
 
-		g_free(restore_policies[i-1]);
+		g_free(set_policies[i-1]);
 	}
 
 	return commit_err;
@@ -2751,7 +2744,7 @@ static void cleanup_dynamic_firewall_rules()
 
 	/* These rules are never enabled directly */
 	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN + 1;
-			type < MAX_CONNMAN_SERVICE_TYPES ; type++) {
+			type < MAX_CONNMAN_SERVICE_TYPES; type++) {
 
 		if (!dynamic_rules[type])
 			continue;
@@ -2768,8 +2761,6 @@ static void cleanup_dynamic_firewall_rules()
 		__connman_firewall_destroy(tethering_firewall);
 		tethering_firewall = NULL;
 	}
-
-	cleanup_general_firewall();
 
 	g_free(dynamic_rules);
 	dynamic_rules = NULL;
@@ -3189,6 +3180,7 @@ int __connman_firewall_init(void)
 
 	flush_all_tables(AF_INET);
 	flush_all_tables(AF_INET6);
+	restore_policies_set = false;
 
 	err = init_all_dynamic_firewall_rules();
 
@@ -3233,6 +3225,8 @@ void __connman_firewall_pre_cleanup(void)
 	if (!general_firewall)
 		return;
 
+	DBG("");
+
 	err = restore_policies(AF_INET, general_firewall->policies,
 				general_firewall->restore_policies);
 
@@ -3275,6 +3269,7 @@ void __connman_firewall_cleanup(void)
 	firewall_access_policy = NULL;
 
 	cleanup_dynamic_firewall_rules();
+	cleanup_general_firewall();
 
 	g_list_free_full(configuration_files, g_free);
 	configuration_files = NULL;

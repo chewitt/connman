@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <glib/gstdio.h>
+#include <gdbus.h>
 
 #include "../src/connman.h"
 
@@ -205,6 +206,129 @@ enum connman_service_state connman_service_get_state(
 						struct connman_service *service)
 {
 	return 0;
+}
+
+// DBus dummies
+
+gboolean g_dbus_register_interface(DBusConnection *connection,
+					const char *path, const char *name,
+					const GDBusMethodTable *methods,
+					const GDBusSignalTable *signals,
+					const GDBusPropertyTable *properties,
+					void *user_data,
+					GDBusDestroyFunction destroy)
+{
+
+	return TRUE;
+}
+
+gboolean g_dbus_unregister_interface(DBusConnection *connection,
+					const char *path, const char *name)
+{
+	return TRUE;
+}
+
+// Original version from gdbus/object.c
+gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message)
+{
+	return TRUE;
+}
+
+// Copied from gdbus/object.c
+DBusMessage *g_dbus_create_error(DBusMessage *message, const char *name,
+						const char *format, ...)
+{
+	va_list args;
+	DBusMessage *reply;
+
+	va_start(args, format);
+
+	reply = g_dbus_create_error_valist(message, name, format, args);
+
+	va_end(args);
+
+	return reply;
+}
+
+// Copied from gdbus/object.c
+DBusMessage *g_dbus_create_error_valist(DBusMessage *message, const char *name,
+					const char *format, va_list args)
+{
+	char str[1024];
+
+	if (format)
+		vsnprintf(str, sizeof(str), format, args);
+	else
+		str[0] = '\0';
+
+	return dbus_message_new_error(message, name, str);
+}
+
+// Copied from gdbus/object.c
+gboolean g_dbus_send_reply(DBusConnection *connection,
+				DBusMessage *message, int type, ...)
+{
+	va_list args;
+	gboolean result;
+
+	va_start(args, type);
+
+	result = g_dbus_send_reply_valist(connection, message, type, args);
+
+	va_end(args);
+
+	return result;
+}
+
+// Copied from gdbus/object.c
+gboolean g_dbus_send_reply_valist(DBusConnection *connection,
+				DBusMessage *message, int type, va_list args)
+{
+	DBusMessage *reply;
+
+	reply = dbus_message_new_method_return(message);
+	if (reply == NULL)
+		return FALSE;
+
+	if (dbus_message_append_args_valist(reply, type, args) == FALSE) {
+		dbus_message_unref(reply);
+		return FALSE;
+	}
+
+	return g_dbus_send_message(connection, reply);
+}
+
+// Copied from gdbus/object.c
+DBusMessage *g_dbus_create_reply_valist(DBusMessage *message,
+						int type, va_list args)
+{
+	DBusMessage *reply;
+
+	reply = dbus_message_new_method_return(message);
+	if (reply == NULL)
+		return NULL;
+
+	if (dbus_message_append_args_valist(reply, type, args) == FALSE) {
+		dbus_message_unref(reply);
+		return NULL;
+	}
+
+	return reply;
+}
+
+// Copied from gdbus/object.c
+DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
+{
+	va_list args;
+	DBusMessage *reply;
+
+	va_start(args, type);
+
+	reply = g_dbus_create_reply_valist(message, type, args);
+
+	va_end(args);
+
+	return reply;
 }
 
 
@@ -1266,55 +1390,60 @@ static bool init_firewall_config(bool use_valid_rules)
 	g_assert(config);
 
 	if (use_valid_rules) {
-		g_key_file_set_string_list(config, "General", "INPUT",
-					general_input,
+		g_key_file_set_string_list(config, "General",
+					"IPv4.INPUT.RULES", general_input,
 					g_strv_length((char**)general_input));
 
-		g_key_file_set_string_list(config, "General", "OUTPUT",
-					general_output,
+		g_key_file_set_string_list(config, "General",
+					"IPv4.OUTPUT.RULES", general_output,
 					g_strv_length((char**)general_output));
 
-		g_key_file_set_string_list(config, "General", "FORWARD",
-					general_forward,
+		g_key_file_set_string_list(config, "General",
+					"IPv4.FORWARD.RULES", general_forward,
 					g_strv_length((char**)general_forward));
 
-		g_key_file_set_string_list(config, "ethernet", "INPUT",
-					eth_input,
+		g_key_file_set_string_list(config, "ethernet",
+					"IPv4.INPUT.RULES", eth_input,
 					g_strv_length((char**)eth_input));
 
-		g_key_file_set_string_list(config, "ethernet", "OUTPUT",
-					eth_output,
+		g_key_file_set_string_list(config, "ethernet",
+					"IPv4.OUTPUT.RULES", eth_output,
 					g_strv_length((char**)eth_output));
 
-		g_key_file_set_string_list(config, "cellular", "INPUT",
-					cellular_input,
+		g_key_file_set_string_list(config, "cellular",
+					"IPv4.INPUT.RULES", cellular_input,
 					g_strv_length((char**)cellular_input));
 
-		g_key_file_set_string_list(config, "cellular", "OUTPUT",
-					cellular_output,
+		g_key_file_set_string_list(config, "cellular",
+					"IPv4.OUTPUT.RULES", cellular_output,
 					g_strv_length((char**)cellular_output));
 	} else {
-		g_key_file_set_string_list(config, "General", "INPUT",
+		g_key_file_set_string_list(config, "General",
+					"IPv4.INPUT.RULES",
 					invalid_general_input,
 					g_strv_length(
 					(char**)invalid_general_input));
 
-		g_key_file_set_string_list(config, "General", "OUTPUT",
+		g_key_file_set_string_list(config, "General",
+					"IPv4.OUTPUT.RULES",
 					invalid_general_output,
 					g_strv_length(
 					(char**)invalid_general_output));
 
-		g_key_file_set_string_list(config, "General", "FORWARD",
+		g_key_file_set_string_list(config, "General",
+					"IPv4.FORWARD.RULES",
 					invalid_general_forward,
 					g_strv_length(
 					(char**)invalid_general_forward));
 
-		g_key_file_set_string_list(config, "ethernet", "INPUT",
+		g_key_file_set_string_list(config, "ethernet",
+					"IPv4.INPUT.RULES",
 					invalid_eth_input,
 					g_strv_length(
 					(char**)invalid_eth_input));
 
-		g_key_file_set_string_list(config, "ethernet", "OUTPUT",
+		g_key_file_set_string_list(config, "ethernet",
+					"IPv4.OUTPUT.RULES",
 					invalid_eth_output,
 					g_strv_length(
 					(char**)invalid_eth_output));
@@ -1782,6 +1911,8 @@ int main(int argc, char *argv[])
 
 	__connman_log_init(argv[0], option_debug, false, false,
 			"Unit Tests Connection Manager", VERSION);
+
+	clean_firewall_config();
 
 	__connman_iptables_init();
 	__connman_firewall_init();
