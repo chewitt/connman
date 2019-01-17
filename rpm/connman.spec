@@ -90,16 +90,15 @@ Provides:   connman-configs
 This package provides default configs for connman, such as
 FallbackTimeservers.
 
-
-%package docs
-Summary:    Documentation for connman
+%package doc
+Summary:    Documentation for %{name}
 Group:      Documentation
 Requires:   %{name} = %{version}-%{release}
 Requires:   %{name} = %{version}
+Obsoletes:  %{name}-docs
 
-%description docs
-Documentation for connman.
-
+%description doc
+Man pages for %{name}.
 
 %prep
 %setup -q -n %{name}-%{version}/connman
@@ -184,7 +183,7 @@ systemctl daemon-reload || :
 
 %files
 %defattr(-,root,root,-)
-%doc COPYING
+%license COPYING
 %{_sbindir}/connman-vpnd
 %{_sbindir}/connmand
 %{_bindir}/connmanctl
@@ -220,13 +219,6 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %config %{_sysconfdir}/connman/main.conf
 
-%files docs
+%files doc
 %defattr(-,root,root,-)
-%{_datadir}/man/man5/connman.conf.5.gz
-%{_datadir}/man/man5/connman-service.config.5.gz
-%{_datadir}/man/man5/connman-vpn-provider.config.5.gz
-%{_datadir}/man/man5/connman-vpn.conf.5.gz
-%{_datadir}/man/man5/connman-firewall.config.5.gz
-%{_datadir}/man/man8/connman.8.gz
-%{_datadir}/man/man8/connman-vpn.8.gz
-%{_datadir}/man/man1/connmanctl.1.gz
+%{_mandir}/man*/%{name}*.*
