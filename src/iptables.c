@@ -2978,6 +2978,10 @@ static int parse_xt_modules(int c, bool invert,
 			ctx->proto = IPPROTO_IPV6;
 
 		fw6.ipv6.proto = ctx->proto;
+
+		/* Flags must be set for IPv6 if protocol is set. */
+		fw6.ipv6.flags |= IP6T_F_PROTO;
+
 		break;
 	default:
 		return 0;
@@ -3280,8 +3284,15 @@ static int parse_rule_spec(struct connman_iptables *table,
 				if (ctx->type == AF_INET)
 					ctx->ip->proto = ctx->proto;
 
-				if (ctx->type == AF_INET6)
+				if (ctx->type == AF_INET6) {
 					ctx->ipv6->proto = ctx->proto;
+
+					/*
+					 * Flags must be set for IPv6 if
+					 * protocol is set.
+					 */
+					ctx->ipv6->flags |= IP6T_F_PROTO;
+				}
 			}
 			break;
 		case 'j':
