@@ -984,6 +984,12 @@ int __connman_iptables_delete(int type,
 int __connman_iptables_restore_all();
 int __connman_iptables_save_all();
 
+void __connman_iptables_validate_init(void);
+void __connman_iptables_validate_cleanup(void);
+bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
+			const char *rule_spec);
+
+
 typedef int (*connman_iptables_manage_cb_t)(int type, const char *table_name,
 				const char *chain, const char *rule_spec);
 
