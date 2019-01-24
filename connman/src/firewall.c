@@ -269,7 +269,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 {
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
-	char *chain;
+	char *chain = NULL;
 	char *full_rule = NULL;
 	int id, err;
 
@@ -307,7 +307,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 
 		err = insert_managed_chain(type, table_name, id);
 		if (err < 0)
-			return err;
+			goto err;
 	}
 
 	mtable->chains[id]++;
@@ -320,7 +320,8 @@ out:
 	else
 		err = __connman_iptables_append(type, table_name, chain,
 					full_rule ? full_rule : rule_spec);
-	
+
+err:
 	if (err < 0)
 		DBG("table %s cannot append rule %s", table_name,
 				full_rule ? full_rule : rule_spec);
@@ -339,7 +340,7 @@ static int delete_managed_rule(int type, const char *table_name,
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
 	int id, err;
-	char *managed_chain;
+	char *managed_chain = NULL;
 	char *full_rule = NULL;
 
 	id = chain_to_index(chain_name);
@@ -348,9 +349,10 @@ static int delete_managed_rule(int type, const char *table_name,
 
 	if (id < 0) {
 		/* This chain is not managed */
-		return __connman_iptables_delete(type, table_name,
+		err = __connman_iptables_delete(type, table_name,
 					chain_name,
 					full_rule ? full_rule : rule_spec);
+		goto out;
 	}
 
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
@@ -387,7 +389,7 @@ static int delete_managed_rule(int type, const char *table_name,
 
 	err = delete_managed_chain(type, table_name, id);
 
- out:
+out:
 	g_free(managed_chain);
 	g_free(full_rule);
 
@@ -1747,7 +1749,7 @@ static int enable_general_firewall_policies(int type, char **policies)
 	int err;
 	int i;
 
-	if (!policies || !g_strv_length(policies))
+	if (!policies)
 		return 0;
 
 	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {

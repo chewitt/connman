@@ -2614,6 +2614,8 @@ static void firewall_test_basic0()
 
 	g_assert_cmpint(__connman_firewall_disable(ctx), ==, 0);
 
+	__connman_firewall_destroy(ctx);
+
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
 	__connman_iptables_cleanup();
@@ -2661,6 +2663,7 @@ static void firewall_test_basic1()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 6);
 
 	g_assert(__connman_firewall_disable(ctx) == 0);
+	__connman_firewall_destroy(ctx);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
@@ -2759,6 +2762,7 @@ static void firewall_test_basic2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
 	g_assert(__connman_firewall_disable(ctx) == 0);
+	__connman_firewall_destroy(ctx);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
@@ -3133,7 +3137,6 @@ static void firewall_test_dynamic_ok0()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_ETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
-	ifname = connman_service_get_interface(&test_service);
 	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -4230,7 +4233,6 @@ static void firewall_test_notifier_fail0()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	ifname = connman_service_get_interface(&test_service);
 	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
