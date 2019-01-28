@@ -4323,6 +4323,11 @@ static DBusMessage *set_property(DBusConnection *conn,
 		dbus_message_iter_get_basic(&value, &autoconnect);
 
 		if (connman_service_set_autoconnect(service, autoconnect)) {
+			/* AutoConnect explicitly set, ensure service is
+			 * saved by clearing the new-service flag.
+			 */
+			service_set_new_service(service, false);
+
 			service_save(service);
 			if (autoconnect)
 				do_auto_connect(service,
