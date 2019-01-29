@@ -878,6 +878,9 @@ int __connman_iptables_append(int type,
 	if (global_iptables_type & IPTABLES_ADD_FAIL)
 		return -EINVAL;
 
+	if (global_iptables_type & IPTABLES_COMMIT_FAIL)
+		return 0;
+
 	DBG("list sizes IPv4: %d IPv6: %d", g_slist_length(rules_ipv4),
 				g_slist_length(rules_ipv6));
 
@@ -915,6 +918,9 @@ int __connman_iptables_insert(int type,
 	if (global_iptables_type & IPTABLES_INS_FAIL)
 		return -EINVAL;
 
+	if (global_iptables_type & IPTABLES_COMMIT_FAIL)
+		return 0;
+
 	DBG("list sizes IPv4: %d IPv6: %d", g_slist_length(rules_ipv4),
 				g_slist_length(rules_ipv6));
 
@@ -949,9 +955,12 @@ int __connman_iptables_delete(int type,
 
 	if (!table_exists(type, table_name))
 		return -EINVAL;
-	
+
 	if (global_iptables_type & IPTABLES_DEL_FAIL)
 		return -EINVAL;
+
+	if (global_iptables_type & IPTABLES_COMMIT_FAIL)
+		return 0;
 
 	DBG("list sizes IPv4: %d IPv6: %d", g_slist_length(rules_ipv4),
 				g_slist_length(rules_ipv6));
@@ -1184,8 +1193,10 @@ gboolean g_file_get_contents(const gchar *filename, gchar **contents,
 	return TRUE;
 }
 
-#define RULES_GEN4 48
-#define RULES_GEN6 50
+#define CHAINS_GEN4 3
+#define RULES_GEN4 (CHAINS_GEN4 + 45)
+#define CHAINS_GEN6 3
+#define RULES_GEN6 (CHAINS_GEN6 + 47)
 #define RULES_ETH 14
 #define RULES_CEL 4
 #define RULES_TETH 7
@@ -2084,11 +2095,11 @@ static void firewall_test_basic0()
 
 	g_assert(ctx);
 
-	g_assert(__connman_firewall_enable(ctx) == -ENOENT);
+	g_assert_cmpint(__connman_firewall_enable(ctx), ==, 0);
 	
 	g_assert(__connman_firewall_is_up());
 
-	g_assert(__connman_firewall_disable(ctx) == -ENOENT);
+	g_assert_cmpint(__connman_firewall_disable(ctx), ==, 0);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3663,30 +3674,35 @@ static void firewall_test_iptables_fail2()
 	const char **device_rules[] = { eth_input, NULL, eth_output };
 
 	setup_test_params(CONFIG_OK|CONFIG_ALL);
-	setup_iptables_params(IPTABLES_ADD_FAIL); // General rules are not added
+
+	/*
+	 * General rules are not added, only the managed chains because
+	 * they are added using __connman_iptables_insert()
+	 */
+	setup_iptables_params(IPTABLES_ADD_FAIL);
 
 	__connman_iptables_init();
 	__connman_firewall_init();
 
-	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6);
 
 	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_READY);
 
-	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_ETH + RULES_ETH_ADD1 +
-				RULES_ETH_ADD3);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_ETH + RULES_ETH_ADD1 +
-				RULES_ETH_ADD3);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4 +
+				RULES_ETH + RULES_ETH_ADD1 + RULES_ETH_ADD3);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN4 +
+				RULES_ETH + RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
 	check_rules(assert_rule_exists, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6);
 
 	check_rules(assert_rule_not_exists, device_rules, ifname);
 
@@ -3709,7 +3725,12 @@ static void firewall_test_iptables_fail3()
 	const char **device_rules[] = { eth_input, NULL, eth_output };
 
 	setup_test_params(CONFIG_OK|CONFIG_ALL);
-	setup_iptables_params(IPTABLES_INS_FAIL); // Managed chain fails
+
+	/*
+	 * Managed chains also fail as they are added with
+	 * __connman_iptables_insert().
+	 */
+	setup_iptables_params(IPTABLES_INS_FAIL);
 
 	__connman_iptables_init();
 	__connman_firewall_init();
