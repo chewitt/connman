@@ -10,6 +10,7 @@ TESTS="test-access \
 test-firewall \
 test-globalproxy \
 test-ippool \
+test-iptables \
 test-sailfish_access \
 test-sailfish_iptables_ext \
 test-sailfish_wakeup_timer \
