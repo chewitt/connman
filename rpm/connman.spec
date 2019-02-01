@@ -186,7 +186,6 @@ systemctl daemon-reload || :
 %license COPYING
 %{_sbindir}/connman-vpnd
 %{_sbindir}/connmand
-%{_bindir}/connmanctl
 %{_libdir}/%{name}/scripts/*
 %{_libdir}/tmpfiles.d/connman_resolvconf.conf
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
@@ -209,6 +208,7 @@ systemctl daemon-reload || :
 
 %files test
 %defattr(-,root,root,-)
+%{_bindir}/connmanctl
 %{_libdir}/%{name}/test/*
 
 %files tools
