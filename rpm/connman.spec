@@ -94,7 +94,6 @@ FallbackTimeservers.
 Summary:    Documentation for %{name}
 Group:      Documentation
 Requires:   %{name} = %{version}-%{release}
-Requires:   %{name} = %{version}
 Obsoletes:  %{name}-docs
 
 %description doc
@@ -152,6 +151,10 @@ cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/connman/
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/connman.service
 
+mkdir -p %{buildroot}/%{_docdir}/%{name}-%{version}
+install -m0644 -t %{buildroot}/%{_docdir}/%{name}-%{version} \
+        AUTHORS ChangeLog README
+
 %preun
 if [ "$1" -eq 0 ]; then
 systemctl stop connman.service || :
@@ -186,8 +189,8 @@ systemctl daemon-reload || :
 %license COPYING
 %{_sbindir}/connman-vpnd
 %{_sbindir}/connmand
-%{_bindir}/connmanctl
-%{_libdir}/%{name}/scripts/*
+%dir %{_libdir}/%{name}
+%{_libdir}/%{name}/scripts
 %{_libdir}/tmpfiles.d/connman_resolvconf.conf
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{_lib}/systemd/system/connman.service
@@ -201,24 +204,24 @@ systemctl daemon-reload || :
 
 %files devel
 %defattr(-,root,root,-)
-%doc AUTHORS COPYING ChangeLog README
-%{_includedir}/%{name}/*.h
-%{_includedir}/%{name}/vpn/*.h
-%{_includedir}/%{name}/vpn/plugins/*.h
+%{_includedir}/%{name}
 %{_libdir}/pkgconfig/*.pc
 
 %files test
 %defattr(-,root,root,-)
-%{_libdir}/%{name}/test/*
+%{_bindir}/connmanctl
+%{_libdir}/%{name}/test
 
 %files tools
 %defattr(-,root,root,-)
-%{_libdir}/%{name}/tools/*
+%{_libdir}/%{name}/tools
 
 %files configs-mer
 %defattr(-,root,root,-)
+%dir %{_sysconfdir}/connman
 %config %{_sysconfdir}/connman/main.conf
 
 %files doc
 %defattr(-,root,root,-)
 %{_mandir}/man*/%{name}*.*
+%{_docdir}/%{name}-%{version}
