@@ -443,19 +443,26 @@ static int firewall_enable_rule(struct fw_rule *rule)
 					rule->rule_spec);
 	if (err < 0) {
 		DBG("cannot insert managed rule %d", err);
-		return err;
+		goto err;
 	}
 
 	err = __connman_iptables_commit(rule->type, rule->table);
 
 	if (err < 0) {
 		DBG("iptables commit failed %d", err);
-		return err;
+		goto err;
 	}
 
 	rule->enabled = true;
 
 	return 0;
+
+err:
+	connman_warn("failed to add rule to iptables: id: %d type: %d "
+				"table: %s chain: %s interface: %s rule: %s",
+				rule->id, rule->type, rule->table, rule->chain,
+				rule->ifname, rule->rule_spec);
+	return err;
 }
 
 static int firewall_disable_rule(struct fw_rule *rule)
@@ -581,6 +588,10 @@ int __connman_firewall_remove_rule(struct firewall_context *ctx, int id)
 		list = prev;
 	}
 
+	/* An empty list of rules is not an error if all rules are removed */
+	if (id == FW_ALL_RULES && !g_list_length(ctx->rules))
+		return 0;
+
 	return err;
 }
 
@@ -597,6 +608,7 @@ int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
 	int e;
 	int err = -ENOENT;
 	int count = 0;
+	int invalid = 0;
 
 	for (list = g_list_first(ctx->rules); list; list = g_list_next(list)) {
 		rule = list->data;
@@ -605,10 +617,12 @@ int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
 			e = firewall_enable_rule(rule);
 
 			/* Do not stop if enabling all rules */
-			if (e == 0 && err == -ENOENT)
+			if (e == 0 && err == -ENOENT) {
 				err = 0;
-			else if (e < 0)
+			} else if (e < 0) {
 				err = e;
+				invalid++;
+			}
 
 			if (id != FW_ALL_RULES)
 				break;
@@ -617,8 +631,9 @@ int __connman_firewall_enable_rule(struct firewall_context *ctx, int id)
 		count++;
 	}
 
-	if (!err && id == FW_ALL_RULES) {
-		DBG("firewall enabled");
+	/* Invalid rules are ignored, just report errors */
+	if (id == FW_ALL_RULES) {
+		DBG("firewall enabled, invalid rules: %d", invalid);
 		ctx->enabled = true;
 	}
 
@@ -650,7 +665,8 @@ int __connman_firewall_disable_rule(struct firewall_context *ctx, int id)
 		}
 	}
 
-	if (!err && id == FW_ALL_RULES) {
+	/* An empty list of rules is not an error */
+	if ((!err || !g_list_length(ctx->rules)) && id == FW_ALL_RULES) {
 		DBG("firewall disabled");
 		ctx->enabled = false;
 	}
@@ -662,13 +678,11 @@ int __connman_firewall_enable(struct firewall_context *ctx)
 {
 	int err;
 
+	/* Invalid rules are ignored, just report that there were errors */
 	err = __connman_firewall_enable_rule(ctx, FW_ALL_RULES);
-	if (err < 0) {
-		connman_warn("Failed to install iptables rules: %s",
-				strerror(-err));
-		__connman_firewall_disable_rule(ctx, FW_ALL_RULES);
-		return err;
-	}
+	if (err < 0)
+		connman_warn("Failed to install some of the iptables rules. "
+					"Last error: %s", strerror(-err));
 
 	firewall_is_up = true;
 
@@ -2645,6 +2659,8 @@ static int init_all_dynamic_firewall_rules(void)
 out:
 	err = enable_general_firewall();
 
+	if (err)
+		DBG("problem enabling");
 	return err;
 }
 
