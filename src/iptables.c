@@ -32,6 +32,7 @@
 #include <sys/socket.h>
 #include <xtables.h>
 #include <inttypes.h>
+#include <setjmp.h>
 
 #include <linux/netfilter_ipv4/ip_tables.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
@@ -193,6 +194,25 @@ struct iptables_replace {
 	struct ipt_replace *r;
 	struct ip6t_replace *r6;
 };
+
+static jmp_buf env_state;
+static bool jmp_set = false;
+
+static void enable_jmp()
+{
+	jmp_set = true;
+}
+
+static void disable_jmp()
+{
+	jmp_set = false;
+}
+
+static bool can_jmp()
+{
+	DBG("%s", jmp_set ? "true" : "false");
+	return jmp_set;
+}
 
 typedef int (*iterate_entries_cb_t)(struct connman_iptables_entry *entry,
 					int builtin, unsigned int hook,
@@ -1873,6 +1893,7 @@ static void dump_target(struct connman_iptables_entry *entry)
 {
 	struct xtables_target *xt_t;
 	struct xt_entry_target *target;
+	int err;
 
 	target = iptables_entry_get_target(entry);
 
@@ -1910,13 +1931,34 @@ static void dump_target(struct connman_iptables_entry *entry)
 			break;
 		}
 
+		enable_jmp();
+
+		if ((err = setjmp(env_state)) != 0) {
+			DBG("setjmp() called by longjmp() with value %d", err);
+			disable_jmp();
+			return;
+		}
+
 		xt_t = xtables_find_target(get_standard_target(entry->type),
 						XTF_LOAD_MUST_SUCCEED);
+
+		disable_jmp();
 
 		if (xt_t->print)
 			xt_t->print(NULL, target, 1);
 	} else {
+		enable_jmp();
+
+		if ((err = setjmp(env_state)) != 0) {
+			DBG("setjmp() called by longjmp() with value %d", err);
+			disable_jmp();
+			return;
+		}
+
 		xt_t = xtables_find_target(target->u.user.name, XTF_TRY_LOAD);
+
+		disable_jmp();
+
 		if (!xt_t) {
 			DBG("\ttarget %s", target->u.user.name);
 			return;
@@ -1937,6 +1979,7 @@ static void dump_match(struct connman_iptables_entry *entry)
 	struct xtables_match *xt_m;
 	struct xt_entry_match *match;
 	u_int16_t target_offset;
+	int err;
 
 	target_offset = iptables_entry_get_target_offset(entry);
 
@@ -1960,7 +2003,18 @@ static void dump_match(struct connman_iptables_entry *entry)
 	if (!strlen(match->u.user.name))
 		return;
 
+	enable_jmp();
+
+	if ((err = setjmp(env_state)) != 0) {
+		DBG("setjmp() called by longjmp() with value %d", err);
+		disable_jmp();
+		return;
+	}
+
 	xt_m = xtables_find_match(match->u.user.name, XTF_TRY_LOAD, NULL);
+
+	disable_jmp();
+
 	if (!xt_m)
 		goto out;
 
@@ -2553,10 +2607,63 @@ static struct option iptables_opts[] = {
 	{NULL},
 };
 
+void iptables_exit(enum xtables_exittype status, const char *msg, ...)
+			__attribute__((noreturn, format(printf,2,3)));
+
+void iptables_exit(enum xtables_exittype status, const char *msg, ...)
+{
+	va_list args;
+	gchar str[256] = { 0 };
+
+	switch (status) {
+	case OTHER_PROBLEM:
+		DBG("OTHER_PROBLEM");
+		break;
+	case PARAMETER_PROBLEM:
+		DBG("PARAMETER_PROBLEM");
+		break;
+	case VERSION_PROBLEM:
+		DBG("VERSION_PROBLEM");
+		break;
+	case RESOURCE_PROBLEM:
+		DBG("RESOURCE_PROBLEM");
+		break;
+	case XTF_ONLY_ONCE:
+		DBG("XTF_ONLY_ONCE");
+		break;
+	case XTF_NO_INVERT:
+		DBG("XTF_NO_INVERT");
+		break;
+	case XTF_BAD_VALUE:
+		DBG("XTF_BAD_VALUE");
+		break;
+	case XTF_ONE_ACTION:
+		DBG("XTF_ONE_ACTION");
+		break;
+	}
+
+	va_start(args, msg);
+	vsnprintf(str, 256, msg, args);
+	va_end(args);
+
+	connman_error("iptables rule error: %s", str);
+
+	if (can_jmp()) {
+		DBG("calling longjmp()");
+		 /* enum xtables_exittype begins from 1 */
+		longjmp(env_state, status);
+	}
+
+	connman_error("exit because of iptables error");
+
+	exit(status);
+}
+
 struct xtables_globals iptables_globals = {
 	.option_offset = 0,
 	.opts = iptables_opts,
 	.orig_opts = iptables_opts,
+	.exit_err = iptables_exit,
 #if XTABLES_VERSION_CODE > 10
 	.compat_rev = xtables_compatible_revision,
 #endif
@@ -2566,6 +2673,7 @@ struct xtables_globals ip6tables_globals = {
 	.option_offset = 0,
 	.opts = iptables_opts,
 	.orig_opts = iptables_opts,
+	.exit_err = iptables_exit,
 #if XTABLES_VERSION_CODE > 10
 	.compat_rev = xtables_compatible_revision,
 #endif
@@ -2578,6 +2686,7 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 	bool is_builtin, is_user_defined;
 	GList *chain_head = NULL;
 	size_t target_size;
+	int err;
 
 	is_builtin = false;
 	is_user_defined = false;
@@ -2595,11 +2704,21 @@ static struct xtables_target *prepare_target(struct connman_iptables *table,
 			is_user_defined = true;
 	}
 
+	enable_jmp();
+
+	if ((err = setjmp(env_state)) != 0) {
+		DBG("setjmp() called by longjmp() with value %d", err);
+		disable_jmp();
+		return NULL;
+	}
+
 	if (is_builtin || is_user_defined)
 		xt_t = xtables_find_target(get_standard_target(table->type),
 						XTF_LOAD_MUST_SUCCEED);
 	else 
 		xt_t = xtables_find_target(target_name, XTF_TRY_LOAD);
+
+	disable_jmp();
 
 	if (!xt_t)
 		return NULL;
@@ -2701,11 +2820,22 @@ static struct xtables_match *prepare_matches(struct connman_iptables *table,
 {
 	struct xtables_match *xt_m;
 	size_t match_size;
+	int err;
 
 	if (!table || !match_name)
 		return NULL;
 
+	enable_jmp();
+
+	if ((err = setjmp(env_state)) != 0) {
+		DBG("setjmp() called by longjmp() with value %d", err);
+		disable_jmp();
+		return NULL;
+	}
+
 	xt_m = xtables_find_match(match_name, XTF_LOAD_MUST_SUCCEED, xt_rm);
+
+	disable_jmp();
 
 	switch (table->type) {
 	case AF_INET:
@@ -2960,6 +3090,7 @@ static int parse_xt_modules(int c, bool invert,
 	struct xtables_rule_match *rm;
 	struct ipt_entry fw;
 	struct ip6t_entry fw6;
+	int err;
 
 	switch (ctx->type) {
 	case AF_INET:
@@ -3001,6 +3132,14 @@ static int parse_xt_modules(int c, bool invert,
 					+ XT_OPTION_OFFSET_SCALE)
 			continue;
 
+		enable_jmp();
+
+		if ((err = setjmp(env_state)) != 0) {
+			DBG("setjmp() called by longjmp() with value %d", err);
+			disable_jmp();
+			return -EINVAL;
+		}
+
 		switch (ctx->type) {
 		case AF_INET:
 			xtables_option_mpcall(c, ctx->argv, invert, m, &fw);
@@ -3009,6 +3148,8 @@ static int parse_xt_modules(int c, bool invert,
 			xtables_option_mpcall(c, ctx->argv, invert, m, &fw6);
 			break;
 		}
+
+		disable_jmp();
 	}
 
 	if (!ctx->xt_t)
@@ -3022,6 +3163,14 @@ static int parse_xt_modules(int c, bool invert,
 					+ XT_OPTION_OFFSET_SCALE)
 		return 0;
 
+	enable_jmp();
+
+	if ((err = setjmp(env_state)) != 0) {
+		DBG("setjmp() called by longjmp() with value %d", err);
+		disable_jmp();
+		return -EINVAL;
+	}
+
 	switch (ctx->type) {
 	case AF_INET:
 		xtables_option_tpcall(c, ctx->argv, invert, ctx->xt_t, &fw);
@@ -3031,18 +3180,42 @@ static int parse_xt_modules(int c, bool invert,
 		break;
 	}
 
+	disable_jmp();
+
 	return 0;
 }
 
 static int final_check_xt_modules(struct parse_context *ctx)
 {
 	struct xtables_rule_match *rm;
+	int err;
 
-	for (rm = ctx->xt_rm; rm; rm = rm->next)
+	for (rm = ctx->xt_rm; rm; rm = rm->next) {
+		enable_jmp();
+
+		if ((err = setjmp(env_state)) != 0) {
+			DBG("setjmp() called by longjmp() with value %d", err);
+			disable_jmp();
+			return -EINVAL;
+		}
+
 		xtables_option_mfcall(rm->match);
+
+		disable_jmp();
+	}
+
+	enable_jmp();
+
+	if ((err = setjmp(env_state)) != 0) {
+		DBG("setjmp() called by longjmp() with value %d", err);
+		disable_jmp();
+		return -EINVAL;
+	}
 
 	if (ctx->xt_t)
 		xtables_option_tfcall(ctx->xt_t);
+
+	disable_jmp();
 
 	return 0;
 }
@@ -3273,7 +3446,21 @@ static int parse_rule_spec(struct connman_iptables *table,
 
 			break;
 		case 'p':
+			enable_jmp();
+
+			if ((err = setjmp(env_state)) != 0) {
+				DBG("setjmp() called by longjmp() with value "
+							"%d", err);
+				disable_jmp();
+
+				/* Errors from parse_rule_spec are negative */
+				err = -EINVAL;
+				goto out;
+			}
+
 			ctx->proto = xtables_parse_protocol(optarg);
+
+			disable_jmp();
 
 			/*
 			 * If protocol was set add it to ipt_ip.
@@ -3323,6 +3510,8 @@ static int parse_rule_spec(struct connman_iptables *table,
 			err = parse_xt_modules(c, invert, ctx);
 			if (err == 1)
 				continue;
+			else if (err == -EINVAL)
+				goto out;
 
 			break;
 		}
