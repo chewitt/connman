@@ -65,6 +65,7 @@ tools/session-test
 tools/netlink-test
 unit/test-ippool
 unit/test-nat
+unit/test-iptables
 
 doc/*.bak
 doc/*.stamp

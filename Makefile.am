@@ -381,7 +381,8 @@ tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 if XTABLES
-noinst_PROGRAMS += tools/iptables-test tools/ip6tables-test tools/iptables-unit
+noinst_PROGRAMS += tools/iptables-test tools/ip6tables-test tools/iptables-unit \
+		   unit/test-iptables
 
 tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/iptables.c \
 				tools/iptables-test.c
@@ -399,6 +400,14 @@ tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c \
 		tools/iptables-unit.c
 tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ -ldl
+
+TESTS += unit/test-iptables
+
+unit_test_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
+unit_test_iptables_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
+			                                     unit/test-iptables.c src/iptables.c
+unit_test_iptables_LDADD = @GLIB_LIBS@ -ldl
+
 endif
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
