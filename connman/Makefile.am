@@ -139,7 +139,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
 			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
-			src/wakeup_timer.c src/jolla-stats.c src/fsid.c \
+			src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c \
 			src/sailfish_iptables_ext.c src/iptables-validate.c
 
@@ -154,6 +154,21 @@ src_connmand_wait_online_SOURCES = src/connmand-wait-online.c
 
 src_connmand_wait_online_LDADD = gdbus/libgdbus-internal.la \
 			@GLIB_LIBS@ @DBUS_LIBS@
+if SAILFISH_COUNTERS
+src_connmand_SOURCES += src/sailfish_datacounter.c \
+			src/sailfish_datacounter_dbus.c \
+			src/sailfish_datacounters.c \
+			src/sailfish_datacounters_dbus.c \
+			src/sailfish_datacounters_dbus_util.c \
+			src/sailfish_datacounters_util.c \
+			src/sailfish_datahistory.c \
+			src/sailfish_datahistory_dbus.c \
+			src/sailfish_datahistory_file.c \
+			src/sailfish_datahistory_memory.c \
+			src/sailfish_stats.c
+else
+src_connmand_SOURCES += src/jolla-stats.c
+endif
 
 if VPN
 vpn_plugin_LTLIBRARIES =
@@ -395,6 +410,66 @@ unit_test_sailfish_wakeup_timer_SOURCES = unit/test-sailfish_wakeup_timer.c \
 unit_test_sailfish_wakeup_timer_LDADD = @GLIB_LIBS@ -lrt -ldl
 noinst_PROGRAMS += unit/test-sailfish_wakeup_timer
 TESTS += unit/test-sailfish_wakeup_timer
+endif
+
+if SAILFISH_COUNTERS
+unit_test_sailfish_datacounter_CPPFLAGS = -I$(builddir)/src \
+	@GLIBUTIL_CFLAGS@ $(AM_CPPFLAGS)
+unit_test_sailfish_datacounter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+	-DSTATS_SHORT_WRITE_PERIOD_SEC=1 \
+	-DSTATS_LONG_WRITE_PERIOD_SEC=3 \
+	-Ddatacounters_time_now=test_time_now \
+	-Dgutil_time_notify_new=test_time_notify_new \
+	-Dgutil_time_notify_ref=test_time_notify_ref \
+	-Dgutil_time_notify_unref=test_time_notify_unref \
+	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
+	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
+unit_test_sailfish_datacounter_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ -ldl
+unit_test_sailfish_datacounter_SOURCES = unit/test-sailfish_datacounter.c \
+	unit/test_timenotify.c src/sailfish_datacounter.c \
+	src/sailfish_datacounters_util.c src/inotify.c src/storage.c \
+	src/wakeup_timer.c src/log.c $(backtrace_sources)
+noinst_PROGRAMS += unit/test-sailfish_datacounter
+TESTS += unit/test-sailfish_datacounter
+
+unit_test_sailfish_datacounters_CPPFLAGS = -I$(builddir)/src \
+	@GLIBUTIL_CFLAGS@ $(AM_CPPFLAGS)
+unit_test_sailfish_datacounters_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+	-Ddatacounters_time_now=test_time_now \
+	-Dgutil_time_notify_new=test_time_notify_new \
+	-Dgutil_time_notify_ref=test_time_notify_ref \
+	-Dgutil_time_notify_unref=test_time_notify_unref \
+	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
+	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
+unit_test_sailfish_datacounters_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ -ldl
+unit_test_sailfish_datacounters_SOURCES = unit/test-sailfish_datacounters.c \
+	unit/test_timenotify.c src/sailfish_datacounters.c \
+	src/sailfish_datacounter.c src/sailfish_datacounters_util.c \
+	src/inotify.c src/storage.c src/wakeup_timer.c src/log.c \
+	$(backtrace_sources)
+noinst_PROGRAMS += unit/test-sailfish_datacounters
+TESTS += unit/test-sailfish_datacounters
+
+unit_test_sailfish_datahistory_CPPFLAGS = -I$(builddir)/src \
+	@GLIBUTIL_CFLAGS@ $(AM_CPPFLAGS)
+unit_test_sailfish_datahistory_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+	-DSTATS_SHORT_WRITE_PERIOD_SEC=1 \
+	-DSTATS_LONG_WRITE_PERIOD_SEC=3 \
+	-Ddatacounters_time_now=test_time_now \
+	-Dgutil_time_notify_new=test_time_notify_new \
+	-Dgutil_time_notify_ref=test_time_notify_ref \
+	-Dgutil_time_notify_unref=test_time_notify_unref \
+	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
+	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
+unit_test_sailfish_datahistory_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ -ldl
+unit_test_sailfish_datahistory_SOURCES = unit/test-sailfish_datahistory.c \
+	unit/test_timenotify.c src/sailfish_datacounter.c \
+	src/sailfish_datacounters_util.c src/sailfish_datahistory.c \
+	src/sailfish_datahistory_memory.c src/sailfish_datahistory_file.c \
+	src/inotify.c src/storage.c src/wakeup_timer.c src/log.c \
+	$(backtrace_sources)
+noinst_PROGRAMS += unit/test-sailfish_datahistory
+TESTS += unit/test-sailfish_datahistory
 endif
 
 if WISPR

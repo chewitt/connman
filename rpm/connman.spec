@@ -126,6 +126,7 @@ Man pages for %{name}.
     --enable-sailfish-usb-tethering \
     --enable-sailfish-wifi \
     --enable-sailfish-access \
+    --enable-sailfish-counters \
     --enable-globalproxy \
     --disable-gadget \
     --with-systemdunitdir=/%{_lib}/systemd/system \
