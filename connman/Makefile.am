@@ -141,7 +141,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/jolla-stats.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c \
-			src/sailfish_iptables_ext.c
+			src/sailfish_iptables_ext.c src/iptables-validate.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -372,7 +372,8 @@ unit_test_firewall_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
 				@GLIB_CFLAGS@
 unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				src/inotify.c src/dbus.c src/error.c \
-				src/firewall.c unit/test-firewall.c
+				src/firewall.c src/iptables-validate.c \
+				unit/test-firewall.c
 unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 unit_test_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
@@ -470,8 +471,8 @@ tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
-		src/inotify.c src/iptables.c src/firewall.c \
-		src/nat.c tools/iptables-unit.c
+		src/inotify.c src/iptables.c src/firewall.c src/nat.c \
+		src/iptables-validate.c tools/iptables-unit.c
 tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
 

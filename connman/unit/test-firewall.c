@@ -86,6 +86,8 @@ enum configtype {
 	CONFIG_USE_POLICY = 	0x0100,
 	ACCESS_FAILURE = 	0x0200,
 	DIR_ACCESS_FAILURE =	0x0800,
+	CONFIG_ICMP_ONLY =	0x1000,
+	CONFIG_OPTIONS_ONLY =	0x2000,
 };
 
 static enum configtype global_config_type = GLOBAL_NOT_SET;
@@ -156,6 +158,12 @@ static void setup_test_params(enum configtype type)
 	
 	if (type & DIR_ACCESS_FAILURE)
 		DBG("DIR_ACCESS_FAILURE");
+
+	if (type & CONFIG_ICMP_ONLY)
+		DBG("CONFIG_ICMP_ONLY");
+
+	if (type & CONFIG_OPTIONS_ONLY)
+		DBG("CONFIG_OPTIONS_ONLY");
 
 	global_config_type = type;
 
@@ -1194,10 +1202,10 @@ gboolean g_file_get_contents(const gchar *filename, gchar **contents,
 }
 
 #define CHAINS_GEN4 3
-#define RULES_GEN4 (CHAINS_GEN4 + 45)
+#define RULES_GEN4 (CHAINS_GEN4 + 60)
 #define CHAINS_GEN6 3
-#define RULES_GEN6 (CHAINS_GEN6 + 47)
-#define RULES_ETH 14
+#define RULES_GEN6 (CHAINS_GEN6 + 62)
+#define RULES_ETH 17
 #define RULES_CEL 4
 #define RULES_TETH 7
 
@@ -1219,26 +1227,43 @@ static const char *general_input[] = {
 		/* Port switches with protocols */
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --sport 81 -j DROP",
-		"-p sctp -m sctp --destination-port 8088 -j LOG",
-		"-p dccp -m dccp --source-port 8188 -j QUEUE",
+		"-p sctp --destination-port 8088 -j LOG",
+		"-p dccp --destination-port 8188 -j QUEUE",
 		"-p tcp -m tcp --destination-port 993 --source-port 992 -j LOG",
 		"-p udp -m udp --destination-port 997 --sport 996 -j ACCEPT",
 		"-p udplite -m udplite --dport 999 --sport 998 -j REJECT",
-		"-p sctp -m sctp --dport 995 --source-port 994 -j DROP",
+		"-p sctp --dport 995 --source-port 994 -j DROP",
+		/* Port with services and their aliases */
+		"-p tcp -m tcp --dport smtp -j ACCEPT",
+		"-p tcp -m tcp --dport mail -j ACCEPT",
+		/* Port ranges */
+		"-p tcp -m multiport --dports 23,33,44 -j ACCEPT",
+		"-p tcp -m multiport --dports 33:44 -j ACCEPT",
+		"-p tcp -m multiport --dports 23,33:44 -j ACCEPT",
+		"-p tcp -m multiport --dports 35,33:44,40 -j ACCEPT",
+		"-p tcp -m multiport --dports 35,33:44,40:60 -j ACCEPT",
+		"-p tcp -m multiport --dports 23,http:https,100 -j ACCEPT",
+		"-p tcp -m multiport --dports ssh,telnet:http,9000 -j ACCEPT",
 		/* Conntrack */
 		"-p all -m conntrack --ctstate RELATED -j ACCEPT",
 		"-m conntrack --ctstate NEW,ESTABLISHED,RELATED -j LOG",
 		/* ICMP, using also negation */
 		"-p icmp -m icmp --icmp-type 8/0 -j DROP",
-		"-p ipv6-icmp -m ipv6-icmp --icmp-type 128/0 -j DROP",
+		"-p ipv6-icmp -m ipv6-icmp --icmpv6-type 128/0 -j DROP",
 		/* Protocols with number and text match are allowed */
 		"-p 6 -m tcp --dport 9898 -j ACCEPT",
-		"-p 6 -m 6 --dport https -j LOG", /* TODO should not pass */
+		"-p 132 --dport 6789 -j LOG",
 		"-p udp -m udp --sport telnet -j QUEUE",
 		/* Negations */
-		"-p tcp -m multiport --dports ! 67,68,69 -j ACCEPT",
-		"-p icmpv6 -m icmpv6 ! --icmp-type 128/0 -j DROP",
-		"-p ! udp -j ACCEPT",
+		"! -p tcp -m multiport --dports 67,68,69 -j ACCEPT",
+		"-p tcp ! -m multiport --dports 70,71 -j ACCEPT",
+		"-p icmpv6 -m icmpv6 ! --icmpv6-type 128/0 -j DROP",
+		"! -p udp ! -m udp ! --sport 23 -j ACCEPT",
+		/* Interfaces are allowed with general rules */
+		"-i eth0 -j ACCEPT",
+		"--in-interface rndis0 -j DROP",
+		"-i eth0 -o rndis0 -j ACCEPT",
+		"--in-interface eth0 --out-interface eth1 -j LOG",
 		 /* Treated as whitespace */
 		"#-p sctp --dport 69 -j REJECT",
 		NULL
@@ -1247,22 +1272,24 @@ static const char *general_output[] = {
 		/* Identical rules in different chains are allowed */
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --sport 81 -j DROP",
-		"-p sctp -m sctp --destination-port 8088 -j LOG",
-		"-p dccp -m dccp --source-port 8188 -j QUEUE",
+		"-p sctp --destination-port 8088 -j LOG",
+		"-p dccp --source-port 8188 -j QUEUE",
 		"-p tcp -m tcp --destination-port 993 --source-port 992 -j LOG",
 		"-p udp -m udp --destination-port 997 --sport 996 -j ACCEPT",
 		"-p udplite -m udplite --dport 999 --sport 998 -j REJECT",
-		"-p sctp -m sctp --dport 995 --source-port 994 -j DROP",
+		"-p sctp --dport 995 --source-port 994 -j DROP",
 		"-p icmp -m icmp --icmp-type 8/0 -j DROP", // +1 IPv4
 		"-p esp -j DROP",
 		"-p ah -j LOG",
 		"-p mh -j QUEUE", /* IPv6 only */
 		"#-p sctp --sport 123 -j REJECT",
+		/* Interfaces going out */
+		"-o eth1 -j ACCEPT",
+		"-o usb0 -j DROP",
+		"--out-interface eth1 -j ACCEPT",
 		NULL
 };
 static const char *general_forward[] = {
-		"-p tcp -m tcp -j ACCEPT",
-		"-p udp -m udp -j DROP",
 		"-p all -m conntrack --ctstate RELATED,ESTABLISHED,NEW -j DROP",
 		"-m ttl --ttl-eq 60 -j LOG", // +1 IPv4
 		/* Basic targets */
@@ -1280,24 +1307,24 @@ static const char *eth_input[] = {
 		/* Multiport with switches */
 		"-p tcp -m tcp --dport 8080 -j ACCEPT",
 		"-p udp -m udp --destination-port 8081 -j DROP",
-		"-p tcp -m multiport --dports 22,23 --sports 10:1000 -j ACCEPT",
+		"-p tcp -m multiport --dports 22,23 -j ACCEPT",
 		"-p tcp -m multiport --dports 8080:10000 -j ACCEPT",
 		"-p udp -m multiport --dports 808,100,123,555,12345 -j DROP",
-		"-p sctp -m multiport --dports 6999 --sports 200:300 -j LOG",
-		"-p sctp -m multiport --destination-ports 69:100 "
-					"--sports 100,200 -j REJECT",
-		"-p tcp -m multiport --dports 6060:50000 "
-					"--source-ports 23,24,45,65 -j LOG",
-		"-p udp -m multiport --destination-ports 1000:3000 "
-					"--source-ports 2000:4000 -j DROP",
+		"-p sctp -m multiport --sports 200:300 -j LOG",
+		"-p sctp -m multiport --destination-ports 69:100 -j REJECT",
+		"-p tcp -m multiport --source-ports 23,24,45,65 -j LOG",
 		"-p tcp -m multiport --port 9999 -j LOG",
 		"-p tcp -m multiport --ports 9999,10000 -j QUEUE",
+		"-p tcp -m multiport --dport 6789 -j ACCEPT",
+		"-p tcp -m multiport --sport 6789 -j DROP",
+		"-p tcp -m multiport --destination-port 6789 -j LOG",
+		"-p tcp -m multiport --source-port 6789 -j QUEUE",
 		NULL
 };
 static const char *eth_output[] = {
 		"-p tcp -m tcp --sport 8080 -j ACCEPT",
 		"-p udp -m udp --source-port 8081 -j DROP",
-		"-p sctp -m sctp --sport 123 -j REJECT",
+		"-p sctp --sport 123 -j REJECT",
 		NULL
 };
 static const char *cellular_input[] = {
@@ -1331,18 +1358,436 @@ static const char *tethering_output[] = {
 		NULL
 };
 
+static const char *tethering_input_invalid[] = {
+		"-p tcp -m tcp --dport 53 -j ACCEPT", // Double
+		"-p tcp -m udp -j LOG", // Invalid rule
+		NULL
+};
+
+#define RULES_ICMP4 47 // 46 + 1 managed chain
+#define RULES_ICMP6 37 // 36 + 1 managed chain
+
+/* ICMP RULES */
+static const char *general_icmpv4[] = {
+	"-p icmp -m icmp --icmp-type any -j ACCEPT",
+	"-p icmp -m icmp --icmp-type echo-reply -j ACCEPT",
+	"-p icmp -m icmp --icmp-type destination-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type network-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type host-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type protocol-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type port-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type fragmentation-needed -j ACCEPT",
+	"-p icmp -m icmp --icmp-type source-route-failed -j ACCEPT",
+	"-p icmp -m icmp --icmp-type network-unknown -j ACCEPT",
+	"-p icmp -m icmp --icmp-type host-unknown -j ACCEPT",
+	"-p icmp -m icmp --icmp-type network-prohibited -j ACCEPT",
+	"-p icmp -m icmp --icmp-type host-prohibited -j ACCEPT",
+	"-p icmp -m icmp --icmp-type TOS-network-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type TOS-host-unreachable -j ACCEPT",
+	"-p icmp -m icmp --icmp-type communication-prohibited -j ACCEPT",
+	"-p icmp -m icmp --icmp-type host-precedence-violation -j ACCEPT",
+	"-p icmp -m icmp --icmp-type precedence-cutoff -j ACCEPT",
+	"-p icmp -m icmp --icmp-type source-quench -j ACCEPT",
+	"-p icmp -m icmp --icmp-type redirect -j ACCEPT",
+	"-p icmp -m icmp --icmp-type network-redirect -j ACCEPT",
+	"-p icmp -m icmp --icmp-type host-redirect -j ACCEPT",
+	"-p icmp -m icmp --icmp-type TOS-network-redirect -j ACCEPT",
+	"-p icmp -m icmp --icmp-type TOS-host-redirect -j ACCEPT",
+	"-p icmp -m icmp --icmp-type echo-request -j ACCEPT",
+	"-p icmp -m icmp --icmp-type router-advertisement -j ACCEPT",
+	"-p icmp -m icmp --icmp-type router-solicitation -j ACCEPT",
+	"-p icmp -m icmp --icmp-type time-exceeded -j ACCEPT",
+	"-p icmp -m icmp --icmp-type ttl-zero-during-transit -j ACCEPT",
+	"-p icmp -m icmp --icmp-type ttl-zero-during-reassembly -j ACCEPT",
+	"-p icmp -m icmp --icmp-type parameter-problem -j ACCEPT",
+	"-p icmp -m icmp --icmp-type ip-header-bad -j ACCEPT",
+	"-p icmp -m icmp --icmp-type required-option-missing -j ACCEPT",
+	"-p icmp -m icmp --icmp-type timestamp-request -j ACCEPT",
+	"-p icmp -m icmp --icmp-type timestamp-reply -j ACCEPT",
+	"-p icmp -m icmp --icmp-type address-mask-request -j ACCEPT",
+	"-p icmp -m icmp --icmp-type address-mask-reply -j ACCEPT",
+	/* Plain codes */
+	"-p icmp -m icmp --icmp-type 0 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 8 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 128 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 255 -j ACCEPT", /* 255 is max for type */
+	/* Code/type */
+	"-p icmp -m icmp --icmp-type 0/0 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 8/1 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 128/128 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 255/255 -j ACCEPT",
+	/* proto with number */
+	"-p 1 -m icmp --icmp-type echo-reply -j ACCEPT",
+	NULL,
+};
+
+static const char *general_icmpv6[] = {
+	"-p icmpv6 -m icmpv6 --icmpv6-type destination-unreachable -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type no-route -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type communication-prohibited -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type beyond-scope -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type address-unreachable -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type port-unreachable -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type failed-policy -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type reject-route -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type packet-too-big -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type time-exceeded -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type ttl-exceeded -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type ttl-zero-during-transit -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type ttl-zero-during-reassembly -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type parameter-problem -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type bad-header -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type unknown-header-type -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type unknown-option -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type echo-request -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type echo-reply -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type router-solicitation -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type router-advertisement -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type neighbour-solicitation -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type neighbour-advertisement -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type neighbor-solicitation -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type neighbor-advertisement -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type redirect -j ACCEPT",
+	/* Plain codes, mixed protos */
+	"-p ipv6-icmp -m icmpv6 --icmpv6-type 0 -j ACCEPT",
+	"-p ipv6-icmp -m icmpv6 --icmpv6-type 8 -j ACCEPT",
+	"-p icmpv6 -m ipv6-icmp --icmpv6-type 128 -j ACCEPT",
+	"-p icmpv6 -m ipv6-icmp --icmpv6-type 255 -j ACCEPT",
+	/* Code/type */
+	"-p ipv6-icmp -m ipv6-icmp --icmpv6-type 0/0 -j ACCEPT",
+	"-p ipv6-icmp -m ipv6-icmp --icmpv6-type 8/1 -j ACCEPT",
+	"-p ipv6-icmp -m ipv6-icmp --icmpv6-type 128/128 -j ACCEPT",
+	"-p ipv6-icmp -m ipv6-icmp --icmpv6-type 255/255 -j ACCEPT",
+	/* proto with number */
+	"-p 58 -m ipv6-icmp --icmpv6-type echo-reply -j ACCEPT",
+	"-p 58 -m icmpv6 --icmpv6-type echo-reply -j ACCEPT",
+	NULL
+};
+
+#define RULES_OPTIONS4 62 // +1 for chain
+#define RULES_OPTIONS6 59 // +1 for chain
+
+static const char *general_options[] = {
+	/* AH and ESP options */
+	"-p ah -m ah --ahspi 12 -j ACCEPT",
+	"-p ah -m ah --ahspi 12:34 -j ACCEPT",
+	"-p 51 -m ah --ahspi 122:334 -j ACCEPT",
+	"-p esp -m esp --espspi 14 -j ACCEPT",
+	"-p esp -m esp --espspi 14:45 -j ACCEPT",
+	"-p 50 -m esp --espspi 14:45 -j ACCEPT",
+	/* ECN options */
+	"-p tcp -m ecn --ecn-tcp-cwr -j ACCEPT",
+	"-p tcp -m ecn --ecn-tcp-ece -j ACCEPT",
+	"-p tcp -m ecn --ecn-ip-ect 0 -j ACCEPT",
+	"-p 6 -m ecn --ecn-ip-ect 3 -j ACCEPT",
+	/* helper options */
+	"-p tcp -m helper --helper irc -j ACCEPT",
+	"-p udp -m helper --helper telnet -j ACCEPT",
+	/* limit options */
+	"-p tcp -m limit --limit 10/sec -j ACCEPT",
+	"-p udp -m limit --limit 5/minute -j ACCEPT",
+	"-p sctp -m limit --limit 2/hour -j ACCEPT",
+	"-p dccp -m limit --limit 1/day -j ACCEPT",
+	"-p tcp -m limit --limit-burst 5 -j DROP",
+	"-p tcp -m limit --limit 6/minute --limit-burst 10 -j DROP",
+	/* pkttype options */
+	"-p tcp -m pkttype --pkt-type unicast -j ACCEPT",
+	"-p udp -m pkttype --pkt-type broadcast -j ACCEPT",
+	"-p tcp -m pkttype --pkt-type multicast -j ACCEPT",
+	/* ttl options, only for IPv4 as of now */
+	"-p tcp -m ttl --ttl-eq 10 -j DROP",
+	"-p tcp -m ttl --ttl-lt 20 -j DROP",
+	"-p tcp -m ttl --ttl-gt 30 -j DROP",
+	/* dccp options */
+	"-p dccp --dccp-types REQUEST -j ACCEPT",
+	"-p dccp --dccp-types REQUEST,RESPONSE,DATA,ACK,DATAACK,CLOSEREQ,CLOSE,"
+				"RESET,SYNC,SYNCACK,INVALID -j ACCEPT",
+	"-p dccp --dccp-option 12 -j DROP",
+	"-p 33 --dccp-types DATA -j ACCEPT",
+	/* conntrack options */
+	"-m conntrack --ctstate NEW,INVALID,ESTABLISHED,RELATED,UNTRACKED,"
+				"SNAT,DNAT -j ACCEPT",
+	"-m conntrack --ctproto tcp -j ACCEPT",
+	"-m conntrack --ctproto 6 -j ACCEPT",
+	"-m conntrack --ctproto all -j ACCEPT",
+	"-m conntrack --ctorigsrcport 22 -j ACCEPT",
+	"-m conntrack --ctorigsrcport ssh -j ACCEPT",
+	"-m conntrack --ctorigdstport 22 -j ACCEPT",
+	"-m conntrack --ctorigdstport ssh -j ACCEPT",
+	"-m conntrack --ctreplsrcport 2222 -j ACCEPT",
+	"-m conntrack --ctreplsrcport ssh -j ACCEPT",
+	"-m conntrack --ctrepldstport 22 -j ACCEPT",
+	"-m conntrack --ctrepldstport ssh -j ACCEPT",
+	"-m conntrack --ctstatus NONE -j ACCEPT",
+	"-m conntrack --ctstatus NONE,EXPECTED,SEEN_REPLY,ASSURED,CONFIRMED"
+				" -j ACCEPT",
+	"-m conntrack --ctexpire 20 -j ACCEPT",
+	"-m conntrack --ctexpire 21:33 -j ACCEPT",
+	"-m conntrack --ctdir ORIGINAL -j DROP",
+	"-m conntrack --ctdir REPLY -j DROP",
+	/* mark options */
+	"-m mark --mark 1 -j ACCEPT",
+	"-m mark --mark 0x01 -j DROP",
+	"-m mark --mark 1/2 -j ACCEPT",
+	"-m mark --mark 0x01/0x30 -j DROP",
+	"-p tcp -m mark --mark 0xffff -j ACCEPT",
+	"-p tcp -m mark --mark 0xDEAD -j ACCEPT",
+	/* tcp options */
+	"-p tcp -m tcp --tcp-flags SYN URG -j DROP",
+	"-p tcp -m tcp --tcp-flags SYN,ACK,FIN,RST,URG,PSH,ALL,NONE "
+				"SYN,ACK,FIN,RST,URG,PSH,ALL,NONE -j DROP",
+	"-p tcp -m tcp --syn -j ACCEPT",
+	"-p 6 -m tcp --tcp-option 45 -j DROP",
+	/* Long versions of options */
+	"--protocol tcp -m tcp --dport 45 -j ACCEPT",
+	"--protocol tcp --match tcp --dport 55 -j DROP",
+	"-p tcp --match tcp --dport 56 -j LOG",
+	"-p tcp -m tcp --dport 66 --jump QUEUE",
+	"--protocol tcp --match tcp --dport 5555 --jump DROP",
+	NULL
+};
+
+static const char *invalid_general_options[] = {
+	/* AH and ESP options */
+	"-p ah -m ah --ahspi 12-34 -j ACCEPT",
+	"-p 50 -m ah --ahspi 12:34 -j ACCEPT",
+	"-p mh -m ah --ahspi 12 -j ACCEPT",
+	"-p ah -m tcp --ahspi 12:34 -j ACCEPT",
+	"-p ah -m ah --ahspi -j ACCEPT",
+	"-p ah -m ah --ahspi spi -j ACCEPT",
+	"-p ah -m ah --ahspi spi:45 -j ACCEPT",
+	"-p ah -m ah --ahspi spi:ips -j ACCEPT",
+	"-p esp -m esp --espspi 14-45 -j ACCEPT",
+	"-p tcp -m esp --espspi 14 -j ACCEPT",
+	"-p 51 -m esp --espspi 14 -j ACCEPT",
+	"-p esp -m udp --espspi 14:45 -j ACCEPT",
+	"-p esp -m esp --espspi -j ACCEPT",
+	"-p esp -m esp --espspi spi -j ACCEPT",
+	"-p esp -m esp --espspi spi:14 -j ACCEPT",
+	"-p esp -m esp --espspi spi:ips -j ACCEPT",
+	/* ECN options */
+	"-p 17 -m ecn --ecn-tcp-cwr -j ACCEPT",
+	"-p udp -m ecn --ecn-tcp-ece -j ACCEPT",
+	"-p all -m ecn --ecn-ip-ect 0 -j ACCEPT",
+	"-p ecn -m ecn --ecn-ip-ect 3 -j ACCEPT",
+	"-p tcp -m ecn --ecn-ip-ect -1 -j ACCEPT",
+	"-p tcp -m ecn --ecn-ip-ect 4 -j ACCEPT",
+	"-p tcp -m tcp --ecn-ip-ect 1 -j ACCEPT",
+	/* helper options */
+	"-p tcp -m tcp --helper irc -j ACCEPT",
+	/* limit options */
+	"-p tcp -m tcp --limit 10/sec -j ACCEPT",
+	"-p tcp -m tcp --limit-burst 5 -j DROP",
+	"-p tcp -m tcp --limit 6/minute --limit-burst 10 -j DROP",
+	"-p tcp -m limit --limit none -j ACCEPT",
+	"-p tcp -m limit --limit 10/year -j ACCEPT",
+	"-p tcp -m limit --limit ten/sec -j ACCEPT",
+	"-p tcp -m limit --limit-burst ten -j ACCEPT",
+	/* pkttype options */
+	"-p tcp -m tcp --pkt-type unicast -j ACCEPT",
+	"-p udp -m tcp --pkt-type broadcast -j ACCEPT",
+	"-p tcp -m tcp --pkt-type multicast -j ACCEPT",
+	"-p tcp -m pkttype --pkttype singlecast -j ACCEPT",
+	/* ttl options, only for IPv4 */
+	"-p tcp -m ttl --ttl-eq ten -j DROP",
+	"-p tcp -m ttl --ttl-lt ten -j DROP",
+	"-p tcp -m ttl --ttl-gt ten -j DROP",
+	/* dccp options */
+	"-p dccp --dccp-types REQUESTED -j ACCEPT",
+	"-p dccp --dccp-types REQUEST,RESPONSE:DATA,ACK,DATAACK,CLOSEREQ,CLOSE,"
+				"RESET,SYNC,SYNCACK,INVALID -j ACCEPT",
+	"-p dccp --dccp-option DATA -j DROP",
+	/* conntrack options */
+	"-m conntrack --ctstate NEW;INVALID,ESTABLISHED,RELATED,UNTRACKED,"
+				"SNAT,DNAT -j ACCEPT",
+	"-m conntrack --ctstate UNVALID -j ACCEPT",
+	"-m conntrack --ctstate 12 -j ACCEPT",
+	"-m conntrack --ctproto tcplite -j ACCEPT",
+	"-m conntrack --ctproto 256 -j ACCEPT",
+	"-m conntrack --ctorigsrcport dummy -j ACCEPT",
+	"-p tcp -m tcp --ctorigdstport 22 -j ACCEPT",
+	"-p tcp -m tcp --ctorigdstport dummy -j ACCEPT",
+	"-m conntrack --ctreplsrcport 222222 -j ACCEPT",
+	"-m conntrack --ctreplsrcport ssha -j ACCEPT",
+	"-m conntrack --ctrepldstport 0 -j ACCEPT",
+	"-m conntrack --ctrepldstport sshd -j ACCEPT",
+	"-m conntrack --ctorigsrc 1.2.3.4 -j ACCEPT",
+	"-m conntrack --ctorigsrc connman.org -j ACCEPT",
+	"-m conntrack --ctorigdst 4.3.2.1 -j ACCEPT",
+	"-m conntrack --ctorigdst connman.org -j ACCEPT",
+	"-m conntrack --ctreplsrc 8.8.8.8 -j ACCEPT",
+	"-m conntrack --ctreplsrc connman.org -j ACCEPT",
+	"-m conntrack --ctrepldst 10.0.0.1 -j ACCEPT",
+	"-m conntrack --ctrepldst connman.org -j ACCEPT",
+	"-m conntrack --ctstatus NON -j ACCEPT",
+	"-m conntrack --ctstatus NONE:EXPECTED,SEEN_REPLY,ASSURED,CONFIRMED"
+				" -j ACCEPT",
+	"-m conntrack --ctexpire today -j ACCEPT",
+	"-m conntrack --ctexpire today:33 -j ACCEPT",
+	"-m conntrack --ctexpire today:tomorrow -j ACCEPT",
+	"-m conntrack --ctdir 1 -j DROP",
+	"-m conntrack --ctdir REPLYED -j DROP",
+	/* mark options */
+	"-p tcp -m tcp --mark 1 -j ACCEPT",
+	"-m mark --mark one -j ACCEPT",
+	"-m mark --mark 0xx01 -j DROP",
+	"-m mark --mark one/2 -j ACCEPT",
+	"-m mark --mark 2/three -j DROP",
+	"-m mark --mark 0xDEADBEEFY -j QUEUE",
+	/* tcp options */
+	"-p udp -m tcp --tcp-flags SYN URG -j DROP",
+	"-p tcp -m sctp --tcp-flags SYN URG -j DROP",
+	"-p tcp -m tcp --tcp-flags SYNC URGENT -j DROP",
+	"-p tcp -m tcp --tcp-flags SYNC URG -j DROP",
+	"-p tcp -m tcp --tcp-flags SYN URGENT -j DROP",
+	"-p tcp -m tcp --tcp-flags SYN SYN:ACK,FIN -j DROP",
+	"-p tcp -m tcp --tcp-flags SYN:ACK,FIN,RST,URG,PSH,ALL,NONE "
+				"SYN;ACK,FIN,RST,URG,PSH,ALL,NONE -j DROP",
+	"-m tcp --syn -j ACCEPT",
+	"-p tcp -m tcp --tcp-option option45 -j DROP",
+	"-p 50 -m tcp --tcp-option 45 -j DROP",
+	/* disabled mh options */
+	"-p mh -m mh --mh-type 1 -j ACCEPT",
+	"-p mobility-header -m mh --mh-type 2 -j ACCEPT",
+	"-p 135 -m mh --mh-type 3 -j DROP",
+	"-p mh --mh-type 1 -j ACCEPT",
+	"-p mobility-header --mh-type 2 -j ACCEPT",
+	"-p 135 --mh-type 3 -j DROP",
+	/* disabled sctp options */
+	"-p sctp -m sctp --chunk-types all SACK -j DROP",
+	"-p sctp -m sctp --chunk-types any DATA:Be,INIT -j DROP",
+	"-p 132 -m sctp --chunk-types only SHUTDOWN_COMPLETE:T,DATA:Bi -j DROP",
+	"-p sctp --chunk-types all SACK -j DROP",
+	"-p sctp --chunk-types any DATA:Be,INIT -j DROP",
+	"-p 132 --chunk-types only SHUTDOWN_COMPLETE:T,DATA:Bi -j DROP",
+	/* port switches defined twice */
+	"-p tcp -m tcp --dport 34 --destination-port 44 -j ACCEPT",
+	"-p tcp -m tcp --destination-port 44 --dport 34 -j ACCEPT",
+	"-p tcp -m tcp --sport 34 --source-port 44 -j ACCEPT",
+	"-p tcp -m tcp --source-port 44 --sport 34 -j ACCEPT",
+	/* multiport switches */
+	"-p tcp -m multiport --dports 22,23 --sports 10:1000 -j ACCEPT",
+	"-p sctp -m multiport --dports 6999 --sports 200:300 -j LOG",
+	"-p sctp -m multiport --destination-ports 69:100 "
+				"--sports 100,200 -j REJECT",
+	"-p tcp -m multiport --dports 6060:50000 "
+				"--source-ports 23,24,45,65 -j LOG",
+	"-p udp -m multiport --destination-ports 1000:3000 "
+				"--source-ports 2000:4000 -j DROP",
+	"-p tcp -m multiport --dports 34 --destination-port 44 -j ACCEPT",
+	"-p tcp -m multiport --dports 34 --destination-ports 44 -j ACCEPT",
+	"-p tcp -m multiport --dports 34 --dports 44 -j ACCEPT",
+	"-p tcp -m multiport --dports 34 --dport 44 -j ACCEPT",
+	"-p tcp -m multiport --dports 34 --ports 44 -j ACCEPT",
+	"-p tcp -m multiport --dports 34 --port 44 -j ACCEPT",
+	"-p tcp -m multiport --destination-ports 34 --destination-port 44 "
+				"-j ACCEPT",
+	"-p tcp -m multiport --destination-ports 34 --destination-ports 44 "
+				"-j ACCEPT",
+	"-p tcp -m multiport --destination-ports 34 --dports 44 -j ACCEPT",
+	"-p tcp -m multiport --destination-ports 34 --dport 44 -j ACCEPT",
+	"-p tcp -m multiport --destination-ports 34 --ports 44 -j ACCEPT",
+	"-p tcp -m multiport --destination-ports 34 --port 44 -j ACCEPT",
+	"-p tcp -m multiport --sports 34 --source-port 44 -j ACCEPT",
+	"-p tcp -m multiport --sports 34 --source-ports 44 -j ACCEPT",
+	"-p tcp -m multiport --sports 34 --sports 44 -j ACCEPT",
+	"-p tcp -m multiport --sports 34 --sport 44 -j ACCEPT",
+	"-p tcp -m multiport --sports 34 --ports 44 -j ACCEPT",
+	"-p tcp -m multiport --sports 34 --port 44 -j ACCEPT",
+	"-p tcp -m multiport --source-ports 34 --source-port 44 -j ACCEPT",
+	"-p tcp -m multiport --source-ports 34 --source-ports 44 -j ACCEPT",
+	"-p tcp -m multiport --source-ports 34 --sports 44 -j ACCEPT",
+	"-p tcp -m multiport --source-ports 34 --sport 44 -j ACCEPT",
+	"-p tcp -m multiport --source-ports 34 --ports 44 -j ACCEPT",
+	"-p tcp -m multiport --source-ports 34 --port 44 -j ACCEPT",
+	"-p tcp -m multiport --port 34 --port 44 -j ACCEPT",
+	"-p tcp -m multiport --ports 44 --port 34 -j ACCEPT",
+	"-p tcp -m multiport --ports 34 --ports 44 -j ACCEPT",
+	"-p tcp -m multiport --port 44 --ports 34 -j ACCEPT",
+	/* Port ranges not valid for single port switches */
+	"-p tcp -m tcp --dport 34,35 -j ACCEPT",
+	"-p tcp -m tcp --sport 34:35 -j ACCEPT",
+	"-p tcp -m tcp --sport telnet:35 -j ACCEPT",
+	"-p tcp -m tcp --sport ssh,http -j ACCEPT",
+	/* Port ranges */
+	"-p tcp -m multiport --dports 44:44 -j ACCEPT",
+	"-p tcp -m multiport --dports 44:,56 -j ACCEPT",
+	"-p tcp -m multiport --dports ssh:,55 -j ACCEPT",
+	"-p tcp -m multiport --dports 22,ssh:,55 -j ACCEPT",
+	"-p tcp -m multiport --dports 22,sshd:55 -j ACCEPT",
+	"-p tcp -m multiport --dports 22a,ssh:55 -j ACCEPT",
+	"-p tcp -m multiport --dports 46:44 -j ACCEPT",
+	"-p tcp -m multiport --dports 23:45:80 -j ACCEPT",
+	"-p tcp -m multiport --dports 35,44:40,40 -j ACCEPT",
+	"-p tcp -m multiport --dports https:http -j ACCEPT",
+	"-p tcp -m multiport --dports https:50 -j ACCEPT",
+	"-p tcp -m multiport --dports 8000:http -j ACCEPT",
+	"-p tcp -m multiport --dports ssh,http:telnet,9000 -j ACCEPT",
+	"-p tcp -m multiport --dports ssh,http:telnet:http,9000 -j ACCEPT",
+	/* Invalid protocol for service name */
+	"-p tcp -m tcp --dport s1-control -j DROP", // SCTP service
+	"-p udp -m udp --sport rxapi -j ACCEPT",  // TCP service
+	/* rxapi = TCP, pim-port = TCP/SCTP, iadt-tls = TCP, lcs-ap = SCTP */
+	"-p udp -m multiport --dports rxapi,pim-port,iadt-tls:lcs-ap -j DROP",
+	/* Matches without options */
+	"-p tcp -m multiport -j ACCEPT",
+	"-p tcp -m tcp -m multiport -j DROP",
+	"-m tcp -j LOG",
+	/* Interfaces */
+	"-i eth0 -i eth1 -j DROP",
+	"-i eth0 -o eth1 -i rndis0 -j DROP",
+	"-o eth1 -i eth0 -o eth0 -j DROP",
+	"--in-interface eth0 --in-interface eth1 -j DROP",
+	"--in-interface eth1 -i eth0 -j DROP",
+	"--out-interface eth0 --out-interface eth0 -j DROP",
+	"--out-interface eth0 -o eth1 -j DROP",
+	"-i ! eth1 -j DROP",
+	"-i ! eth1 -o ! eth0 -j ACCEPT",
+	NULL
+};
+
 /* Main config with invalid rules */
 static const char *invalid_general_input[] = {
+		/* Match has to have options */
+		"-p tcp -m tcp -j ACCEPT",
+		"-p udp -m udp -j DROP",
+		/* Matches cannot be defined as protocol integers */
+		"-p 6 -m 6 --dport https -j LOG",
 		/* Only one target */
 		"-p tcp -m tcp --dport 80 -j ACCEPT -j DROP",
 		/* Protocol omitted */
 		"udp -m udp --dport 81 -j DROP",
+		/* -m sctp is not supported */
+		"-p sctp -m sctp --dport 5678 -j ACCEPT",
+		/* -m mh is not supported */
+		"-p mh -m mh -j ACCEPT",
+		"-p mh -m mh --mh-type binding-refresh-request -j LOG",
+		"-p mh -m mh --mh-type cot:be -j DROP",
+		/* -m dccp is not supported */
+		"-p dccp -m dccp --source-port 8188 -j QUEUE",
 		/* One protocol only */
 		"-p tcp -p all -m conntrack --ctstate RELATED -j ACCEPT",
 		/* State is disabled */
 		"-p tcp -m state --state NEW -j ACCEPT",
 		/* Comment is disabled, TODO lone --comment must be disabled */
 		"-p tcp -m tcp --dport 22 -j ACCEPT -m comment --comment test",
+		/* ICMP v4*/
+		"-p icmp -m icmpv6 --icmp-type 8 -j ACCEPT",
+		"-p icmp -m icmp --icmp-type 8/ -j ACCEPT",
+		"-p icmp -m icmp --icmp-type 8/a -j ACCEPT",
+		"-p icmp -m icmp --icmp-type echo-reguest -j ACCEPT",
+		"-p icmp -m icmp --icmp-type 300 -j ACCEPT",
+		"-p icmp -m icmp --icmp-type 8/300 -j ACCEPT",
+		"-p icmp -m icmp --icmp-type 256/256 -j ACCEPT",
+		"-p icmp -m icmp --icmp-type 10000/10000 -j ACCEPT",
+		"-p icmp -m icmp --icmp-type -j ACCEPT",
+		"-p icmp -m icmp -j ACCEPT",
+		/* ICMP v6 */
+		"-p icmpv6 -m icmp --icmp-type 8 -j ACCEPT",
+		"-p icmpv6 -m icmp --icmpv6-type 8 -j ACCEPT",
+		"-p icmpv6 -m icmpv6 --icmp-type 8 -j ACCEPT",
+		"-p ipv6-icmp -m icmpv6 --icmp-type tll-exceeded -j ACCEPT",
+		"-p ipv6-icmp -m icmpv6 --icmp-type /255 -j ACCEPT",
 		/* Source or destination modifiers are disabled */
 		"-p tcp -m tcp --dport 99 --source 192.168.1.1 -j DROP",
 		"-p tcp -m tcp --dport 99 --src 192.168.1.2 -j DROP",
@@ -1353,6 +1798,13 @@ static const char *invalid_general_input[] = {
 		"--source 1.2.3.4 --destination 4.3.2.1 -j ACCEPT",
 		"--src 1.2.3.4 --dst 4.3.2.1 -j ACCEPT",
 		"-d 1.2.3.4 -d 4.3.2.1 -j ACCEPT",
+		/* Invalid switches */
+		"-4 -p tcp -j ACCEPT",
+		"--ipv4 -p tcp -j ACCEPT",
+		"-6 -p tcp -j ACCEPT",
+		"--ipv6 -p tcp -j ACCEPT",
+		"-f -p udp -m udp --dport 45 -j DROP",
+		"--fragment -p udp -m udp --dport 45 -j DROP",
 		NULL
 };
 static const char *invalid_general_output[] = {
@@ -1371,14 +1823,18 @@ static const char *invalid_general_output[] = {
 		"-p tcp -m tcp -m multiport 45:8000 -j ACCEPT",
 		/* Clearly invalid */
 		"-p tcp -m",
-		/* Invalid port specifiers for multiport*/
-		"-p tcp -m multiport --dport 6789 -j ACCEPT"
-		"-p tcp -m multiport --sport 6789 -j DROP",
+		"-p  ",
+		"!",
+		"--portocol tcp -j ACCEPT",
+		"-p tcp --motch tcp -j DROP",
+		"--p tcp -m tcp -j LOG",
+		/* Empty port specifiers for multiport*/
+		"-p tcp -m multiport --dport -j ACCEPT",
+		"-p tcp -m multiport --sport -j DROP",
 		"-p tcp -m multiport --dports -j ACCEPT",
-		/* TODO FIX these in firewall.c */
-		/*"-p tcp -m multiport --destination-port 6789 -j LOG",
-		"-p tcp -m multiport --source-port 6789 -j QUEUE",
-		"-p tcp -m multiport --dport 6789 --sport 6788 -j REJECT",*/
+		"-p tcp -m multiport --destination-port -j LOG",
+		"-p tcp -m multiport --source-port -j QUEUE",
+		"-p tcp -m multiport --dport --sport  -j REJECT",
 		NULL
 };
 static const char *invalid_general_forward[] = {
@@ -1392,6 +1848,10 @@ static const char *invalid_general_forward[] = {
 		"-p tcp -m multiport -m tcp --dports 555:666 -j ACCEPT",
 		/* No protocol */
 		"-p -j DROP",
+		/* Invalid targets */
+		"-p tcp -j DORP",
+		"-p tcp -j connman-INPUT",
+		"-p tcp -j own-table-name",
 		NULL
 };
 static const char *invalid_eth_input[] = {
@@ -1698,6 +2158,41 @@ static gboolean setup_main_config(GKeyFile *config)
 					general_policies_fail[2]);
 	}
 
+	if (global_config_type & CONFIG_ICMP_ONLY) {
+		g_key_file_set_string_list(config, "General",
+					"IPv4.INPUT.RULES",
+					general_icmpv4,
+					g_strv_length((char**)general_icmpv4));
+		g_key_file_set_string_list(config, "General",
+					"IPv6.INPUT.RULES",
+					general_icmpv6,
+					g_strv_length((char**)general_icmpv6));
+	}
+
+	if (global_config_type & CONFIG_OPTIONS_ONLY) {
+		if (global_config_type & CONFIG_INVALID) {
+			g_key_file_set_string_list(config, "General",
+					"IPv4.INPUT.RULES",
+					invalid_general_options,
+					g_strv_length(
+					(char**)invalid_general_options));
+			g_key_file_set_string_list(config, "General",
+					"IPv6.INPUT.RULES",
+					invalid_general_options,
+					g_strv_length(
+					(char**)invalid_general_options));
+		} else {
+			g_key_file_set_string_list(config, "General",
+					"IPv4.INPUT.RULES",
+					general_options,
+					g_strv_length((char**)general_options));
+			g_key_file_set_string_list(config, "General",
+					"IPv6.INPUT.RULES",
+					general_options,
+					g_strv_length((char**)general_options));
+		}
+	}
+
 	return TRUE;
 }
 
@@ -1710,7 +2205,7 @@ static gboolean setup_main_config(GKeyFile *config)
 static const char *cel_input_add0[] = {
 			"-p udp -m udp --dport 12000 -j LOG",
 			"-p tcp -m tcp --dport 12001 -j QUEUE",
-			"-p dccp -m dccp --dport 12002 -j REJECT",
+			"-p dccp --dport 12002 -j REJECT",
 			NULL,
 };
 
@@ -1749,7 +2244,7 @@ static const char *input_fail2[] = {
 
 // Ethernet
 static const char *eth_input_add3[] = {
-			"-p dccp -m dccp --sport 34 --dport 55 -j ACCEPT",
+			"-p dccp --sport 34 --dport 55 -j ACCEPT",
 			"-p dccp -m multiport --ports 56:67 -j DROP",
 			"-p all -m conntrack --ctstate NEW -j ACCEPT",
 			NULL,
@@ -1817,17 +2312,32 @@ gboolean setup_config(GKeyFile *config, int config_index)
 
 	if (global_config_type & CONFIG_INVALID ||
 				global_config_type & CONFIG_MIXED) {
-		DBG("invalid or mixed");
-		g_key_file_set_string_list(config, config_group,
+		/* Add invalid tethering rules */
+		if (global_config_type & CONFIG_TETHERING) {
+			DBG("invalid tethering rules");
+			g_key_file_set_string_list(config, "tethering",
+					"IPv4.OUTPUT.RULES",
+					tethering_input_invalid,
+					g_strv_length(
+					(char**)tethering_input_invalid));
+			g_key_file_set_string_list(config, "tethering",
+					"IPv6.OUTPUT.RULES",
+					tethering_input_invalid,
+					g_strv_length(
+					(char**)tethering_input_invalid));
+		} else {
+			DBG("invalid or mixed");
+			g_key_file_set_string_list(config, config_group,
 					"IPv4.OUTPUT.RULES",
 					input_fail_rules[config_index],
 					g_strv_length(
 					(char**)input_fail_rules[config_index]));
-		g_key_file_set_string_list(config, config_group,
+			g_key_file_set_string_list(config, config_group,
 					"IPv6.OUTPUT.RULES",
 					input_fail_rules[config_index],
 					g_strv_length(
 					(char**)input_fail_rules[config_index]));
+		}
 	}
 
 	g_free(config_group);
@@ -2033,7 +2543,7 @@ static void assert_rule_not_exists(int type, const char *table,
 typedef  void (*assert_cb_t)(int type, const char *table, const char *chain,
 			const char *rule_spec, const char *device);
 
-static void check_rules(assert_cb_t cb, const char **rules[],
+static void check_rules(assert_cb_t cb, int type, const char **rules[],
 			const char *ifname)
 {
 	int i, j;
@@ -2043,10 +2553,13 @@ static void check_rules(assert_cb_t cb, const char **rules[],
 			continue;
 
 		for (i = 0; rules[j][i]; i++) {
-			cb(AF_INET, "filter", connman_chains[j], rules[j][i],
-						ifname);
-			cb(AF_INET6, "filter", connman_chains[j], rules[j][i],
-						ifname);
+			if (!type || type == AF_INET)
+				cb(AF_INET, "filter", connman_chains[j],
+						rules[j][i], ifname);
+
+			if (!type || type == AF_INET6)
+				cb(AF_INET6, "filter", connman_chains[j],
+						rules[j][i], ifname);
 		}
 	}
 }
@@ -2061,9 +2574,9 @@ static void check_main_config_rules()
 	const char **eth_rules_all[] = {eth_input, NULL, eth_output};
 	const char **cel_rules_all[] = {cellular_input, NULL, cellular_output};
 
-	check_rules(assert_rule_exists, general_rules_all, NULL);
-	check_rules(assert_rule_not_exists, eth_rules_all, NULL);
-	check_rules(assert_rule_not_exists, cel_rules_all, NULL);
+	check_rules(assert_rule_exists, 0, general_rules_all, NULL);
+	check_rules(assert_rule_not_exists, 0, eth_rules_all, NULL);
+	check_rules(assert_rule_not_exists, 0, cel_rules_all, NULL);
 }
 
 static void check_default_policies(const char *policies[])
@@ -2100,6 +2613,8 @@ static void firewall_test_basic0()
 	g_assert(__connman_firewall_is_up());
 
 	g_assert_cmpint(__connman_firewall_disable(ctx), ==, 0);
+
+	__connman_firewall_destroy(ctx);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -2148,6 +2663,7 @@ static void firewall_test_basic1()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 6);
 
 	g_assert(__connman_firewall_disable(ctx) == 0);
+	__connman_firewall_destroy(ctx);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
@@ -2246,6 +2762,7 @@ static void firewall_test_basic2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
 	g_assert(__connman_firewall_disable(ctx) == 0);
+	__connman_firewall_destroy(ctx);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
@@ -2424,6 +2941,56 @@ static void firewall_test_all_config_duplicates1()
 	__connman_iptables_cleanup();
 }
 
+static void firewall_test_icmp_config_ok0()
+{
+	const char **icmpv4_rules[] = { general_icmpv4, NULL, NULL};
+	const char **icmpv6_rules[] = { general_icmpv6, NULL, NULL};
+
+	setup_test_params(CONFIG_ICMP_ONLY);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_ICMP4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_ICMP6);
+
+	check_rules(assert_rule_exists, AF_INET, icmpv4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET6, icmpv6_rules, NULL);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+static void firewall_test_options_config_ok0()
+{
+	const char **opt4_rules[] = { general_options, NULL, NULL};
+	const char **opt6_rules[] = { general_options, NULL, NULL};
+
+	setup_test_params(CONFIG_OPTIONS_ONLY);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_OPTIONS4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_OPTIONS6);
+
+	check_rules(assert_rule_exists, AF_INET, opt4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET6, opt6_rules, NULL);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
 static void firewall_test_main_config_fail0()
 {
 	setup_test_params(CONFIG_INVALID); // Rules that are invalid
@@ -2514,6 +3081,28 @@ static void firewall_test_all_config_fail0()
 	__connman_iptables_cleanup();
 }
 
+static void firewall_test_options_config_fail0()
+{
+	const char **opt4_rules[] = { invalid_general_options, NULL, NULL};
+	const char **opt6_rules[] = { invalid_general_options, NULL, NULL};
+
+	setup_test_params(CONFIG_OPTIONS_ONLY|CONFIG_INVALID);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	check_rules(assert_rule_not_exists, AF_INET, opt4_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET6, opt6_rules, NULL);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	__connman_iptables_cleanup();
+}
+
 /* One service to ready, online and off */
 static void firewall_test_dynamic_ok0()
 {
@@ -2541,22 +3130,21 @@ static void firewall_test_dynamic_ok0()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_ONLINE);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_ETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
-	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	g_free(ifname);
 
@@ -2599,7 +3187,7 @@ static void firewall_test_dynamic_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -2612,7 +3200,7 @@ static void firewall_test_dynamic_ok1()
 				RULES_GEN6 + RULES_ETH + RULES_CEL);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
 
 	// Disable ethernet test service
 	test_service.state = test_service2.state =
@@ -2623,7 +3211,7 @@ static void firewall_test_dynamic_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_CEL);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_CEL);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -2631,7 +3219,7 @@ static void firewall_test_dynamic_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
 
 	g_free(ifname);
 	g_free(ifname2);
@@ -2677,7 +3265,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 1 );
 
 	ifname = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -2685,7 +3273,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	// Re-enable
 	test_technology.enabled = true;
@@ -2695,7 +3283,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 1 );
 
 	ifname = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -2703,7 +3291,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	__connman_firewall_pre_cleanup();
 
@@ -2747,8 +3335,8 @@ static void firewall_test_dynamic_ok3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_TETH);
 
 	ifname = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, tethering_rules, ifname);
-	check_rules(assert_rule_not_exists, not_exist_rules, ifname);
+	check_rules(assert_rule_exists, 0, tethering_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, not_exist_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -2756,7 +3344,7 @@ static void firewall_test_dynamic_ok3()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, tethering_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, tethering_rules, ifname);
 
 	__connman_firewall_pre_cleanup();
 
@@ -2812,9 +3400,9 @@ static void firewall_test_dynamic_ok4()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
-	check_rules(assert_rule_exists, eth_add_rules1, ifname);
-	check_rules(assert_rule_exists, eth_add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, eth_add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, eth_add_rules3, ifname);
 
 	// Tethering on
 	test_technology.default_rules = false;
@@ -2827,8 +3415,8 @@ static void firewall_test_dynamic_ok4()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3 + RULES_TETH);
 
 	iftether = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, tethering_rules, iftether);
-	check_rules(assert_rule_not_exists, not_exist_rules, iftether);
+	check_rules(assert_rule_exists, 0, tethering_rules, iftether);
+	check_rules(assert_rule_not_exists, 0, not_exist_rules, iftether);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -2843,9 +3431,9 @@ static void firewall_test_dynamic_ok4()
 				RULES_CEL + RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, cel_rules, ifname2);
-	check_rules(assert_rule_exists, cel_add_rules0, ifname2);
-	check_rules(assert_rule_exists, cel_add_rules2, ifname2);
+	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, cel_add_rules0, ifname2);
+	check_rules(assert_rule_exists, 0, cel_add_rules2, ifname2);
 
 	// Disable ethernet test service
 	test_service.state = test_service2.state = CONNMAN_SERVICE_STATE_ONLINE;
@@ -2857,9 +3445,9 @@ static void firewall_test_dynamic_ok4()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_TETH +
 				RULES_CEL + RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, eth_add_rules1, ifname);
-	check_rules(assert_rule_not_exists, eth_add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_add_rules3, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -2867,9 +3455,9 @@ static void firewall_test_dynamic_ok4()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_TETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_TETH);
 
-	check_rules(assert_rule_not_exists, cel_rules, ifname2);
-	check_rules(assert_rule_not_exists, eth_add_rules1, ifname2);
-	check_rules(assert_rule_not_exists, eth_add_rules3, ifname2);
+	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, eth_add_rules1, ifname2);
+	check_rules(assert_rule_not_exists, 0, eth_add_rules3, ifname2);
 
 	// Disable tethering
 	firewall_notifier->tethering_changed(&test_technology, false);
@@ -2878,7 +3466,7 @@ static void firewall_test_dynamic_ok4()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, tethering_rules, iftether);
+	check_rules(assert_rule_not_exists, 0, tethering_rules, iftether);
 
 	g_free(ifname);
 	g_free(ifname2);
@@ -2920,7 +3508,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service3);
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	test_service3.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -2929,7 +3517,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	g_free(ifname);
 
@@ -2943,7 +3531,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service3);
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	test_service.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -2952,7 +3540,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	g_free(ifname);
 	g_free(test_service3.ifname);
@@ -3005,9 +3593,9 @@ static void firewall_test_dynamic_ok6()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
-	check_rules(assert_rule_exists, eth_add_rules1, ifname);
-	check_rules(assert_rule_exists, eth_add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, eth_add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, eth_add_rules3, ifname);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -3022,9 +3610,9 @@ static void firewall_test_dynamic_ok6()
 				RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, cel_rules, ifname2);
-	check_rules(assert_rule_exists, cel_add_rules0, ifname2);
-	check_rules(assert_rule_exists, cel_add_rules2, ifname2);
+	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, cel_add_rules0, ifname2);
+	check_rules(assert_rule_exists, 0, cel_add_rules2, ifname2);
 
 	// Disable ethernet test service
 	test_service.state = test_service2.state = CONNMAN_SERVICE_STATE_ONLINE;
@@ -3036,9 +3624,9 @@ static void firewall_test_dynamic_ok6()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_CEL +
 				RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, eth_add_rules1, ifname);
-	check_rules(assert_rule_not_exists, eth_add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_add_rules3, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -3046,9 +3634,9 @@ static void firewall_test_dynamic_ok6()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, cel_rules, ifname2);
-	check_rules(assert_rule_not_exists, cel_add_rules0, ifname2);
-	check_rules(assert_rule_not_exists, cel_add_rules2, ifname2);
+	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, cel_add_rules0, ifname2);
+	check_rules(assert_rule_not_exists, 0, cel_add_rules2, ifname2);
 
 	g_free(ifname);
 	g_free(ifname2);
@@ -3092,7 +3680,7 @@ static void firewall_test_dynamic_ok7()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -3105,7 +3693,7 @@ static void firewall_test_dynamic_ok7()
 				RULES_GEN6 + RULES_ETH + RULES_CEL);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
 
 	test_service2.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -3116,7 +3704,7 @@ static void firewall_test_dynamic_ok7()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_CEL);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_CEL);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -3124,7 +3712,7 @@ static void firewall_test_dynamic_ok7()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
 
 	// Remove disconnected
 	service_remove(&test_service2);
@@ -3140,6 +3728,51 @@ static void firewall_test_dynamic_ok7()
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Tethering with invalid rules also added */
+static void firewall_test_dynamic_ok8()
+{
+	const char **tethering_rules[] = { tethering_input, NULL, NULL};
+	const char *ifname;
+
+	setup_test_params(CONFIG_TETHERING|CONFIG_INVALID);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	// Tethering with custom rules, the rules are invalid
+	test_technology.default_rules = false;
+	test_technology.enabled = true;
+	firewall_notifier->tethering_changed(&test_technology, true);
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4 +
+				RULES_TETH);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6 +
+				RULES_TETH);
+
+	ifname = __connman_tethering_get_bridge();
+
+	/*
+	 * Check only valid rules, the tethering_input_invalid contains a
+	 * duplicate rule found in tethering_input.
+	 */
+	check_rules(assert_rule_exists, 0, tethering_rules, ifname);
+
+	firewall_notifier->tethering_changed(&test_technology, false);
+	test_technology.enabled = false;
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_firewall_pre_cleanup();
+
+	__connman_firewall_cleanup();
 
 	__connman_iptables_cleanup();
 }
@@ -3286,11 +3919,11 @@ static void firewall_test_config_reload2()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
 
 	g_free(ifname);
 
@@ -3336,7 +3969,7 @@ static void firewall_test_config_reload3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
 
 	test_service.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -3364,15 +3997,15 @@ static void firewall_test_config_reload3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH +
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
-	check_rules(assert_rule_exists, eth_rules, ifname);
-	check_rules(assert_rule_exists, add_rules1, ifname);
-	check_rules(assert_rule_exists, add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, add_rules3, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, add_rules1, ifname);
-	check_rules(assert_rule_not_exists, add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, add_rules3, ifname);
 
 	g_free(ifname);
 
@@ -3439,9 +4072,9 @@ static void firewall_test_config_reload4()
 				RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, eth_rules, ifname);
-	check_rules(assert_rule_exists, add_rules3, ifname);
-	check_rules(assert_rule_not_exists, add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, add_rules1, ifname);
 
 	test_service.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -3463,13 +4096,13 @@ static void firewall_test_config_reload4()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_ETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
-	check_rules(assert_rule_exists, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, add_rules1, ifname);
-	check_rules(assert_rule_not_exists, add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, add_rules3, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	check_rules(assert_rule_not_exists, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
 
 	g_free(ifname);
 	dbus_message_unref(msg);
@@ -3593,22 +4226,21 @@ static void firewall_test_notifier_fail0()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_ONLINE);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	g_free(ifname);
 
@@ -3697,14 +4329,14 @@ static void firewall_test_iptables_fail2()
 				RULES_ETH + RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	g_free(ifname);
 
@@ -3746,14 +4378,14 @@ static void firewall_test_iptables_fail3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
-	check_rules(assert_rule_not_exists, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
 
 	g_free(ifname);
 
@@ -3820,6 +4452,7 @@ int main (int argc, char *argv[])
 {
 	GOptionContext *context;
 	GError *error = NULL;
+	int ret;
 
 	g_test_init(&argc, &argv, NULL);
 
@@ -3839,6 +4472,7 @@ int main (int argc, char *argv[])
 
 	__connman_log_init(argv[0], option_debug, false, false,
 			"Unit Tests Connection Manager", VERSION);
+	__connman_iptables_validate_init();
 
 	g_test_add_func("/firewall/test_basic0", firewall_test_basic0);
 	g_test_add_func("/firewall/test_basic1", firewall_test_basic1);
@@ -3857,6 +4491,10 @@ int main (int argc, char *argv[])
 				firewall_test_all_config_duplicates0);
 	g_test_add_func("/firewall/test_all_config_duplicates1",
 				firewall_test_all_config_duplicates1);
+	g_test_add_func("/firewall/test_icmp_config_ok0",
+				firewall_test_icmp_config_ok0);
+	g_test_add_func("/firewall/test_options_config_ok0",
+				firewall_test_options_config_ok0);
 	g_test_add_func("/firewall/test_main_config_fail0",
 				firewall_test_main_config_fail0);
 	g_test_add_func("/firewall/test_main_config_fail1",
@@ -3865,6 +4503,8 @@ int main (int argc, char *argv[])
 				firewall_test_main_config_fail2);
 	g_test_add_func("/firewall/test_all_config_fail0",
 				firewall_test_all_config_fail0);
+	g_test_add_func("/firewall/test_options_config_fail0",
+				firewall_test_options_config_fail0);
 	g_test_add_func("/firewall/test_dynamic_ok0",
 				firewall_test_dynamic_ok0);
 	g_test_add_func("/firewall/test_dynamic_ok1",
@@ -3881,6 +4521,8 @@ int main (int argc, char *argv[])
 				firewall_test_dynamic_ok6);
 	g_test_add_func("/firewall/test_dynamic_ok7",
 				firewall_test_dynamic_ok7);
+	g_test_add_func("/firewall/test_dynamic_ok8",
+				firewall_test_dynamic_ok8);
 	g_test_add_func("/firewall/config_reload0",
 				firewall_test_config_reload0);
 	g_test_add_func("/firewall/config_reload1",
@@ -3908,7 +4550,11 @@ int main (int argc, char *argv[])
 	g_test_add_func("/firewall/iptables_fail4",
 				firewall_test_iptables_fail4);
 
-	return g_test_run();
+	ret = g_test_run();
+
+	__connman_iptables_validate_cleanup();
+
+	return ret;
 }
 
 /*

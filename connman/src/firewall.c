@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2013,2015  BMW Car IT GmbH.
+ *  Copyright (C) 2018,2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -268,7 +269,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 {
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
-	char *chain;
+	char *chain = NULL;
 	char *full_rule = NULL;
 	int id, err;
 
@@ -306,7 +307,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 
 		err = insert_managed_chain(type, table_name, id);
 		if (err < 0)
-			return err;
+			goto err;
 	}
 
 	mtable->chains[id]++;
@@ -319,7 +320,8 @@ out:
 	else
 		err = __connman_iptables_append(type, table_name, chain,
 					full_rule ? full_rule : rule_spec);
-	
+
+err:
 	if (err < 0)
 		DBG("table %s cannot append rule %s", table_name,
 				full_rule ? full_rule : rule_spec);
@@ -338,7 +340,7 @@ static int delete_managed_rule(int type, const char *table_name,
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
 	int id, err;
-	char *managed_chain;
+	char *managed_chain = NULL;
 	char *full_rule = NULL;
 
 	id = chain_to_index(chain_name);
@@ -347,9 +349,10 @@ static int delete_managed_rule(int type, const char *table_name,
 
 	if (id < 0) {
 		/* This chain is not managed */
-		return __connman_iptables_delete(type, table_name,
+		err = __connman_iptables_delete(type, table_name,
 					chain_name,
 					full_rule ? full_rule : rule_spec);
+		goto out;
 	}
 
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
@@ -386,7 +389,7 @@ static int delete_managed_rule(int type, const char *table_name,
 
 	err = delete_managed_chain(type, table_name, id);
 
- out:
+out:
 	g_free(managed_chain);
 	g_free(full_rule);
 
@@ -1239,537 +1242,6 @@ disable:
 	g_free(ifname);
 }
 
-enum iptables_switch_type {
-	IPTABLES_UNSET    = 0,
-	IPTABLES_SWITCH   = 1,
-	IPTABLES_MATCH    = 2,
-	IPTABLES_TARGET   = 3,
-	IPTABLES_PROTO    = 4,
-	IPTABLES_PORT     = 5,
-};
-
-#define MAX_IPTABLES_SWITCH 6
-
-static bool is_string_digits(const char *str)
-{
-	int i;
-
-	if (!str || !*str)
-		return false;
-
-	for (i = 0; str[i]; i++) {
-		if (!g_ascii_isdigit(str[i]))
-			return false;
-	}
-	return true;
-}
-
-static bool is_supported(int type, enum iptables_switch_type switch_type,
-					const char* group, const char *str)
-{
-	/*
-	 * The switches and matches that are not supported.
-	 * 
-	 * Chain manipulation is not supported, the rules are going to specific
-	 * managed chains within connman.
-	 *
-	 * Setting specific addresses is not supported because the purpose of
-	 * these rules is to set the base line of prevention to be used on both
-	 * IPv4 and IPv6. In the future rules may be separated to have own for
-	 * both of the IP protocols.
-	 
-	 * Setting specific interfaces is not supported for dynamic rules, these
-	 * are added dynamically into the rules when interface comes up. For
-	 * General rules setting interfaces is allowed.
-	 */
-	const char *not_supported_switches[] = { "--source", "--src","-s",
-						"--destination", "--dst", "-d",
-						"--append", "-A",
-						"--delete", "-D",
-						"--delete-chain", "-X",
-						"--flush", "-F",
-						"--insert", "-I",
-						"--new-chain", "-N",
-						"--policy", "-P",
-						"--rename-chain", "-E",
-						"--replace", "-R",
-						"--zero", "-Z",
-						"--to-destination",
-						"--from-destination",
-						NULL
-	};
-	const char *not_supported_dynamic_switches[] = { "--in-interface", "-i",
-						"--out-interface", "-o",
-						NULL
-	};
-
-	const char *not_supported_matches_ipv4[] = { "comment",
-						"state",
-						"iprange",
-						"recent",
-						"owner",
-						NULL
-	};
-	const char *not_supported_matches_ipv6[] = { "comment",
-						"state",
-						"iprange",
-						"recent",
-						"owner",
-						"ttl",
-						NULL
-	};
-
-	const char **not_supported_matches = NULL;
-
-	/* Protocols that iptables supports with -p or --protocol switch */
-	const char *supported_protocols_ipv4[] = { "tcp",
-						"udp",
-						"udplite",
-						"icmp",
-						"esp",
-						"ah",
-						"sctp",
-						"dccp",
-						"all",
-						NULL
-	};
-
-	/* Protocols that iptables supports with -p or --protocol switch */
-	const char *supported_protocols_ipv6[] = { "tcp",
-						"udp",
-						"udplite",
-						"icmpv6",
-						"ipv6-icmp",
-						"esp",
-						"ah",
-						"sctp",
-						"mh",
-						"dccp",
-						"all",
-						NULL
-	};
-
-	const char **supported_protocols = NULL;
-
-	/*
-	 * Targets that are supported. No targets to custom chains are
-	 * allowed
-	 */
-	const char *supported_targets[] = { "ACCEPT",
-						"DROP",
-						"REJECT",
-						"LOG",
-						"QUEUE",
-						NULL
-	};
-
-	struct protoent *p = NULL;
-	bool is_general = false;
-	int protonum = 0;
-	int i = 0;
-
-	/* Do not care about empty or nonexistent content */
-	if (!str || !*str)
-		return true;
-	
-	if (group && !g_strcmp0(group, GROUP_GENERAL))
-		is_general = true;
-
-	switch (type) {
-	case AF_INET:
-		not_supported_matches = not_supported_matches_ipv4;
-		supported_protocols = supported_protocols_ipv4;
-		break;
-	case AF_INET6:
-		not_supported_matches = not_supported_matches_ipv6;
-		supported_protocols = supported_protocols_ipv6;
-		break;
-	default:
-		return false;
-	}
-
-	switch (switch_type) {
-	case IPTABLES_SWITCH:
-		for (i = 0; not_supported_switches[i]; i++) {
-			if (!g_strcmp0(str, not_supported_switches[i]))
-				return false;
-		}
-
-		/* If the rule is not in Group general */
-		if (!is_general) {
-			for (i = 0; not_supported_dynamic_switches[i]; i++) {
-				if (!g_strcmp0(str,
-					not_supported_dynamic_switches[i]))
-					return false;
-			} 
-		}
-
-		return true;
-	case IPTABLES_MATCH:
-		for (i = 0; not_supported_matches[i]; i++) {
-			if (!g_strcmp0(str, not_supported_matches[i]))
-				return false;
-		}
-
-		return true;
-	case IPTABLES_TARGET:
-		for (i = 0; supported_targets[i]; i++) {
-			if (!g_strcmp0(str, supported_targets[i]))
-				return true;
-		}
-
-		return false;
-	case IPTABLES_PROTO:
-		if (is_string_digits(str))
-			protonum = (int) g_ascii_strtoll(str, NULL, 10);
-
-		for (i = 0; supported_protocols[i]; i++) {
-			/* Protocols can be also capitalized */
-			if (!g_ascii_strcasecmp(str, supported_protocols[i]))
-				return true;
-
-			/* Protocols can be defined by their number. */
-			if (protonum) {
-				p = getprotobyname(supported_protocols[i]);
-				if (p && protonum == p->p_proto)
-					return true;
-			}
-		}
-
-		return false;
-	default:
-		return true;
-	}
-}
-
-static bool is_port_switch(const char *str, bool multiport)
-{
-	const char *multiport_switches[] = { "--destination-ports", "--dports",
-					"--source-ports", "--sports",
-					"--port", "--ports",
-					NULL
-	};
-	const char *port_switches[] = { "--destination-port", "--dport",
-					"--source-port", "--sport",
-					NULL
-	};
-
-	int i;
-
-	if (!str || !*str)
-		return true;
-
-	if (multiport) {
-		for (i = 0; multiport_switches[i]; i++) {
-			if (!g_strcmp0(str, multiport_switches[i]))
-				return true;
-		}
-	}
-
-	/* Normal port switches can be used also with -m multiport */
-	for (i = 0; port_switches[i]; i++) {
-		if (!g_strcmp0(str, port_switches[i])) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-static bool validate_ports_or_services(const char *str)
-{
-	gchar **tokens;
-	 /* In iptables ports are separated with commas, ranges with colon. */
-	const char delimiters[] = ",:";
-	struct servent *s;
-	bool ret = true;
-	int portnum;
-	int i;
-
-	if (!str || !*str)
-		return false;
-
-	tokens = g_strsplit_set(str, delimiters, 0);
-
-	if (!tokens)
-		return false;
-
-	for (i = 0; tokens[i]; i++) {
-
-		/* Plain digits, check if port is valid */
-		if (is_string_digits(tokens[i])) {
-			portnum = (int) g_ascii_strtoll(tokens[i], NULL, 10);
-
-			/* Valid port number */
-			if (portnum && portnum <= G_MAXUINT16)
-				continue;
-		}
-
-		/* Check if service name is valid with any protocol */
-		s = getservbyname(tokens[i], NULL);
-
-		if (s) {
-			if (!g_strcmp0(tokens[i], s->s_name))
-				continue;
-		}
-
-		/* If one of the ports/services is invalid, rule is invalid */
-		ret = false;
-		DBG("invalid port/service %s in %s", tokens[i], str);
-		break;
-	}
-
-	g_strfreev(tokens);
-
-	return ret;
-}
-
-static bool protocol_match_equals(const char *protocol, const char *match)
-{
-	struct protoent *p = NULL;
-	int protonum;
-	int i;
-
-	if (!protocol || !match)
-		return false;
-
-	if (!g_ascii_strcasecmp(protocol, match))
-		return true;
-
-	/* If protocol is integer */
-	if (is_string_digits(protocol)) {
-		protonum = (int) g_ascii_strtoll(protocol, NULL, 10);
-
-		if (!protonum)
-			return false;
-
-		p = getprotobynumber(protonum);
-	} else {
-		p = getprotobyname(protocol);
-	}
-
-	if (!p)
-		return false;
-
-	/* Protocol official name equals */
-	if (!g_ascii_strcasecmp(p->p_name, match))
-		return true;
-
-	/* Check if it is one of the aliases */
-	for (i = 0; p->p_aliases && p->p_aliases[i]; i++) {
-		/* Protocols can be also capitalized */
-		if (!g_ascii_strcasecmp(p->p_aliases[i], match))
-			return true;
-	}
-
-	return false;
-}
-
-static bool validate_iptables_rule(int type, const char *group,
-							const char *rule_spec)
-{
-	gchar **argv = NULL;
-	GError *error = NULL;
-	bool ret = false;
-	int i = 0;
-	int argc = 0;
-	int protocol_opt_index = 0;
-	int protocol_match_index = 0;
-	bool multiport_used = false;
-	unsigned int switch_types_found[MAX_IPTABLES_SWITCH] = { 0 };
-	enum iptables_switch_type switch_type = IPTABLES_UNSET;
-	const char *match = NULL;
-	const char valid_prefix = '-';
-
-	if (!g_shell_parse_argv(rule_spec, &argc, &argv, &error)) {
-		DBG("failed in parsing %s", error ? error->message : "");
-		goto out;
-	}
-
-	/* -j TARGET is the bare minimum of a rule */
-	if (argc < 2 || !argv[0][0]) {
-		DBG("parsed content is invalid");
-		goto out;
-	}
-
-	/* Only '-' prefixed rules are allowed in iptables. */
-	if (argv[0][0] != valid_prefix) {
-		DBG("invalid rule prefix");
-		goto out;
-	}
-
-	for (i = 0; i < argc; ) {
-		const char *arg = argv[i++];
-
-		if (!is_supported(type, IPTABLES_SWITCH, group, arg)) {
-			DBG("switch %s is not supported", arg);
-			goto out;
-		}
-
-		if (!g_strcmp0(arg, "-m")) {
-			switch_type = IPTABLES_MATCH;
-			match = argv[i++];
-
-			if (!match) {
-				DBG("trailing '-m' in rule \"%s\"", rule_spec);
-				goto out;
-			}
-
-			/* multiport match has to have valid port switches */
-			if (!g_strcmp0(match, "multiport")) {
-				multiport_used = true;
-				
-				/* Cannot use -m multiport with -m protocol */
-				if (protocol_match_index) {
-					DBG("-m multiport with -m %s",
-						argv[protocol_match_index]);
-					goto out;
-				}
-				
-				const char *opt = argv[i++];
-
-				if (!opt) {
-					DBG("empty %s %s switch", arg, match);
-					goto out;
-				}
-
-				if (!is_port_switch(opt, true)) {
-					DBG("non-supported %s %s switch %s",
-						arg, match, opt);
-					goto out;
-				}
-
-				const char *param = argv[i++];
-				if (!param) {
-					DBG("empty parameter with %s", opt);
-					goto out;
-				}
-
-				/* Negated switch must be skipped */
-				if (!g_strcmp0(param, "!"))
-					param = argv[i++];
-
-				if (!validate_ports_or_services(param)) {
-					DBG("invalid ports %s %s", opt, param);
-					goto out;
-				}
-			}
-			
-			/* If this is one of the supported protocols */
-			if (is_supported(type, IPTABLES_PROTO, group, match)) {
-				/*
-				 * If no protocol is set before, protocol match
-				 * cannot be used
-				 */
-				if (!switch_types_found[IPTABLES_PROTO]) {
-					DBG("-m %s without -p protocol", match);
-					goto out;
-				}
-
-				/* Check if match protocol equals */
-				if (!protocol_match_equals(
-						argv[protocol_opt_index],
-						match)) {
-					DBG("-p %s -m %s different protocol",
-						argv[protocol_opt_index],
-						match);
-					goto out;
-				}
-
-				if (multiport_used) {
-					DBG("-m multiport -m %s not supported",
-							match);
-					goto out;
-				}
-
-				/* Store the match index for multiport */
-				protocol_match_index = i-1;
-			}
-		}
-
-		if (!g_strcmp0(arg, "-j")) {
-			switch_type = IPTABLES_TARGET;
-			match = argv[i++];
-
-			if (!match) {
-				DBG("trailing '-j' in rule \"%s\"", rule_spec);
-				goto out;
-			}
-		}
-
-		if (!g_strcmp0(arg, "-p")) {
-			switch_type = IPTABLES_PROTO;
-			match = argv[i++];
-
-			if (!match) {
-				DBG("trailing '-p' in rule \"%s\"", rule_spec);
-				goto out;
-			}
-
-			/* Negated switch must be skipped */
-			if (!g_strcmp0(match, "!"))
-				match = argv[i++];
-			
-			/* Save the protocol index for -m switch check */
-			protocol_opt_index = i-1;
-		}
-
-		if (is_port_switch(arg, false)) {
-			switch_type = IPTABLES_PORT;
-			match = argv[i++];
-
-			if (!match) {
-				DBG("trailing '%s' in rule \"%s\"", arg,
-					rule_spec);
-				goto out;
-			}
-
-			/* Negated switch must be skipped */
-			if (!g_strcmp0(match, "!"))
-				match = argv[i++];
-
-			if (!validate_ports_or_services(match)) {
-				DBG("invalid ports %s %s", arg, match);
-				goto out;
-			}
-		}
-
-		if (match && !is_supported(type, switch_type, group, match)) {
-			DBG("%s %s is not supported", arg, match);
-			goto out;
-		}
-
-		/* Record the current switch type */
-		switch_types_found[switch_type]++;
-		switch_type = IPTABLES_UNSET;
-		match = NULL;
-	}
-
-	/* There can be 0...2 port switches in rule */
-	if (switch_types_found[IPTABLES_PORT] > 2)
-		goto out;
-
-	/* There should be 0...2 matches in one rule */
-	if (switch_types_found[IPTABLES_MATCH] > 2)
-		goto out;
-
-	/* There should be 0...1 protocols defined in rule */
-	if (switch_types_found[IPTABLES_PROTO] > 1)
-		goto out;
-
-	/* There has to be exactly one target in rule */
-	if (switch_types_found[IPTABLES_TARGET] != 1)
-		goto out;
-
-	ret = true;
-
-out:
-	g_clear_error(&error);
-	g_strfreev(argv);
-
-	return ret;
-}
-
 static bool is_rule_in_context(struct firewall_context *ctx, int type,
 			const char *table, const char *chain, const char *rule)
 {
@@ -1790,6 +1262,17 @@ static bool is_rule_in_context(struct firewall_context *ctx, int type,
 	}
 
 	return false;
+}
+
+static bool validate_iptables_rule(int type, const char *group,
+			const char *rule_spec)
+{
+	bool allow_dynamic = false;
+	
+	if (group && !g_strcmp0(group, GROUP_GENERAL))
+		allow_dynamic = true;
+	
+	return __connman_iptables_validate_rule(type, allow_dynamic, rule_spec);
 }
 
 typedef int (*add_rules_cb_t)(int type, const char *filename, const char *group,
@@ -1816,8 +1299,9 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 
 	for(i = 0; rules[i]; i++) {
 
-		DBG("process rule tech %s chain %s rule %s", group,
-					builtin_chains[chain_id], rules[i]);
+		DBG("processing type %d rule tech %s chain %s rule %s", type,
+					group, builtin_chains[chain_id],
+					rules[i]);
 
 		if (!validate_iptables_rule(type, group, rules[i])) {
 			DBG("failed to add rule, rule is invalid");
@@ -1981,7 +1465,7 @@ static int add_tethering_rules_cb(int type, const char *filename,
 					rules[i]);
 
 		if (!validate_iptables_rule(type, group, rules[i])) {
-			DBG("invalid general rule");
+			DBG("invalid tethering rule");
 			continue;
 		}
 
@@ -2265,7 +1749,7 @@ static int enable_general_firewall_policies(int type, char **policies)
 	int err;
 	int i;
 
-	if (!policies || !g_strv_length(policies))
+	if (!policies)
 		return 0;
 
 	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
