@@ -88,6 +88,7 @@ enum configtype {
 	DIR_ACCESS_FAILURE =	0x0800,
 	CONFIG_ICMP_ONLY =	0x1000,
 	CONFIG_OPTIONS_ONLY =	0x2000,
+	CONFIG_OPTIONS_ADDR =	0x4000,
 };
 
 static enum configtype global_config_type = GLOBAL_NOT_SET;
@@ -164,6 +165,9 @@ static void setup_test_params(enum configtype type)
 
 	if (type & CONFIG_OPTIONS_ONLY)
 		DBG("CONFIG_OPTIONS_ONLY");
+
+	if (type & CONFIG_OPTIONS_ADDR)
+		DBG("CONFIG_OPTIONS_ADDR");
 
 	global_config_type = type;
 
@@ -1464,8 +1468,8 @@ static const char *general_icmpv6[] = {
 	NULL
 };
 
-#define RULES_OPTIONS4 62 // +1 for chain
-#define RULES_OPTIONS6 59 // +1 for chain
+#define RULES_OPTIONS4 64 // +1 for chain
+#define RULES_OPTIONS6 61 // +1 for chain
 
 static const char *general_options[] = {
 	/* AH and ESP options */
@@ -1544,6 +1548,48 @@ static const char *general_options[] = {
 	"-p tcp --match tcp --dport 56 -j LOG",
 	"-p tcp -m tcp --dport 66 --jump QUEUE",
 	"--protocol tcp --match tcp --dport 5555 --jump DROP",
+	/* Hostnames */
+	"-d host.name.com -j DROP",
+	"-s host.name.com,host2.name2.com,host3.name3.com -j DROP",
+	NULL
+};
+
+#define RULES_OPTIONS_ADDR4 18 // +1 chain
+#define RULES_OPTIONS_ADDR6 10 // +1 chain
+
+static const char *general_options_address4[] = {
+	/* Address options IPv4 */
+	"--source 192.168.1.1 -j DROP",
+	"--src 192.168.1.2/32 -j DROP",
+	"-s 192.168.1.3/24 -j DROP",
+	"--destination 192.168.1.3 -j DROP",
+	"--dst 192.168.1.4 -j DROP",
+	"-d 192.168.1.5 -j DROP",
+	"--source 192.168.1.1 --destination 192.168.2.1 -j DROP",
+	"-p tcp ! -s 1.2.3.4 -j DROP",
+	"-s 1.2.3.4,5.6.7.8/16,9.8.7.6 -j ACCEPT",
+	"-m conntrack --ctorigsrc 1.2.3.4 -j ACCEPT",
+	"-m conntrack --ctorigsrc connman.org -j ACCEPT",
+	"-m conntrack --ctorigdst 4.3.2.1 -j ACCEPT",
+	"-m conntrack --ctorigdst connman.org -j ACCEPT",
+	"-m conntrack --ctreplsrc 8.8.8.8 -j ACCEPT",
+	"-m conntrack --ctreplsrc connman.org -j ACCEPT",
+	"-m conntrack --ctrepldst 10.0.0.1 -j ACCEPT",
+	"-m conntrack --ctrepldst connman.org -j ACCEPT",
+	NULL
+};
+
+static const char *general_options_address6[] = {
+	/* Address options IPv6 */
+	"--source 2001:db8:3333:4444:5555:6666:7777:8888 -j DROP",
+	"--src 2001:db8:: -j DROP",
+	"-s ::1234:5678/64 -j DROP",
+	"-p tcp ! -s ::1234:5678/64 -j DROP",
+	"--destination 2001:db8::1234:5678 -j DROP",
+	"--dst 2001:0db8:0001:0000:0000:0ab9:C0A8:0102 -j DROP",
+	"-d 2001:db8:3333:4444:5555:6666:1.2.3.4 -j DROP",
+	"--source 2001:db8:: --destination ::1234:5678/64 -j DROP",
+	"-s 2001:db8::,::1234:5678/64,2001:db8::1234:5678/128 -j DROP",
 	NULL
 };
 
@@ -1611,14 +1657,11 @@ static const char *invalid_general_options[] = {
 	"-m conntrack --ctreplsrcport ssha -j ACCEPT",
 	"-m conntrack --ctrepldstport 0 -j ACCEPT",
 	"-m conntrack --ctrepldstport sshd -j ACCEPT",
-	"-m conntrack --ctorigsrc 1.2.3.4 -j ACCEPT",
-	"-m conntrack --ctorigsrc connman.org -j ACCEPT",
-	"-m conntrack --ctorigdst 4.3.2.1 -j ACCEPT",
-	"-m conntrack --ctorigdst connman.org -j ACCEPT",
-	"-m conntrack --ctreplsrc 8.8.8.8 -j ACCEPT",
-	"-m conntrack --ctreplsrc connman.org -j ACCEPT",
-	"-m conntrack --ctrepldst 10.0.0.1 -j ACCEPT",
-	"-m conntrack --ctrepldst connman.org -j ACCEPT",
+	"-m conntrack --ctorigsrc 1.2.3.4/40 -j ACCEPT",
+	"-m conntrack --ctorigsrc connman.org,1.2.3.4/34 -j ACCEPT",
+	"-m conntrack --ctorigdst 4.3.2.1/44 -j ACCEPT",
+	"-m conntrack --ctreplsrc 8.8.8.8/56 -j ACCEPT",
+	"-m conntrack --ctrepldst 10.0.0.1/66 -j ACCEPT",
 	"-m conntrack --ctstatus NON -j ACCEPT",
 	"-m conntrack --ctstatus NONE:EXPECTED,SEEN_REPLY,ASSURED,CONFIRMED"
 				" -j ACCEPT",
@@ -1788,16 +1831,22 @@ static const char *invalid_general_input[] = {
 		"-p icmpv6 -m icmpv6 --icmp-type 8 -j ACCEPT",
 		"-p ipv6-icmp -m icmpv6 --icmp-type tll-exceeded -j ACCEPT",
 		"-p ipv6-icmp -m icmpv6 --icmp-type /255 -j ACCEPT",
-		/* Source or destination modifiers are disabled */
-		"-p tcp -m tcp --dport 99 --source 192.168.1.1 -j DROP",
-		"-p tcp -m tcp --dport 99 --src 192.168.1.2 -j DROP",
-		"-p tcp -m tcp --dport 99 -s 192.168.1.3 -j DROP",
-		"-p tcp -m tcp --dport 98 --destination 192.168.1.3 -j DROP",
-		"-p tcp -m tcp --dport 98 --dst 192.168.1.4 -j DROP",
-		"-p tcp -m tcp --dport 98 -d 192.168.1.5 -j DROP",
-		"--source 1.2.3.4 --destination 4.3.2.1 -j ACCEPT",
-		"--src 1.2.3.4 --dst 4.3.2.1 -j ACCEPT",
+		/* Source or destination modifiers cannot be used twice */
+		"--source 1.2.3.4 --source 4.3.2.1 -j ACCEPT",
+		"--src 1.2.3.4 --src 4.3.2.1 -j ACCEPT",
+		"-s 1.2.3.4 -s 4.3.2.1 -j ACCEPT",
+		"--destination 1.2.3.4 --destination 4.3.2.1 -j ACCEPT",
+		"--dst 1.2.3.4 --dst 4.3.2.1 -j ACCEPT",
 		"-d 1.2.3.4 -d 4.3.2.1 -j ACCEPT",
+		"-d 1.2.3.4 -s 4.3.2.1 -d 9.8.7.6 -j ACCEPT",
+		/* Invalid netmask use */
+		"-s 1.9.2.6//32 -j DROP",
+		"-d 2.3.4.5/33 -j DROP",
+		"-s 10.0.0.1/20/24 -j DROP",
+		"-d 2.3.4.5/255.255.255.256 -j ACCEPT",
+		"-s host.name.com/32 -j ACCEPT",
+		"-d host.name.com/255.255.255.0 -j ACCEPT",
+		"-s ! 1.2.3.4 -j ACCEPT",
 		/* Invalid switches */
 		"-4 -p tcp -j ACCEPT",
 		"--ipv4 -p tcp -j ACCEPT",
@@ -2181,6 +2230,17 @@ static gboolean setup_main_config(GKeyFile *config)
 					invalid_general_options,
 					g_strv_length(
 					(char**)invalid_general_options));
+		} else if (global_config_type & CONFIG_OPTIONS_ADDR) {
+			g_key_file_set_string_list(config, "General",
+					"IPv4.INPUT.RULES",
+					general_options_address4,
+					g_strv_length(
+					(char**)general_options_address4));
+			g_key_file_set_string_list(config, "General",
+					"IPv6.INPUT.RULES",
+					general_options_address6,
+					g_strv_length(
+					(char**)general_options_address6));
 		} else {
 			g_key_file_set_string_list(config, "General",
 					"IPv4.INPUT.RULES",
@@ -2981,6 +3041,33 @@ static void firewall_test_options_config_ok0()
 
 	check_rules(assert_rule_exists, AF_INET, opt4_rules, NULL);
 	check_rules(assert_rule_exists, AF_INET6, opt6_rules, NULL);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+static void firewall_test_options_config_ok1()
+{
+	const char **opt4_rules[] = { general_options_address4, NULL, NULL};
+	const char **opt6_rules[] = { general_options_address6, NULL, NULL};
+
+	setup_test_params(CONFIG_OPTIONS_ONLY|CONFIG_OPTIONS_ADDR);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_OPTIONS_ADDR4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_OPTIONS_ADDR6);
+
+	check_rules(assert_rule_exists, AF_INET, opt4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET6, opt6_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET, opt6_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET6, opt4_rules, NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -4495,6 +4582,8 @@ int main (int argc, char *argv[])
 				firewall_test_icmp_config_ok0);
 	g_test_add_func("/firewall/test_options_config_ok0",
 				firewall_test_options_config_ok0);
+	g_test_add_func("/firewall/test_options_config_ok1",
+				firewall_test_options_config_ok1);
 	g_test_add_func("/firewall/test_main_config_fail0",
 				firewall_test_main_config_fail0);
 	g_test_add_func("/firewall/test_main_config_fail1",
