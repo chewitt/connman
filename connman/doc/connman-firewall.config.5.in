@@ -24,7 +24,8 @@ Rules are loaded as general, tethering and service type specific rules
 .IP
 Rules are applied only for the iptables filter table
 .IP
-Rules are added using managed chains only, no chain management with configs
+Rules are added using managed chains only, no chain management with configs.
+Rules are applied to connman-INPUT|FORWARD|OUTPUT chains.
 .IP
 Rules in General section are applied at start and removed at shutdown
 .IP
@@ -44,8 +45,33 @@ The configuration files from @configdir@/connman/firewall.d/ are read in
 alphabetical order after the main @configdir@/connman/firewall.conf is read. If
 the file @configdir@/connman/firewall.conf is omitted, then only the firewall
 configurations from @configdir@/connman/firewall.d/ are read.
+.P
+When multiple different rule files are used the POLICY for specific chain is
+used from the latest definition of that POLICY in configuration files. The rules
+are are appended to the internal list of rules as they are read for both General
+section and service & tethering sections. For an example of this refer to
+Example1.
 .TP
 The section names are case sensitive. Regular key file format is used.
+.SH IPTABLES RULE ORDERING
+.P
+Rules from General section in firewall.conf are considered as base rules. These
+are kept as last ones in the iptables list to allow exceptions on top of them.
+The rules from firewall config files in @configdir@/connman/firewall.d have
+their rules from General section set up before the General section rules from
+firewall.conf.
+.P
+When a service that has dynamic rules in any configuration is connected the
+rules are inserted on top of the managed chain when the service is in READY
+state or tethering is enabled.
+.P
+Reloading of configurations is half-way supported. Changes in existing files are
+not detected as of now (TODO). To make ConnMan detect the changes restart is
+required. Adding new or removing old configuration is supported with systemctl
+reload command. In case a new config is added the rules are loaded in order to
+the internal lists but are not set in correct order into iptables. In such case
+service must be re-connected (e.g., WiFi) or ConnMan restarted (General rules)
+to get the order correct.
 .SH USED KEYS
 .P
 The following keys are supported and the generic format is PROTOCOL.CHAIN.TYPE,
@@ -112,13 +138,19 @@ Will discard the first --dport 23 rule and use the second --dport 24 rule
 .SS
 Each rule:
 .TP
-Has to have one target (-j TARGET) which is the bare minimum of the rule.
+Has to have one target (-j|--jump TARGET) or goto (-g|--goto TARGET) which is the bare minimum of the rule.
 .TP
-Can have 0...1 protocol matches (-p protocol)..
+Can have 0...1 protocol matches (-p|--protocol protocol).
 .TP
-Can have 0...2 match speficiers (-m match)
+Can have 0...2 match speficiers (-m|--match match).
 .TP
-Can have 0...2 port switches either with a protocol modifier (-m protocol) or with multiport modifier (-m multiport).
+Can have 0...2 port switches with a protocol modifier (-m|--match protocol) OR
+.TP
+Can have 0...1 port switches with multiport modifier (-m|--match multiport)
+.TP
+Can have 0...2 destination specifiers (same direction cannot be used twice)
+.TP
+Can have 0...2 interface switches in [General] section (same direction cannot be used twice)
 .SS
 Targets:
 .P
@@ -134,10 +166,9 @@ Following switches are disabled and if a rule contains any of them the rule will
 .IP
 All chain modifiers, since rules are added to managed chains, following modifiers are disabled: --append, -A, --delete, -D, --delete-chain, -X, --flush, -F, --insert, -I, --new-chain, -N, --policy, -P, --rename-chain, -E, --replace, -R, --zero, -Z
 .IP
-Destination speficiers are disabled (enabled later): --source, --src, -s,
---destination, --dst, -d, --to-destination, --from-destination
+Destination speficiers for DNAT are disabled : --to-destination, --from-destination
 .IP
-Some matches (with -m) are disabled (cause crash or commit errors). IPv4: comment, state, iprange, recent, owner. IPv6: comment, state, iprange, recent, owner, ttl
+Some matches (with -m) are disabled (cause crash or commit errors). IPv4: comment, state, iprange, recent, owner, sctp, dccp, mh, hashlimit, icmpv6, ipv6-icmp. IPv6: comment, state, iprange, recent, owner, ttl, sctp, dccp, mh, hashlimit, frag, icmp
 .P
 Interface specifiers (--in-interface, -i, --out-interface, -o) are not allowed in tethering or service type sections: 
 .SH CONFIGURATION: GENERAL SECTION

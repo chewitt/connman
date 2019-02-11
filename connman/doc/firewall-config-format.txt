@@ -5,20 +5,13 @@ In general the firewall configuration in connman works as follows:
  - Rules are loaded as general, tethering and service type specific rules
  - Rules are applied only for the iptables filter table
  - Rules are added using managed chains only, no chain management with configs
+   - Rules are applied to connman-INPUT|FORWARD|OUTPUT chains
  - Rules in General section are applied at start and removed at shutdown
  - Rules in tethering section are enabled/disabled when tethering is on/off
  - Rules for service types are enabled/disabled when service goes online/offline
 
 Connman firewall configuration file loading
 ===========================================
-
-In general the firewall configuration in connman works as follows:
- - Rules are loaded as general, tethering and service type specific rules
- - Rules are applied only for the iptables filter table
- - Rules are added using managed chains only, no chain management with configs
- - Rules in General section are applied at start and removed at shutdown
- - Rules in tethering section are enabled/disabled when tethering is on/off
- - Rules for service types are enabled/disabled when service goes online/offline
 
 Connman supports firewall configurations for both general (permanent) settings
 and for each connected service type. The main configuration is always as
@@ -32,7 +25,35 @@ alphabetical order after the main CONFIGDIR/connman/firewall.conf is read. If
 the file CONFIGDIR/connman/firewall.conf is omitted, then only the firewall
 configurations from CONFIGDIR/connman/firewall.d/ are read.
 
-The section names are case sensitive. Regular key file format is used.
+When multiple different rule files are used the POLICY for specific chain is
+used from the latest definition of that POLICY in configuration files. The rules
+are are appended to the internal list of rules as they are read for both General
+section and service & tethering sections. For an example of this refer to
+Example1.
+
+The section names in configuration files are case sensitive. Regular key file
+format is used.
+
+Connman firewall rule ordering
+==============================
+
+Rules from General section in firewall.conf are considered as base rules. These
+are kept as last ones in the iptables list to allow exceptions on top of them.
+The rules from firewall config files in CONFIGDIR/connman/firewall.d have their
+rules from General section set up before the General section rules from
+firewall.conf.
+
+When a service that has dynamic rules in any configuration is connected the
+rules are inserted on top of the managed chain when the service is in READY
+state or tethering is enabled.
+
+Reloading of configurations is half-way supported. Changes in existing files are
+not detected as of now (TODO). To make ConnMan detect the changes restart is
+required. Adding new or removing old configuration is supported with systemctl
+reload command. In case a new config is added the rules are loaded in order to
+the internal lists but are not set in correct order into iptables. In such case
+service must be re-connected (e.g., WiFi) or ConnMan restarted (General rules)
+to get the order correct.
 
 Keys in sections
 ================
@@ -75,17 +96,29 @@ https://www.frozentux.net/iptables-tutorial/iptables-tutorial.html
 Rules are separated with semicolons (;). All rules for a key must be on one
 line.
 
+Used options in rules are checked for their appropriate input values, the
+protocol and/or match values are checked as well. If option is not supported or
+there are missing/invalid values the rule is ignored. Negations in rules are
+supported as with iptables command.
+
 Each rule:
- - Has to have one target (-j TARGET) which is the bare minimum of the rule
- - Can have 0...1 protocol matches (-p protocol)
- - Can have 0...2 match speficiers (-m match), e.g., to allow one attempt per
-   second to telnet:
-    -p udp -m udp --dport 23 -m limit --limit 1/second --limit-burst 1 -j ACCEPT
- - Can have 0...2 port switches
-   - with a protocol modifier (-m protocol):
+ - Has to have one target (-j|--jump TARGET) or goto (-g|--goto) which is the
+   bare minimum of the rule
+ - Can have 0...1 protocol matches (-p|--protocol protocol)
+ - Can have 0...2 match speficiers (-m|--match match),
+   - E.g., to allow one attempt per second to telnet:
+     -p udp -m udp --dport 23 -m limit --limit 1/s --limit-burst 1 -j ACCEPT
+ - Can have
+   - 0...2 port switches with a protocol modifier (-m|--match protocol):
      --destination-port, --dport, --source-port, --sport 
-   - with multiport modifier (-m multiport):
-     --destination-ports, --dports, --source-ports, --sports, --port, --ports
+   - 0...1 port switches with multiport modifier (-m|--match multiport):
+     --destination-ports, --dports, --source-ports, --sports, --port, --ports,
+     --destination-port, --dport, --source-port, --sport
+ - Can have 0...2 destination specifiers (same direction cannot be used twice)
+   --source, --src, -s, --destination, --dst, -d
+ - Can have 0...2 interface switches in [General] section (same direction cannot
+   be used twice):
+   --in-interface, -i, --out-interface, -o
 
 Rules can be commented out with hash tag (#) as first character. Commented rules
 are simply ignored. For example:
@@ -109,11 +142,15 @@ be ignored:
    modifiers are disabled: --append, -A, --delete, -D, --delete-chain, -X, 
    --flush, -F, --insert, -I, --new-chain, -N, --policy, -P, --rename-chain, -E,
    --replace, -R, --zero, -Z
- - Destination speficiers are disabled (enabled later): --source, --src, -s,
-   --destination, --dst, -d, --to-destination, --from-destination
+ - Destination speficiers for DNAT are disabled : --to-destination,
+   --from-destination
+ - Fragment: -f, --fragment
+ - IP family options: --ipv4, -4, --ipv6, -6
  - Some matches (with -m) are disabled (cause crash or commit errors):
-   - IPv4: comment, state, iprange, recent, owner
-   - IPv6: comment, state, iprange, recent, owner, ttl
+   - IPv4: comment, state, iprange, recent, owner, sctp, dccp, mh, hashlimit,
+     icmpv6, ipv6-icmp
+   - IPv6: comment, state, iprange, recent, owner, ttl, sctp, dccp, mh,
+     hashlimit, frag, icmp
  - Interface specifiers are not allowed in tethering or service type sections:
    --in-interface, -i, --out-interface, -o
 
@@ -146,13 +183,7 @@ default rules will be added as they would make these custom rules set in
 [tethering] unnecessary by allowing all traffic. Only RULES can be defined in
 tethering section.
 
-For this, for example following rules could be enabled to allow only DHCP and
-DNS, into, e.g., /etc/connman/firewall.d/42-tethering-firewall.conf
-
-[tethering]
-
-IPv4.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
-IPv6.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
+For example of allowing only DNS and DHCP refer to Example2.
 
 Service type sections
 =====================
@@ -180,3 +211,44 @@ include/service.h):
  - gadget
  - p2p
 
+Examples
+========
+
+Here are some examples regarding firewall config use.
+
+Example1: Rule loading
+======================
+
+There is main config and three configs, which are processed in order:
+ 1: base firewall.conf - has [General] rules and POLICY set
+ 2: firewall.d/10-firewall.conf - has [wifi] rules
+ 3: firewall.d/20-firewall.conf - has [General] rules
+ 4: firewall.d/30-firewall.conf - has [wifi] and [General] rules
+
+
+Rules in firewall at ConnMan start:
+ - Policy from 1
+ - Rules:
+   - Rules from 3 [General]
+   - Rules from 4 [General]
+   - Rules from 1 [General]
+
+Rules in firewall after enabling WiFi
+ - Policy from 1
+ - Rules:
+   - Rules from 2 [wifi]
+   - Rules from 4 [wifi]
+   - Rules from 3 [General]
+   - Rules from 4 [General]
+   - Rules from 1 [General]
+
+Example2: Tethering rules to allow only DHCP and DNS
+====================================================
+
+For example following rules could be enabled to allow only DHCP and
+DNS, into, e.g., /etc/connman/firewall.d/42-tethering-firewall.conf
+
+[tethering]
+
+IPv4.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
+IPv6.INPUT.RULES = -p udp -m udp --dport 53 -j ACCEPT; -p tcp -m tcp --dport 53 -j ACCEPT; -p udp -m udp --dport 67 -j ACCEPT
