@@ -387,8 +387,8 @@ unit_test_firewall_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
 				@GLIB_CFLAGS@
 unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				src/inotify.c src/dbus.c src/error.c \
-				src/firewall.c src/iptables-validate.c \
-				unit/test-firewall.c
+				src/inet.c src/firewall.c \
+				src/iptables-validate.c unit/test-firewall.c
 unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 unit_test_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
@@ -547,7 +547,7 @@ tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c src/firewall.c src/nat.c \
-		src/iptables-validate.c tools/iptables-unit.c
+		src/inet.c src/iptables-validate.c tools/iptables-unit.c
 tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
 

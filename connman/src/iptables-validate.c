@@ -38,9 +38,10 @@ enum iptables_switch_type {
 	IPTABLES_PORT      = 5,
 	IPTABLES_OPTION    = 6,
 	IPTABLES_INTERFACE = 7,
+	IPTABLES_IPADDR    = 8,
 };
 
-#define MAX_IPTABLES_SWITCH 8
+#define MAX_IPTABLES_SWITCH 9
 
 static bool is_string_digits(const char *str)
 {
@@ -148,10 +149,10 @@ static const int mark_options_count[] = {1, -1};
  * [!] --ctstate {INVALID|ESTABLISHED|NEW|RELATED|UNTRACKED|SNAT|DNAT}[,...]
  * 				State(s) to match
  * [!] --ctproto proto		Protocol to match; by number or name, e.g. "tcp"
- * [!] --ctorigsrc address[/mask] TODO
- * [!] --ctorigdst address[/mask] TODO
- * [!] --ctreplsrc address[/mask] TODO
- * [!] --ctrepldst address[/mask] TODO
+ * [!] --ctorigsrc address[/mask]
+ * [!] --ctorigdst address[/mask]
+ * [!] --ctreplsrc address[/mask]
+ * [!] --ctrepldst address[/mask]
  * 				Original/Reply source/destination address
  * [!] --ctorigsrcport port
  * [!] --ctorigdstport port
@@ -574,6 +575,48 @@ static bool is_port_option(const char *str, bool multiport)
 	return false;
 }
 
+static const char *address_option_src[] = {"--source", "--src", "-s", NULL};
+static const char *address_option_dst[] = {"--destination", "--dst", "-d",
+			NULL};
+
+static bool is_address_option(const char *str)
+{
+	if (!str)
+		return false;
+
+	if (g_strv_contains(address_option_src, str) ||
+			g_strv_contains(address_option_dst, str))
+		return true;
+
+	return false;
+}
+
+static bool is_address_option_same_direction(const char *str1,
+			const char *str2)
+{
+	int i;
+	int direction1 = -1, direction2 = -1;
+
+	if (!g_strcmp0(str1, str2))
+		return true;
+
+	for (i = 0; address_option_src[i]; i++) {
+		if (!g_strcmp0(address_option_src[i], str1))
+			direction1 = 0;
+		if (!g_strcmp0(address_option_src[i], str2))
+			direction2 = 0;
+	}
+
+	for (i = 0; address_option_dst[i]; i++) {
+		if (!g_strcmp0(address_option_dst[i], str1))
+			direction1 = 1;
+		if (!g_strcmp0(address_option_dst[i], str2))
+			direction2 = 1;
+	}
+
+	return direction1 == direction2;
+}
+
 static bool is_valid_port_or_service(const char *protocol,
 			const char *port_or_service,
 			uint16_t *port)
@@ -691,6 +734,100 @@ static bool validate_ports_or_services(const char *protocol, const char *str,
 	return ret;
 }
 
+static bool is_valid_netmask(int family, const char *netmask)
+{
+	int cidr_len = 0;
+	int cidr_max = 0;
+
+	/* Netmask with CIDR notation */
+	if (is_string_digits(netmask)) {
+		switch (family) {
+		case AF_INET:
+			cidr_len = 2;
+			cidr_max = 32;
+			break;
+		case AF_INET6:
+			cidr_len = 3;
+			cidr_max = 128;
+		}
+
+		return strlen(netmask) <= cidr_len && (int)g_ascii_strtoll(
+					netmask, NULL, 10) <= cidr_max;
+	} else {
+		/* If family differs or error occurs, netmask is invalid */
+		return family == connman_inet_check_ipaddress(netmask);
+	}
+}
+
+static bool validate_address_option_value(int family, const char *address)
+{
+	gchar **tokens;
+	bool ret = false;
+	int res;
+
+	tokens = g_strsplit(address, "/", 2);
+
+	if (!tokens)
+		return false;
+
+	/* Has netmask defined */
+	switch (g_strv_length(tokens)) {
+	case 2:
+		if (!is_valid_netmask(family, tokens[1])) {
+			DBG("invalid netmask in %s", address);
+			goto out;
+		}
+	/* Fallthrough */
+	case 1:
+		/* IP family or error is returned */
+		res = connman_inet_check_ipaddress(tokens[0]);
+
+		if (res == family) {
+			ret = true;
+			goto out;
+		/* If family is different, there is no error set */
+		} else if (res > 0) {
+			DBG("invalid IP family address %s", address);
+			goto out;
+		}
+		break;
+	default:
+		goto out;
+	}
+
+	ret = connman_inet_check_hostname(address, strlen(address));
+out:
+	g_strfreev(tokens);
+	return ret;
+}
+
+static bool validate_addresses(int family, const char *addresses)
+{
+	gchar **tokens;
+	bool ret = false;
+	int length;
+	int i;
+
+	tokens = g_strsplit(addresses, ",", 0);
+
+	if (!tokens)
+		goto out;
+
+	length = g_strv_length(tokens);
+
+	for (i = 0; i < length; i++) {
+		ret = validate_address_option_value(family, tokens[i]);
+
+		if (!ret) {
+			DBG("invalid address %s", tokens[i]);
+			goto out;
+		}
+	}
+out:
+	g_strfreev(tokens);
+	return ret;
+}
+
 static bool is_icmp_int_type_valid(const char *icmp_type)
 {
 	int icmp_num;
@@ -797,7 +934,8 @@ static bool is_valid_param_sequence(const char **haystack, const char *needles,
  * 		defined by the type.
  * multiport: is this a multiport match (special port option case)
  */
-static bool is_valid_option_type_params(enum iptables_match_options_type type,
+static bool is_valid_option_type_params(int family,
+			enum iptables_match_options_type option_type,
 			const char *protocol, const char **params,
 			const int option_position, bool multiport)
 {
@@ -891,7 +1029,7 @@ static bool is_valid_option_type_params(enum iptables_match_options_type type,
 	bool value2 = false;
 	int token_count = 0;
 
-	switch (type) {
+	switch (option_type) {
 	/* Both AH and ESP have the same index value with optional range ':' */
 	case IPTABLES_OPTION_AH:
 	case IPTABLES_OPTION_ESP:
@@ -911,14 +1049,16 @@ static bool is_valid_option_type_params(enum iptables_match_options_type type,
 		}
 
 		/*
-		 * TODO: --ctorigsrc, --ctorigdst, --ctreplsrc and --ctrepldst
-		 * are ignored as are other address options. Each have
-		 * address/mask as values. Add support when other address
-		 * options are enabled.
+		 * --ctorigsrc, --ctorigdst, --ctreplsrc and --ctrepldst have
+		 * one address[/mask].
 		 */
 		if (option_position >= IPTABLES_CONNTRACK_CTORIGSRC &&
 			option_position <= IPTABLES_CONNTRACK_CTREPLDST) {
-			return false;
+			/*
+			 * TODO check if option is checked twice. For now, let
+			 * iptables error handling handle them.
+			 */
+			return validate_address_option_value(family, params[0]);
 		}
 
 		/*
@@ -1260,7 +1400,7 @@ static bool is_valid_option_for_protocol_match(const char* protocol,
 	return false;
 }
 
-static bool is_supported(int type, enum iptables_switch_type switch_type,
+static bool is_supported(int family, enum iptables_switch_type switch_type,
 					const char *str)
 {
 	/*
@@ -1278,9 +1418,7 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 	 * are added dynamically into the rules when interface comes up. For
 	 * General rules setting interfaces is allowed.
 	 */
-	const char *not_supported_switches[] = { "--source", "--src","-s",
-						"--destination", "--dst", "-d",
-						"--append", "-A",
+	const char *not_supported_switches[] = {"--append", "-A",
 						"--delete", "-D",
 						"--delete-chain", "-X",
 						"--flush", "-F",
@@ -1375,7 +1513,7 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 	if (!str || !*str)
 		return true;
 
-	switch (type) {
+	switch (family) {
 	case AF_INET:
 		not_supported_matches = not_supported_matches_ipv4;
 		supported_protocols = supported_protocols_ipv4;
@@ -1412,6 +1550,9 @@ static bool is_supported(int type, enum iptables_switch_type switch_type,
 		return true;
 	case IPTABLES_INTERFACE:
 		return true;
+	case IPTABLES_IPADDR:
+		/* Multiple addresses can be defined */
+		return validate_addresses(family, str);
 	case IPTABLES_UNSET:
 		break;
 	}
@@ -1425,7 +1566,7 @@ enum icmp_check_result {
 			INVALID_ICMP,
 };
 
-static enum icmp_check_result is_icmp_proto_or_match(int type,
+static enum icmp_check_result is_icmp_proto_or_match(int family,
 			const char *proto_or_match)
 {
 	const char *icmp_ipv4[] = { "icmp", NULL };
@@ -1434,7 +1575,7 @@ static enum icmp_check_result is_icmp_proto_or_match(int type,
 	if (!proto_or_match || !*proto_or_match)
 		return NOT_ICMP;
 
-	switch (type) {
+	switch (family) {
 	case AF_INET:
 		if (g_strv_contains(icmp_ipv4, proto_or_match))
 			return VALID_ICMP;
@@ -1455,7 +1596,7 @@ static enum icmp_check_result is_icmp_proto_or_match(int type,
 	return NOT_ICMP;
 }
 
-static bool protocol_match_equals(int type, const char *protocol,
+static bool protocol_match_equals(int family, const char *protocol,
 			const char *match)
 {
 	struct protoent *p;
@@ -1477,11 +1618,11 @@ static bool protocol_match_equals(int type, const char *protocol,
 	 * also valid ICMP for the type. Protocol "icmpv6" is not found with
 	 * getprotobyname() but is understood by iptables.
 	*/
-	switch (is_icmp_proto_or_match(type, protocol)) {
+	switch (is_icmp_proto_or_match(family, protocol)) {
 	case NOT_ICMP:
 		break; // Is not ICMP protocol
 	case VALID_ICMP:
-		return is_icmp_proto_or_match(type, match);
+		return is_icmp_proto_or_match(family, match);
 	case INVALID_ICMP:
 		return false;
 	}
@@ -1497,11 +1638,11 @@ static bool protocol_match_equals(int type, const char *protocol,
 		return true;
 
 	/* If ICMP protocol was defined as integer */
-	switch (is_icmp_proto_or_match(type, p->p_name)) {
+	switch (is_icmp_proto_or_match(family, p->p_name)) {
 	case NOT_ICMP:
 		break; // Is not ICMP protocol
 	case VALID_ICMP:
-		return is_icmp_proto_or_match(type, match);
+		return is_icmp_proto_or_match(family, match);
 	case INVALID_ICMP:
 		return false;
 	}
@@ -1524,7 +1665,7 @@ static bool is_valid_prefix(const char prefix)
 	return !!strchr(valid_prefixes, prefix);
 }
 
-bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
+bool __connman_iptables_validate_rule(int family, bool allow_dynamic,
 			const char *rule_spec)
 {
 	gchar **argv = NULL;
@@ -1541,6 +1682,7 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 	const char *protocol = NULL;
 	const char *match = NULL;
 	const char *interface = NULL;
+	const char *address_option = NULL;
 
 	if (!g_shell_parse_argv(rule_spec, &argc, &argv, &error)) {
 		DBG("failed in parsing %s", error ? error->message : "");
@@ -1567,7 +1709,7 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 			goto out;
 		}
 
-		if (!is_supported(type, IPTABLES_SWITCH, arg)) {
+		if (!is_supported(family, IPTABLES_SWITCH, arg)) {
 			DBG("switch %s is not supported", arg);
 			goto out;
 		}
@@ -1595,7 +1737,7 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 					goto out;
 				}
 			/* If this is one of the supported protocols */
-			} else if (is_supported(type, IPTABLES_PROTO, opt)) {
+			} else if (is_supported(family, IPTABLES_PROTO, opt)) {
 				/*
 				 * If no protocol is set before, protocol match
 				 * cannot be used
@@ -1619,7 +1761,7 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 				}
 
 				/* Check if match protocol equals */
-				if (!protocol_match_equals(type, protocol,
+				if (!protocol_match_equals(family, protocol,
 							opt)) {
 					DBG("-p %s -m %s different protocol",
 								protocol, opt);
@@ -1676,6 +1818,26 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 
 			if (!g_strcmp0(opt, "!"))
 				goto negation_failure;
+		} else if (is_address_option(arg)) {
+			if (address_option && is_address_option_same_direction(
+						arg, address_option)) {
+				DBG("duplicate address option in %s",
+							rule_spec);
+				goto out;
+			}
+
+			address_option = arg;
+
+			switch_type = IPTABLES_IPADDR;
+			opt = argv[i++];
+
+			if (!opt)
+				goto trailing;
+
+			if (!g_strcmp0(opt, "!"))
+				goto negation_failure;
+
+			DBG("address %s %s", arg, opt);
 		} else if (g_str_has_prefix(arg, "--")) {
 			enum iptables_match_options_type option_type;
 			int option_type_params = 0;
@@ -1742,7 +1904,7 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 				params[opt_index] = argv[i++];
 			}
 
-			if (!is_valid_option_type_params(option_type,
+			if (!is_valid_option_type_params(family, option_type,
 						protocol,
 						params,
 						option_type_position,
@@ -1761,7 +1923,7 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 			goto out;
 		}
 
-		if (opt && !is_supported(type, switch_type, opt)) {
+		if (opt && !is_supported(family, switch_type, opt)) {
 			DBG("%s %s is not supported", arg, opt);
 			goto out;
 		}
@@ -1771,6 +1933,9 @@ bool __connman_iptables_validate_rule(int type, bool allow_dynamic,
 		switch_type = IPTABLES_UNSET;
 		opt = NULL;
 	}
+
+	if (switch_types_found[IPTABLES_IPADDR] > 2)
+		goto out;
 
 	/* With Genral rules dynamic options are allowed, max two (in + out) */
 	if (allow_dynamic && switch_types_found[IPTABLES_INTERFACE] > 2)
