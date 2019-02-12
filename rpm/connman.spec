@@ -22,7 +22,7 @@ Requires:   libgsupplicant >= 1.0.4
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
-# %license requires reasonably fresh rpm
+# license macro requires reasonably fresh rpm
 BuildRequires:  rpm >= 4.11
 BuildRequires:  pkgconfig(xtables) >= 1.6.1
 BuildRequires:	pkgconfig(libiptc)
