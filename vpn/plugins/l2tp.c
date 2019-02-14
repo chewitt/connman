@@ -382,6 +382,7 @@ static int write_pppd_option(struct vpn_provider *provider, int fd)
 
 	l2tp_write_option(fd, "nodetach", NULL);
 	l2tp_write_option(fd, "lock", NULL);
+	l2tp_write_option(fd, "logfd", "2");
 	l2tp_write_option(fd, "usepeerdns", NULL);
 	l2tp_write_option(fd, "noipdefault", NULL);
 	l2tp_write_option(fd, "noauth", NULL);

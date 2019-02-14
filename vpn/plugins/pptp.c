@@ -453,6 +453,7 @@ static int run_connect(struct vpn_provider *provider,
 
 	connman_task_add_argument(task, "nodetach", NULL);
 	connman_task_add_argument(task, "lock", NULL);
+	connman_task_add_argument(task, "logfd", "2");
 	connman_task_add_argument(task, "usepeerdns", NULL);
 	connman_task_add_argument(task, "noipdefault", NULL);
 	connman_task_add_argument(task, "noauth", NULL);
