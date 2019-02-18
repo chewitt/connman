@@ -4698,7 +4698,9 @@ static void add_network_security_peap(DBusMessageIter *dict,
 
 	}
 
-	if (g_str_has_prefix(ssid->phase2_auth, "EAP-")) {
+	if(g_strcmp0(ssid->phase2_auth, "GTC") == 0 && g_strcmp0(ssid->eap, "ttls") == 0)
+		phase2_auth = g_strdup_printf("autheap=%s", ssid->phase2_auth);
+	else if (g_str_has_prefix(ssid->phase2_auth, "EAP-")) {
 		phase2_auth = g_strdup_printf("autheap=%s",
 					ssid->phase2_auth + strlen("EAP-"));
 	} else
