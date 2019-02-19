@@ -3002,9 +3002,10 @@ int connman_inet_check_ipaddress(const char *host)
 	addr = NULL;
 
 	result = getaddrinfo(host, NULL, &hints, &addr);
-	if (result == 0)
+	if (result == 0) {
 		result = addr->ai_family;
-	freeaddrinfo(addr);
+		freeaddrinfo(addr);
+	}
 
 	return result;
 }
