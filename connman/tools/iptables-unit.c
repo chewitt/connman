@@ -234,6 +234,13 @@ gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message)
 	return TRUE;
 }
 
+gboolean g_dbus_send_message_with_reply(DBusConnection *connection,
+					DBusMessage *message,
+					DBusPendingCall **call, int timeout)
+{
+	return TRUE;
+}
+
 // Copied from gdbus/object.c
 DBusMessage *g_dbus_create_error(DBusMessage *message, const char *name,
 						const char *format, ...)
@@ -331,6 +338,56 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 	return reply;
 }
 
+static guint watch_id = 69;
+
+guint g_dbus_add_signal_watch(DBusConnection *connection,
+				const char *sender, const char *path,
+				const char *interface, const char *member,
+				GDBusSignalFunction function, void *user_data,
+				GDBusDestroyFunction destroy)
+{
+	return watch_id;
+}
+
+gboolean g_dbus_remove_watch(DBusConnection *connection, guint id)
+{
+	return id == watch_id;
+}
+
+// device dummies
+
+struct connman_device *connman_device_find_by_index(int index)
+{
+	return NULL;
+}
+
+const char *connman_device_get_ident(struct connman_device *device)
+{
+	return NULL;
+}
+
+const char *connman_device_get_string(struct connman_device *device,
+							const char *key)
+{
+	return NULL;
+}
+
+enum connman_device_type connman_device_get_type(struct connman_device *device)
+{
+	return 0;
+}
+
+// rtnl dummies
+
+int connman_rtnl_register(struct connman_rtnl *rtnl)
+{
+	return 0;
+}
+
+void connman_rtnl_unregister(struct connman_rtnl *rtnl)
+{
+	return;
+}
 
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
@@ -857,7 +914,7 @@ static void test_firewall_basic3(void)
 	g_assert(err == 0);
 
 	err = __connman_firewall_disable(ctx);
-	g_assert(err == -ENOENT);
+	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
 }
@@ -1233,7 +1290,7 @@ static void test_firewall6_basic3(void)
 	g_assert(err == 0);
 
 	err = __connman_firewall_disable(ctx);
-	g_assert(err == -ENOENT);
+	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
 }
@@ -1317,8 +1374,8 @@ static const char *general_output[] = {
 		NULL
 };
 static const char *general_forward[] = {
-		"-p tcp -m tcp -j ACCEPT",
-		"-p udp -m udp -j DROP",
+		"-p tcp -m tcp --sport 82 --dport 80 -j ACCEPT",
+		"-p udp -m udp --sport 80 --dport 81 -j DROP",
 		NULL
 };
 static const char *eth_input[] = {
@@ -1536,6 +1593,8 @@ static void test_managed_rule_exists(int type, const char *chain,
 	else
 		test_rule = g_strconcat("-A connman-", chain, rule_dev,
 					rule, NULL);
+
+	DBG("rule: \"%s\"", test_rule);
 
 	if (rule_exists)
 		assert_rule_exists(type, "filter", test_rule);

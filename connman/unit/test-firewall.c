@@ -1,7 +1,7 @@
 /*
  *  ConnMan firewall unit tests
  *
- *  Copyright (C) 2018 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2018-2019 Jolla Ltd. All rights reserved.
  *  Contact: jussi.laakkonen@jolla.com
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -525,6 +525,10 @@ static bool notifier_fail = false;
 
 int connman_notifier_register(struct connman_notifier *notifier)
 {
+	DBG("");
+
+	g_assert(notifier);
+
 	if (notifier_fail)
 		return -EINVAL;
 
@@ -536,6 +540,10 @@ int connman_notifier_register(struct connman_notifier *notifier)
 
 void connman_notifier_unregister(struct connman_notifier *notifier)
 {
+	DBG("");
+
+	g_assert(notifier);
+
 	firewall_notifier = NULL;
 }
 
@@ -1204,6 +1212,35 @@ gboolean g_file_get_contents(const gchar *filename, gchar **contents,
 
 	return TRUE;
 }
+
+// device dummies
+
+struct connman_device {
+	const char *ifname;
+};
+
+static struct connman_device test_device1 = {
+	.ifname = "rndis0",
+};
+
+static struct connman_device test_device2 = {
+	.ifname = "usb0",
+};
+
+static struct connman_device test_device3 = {
+	.ifname = NULL,
+};
+
+const char *connman_device_get_string(struct connman_device *device,
+							const char *key)
+{
+	if (device && !g_strcmp0(key, "Interface"))
+		return device->ifname;
+
+	return NULL;
+}
+
+// End of dummies
 
 #define CHAINS_GEN4 3
 #define RULES_GEN4 (CHAINS_GEN4 + 60)
@@ -3864,6 +3901,217 @@ static void firewall_test_dynamic_ok8()
 	__connman_iptables_cleanup();
 }
 
+static void firewall_test_device_status0()
+{
+	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* on */
+	firewall_notifier->device_status_changed(&test_device1, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
+	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+
+	/* off */
+	firewall_notifier->device_status_changed(&test_device1, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Tests with two devices */
+static void firewall_test_device_status1()
+{
+	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* device 1 on */
+	firewall_notifier->device_status_changed(&test_device1, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
+	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+
+	/* device 1 off */
+	firewall_notifier->device_status_changed(&test_device1, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	/* device 1 on */
+	firewall_notifier->device_status_changed(&test_device1, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
+	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+
+	/* device 2 on */
+	firewall_notifier->device_status_changed(&test_device2, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 4);
+	check_rules(assert_rule_exists, 0, device_rules, test_device2.ifname);
+
+	/* device 1 off */
+	firewall_notifier->device_status_changed(&test_device1, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	/* device 2 off */
+	firewall_notifier->device_status_changed(&test_device2, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device2.ifname);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Tests devices with double notifications */
+static void firewall_test_device_status2()
+{
+	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* on */
+	firewall_notifier->device_status_changed(&test_device1, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
+	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+
+	/* on double */
+	firewall_notifier->device_status_changed(&test_device1, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
+	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+
+	/* off */
+	firewall_notifier->device_status_changed(&test_device1, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	/* off double */
+	firewall_notifier->device_status_changed(&test_device1, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Notify from managed device - no new rules */
+static void firewall_test_device_status3()
+{
+	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* on */
+	firewall_notifier->device_status_changed(&test_device1, true, true);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	/* off */
+	firewall_notifier->device_status_changed(&test_device1, false, true);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Only off notify from managed device - nothing done */
+static void firewall_test_device_status4()
+{
+	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* Managed device off notification, nothing is done */
+	firewall_notifier->device_status_changed(&test_device1, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	check_rules(assert_rule_not_exists, 0, device_rules,
+				test_device1.ifname);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
 static void firewall_test_config_reload0()
 {
 	DBusMessage *msg;
@@ -4198,6 +4446,66 @@ static void firewall_test_config_reload4()
 
 	check_default_policies(policies_default);
 
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Device is null  */
+static void firewall_test_device_status_fail0()
+{
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* NULL device on */
+	firewall_notifier->device_status_changed(NULL, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* NULL device off */
+	firewall_notifier->device_status_changed(NULL, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	__connman_firewall_pre_cleanup();
+	__connman_firewall_cleanup();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
+
+	__connman_iptables_cleanup();
+}
+
+/* Interface is null  */
+static void firewall_test_device_status_fail1()
+{
+	setup_test_params(CONFIG_OK);
+
+	__connman_iptables_init();
+	__connman_firewall_init();
+
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* Device with no inteface on */
+	firewall_notifier->device_status_changed(&test_device3, true, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	/* Device with no inteface off */
+	firewall_notifier->device_status_changed(&test_device3, false, false);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+
+	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
@@ -4612,21 +4920,35 @@ int main (int argc, char *argv[])
 				firewall_test_dynamic_ok7);
 	g_test_add_func("/firewall/test_dynamic_ok8",
 				firewall_test_dynamic_ok8);
-	g_test_add_func("/firewall/config_reload0",
+	g_test_add_func("/firewall/test_device_status0",
+				firewall_test_device_status0);
+	g_test_add_func("/firewall/test_device_status1",
+				firewall_test_device_status1);
+	g_test_add_func("/firewall/test_device_status2",
+				firewall_test_device_status2);
+	g_test_add_func("/firewall/test_device_status3",
+				firewall_test_device_status3);
+	g_test_add_func("/firewall/test_device_status4",
+				firewall_test_device_status4);
+	g_test_add_func("/firewall/test_config_reload0",
 				firewall_test_config_reload0);
-	g_test_add_func("/firewall/config_reload1",
+	g_test_add_func("/firewall/test_config_reload1",
 				firewall_test_config_reload1);
-	g_test_add_func("/firewall/config_reload2",
+	g_test_add_func("/firewall/test_config_reload2",
 				firewall_test_config_reload2);
-	g_test_add_func("/firewall/config_reload3",
+	g_test_add_func("/firewall/test_config_reload3",
 				firewall_test_config_reload3);
-	g_test_add_func("/firewall/config_reload4",
+	g_test_add_func("/firewall/test_config_reload4",
 				firewall_test_config_reload4);
+	g_test_add_func("/firewall/test_device_status_fail0",
+				firewall_test_device_status_fail0);
+	g_test_add_func("/firewall/test_device_status_fail1",
+				firewall_test_device_status_fail1);
 	g_test_add_func("/firewall/config_reload_fail0",
 				firewall_test_config_reload_fail0);
 	g_test_add_func("/firewall/config_reload_fail1",
 				firewall_test_config_reload_fail1);
-	g_test_add_func("/firewall/iptables_notifier0",
+	g_test_add_func("/firewall/iptables_notifier_fail0",
 				firewall_test_notifier_fail0);
 	g_test_add_func("/firewall/iptables_fail0",
 				firewall_test_iptables_fail0);
