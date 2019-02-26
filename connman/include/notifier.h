@@ -25,6 +25,7 @@
 #include <connman/service.h>
 #include <connman/ipconfig.h>
 #include <connman/technology.h>
+#include <connman/device.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,9 +58,16 @@ struct connman_notifier {
 					struct connman_ipconfig *ipconfig);
 	void (*idle_state) (bool idle);
 	void (*tethering_changed) (struct connman_technology *tech, bool on);
+	/*
+	 * The boolean 'on' defines device state, boolean 'managed' tells if
+	 * connman should manage this device or not. If device is not managed it
+	 * means that an external component brought that up.
+	 */
+	void (*device_status_changed) (struct connman_device *device, bool on,
+				bool managed);
 
 	/* Placeholders for future extensions */
-	void (*_reserved[10])(void);
+	void (*_reserved[9])(void);
 
 	/* api_level will remain zero (and ignored) until we run out of
 	 * the above placeholders. Hopefully, forever. */

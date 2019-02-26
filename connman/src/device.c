@@ -668,6 +668,15 @@ int connman_device_reconnect_service(struct connman_device *device)
 	return 0;
 }
 
+void connman_device_status_notify(struct connman_device *device, bool on,
+								bool managed)
+{
+	if (!device)
+		return;
+
+	__connman_notifier_device_status_changed(device, on, managed);
+}
+
 static void mark_network_available(gpointer key, gpointer value,
 							gpointer user_data)
 {

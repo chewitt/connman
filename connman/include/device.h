@@ -111,6 +111,9 @@ struct connman_device *connman_device_create_from_index(int index);
 struct connman_device *connman_device_find_by_index(int index);
 int connman_device_reconnect_service(struct connman_device *device);
 
+void connman_device_status_notify(struct connman_device *device, bool on,
+								bool managed);
+
 struct connman_device_driver {
 	const char *name;
 	enum connman_device_type type;
