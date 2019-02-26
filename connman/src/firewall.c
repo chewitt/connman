@@ -1082,33 +1082,56 @@ static void service_remove(struct connman_service *service)
 		DBG("removed dynamic rules of service %s", identifier);
 }
 
-static int add_default_tethering_rules(struct firewall_context *ctx,
-								char *ifname)
+static int add_default_accept_all_rules(struct firewall_context *ctx,
+			char *ifname, bool both_directions)
 {
 	/* Add more in the future if needed */
-	const char *tethering_rules[] = { "-j ACCEPT", NULL };
+	const char *default_rules[] = { "-j ACCEPT", NULL };
 	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
+	int err = 0;
 	int id;
 	int i;
 
 	/* Add tethering rules for both IPv4 and IPv6 when using usb */
-	for (i = 0; tethering_rules[i]; i++) {
+	for (i = 0; default_rules[i]; i++) {
 		id = __connman_firewall_add_rule(ctx, cb, NULL, "filter",
-					"INPUT", tethering_rules[i]);
-		if (id < 0)
-			DBG("cannot add IPv4 rule %s",
-						tethering_rules[i]);
+					"INPUT", default_rules[i]);
+		if (id < 0) {
+			DBG("cannot add IPv4 rule %s", default_rules[i]);
+			err = -EINVAL;
+		}
 
 		id = __connman_firewall_add_ipv6_rule(ctx, cb, NULL, "filter",
-					"INPUT", tethering_rules[i]);
-		if (id < 0)
-			DBG("cannot add IPv6 rule %s",
-						tethering_rules[i]);
+					"INPUT", default_rules[i]);
+		if (id < 0) {
+			DBG("cannot add IPv6 rule %s", default_rules[i]);
+			err = -EINVAL;
+		}
+
+		if (both_directions) {
+			id = __connman_firewall_add_rule(ctx, cb, NULL,
+						"filter", "OUTPUT",
+						default_rules[i]);
+			if (id < 0) {
+				DBG("cannot add IPv4 rule %s",
+							default_rules[i]);
+				err = -EINVAL;
+			}
+
+			id = __connman_firewall_add_ipv6_rule(ctx, cb, NULL,
+						"filter", "OUTPUT",
+						default_rules[i]);
+			if (id < 0) {
+				DBG("cannot add IPv6 rule %s",
+							default_rules[i]);
+				err = -EINVAL;
+			}
+		}
 	}
 
 	g_list_foreach(ctx->rules, setup_firewall_rule_interface, ifname);
 
-	return 0;
+	return err;
 }
 
 #define DEFAULT_TETHERING_IDENT "tethering_default"
@@ -1180,7 +1203,7 @@ static void tethering_changed(struct connman_technology *tech, bool on)
 		/* If list is empty add default rules */
 		if (!g_list_length(ctx->rules)) {
 			/* Try to add default rules for tethering */
-			if (add_default_tethering_rules(ctx, ifname)) {
+			if (add_default_accept_all_rules(ctx, ifname, false)) {
 				DBG("default tethering rules cannot be added.");
 				goto disable;
 			}
@@ -1199,7 +1222,7 @@ static void tethering_changed(struct connman_technology *tech, bool on)
 						tech, identifier, ifname);
 	} else {
 		/*
-		 * If tethering is on and firewall is enabled, return. 
+		 * If tethering is on and firewall is enabled, return.
 		 * If tethering is off and firewall is disabled, return.
 		 */
 		if ((on && ctx->enabled) || (!on && !ctx->enabled)) {
@@ -1252,6 +1275,105 @@ disable:
 	/* This generates notification */
 	connman_technology_tethering_notify(tech, FALSE);
 	g_free(ifname);
+}
+
+static void device_status_changed(struct connman_device *device, bool on,
+								bool managed)
+{
+	struct firewall_context *ctx;
+	char *ifname = NULL;
+	int err = 0;
+
+	if (!device) {
+		DBG("no device");
+		return;
+	}
+
+	if (managed) {
+		DBG("ignoring managed device %p", device);
+		return;
+	}
+
+	/* This is not set if the configuration has not been loaded */
+	if (!current_dynamic_rules)
+		return;
+
+	/* It is safer to dup the interface name than to remove const */
+	ifname = g_strdup(connman_device_get_string(device, "Interface"));
+
+	if (!ifname) {
+		DBG("no interface for device %p", device);
+		return;
+	}
+
+	DBG("gadget device %s %s", ifname, on ? "up" : "down");
+
+	ctx = g_hash_table_lookup(current_dynamic_rules, ifname);
+
+	/* Not found, create new. */
+	if (!ctx) {
+		if (!on)
+			goto out;
+
+		ctx = __connman_firewall_create();
+
+		/* Allocation of ctx failed, disable device firewall. */
+		if (!ctx) {
+			DBG("new firewall cannot be created");
+			goto out;
+		}
+
+		/* Add default rules for device for both directions */
+		err = add_default_accept_all_rules(ctx, ifname, true);
+		if (err) {
+			DBG("default device rules cannot be added.");
+			goto out;
+		}
+
+		/*
+		 * Add a new into hash table, this condition should not be ever
+		 * met. Left for debugging.
+		 */
+		if (!g_hash_table_replace(current_dynamic_rules,
+					g_strdup(ifname), ctx))
+			DBG("hash table error, key %s exists", ifname);
+		else
+			DBG("added new device firewall rules for %s", ifname);
+	} else {
+		/*
+		 * If device is on and firewall is enabled, return. 
+		 * If device is off and firewall is disabled, return.
+		 */
+		if (on == ctx->enabled) {
+			DBG("device firewall already %s for %s",
+						on ? "enabled" : "disabled",
+						ifname);
+			goto out;
+		}
+
+		/*
+		 * If there is a device firewall for this identifier it will
+		 * have the rules set up properly. Just to make sure, update the
+		 * used interface info.
+		 */
+		if (on) {
+			/* Set interface information for each firewall rule */
+			g_list_foreach(ctx->rules,
+						setup_firewall_rule_interface,
+						ifname);
+			DBG("reused device firewall for %s", ifname);
+		}
+	}
+	if (on)
+		err = __connman_firewall_enable(ctx);
+	else
+		err = __connman_firewall_disable_rule(ctx, FW_ALL_RULES);
+
+out:
+	g_free(ifname);
+
+	if (err)
+		DBG("cannot make change, error: %s", strerror(-err));
 }
 
 static bool is_rule_in_context(struct firewall_context *ctx, int family,
@@ -2643,6 +2765,8 @@ static struct connman_access_firewall_policy *get_firewall_access_policy()
 	return firewall_access_policy;
 }
 
+static DBusConnection *connection = NULL;
+
 static DBusMessage *reload(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -2667,8 +2791,6 @@ static DBusMessage *reload(DBusConnection *conn,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
-static DBusConnection *connection = NULL;
-
 static const GDBusMethodTable firewall_methods[] = {
 	{ GDBUS_ASYNC_METHOD("Reload", NULL, NULL, reload) },
 	{ },
@@ -2679,6 +2801,7 @@ static struct connman_notifier firewall_notifier = {
 	.service_state_changed	= service_state_changed,
 	.service_remove		= service_remove,
 	.tethering_changed	= tethering_changed,
+	.device_status_changed	= device_status_changed,
 };
 
 int __connman_firewall_init(void)
@@ -2766,6 +2889,8 @@ void __connman_firewall_pre_cleanup(void)
 void __connman_firewall_cleanup(void)
 {
 	DBG("");
+
+	connman_notifier_unregister(&firewall_notifier);
 
 	if (connection) {
 		if (!g_dbus_unregister_interface(connection,
