@@ -44,6 +44,7 @@ BuildRequires:  pkgconfig(libmce-glib)
 BuildRequires:  pkgconfig(libgsupplicant) >= 1.0.6
 BuildRequires:  ppp-devel
 BuildRequires:  libtool
+BuildRequires:  usb-moded-devel >= 0.86.0+mer31
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -124,6 +125,7 @@ Man pages for %{name}.
     --enable-sailfish-debuglog \
     --enable-sailfish-ofono \
     --enable-sailfish-usb-tethering \
+    --enable-sailfish-developer-mode \
     --enable-sailfish-wifi \
     --enable-sailfish-access \
     --enable-sailfish-counters \

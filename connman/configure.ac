@@ -432,6 +432,11 @@ AC_ARG_ENABLE(sailfish-usb-tethering,
 			[enable_sailfish_usb=${enableval}], [enable_sailfish_usb="no"])
 AM_CONDITIONAL(SAILFISH_USB_TETHERING, test "${enable_sailfish_usb_tethering}" != "no")
 
+AC_ARG_ENABLE(sailfish-developer-mode,
+	AC_HELP_STRING([--enable-sailfish-developer-mode], [enable Sailfish developer mode plugin]),
+			[enable_sailfish_developer_mode=${enableval}], [enable_sailfish_developer_mode="no"])
+AM_CONDITIONAL(SAILFISH_DEVELOPER_MODE, test "${enable_sailfish_developer_mode}" != "no")
+
 AC_ARG_ENABLE(sailfish-wifi,
 	AC_HELP_STRING([--enable-sailfish-wifi], [enable Sailfish WiFi plugin]),
 		[enable_sailfish_wifi=${enableval}], [enable_sailfish_wifi="no"])
