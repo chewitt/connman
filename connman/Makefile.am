@@ -472,6 +472,17 @@ noinst_PROGRAMS += unit/test-sailfish_datahistory
 TESTS += unit/test-sailfish_datahistory
 endif
 
+if SAILFISH_DEVELOPER_MODE
+unit_test_sailfish_developer_mode_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				@GLIB_CFLAGS@
+unit_test_sailfish_developer_mode_SOURCES = $(backtrace_sources) src/connman.h \
+				src/log.c plugins/sailfish_developer_mode.c \
+				unit/test-sailfish_developer_mode.c
+unit_test_sailfish_developer_mode_LDADD = @GLIB_LIBS@ -ldl
+noinst_PROGRAMS += unit/test-sailfish_developer_mode
+TESTS += unit/test-sailfish_developer_mode
+endif
+
 if WISPR
 noinst_PROGRAMS += tools/wispr
 

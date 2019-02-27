@@ -17,7 +17,7 @@ test-sailfish_wakeup_timer \
 test-sailfish_datacounter \
 test-sailfish_datacounters \
 test-sailfish_datahistory \
-test-sailfish_wakeup_timer \
+test-sailfish_developer_mode \
 test-vpn-settings"
 
 pushd `dirname $0` > /dev/null
