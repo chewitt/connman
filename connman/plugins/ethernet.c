@@ -48,6 +48,7 @@
 #include <connman/rtnl.h>
 #include <connman/log.h>
 #include <connman/setting.h>
+#include <connman/notifier.h>
 
 static bool eth_tethering = false;
 
@@ -294,11 +295,19 @@ static void eth_dev_remove(struct connman_device *device)
 	g_free(ethernet);
 }
 
+static GSList *ignore_index_list = NULL;
+
 static int eth_dev_enable(struct connman_device *device)
 {
 	struct ethernet_data *ethernet = connman_device_get_data(device);
 
 	DBG("device %p", device);
+
+	if (g_slist_find(ignore_index_list,
+				GINT_TO_POINTER(ethernet->index))) {
+		DBG("cannot access developer mode device");
+		return 0;
+	}
 
 	return connman_inet_ifup(ethernet->index);
 }
@@ -308,6 +317,12 @@ static int eth_dev_disable(struct connman_device *device)
 	struct ethernet_data *ethernet = connman_device_get_data(device);
 
 	DBG("device %p", device);
+
+	if (g_slist_find(ignore_index_list,
+				GINT_TO_POINTER(ethernet->index))) {
+		DBG("cannot access developer mode device");
+		return 0;
+	}
 
 	return connman_inet_ifdown(ethernet->index);
 }
@@ -430,6 +445,45 @@ static struct connman_technology_driver eth_tech_driver = {
 	.set_tethering		= eth_tech_set_tethering,
 };
 
+static void ethernet_device_status_changed(struct connman_device *device,
+			bool on, bool managed)
+{
+	int index;
+
+	if (!device)
+		return;
+
+	/* This is connman device, do not add them to ignore list */
+	if (managed)
+		return;
+
+	if (connman_device_get_type(device) != CONNMAN_DEVICE_TYPE_ETHERNET)
+		return;
+
+	index = connman_device_get_index(device);
+
+	if (on) {
+		DBG("add device %p", device);
+
+		if (g_slist_find(ignore_index_list, GINT_TO_POINTER(index))) {
+			DBG("device already in index list");
+			return;
+		}
+
+		ignore_index_list = g_slist_prepend(ignore_index_list,
+					GINT_TO_POINTER(index));
+	} else {
+		DBG("remove device %p", device);
+		ignore_index_list = g_slist_remove(ignore_index_list,
+					GINT_TO_POINTER(index));
+	}
+}
+
+static struct connman_notifier ethernet_notifier = {
+	.name			= "ethernet_plugin",
+	.device_status_changed	= ethernet_device_status_changed,
+};
+
 static int ethernet_init(void)
 {
 	int err;
@@ -448,6 +502,10 @@ static int ethernet_init(void)
 		return err;
 	}
 
+	err = connman_notifier_register(&ethernet_notifier);
+	if (err < 0)
+		DBG("cannot register device status notifier");
+
 	return 0;
 }
 
@@ -458,6 +516,13 @@ static void ethernet_exit(void)
 	connman_network_driver_unregister(&eth_network_driver);
 
 	connman_device_driver_unregister(&eth_dev_driver);
+
+	connman_notifier_unregister(&ethernet_notifier);
+
+	if (ignore_index_list)
+		g_slist_free(ignore_index_list);
+
+	ignore_index_list = NULL;
 }
 
 CONNMAN_PLUGIN_DEFINE(ethernet, "Ethernet interface plugin", VERSION,
