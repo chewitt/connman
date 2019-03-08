@@ -212,11 +212,11 @@ systemctl daemon-reload || :
 
 %files test
 %defattr(-,root,root,-)
-%{_bindir}/connmanctl
 %{_libdir}/%{name}/test
 
 %files tools
 %defattr(-,root,root,-)
+%{_bindir}/connmanctl
 %{_libdir}/%{name}/tools
 
 %files configs-mer
