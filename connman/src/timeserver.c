@@ -106,24 +106,21 @@ static void resolv_result(GResolvResultStatus status, char **results,
 
 	if (status == G_RESOLV_RESULT_STATUS_SUCCESS) {
 		if (results) {
-			for (i = 0; results[i]; i++) {
+			/* prepend the results in reverse order */
+
+			for (i = 0; results[i]; i++)
+				/* count */;
+			i--;
+
+			for (; i >= 0; i--) {
 				DBG("result[%d]: %s", i, results[i]);
-				if (i == 0)
-					continue;
 
 				ts_list = __connman_timeserver_add_list(
-							ts_list, results[i]);
+					ts_list, results[i]);
 			}
-
-			DBG("Using timeserver %s", results[0]);
-
-			__connman_ntp_start(results[0], ntp_callback, NULL);
-
-			return;
 		}
 	}
 
-	/* If resolving fails, move to the next server */
 	sync_next();
 }
 
@@ -145,23 +142,7 @@ static void timeserver_sync_start(void)
 	}
 	ts_list = g_slist_reverse(ts_list);
 
-	ts_current = ts_list->data;
-
-	ts_list = g_slist_delete_link(ts_list, ts_list);
-
-	/* if it's an IP, directly query it. */
-	if (connman_inet_check_ipaddress(ts_current) > 0) {
-		DBG("Using timeserver %s", ts_current);
-
-		__connman_ntp_start(ts_current, ntp_callback, NULL);
-
-		return;
-	}
-
-	DBG("Resolving timeserver %s", ts_current);
-
-	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
-						resolv_result, NULL);
+	sync_next();
 }
 
 static gboolean timeserver_sync_restart(gpointer user_data)
@@ -178,7 +159,7 @@ static gboolean timeserver_sync_restart(gpointer user_data)
  * none of the server did work we start over with the first server
  * with a backoff.
  */
-static void sync_next()
+static void sync_next(void)
 {
 	if (ts_current) {
 		g_free(ts_current);
@@ -187,32 +168,25 @@ static void sync_next()
 
 	__connman_ntp_stop();
 
-	/* Get the 1st server in the list */
-	if (!ts_list) {
-		DBG("No timeserver could be used, restart probing in 5 seconds");
+	while (ts_list) {
+		ts_current = ts_list->data;
+		ts_list = g_slist_delete_link(ts_list, ts_list);
 
-		ts_backoff_id = g_timeout_add_seconds(5,
-					timeserver_sync_restart, NULL);
-		return;
-	}
+		/* if it's an IP, directly query it. */
+		if (connman_inet_check_ipaddress(ts_current) > 0) {
+			DBG("Using timeserver %s", ts_current);
+			__connman_ntp_start(ts_current, ntp_callback, NULL);
+			return;
+		}
 
-	ts_current = ts_list->data;
-
-	ts_list = g_slist_delete_link(ts_list, ts_list);
-
-	/* if it's an IP, directly query it. */
-	if (connman_inet_check_ipaddress(ts_current) > 0) {
-		DBG("Using timeserver %s", ts_current);
-
-		__connman_ntp_start(ts_current, ntp_callback, NULL);
-
-		return;
-	}
-
-	DBG("Resolving timeserver %s", ts_current);
-
-	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
+		DBG("Resolving timeserver %s", ts_current);
+		resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
 						resolv_result, NULL);
+		return;
+	}
+
+	DBG("No timeserver could be used, restart probing in 5 seconds");
+	ts_backoff_id = g_timeout_add_seconds(5, timeserver_sync_restart, NULL);
 }
 
 GSList *__connman_timeserver_add_list(GSList *server_list,
