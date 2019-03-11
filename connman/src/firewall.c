@@ -51,14 +51,14 @@ static const char *builtin_chains[] = {
 };
 
 struct connman_managed_table {
-	int type;
+	int family;
 	char *name;
 	unsigned int chains[NF_INET_NUMHOOKS];
 };
 
 struct fw_rule {
 	int id;
-	int type;
+	int family;
 	bool enabled;
 	char *table;
 	char *chain;
@@ -159,6 +159,17 @@ static int firewall_rule_compare(gconstpointer a, gconstpointer b)
 	return g_strcmp0(rule_a->config_file, rule_b->config_file);
 }
 
+static int firewall_rule_compare_reverse(gconstpointer a, gconstpointer b)
+{
+	/*
+	 * This reverses the rule order for dynamic and tethering rules. These
+	 * rules are inserted to iptables instead of appending so the last one
+	 * to be inserted should not be on top. With reversed list the rule that
+	 * is loaded as first rule from configs stays on top of iptables rules.
+	 */
+	return firewall_rule_compare(b, a);
+}
+
 static int chain_to_index(const char *chain_name)
 {
 	if (!g_strcmp0(builtin_chains[NF_IP_PRE_ROUTING], chain_name))
@@ -183,7 +194,7 @@ static int managed_chain_to_index(const char *chain_name)
 	return chain_to_index(chain_name + strlen(CHAIN_PREFIX));
 }
 
-static int insert_managed_chain(int type, const char *table_name, int id)
+static int insert_managed_chain(int family, const char *table_name, int id)
 {
 	char *rule, *managed_chain;
 	int err;
@@ -191,19 +202,19 @@ static int insert_managed_chain(int type, const char *table_name, int id)
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX,
 					builtin_chains[id]);
 
-	err = __connman_iptables_new_chain(type, table_name, managed_chain);
+	err = __connman_iptables_new_chain(family, table_name, managed_chain);
 
 	if (err < 0)
 		goto out;
 
 	rule = g_strdup_printf("-j %s", managed_chain);
 
-	err = __connman_iptables_insert(type, table_name,
+	err = __connman_iptables_insert(family, table_name,
 					builtin_chains[id], rule);
 
 	g_free(rule);
 	if (err < 0) {
-		__connman_iptables_delete_chain(type, table_name,
+		__connman_iptables_delete_chain(family, table_name,
 						managed_chain);
 		goto out;
 	}
@@ -214,7 +225,7 @@ out:
 	return err;
 }
 
-static int delete_managed_chain(int type, const char *table_name, int id)
+static int delete_managed_chain(int family, const char *table_name, int id)
 {
 	char *rule, *managed_chain;
 	int err;
@@ -223,14 +234,14 @@ static int delete_managed_chain(int type, const char *table_name, int id)
 					builtin_chains[id]);
 
 	rule = g_strdup_printf("-j %s", managed_chain);
-	err = __connman_iptables_delete(type, table_name,
+	err = __connman_iptables_delete(family, table_name,
 					builtin_chains[id], rule);
 	g_free(rule);
 
 	if (err < 0)
 		goto out;
 
-	err =  __connman_iptables_delete_chain(type, table_name,
+	err =  __connman_iptables_delete_chain(family, table_name,
 					managed_chain);
 
 out:
@@ -261,7 +272,7 @@ static char *format_new_rule(int chain, const char* ifname, const char* rule)
 }
 
 static int insert_managed_rule(connman_iptables_manage_cb_t cb,
-				int type,
+				int family,
 				const char *table_name,
 				const char *chain_name,
 				const char *ifname,
@@ -287,7 +298,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 		mtable = list->data;
 
 		if (g_strcmp0(mtable->name, table_name) == 0 &&
-				mtable->type == type)
+				mtable->family == family)
 			break;
 
 		mtable = NULL;
@@ -296,7 +307,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 	if (!mtable) {
 		mtable = g_new0(struct connman_managed_table, 1);
 		mtable->name = g_strdup(table_name);
-		mtable->type = type;
+		mtable->family = family;
 
 		managed_tables = g_slist_prepend(managed_tables, mtable);
 	}
@@ -305,7 +316,7 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 		DBG("table %s add managed chain for %s",
 			table_name, chain_name);
 
-		err = insert_managed_chain(type, table_name, id);
+		err = insert_managed_chain(family, table_name, id);
 		if (err < 0)
 			goto err;
 	}
@@ -315,10 +326,10 @@ static int insert_managed_rule(connman_iptables_manage_cb_t cb,
 
 out:
 	if (cb)
-		err = cb(type, table_name, chain,
+		err = cb(family, table_name, chain,
 					full_rule ? full_rule : rule_spec);
 	else
-		err = __connman_iptables_append(type, table_name, chain,
+		err = __connman_iptables_append(family, table_name, chain,
 					full_rule ? full_rule : rule_spec);
 
 err:
@@ -332,7 +343,7 @@ err:
 	return err;
  }
 
-static int delete_managed_rule(int type, const char *table_name,
+static int delete_managed_rule(int family, const char *table_name,
 				const char *chain_name,
 				const char *ifname,
 				const char *rule_spec)
@@ -349,7 +360,7 @@ static int delete_managed_rule(int type, const char *table_name,
 
 	if (id < 0) {
 		/* This chain is not managed */
-		err = __connman_iptables_delete(type, table_name,
+		err = __connman_iptables_delete(family, table_name,
 					chain_name,
 					full_rule ? full_rule : rule_spec);
 		goto out;
@@ -357,19 +368,19 @@ static int delete_managed_rule(int type, const char *table_name,
 
 	managed_chain = g_strdup_printf("%s%s", CHAIN_PREFIX, chain_name);
 
-	err = __connman_iptables_delete(type, table_name, managed_chain,
+	err = __connman_iptables_delete(family, table_name, managed_chain,
 				full_rule ? full_rule : rule_spec);
 	
 	if (err < 0)
 		DBG("table %s managed rule %s was not removed from ip%stables",
 			table_name, full_rule ? full_rule : rule_spec,
-			type == AF_INET6 ? "6" : "");
+			family == AF_INET6 ? "6" : "");
 
 	for (list = managed_tables; list; list = list->next) {
 		mtable = list->data;
 
 		if (g_strcmp0(mtable->name, table_name) == 0 &&
-				mtable->type == type)
+				mtable->family == family)
 			break;
 
 		mtable = NULL;
@@ -387,7 +398,7 @@ static int delete_managed_rule(int type, const char *table_name,
 	DBG("table %s remove managed chain for %s",
 			table_name, chain_name);
 
-	err = delete_managed_chain(type, table_name, id);
+	err = delete_managed_chain(family, table_name, id);
 
 out:
 	g_free(managed_chain);
@@ -438,10 +449,10 @@ static int firewall_enable_rule(struct fw_rule *rule)
 	if (rule->enabled)
 		return -EALREADY;
 
-	DBG("%d %s %s %s %s", rule->type, rule->table, rule->chain,
+	DBG("%d %s %s %s %s", rule->family, rule->table, rule->chain,
 					rule->ifname, rule->rule_spec);
 
-	err = insert_managed_rule(rule->cb, rule->type, rule->table,
+	err = insert_managed_rule(rule->cb, rule->family, rule->table,
 					rule->chain, rule->ifname,
 					rule->rule_spec);
 	if (err < 0) {
@@ -449,7 +460,7 @@ static int firewall_enable_rule(struct fw_rule *rule)
 		goto err;
 	}
 
-	err = __connman_iptables_commit(rule->type, rule->table);
+	err = __connman_iptables_commit(rule->family, rule->table);
 
 	if (err < 0) {
 		DBG("iptables commit failed %d", err);
@@ -461,9 +472,9 @@ static int firewall_enable_rule(struct fw_rule *rule)
 	return 0;
 
 err:
-	connman_warn("failed to add rule to iptables: id: %d type: %d "
+	connman_warn("failed to add rule to iptables: id: %d IP family: %d "
 				"table: %s chain: %s interface: %s rule: %s",
-				rule->id, rule->type, rule->table, rule->chain,
+				rule->id, rule->family, rule->table, rule->chain,
 				rule->ifname, rule->rule_spec);
 	return err;
 }
@@ -475,7 +486,7 @@ static int firewall_disable_rule(struct fw_rule *rule)
 	if (!rule->enabled)
 		return -EALREADY;
 
-	err = delete_managed_rule(rule->type, rule->table, rule->chain,
+	err = delete_managed_rule(rule->family, rule->table, rule->chain,
 					rule->ifname, rule->rule_spec);
 	if (err < 0) {
 		connman_error("pre-commit: Cannot remove previously installed "
@@ -483,7 +494,7 @@ static int firewall_disable_rule(struct fw_rule *rule)
 		return err;
 	}
 
-	err = __connman_iptables_commit(rule->type, rule->table);
+	err = __connman_iptables_commit(rule->family, rule->table);
 	
 	if (err < 0) {
 		connman_error("Cannot remove previously installed "
@@ -496,6 +507,40 @@ static int firewall_disable_rule(struct fw_rule *rule)
 	return 0;
 }
 
+static int firewall_add_rule(struct firewall_context *ctx,
+				connman_iptables_manage_cb_t cb,
+				const char *config_file,
+				int family,
+				const char *table,
+				const char *chain,
+				char *rule_spec)
+{
+	struct fw_rule *rule;
+	GCompareFunc comparefunc;
+
+	rule = g_new0(struct fw_rule, 1);
+
+	rule->id = firewall_rule_id++;
+	rule->family = family;
+	rule->enabled = false;
+	rule->cb = cb;
+
+	if (!cb || cb == __connman_iptables_append)
+		comparefunc = firewall_rule_compare;
+	else
+		comparefunc = firewall_rule_compare_reverse;
+
+	if (config_file)
+		rule->config_file = g_path_get_basename(config_file);
+
+	rule->table = g_strdup(table);
+	rule->chain = g_strdup(chain);
+	rule->rule_spec = rule_spec;
+
+	ctx->rules = g_list_insert_sorted(ctx->rules, rule, comparefunc);
+	return rule->id;
+}
+
 int __connman_firewall_add_rule(struct firewall_context *ctx,
 				connman_iptables_manage_cb_t cb,
 				const char *config_file,
@@ -505,7 +550,6 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 {
 	va_list args;
 	char *rule_spec;
-	struct fw_rule *rule;
 
 	va_start(args, rule_fmt);
 
@@ -513,23 +557,8 @@ int __connman_firewall_add_rule(struct firewall_context *ctx,
 
 	va_end(args);
 
-	rule = g_new0(struct fw_rule, 1);
-
-	rule->id = firewall_rule_id++;
-	rule->type = AF_INET;
-	rule->enabled = false;
-	rule->cb = cb;
-
-	if (config_file)
-		rule->config_file = g_path_get_basename(config_file);
-
-	rule->table = g_strdup(table);
-	rule->chain = g_strdup(chain);
-	rule->rule_spec = rule_spec;
-
-	ctx->rules = g_list_insert_sorted(ctx->rules, rule,
-				firewall_rule_compare);
-	return rule->id;
+	return firewall_add_rule(ctx, cb, config_file, AF_INET, table, chain,
+				rule_spec);
 }
 
 int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
@@ -541,7 +570,6 @@ int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
 {
 	va_list args;
 	char *rule_spec;
-	struct fw_rule *rule;
 
 	va_start(args, rule_fmt);
 
@@ -549,23 +577,8 @@ int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
 
 	va_end(args);
 
-	rule = g_new0(struct fw_rule, 1);
-
-	rule->id = firewall_rule_id++;
-	rule->type = AF_INET6;
-	rule->enabled = false;
-	rule->cb = cb;
-
-	if (config_file)
-		rule->config_file = g_path_get_basename(config_file);
-
-	rule->table = g_strdup(table);
-	rule->chain = g_strdup(chain);
-	rule->rule_spec = rule_spec;
-
-	ctx->rules = g_list_insert_sorted(ctx->rules, rule,
-				firewall_rule_compare);
-	return rule->id;
+	return firewall_add_rule(ctx, cb, config_file, AF_INET6, table, chain,
+				rule_spec);
 }
 
 int __connman_firewall_remove_rule(struct firewall_context *ctx, int id)
@@ -715,13 +728,13 @@ static void iterate_chains_cb(const char *chain_name, void *user_data)
 	*chains = g_slist_prepend(*chains, GINT_TO_POINTER(id));
 }
 
-static void flush_table(int type, const char *table_name)
+static void flush_table(int family, const char *table_name)
 {
 	GSList *chains = NULL, *list;
 	char *rule, *managed_chain;
 	int id, err;
 
-	err = __connman_iptables_iterate_chains(type, table_name,
+	err = __connman_iptables_iterate_chains(family, table_name,
 					iterate_chains_cb, &chains);
 	
 	if (err < 0)
@@ -735,7 +748,7 @@ static void flush_table(int type, const char *table_name)
 
 		rule = g_strdup_printf("-j %s", managed_chain);
 		
-		err = __connman_iptables_delete(type, table_name,
+		err = __connman_iptables_delete(family, table_name,
 						builtin_chains[id],
 						rule);
 
@@ -745,7 +758,7 @@ static void flush_table(int type, const char *table_name)
 		}
 		g_free(rule);
 
-		err = __connman_iptables_flush_chain(type, table_name,
+		err = __connman_iptables_flush_chain(family, table_name,
 						managed_chain);
 		
 		if (err < 0) {
@@ -753,7 +766,7 @@ static void flush_table(int type, const char *table_name)
 				managed_chain, strerror(-err));
 		}
 		
-		err = __connman_iptables_delete_chain(type, table_name,
+		err = __connman_iptables_delete_chain(family, table_name,
 						managed_chain);
 		
 		if (err < 0) {
@@ -764,7 +777,7 @@ static void flush_table(int type, const char *table_name)
 		g_free(managed_chain);
 	}
 
-	err = __connman_iptables_commit(type, table_name);
+	err = __connman_iptables_commit(family, table_name);
 	if (err < 0) {
 		connman_warn("Failed to flush table '%s': %s",
 			table_name, strerror(-err));
@@ -776,7 +789,7 @@ static void flush_table(int type, const char *table_name)
 #define IP_TABLES_NAMES_FILE "/proc/net/ip_tables_names"
 #define IP6_TABLES_NAMES_FILE "/proc/net/ip6_tables_names"
 
-static void flush_all_tables(int type)
+static void flush_all_tables(int family)
 {
 	gchar *content = NULL;
 	gsize len = -1;
@@ -786,7 +799,7 @@ static void flush_all_tables(int type)
 	char **tokens = NULL;
 	int i, j;
 
-	switch (type) {
+	switch (family) {
 	case AF_INET:
 		iptables_file = IP_TABLES_NAMES_FILE;
 		break;
@@ -823,8 +836,9 @@ static void flush_all_tables(int type)
 	for (i = 0; tables[i]; i++) {
 		for (j = 0; tokens[j]; j++) {
 			if (!g_strcmp0(tables[i], tokens[j])) {
-				DBG("flush type %d table %s", type, tables[i]);
-				flush_table(type, tables[i]);
+				DBG("flush IP family %d table %s", family,
+							tables[i]);
+				flush_table(family, tables[i]);
 			}
 		}
 	}
@@ -887,7 +901,7 @@ static gpointer copy_fw_rule(gconstpointer src, gpointer data)
 
 	new->id = firewall_rule_id++;
 	new->enabled = false;
-	new->type = old->type;
+	new->family = old->family;
 	new->cb = old->cb;
 
 	if (old->config_file)
@@ -1015,13 +1029,11 @@ static int disable_dynamic_rules(struct connman_service *service)
 static void service_state_changed(struct connman_service *service,
 				enum connman_service_state state)
 {
-	enum connman_service_type type;
 	int err;
 
-	type = connman_service_get_type(service);
-
 	DBG("service %p %s type %d state %d", service,
-				__connman_service_get_name(service), type,
+				__connman_service_get_name(service),
+				connman_service_get_type(service),
 				state);
 
 	switch (state) {
@@ -1154,7 +1166,7 @@ static void tethering_changed(struct connman_technology *tech, bool on)
 			break;
 		}
 
-		/* No match to type of tethering_firewall is not set */
+		/* No match to type, tethering_firewall is not set */
 		if (!ctx) {
 			ctx = __connman_firewall_create();
 
@@ -1242,7 +1254,7 @@ disable:
 	g_free(ifname);
 }
 
-static bool is_rule_in_context(struct firewall_context *ctx, int type,
+static bool is_rule_in_context(struct firewall_context *ctx, int family,
 			const char *table, const char *chain, const char *rule)
 {
 	GList *iter;
@@ -1254,7 +1266,7 @@ static bool is_rule_in_context(struct firewall_context *ctx, int type,
 		if (!list_rule)
 			continue;
 
-		if (list_rule->type == type &&
+		if (list_rule->family == family &&
 					!g_strcmp0(list_rule->table, table) &&
 					!g_strcmp0(list_rule->chain, chain) &&
 					!g_strcmp0(list_rule->rule_spec, rule))
@@ -1264,7 +1276,7 @@ static bool is_rule_in_context(struct firewall_context *ctx, int type,
 	return false;
 }
 
-static bool validate_iptables_rule(int type, const char *group,
+static bool validate_iptables_rule(int family, const char *group,
 			const char *rule_spec)
 {
 	bool allow_dynamic = false;
@@ -1272,13 +1284,13 @@ static bool validate_iptables_rule(int type, const char *group,
 	if (group && !g_strcmp0(group, GROUP_GENERAL))
 		allow_dynamic = true;
 	
-	return __connman_iptables_validate_rule(type, allow_dynamic, rule_spec);
+	return __connman_iptables_validate_rule(family, allow_dynamic, rule_spec);
 }
 
-typedef int (*add_rules_cb_t)(int type, const char *filename, const char *group,
+typedef int (*add_rules_cb_t)(int family, const char *filename, const char *group,
 						int chain_id, char** rules);
 
-static int add_dynamic_rules_cb(int type, const char *filename,
+static int add_dynamic_rules_cb(int family, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
 	enum connman_service_type service_type;
@@ -1299,16 +1311,16 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 
 	for(i = 0; rules[i]; i++) {
 
-		DBG("processing type %d rule tech %s chain %s rule %s", type,
-					group, builtin_chains[chain_id],
+		DBG("processing IP family %d rule tech %s chain %s rule %s",
+					family, group, builtin_chains[chain_id],
 					rules[i]);
 
-		if (!validate_iptables_rule(type, group, rules[i])) {
+		if (!validate_iptables_rule(family, group, rules[i])) {
 			DBG("failed to add rule, rule is invalid");
 			continue;
 		}
 
-		if (is_rule_in_context(dynamic_rules[service_type], type, table,
+		if (is_rule_in_context(dynamic_rules[service_type], family, table,
 						builtin_chains[chain_id],
 						rules[i])) {
 			DBG("ignoring rule %s in service type %d, rule exists",
@@ -1316,7 +1328,7 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 			continue;
 		}
 
-		switch (type) {
+		switch (family) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(
 						dynamic_rules[service_type],
@@ -1333,7 +1345,7 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 			break;
 		default:
 			id = -1;
-			DBG("invalid IP protocol %d", type);
+			DBG("invalid IP protocol %d", family);
 			break;
 		}
 
@@ -1352,7 +1364,7 @@ static int add_dynamic_rules_cb(int type, const char *filename,
 	return err;
 }
 
-static int add_general_rules_cb(int type, const char *filename,
+static int add_general_rules_cb(int family, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
 	connman_iptables_manage_cb_t cb = __connman_iptables_append;
@@ -1381,16 +1393,16 @@ static int add_general_rules_cb(int type, const char *filename,
 			continue;
 		}
 
-		DBG("processing type %d group %s rule chain %s rule %s", type,
-					GROUP_GENERAL, builtin_chains[chain_id],
-					rules[i]);
+		DBG("processing IP family %d group %s rule chain %s rule %s",
+					family, GROUP_GENERAL,
+					builtin_chains[chain_id], rules[i]);
 
-		if (!validate_iptables_rule(type, group, rules[i])) {
+		if (!validate_iptables_rule(family, group, rules[i])) {
 			DBG("invalid general rule");
 			continue;
 		}
 
-		if (is_rule_in_context(general_firewall->ctx, type, table,
+		if (is_rule_in_context(general_firewall->ctx, family, table,
 						builtin_chains[chain_id],
 						rules[i])) {
 			DBG("ignoring rule %s in general rules, rule exists",
@@ -1398,7 +1410,7 @@ static int add_general_rules_cb(int type, const char *filename,
 			continue;
 		}
 
-		switch (type) {
+		switch (family) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(general_firewall->ctx,
 						cb, filename, table,
@@ -1414,7 +1426,7 @@ static int add_general_rules_cb(int type, const char *filename,
 			break;
 		default:
 			id = -1;
-			DBG("invalid IP protocol %d", type);
+			DBG("invalid IP protocol %d", family);
 			break;
 		}
 
@@ -1434,7 +1446,7 @@ static int add_general_rules_cb(int type, const char *filename,
 	return err;
 }
 
-static int add_tethering_rules_cb(int type, const char *filename,
+static int add_tethering_rules_cb(int family, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
 	connman_iptables_manage_cb_t cb = __connman_iptables_insert;
@@ -1460,16 +1472,16 @@ static int add_tethering_rules_cb(int type, const char *filename,
 			continue;
 		}
 
-		DBG("processing type %d group %s rule chain %s rule %s", type,
-					group, builtin_chains[chain_id],
+		DBG("processing IP family %d group %s rule chain %s rule %s",
+					family, group, builtin_chains[chain_id],
 					rules[i]);
 
-		if (!validate_iptables_rule(type, group, rules[i])) {
+		if (!validate_iptables_rule(family, group, rules[i])) {
 			DBG("invalid tethering rule");
 			continue;
 		}
 
-		if (is_rule_in_context(tethering_firewall, type, table,
+		if (is_rule_in_context(tethering_firewall, family, table,
 						builtin_chains[chain_id],
 						rules[i])) {
 			DBG("ignoring rule %s in tethering rules, rule exists",
@@ -1477,7 +1489,7 @@ static int add_tethering_rules_cb(int type, const char *filename,
 			continue;
 		}
 
-		switch (type) {
+		switch (family) {
 		case AF_INET:
 			id = __connman_firewall_add_rule(tethering_firewall, cb,
 						filename, table,
@@ -1493,7 +1505,7 @@ static int add_tethering_rules_cb(int type, const char *filename,
 			break;
 		default:
 			id = -1;
-			DBG("invalid IP protocol %d", type);
+			DBG("invalid IP protocol %d", family);
 			break;
 		}
 
@@ -1519,7 +1531,7 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 	GError *error = NULL;
 	char** rules;
 	const char *chain_name = NULL;
-	int types[3] = { AF_INET, AF_INET6, 0 };
+	int afs[3] = { AF_INET, AF_INET6, 0 };
 	int chain;
 	int count;
 	int err = 0;
@@ -1532,10 +1544,10 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 		return 0;
 
 	for (chain = NF_IP_LOCAL_IN; chain < NF_IP_NUMHOOKS - 1; chain++) {
-		for (i = 0; types[i]; i++) {
+		for (i = 0; afs[i]; i++) {
 
-			/* Setup chain name based on IP type */
-			switch (types[i]) {
+			/* Setup chain name based on IP family */
+			switch (afs[i]) {
 			case AF_INET:
 				chain_name = supported_chains[chain];
 				break;
@@ -1556,7 +1568,7 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 				DBG("found %d rules in group %s chain %s", len,
 							group, chain_name);
 
-				count = cb(types[i], filename, group, chain,
+				count = cb(afs[i], filename, group, chain,
 							rules);
 			
 				if (count < 0) {
@@ -1743,7 +1755,7 @@ static GKeyFile *load_dynamic_rules(const char *file)
 	return keyfile;
 }
 
-static int enable_general_firewall_policies(int type, char **policies)
+static int enable_general_firewall_policies(int family, char **policies)
 {
 	char table[] = "filter";
 	int err;
@@ -1756,23 +1768,23 @@ static int enable_general_firewall_policies(int type, char **policies)
 		if (!policies[i-1])
 			continue;
 
-		err = __connman_iptables_change_policy(type, table,
+		err = __connman_iptables_change_policy(family, table,
 					builtin_chains[i], policies[i-1]);
 
 		if (err)
-			DBG("cannot set type %d chain %s policy %s", type,
-						builtin_chains[i],
+			DBG("cannot set IP family %d chain %s policy %s",
+						family, builtin_chains[i],
 						policies[i-1]);
 		else {
-			DBG("set type %d chain %s policy %s", type,
+			DBG("set IP family %d chain %s policy %s", family,
 						builtin_chains[i],
 						policies[i-1]);
 
-			err = __connman_iptables_commit(type, table);
+			err = __connman_iptables_commit(family, table);
 
 			if (err) {
-				DBG("commit failed, type %d table %s", type,
-							table);
+				DBG("commit failed, IP family %d table %s",
+							family, table);
 				return err;
 			}
 		}
@@ -1845,7 +1857,7 @@ static bool is_valid_policy(char *policy)
 	return false;
 }
 
-static int load_general_firewall_policies(int type, GKeyFile *config,
+static int load_general_firewall_policies(int family, GKeyFile *config,
 								char **policies)
 {
 	GError *error = NULL;
@@ -1857,7 +1869,7 @@ static int load_general_firewall_policies(int type, GKeyFile *config,
 		return -EINVAL;
 
 	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
-		switch (type) {
+		switch (family) {
 		case AF_INET:
 			policy = supported_policies[i];
 			break;
@@ -1875,7 +1887,7 @@ static int load_general_firewall_policies(int type, GKeyFile *config,
 					GROUP_GENERAL, policy, &error);
 
 		if (!load_policy) {
-			DBG("no policy set for type %d chain %s", type,
+			DBG("no policy set for IP family %d chain %s", family,
 						builtin_chains[i]);
 		} else if (!is_valid_policy(load_policy)) {
 			g_free(load_policy);
@@ -1885,7 +1897,7 @@ static int load_general_firewall_policies(int type, GKeyFile *config,
 				g_free(policies[i-1]);
 
 			policies[i-1] = load_policy;
-			DBG("set type %d chain %s policy %s", type,
+			DBG("set IP family %d chain %s policy %s", family,
 					builtin_chains[i], policies[i-1]);
 		}
 
@@ -2148,7 +2160,7 @@ out:
 	return err;
 }
 
-static int restore_policies(int type, char **policies, char **set_policies)
+static int restore_policies(int family, char **policies, char **set_policies)
 {
 	char table[] = "filter";
 	int commit_err = 0;
@@ -2171,7 +2183,7 @@ static int restore_policies(int type, char **policies, char **set_policies)
 
 			/* Commit errors are not recoverable */
 			if (!commit_err) {
-				err = __connman_iptables_change_policy(type,
+				err = __connman_iptables_change_policy(family,
 							table,
 							builtin_chains[i],
 							set_policies[i-1]);
@@ -2183,7 +2195,7 @@ static int restore_policies(int type, char **policies, char **set_policies)
 							set_policies[i-1]);
 				} else {
 					commit_err = __connman_iptables_commit(
-								type, table);
+								family, table);
 
 					if (commit_err) {
 						DBG("cannot commit policy "
@@ -2269,20 +2281,15 @@ static void cleanup_dynamic_firewall_rules()
 static void firewall_failsafe(const char *chain_name, void *user_data)
 {
 	int err;
-	int type;
+	int family;
 	const char *data = user_data;
 
 	if (!data)
 		return;
 
-	if (!g_strcmp0(data, "AF_INET"))
-		type = AF_INET;
-	else if (!g_strcmp0(data, "AF_INET6"))
-		type = AF_INET6;
-	else
-		return;
+	family = GPOINTER_TO_INT(user_data);
 
-	err = __connman_iptables_change_policy(type, "filter", chain_name,
+	err = __connman_iptables_change_policy(family, "filter", chain_name,
 				"ACCEPT");
 
 	if (err) {
@@ -2291,7 +2298,7 @@ static void firewall_failsafe(const char *chain_name, void *user_data)
 		return;
 	}
 
-	err = __connman_iptables_commit(type, "filter");
+	err = __connman_iptables_commit(family, "filter");
 
 	if (err)
 		DBG("cannot commit table filter chain %s policy, error %d",
@@ -2312,15 +2319,17 @@ static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 		dyn_rule = dyn_list->data;
 
 		/* If the dynamic rule is already added for service firewall */
-		if (is_rule_in_context(srv_ctx, dyn_rule->type,
+		if (is_rule_in_context(srv_ctx, dyn_rule->family,
 					dyn_rule->table, dyn_rule->chain,
 					dyn_rule->rule_spec))
 			continue;
 
 		new_rule = copy_fw_rule(dyn_rule, ifname);
-		
+
+		/* The dynamic/tethering rules are inserted to iptables so
+		 * they must be added with reverse sorting function */
 		srv_ctx->rules = g_list_insert_sorted(srv_ctx->rules, new_rule,
-					firewall_rule_compare);
+					firewall_rule_compare_reverse);
 
 		if (srv_ctx->enabled) {
 			err = firewall_enable_rule(new_rule);
@@ -2373,7 +2382,7 @@ static int remove_config_from_context(struct firewall_context *ctx,
 				}
 			}
 
-			switch (rule->type) {
+			switch (rule->family) {
 			case AF_INET:
 				err = __connman_firewall_remove_rule(ctx,
 							rule->id);
@@ -2710,9 +2719,11 @@ int __connman_firewall_init(void)
 		__connman_iptables_cleanup();
 		__connman_iptables_init();
 		__connman_iptables_iterate_chains(AF_INET, "filter",
-					firewall_failsafe, "AF_INET");
+					firewall_failsafe,
+					GINT_TO_POINTER(AF_INET));
 		__connman_iptables_iterate_chains(AF_INET6, "filter",
-					firewall_failsafe, "AF_INET6");
+					firewall_failsafe,
+					GINT_TO_POINTER(AF_INET6));
 	}
 
 	return 0;
