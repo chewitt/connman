@@ -1217,18 +1217,22 @@ gboolean g_file_get_contents(const gchar *filename, gchar **contents,
 
 struct connman_device {
 	const char *ifname;
+	bool managed;
 };
 
 static struct connman_device test_device1 = {
 	.ifname = "rndis0",
+	.managed = false,
 };
 
 static struct connman_device test_device2 = {
 	.ifname = "usb0",
+	.managed = false,
 };
 
 static struct connman_device test_device3 = {
 	.ifname = NULL,
+	.managed = false,
 };
 
 const char *connman_device_get_string(struct connman_device *device,
@@ -1238,6 +1242,29 @@ const char *connman_device_get_string(struct connman_device *device,
 		return device->ifname;
 
 	return NULL;
+}
+
+void connman_device_set_managed(struct connman_device *device, bool managed)
+{
+	if (!device)
+		return;
+
+	device->managed = managed;
+}
+
+bool connman_device_get_managed(struct connman_device *device)
+{
+	if (!device)
+		return true;
+
+	return device->managed;
+}
+
+/* TODO implement this properly */
+bool connman_device_has_status_changed_to(struct connman_device *device,
+					bool new_status)
+{
+	return true;
 }
 
 // End of dummies
@@ -3914,13 +3941,13 @@ static void firewall_test_device_status0()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* on */
-	firewall_notifier->device_status_changed(&test_device1, true, false);
+	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
 	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
 
 	/* off */
-	firewall_notifier->device_status_changed(&test_device1, false, false);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
@@ -3949,39 +3976,39 @@ static void firewall_test_device_status1()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* device 1 on */
-	firewall_notifier->device_status_changed(&test_device1, true, false);
+	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
 	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
 
 	/* device 1 off */
-	firewall_notifier->device_status_changed(&test_device1, false, false);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
 				test_device1.ifname);
 
 	/* device 1 on */
-	firewall_notifier->device_status_changed(&test_device1, true, false);
+	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
 	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
 
 	/* device 2 on */
-	firewall_notifier->device_status_changed(&test_device2, true, false);
+	firewall_notifier->device_status_changed(&test_device2, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 4);
 	check_rules(assert_rule_exists, 0, device_rules, test_device2.ifname);
 
 	/* device 1 off */
-	firewall_notifier->device_status_changed(&test_device1, false, false);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
 	check_rules(assert_rule_not_exists, 0, device_rules,
 				test_device1.ifname);
 
 	/* device 2 off */
-	firewall_notifier->device_status_changed(&test_device2, false, false);
+	firewall_notifier->device_status_changed(&test_device2, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
@@ -4010,26 +4037,26 @@ static void firewall_test_device_status2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* on */
-	firewall_notifier->device_status_changed(&test_device1, true, false);
+	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
 	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
 
 	/* on double */
-	firewall_notifier->device_status_changed(&test_device1, true, false);
+	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
 	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
 
 	/* off */
-	firewall_notifier->device_status_changed(&test_device1, false, false);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
 				test_device1.ifname);
 
 	/* off double */
-	firewall_notifier->device_status_changed(&test_device1, false, false);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
@@ -4061,14 +4088,15 @@ static void firewall_test_device_status3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* on */
-	firewall_notifier->device_status_changed(&test_device1, true, true);
+	test_device1.managed = true;
+	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
 				test_device1.ifname);
 
 	/* off */
-	firewall_notifier->device_status_changed(&test_device1, false, true);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
@@ -4081,6 +4109,8 @@ static void firewall_test_device_status3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
 	__connman_iptables_cleanup();
+
+	test_device1.managed = false;
 }
 
 /* Only off notify from managed device - nothing done */
@@ -4097,7 +4127,7 @@ static void firewall_test_device_status4()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* Managed device off notification, nothing is done */
-	firewall_notifier->device_status_changed(&test_device1, false, false);
+	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 	check_rules(assert_rule_not_exists, 0, device_rules,
@@ -4466,12 +4496,12 @@ static void firewall_test_device_status_fail0()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* NULL device on */
-	firewall_notifier->device_status_changed(NULL, true, false);
+	firewall_notifier->device_status_changed(NULL, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* NULL device off */
-	firewall_notifier->device_status_changed(NULL, false, false);
+	firewall_notifier->device_status_changed(NULL, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
@@ -4496,12 +4526,12 @@ static void firewall_test_device_status_fail1()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* Device with no inteface on */
-	firewall_notifier->device_status_changed(&test_device3, true, false);
+	firewall_notifier->device_status_changed(&test_device3, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	/* Device with no inteface off */
-	firewall_notifier->device_status_changed(&test_device3, false, false);
+	firewall_notifier->device_status_changed(&test_device3, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 

@@ -1277,8 +1277,7 @@ disable:
 	g_free(ifname);
 }
 
-static void device_status_changed(struct connman_device *device, bool on,
-								bool managed)
+static void device_status_changed(struct connman_device *device, bool on)
 {
 	struct firewall_context *ctx;
 	char *ifname = NULL;
@@ -1289,7 +1288,32 @@ static void device_status_changed(struct connman_device *device, bool on,
 		return;
 	}
 
-	if (managed) {
+	/* Device is managed by connman */
+	if (connman_device_get_managed(device)) {
+		/*
+		 * If there is a status change, this is a status change
+		 * notification from a managed device, which can be ignored.
+		 * Otherwise when the status has not changed and transition is
+		 * from non-managed to managed this must be processed to remove
+		 * the device index from the list in case device is off.
+		 */
+		if (connman_device_has_status_changed_to(device, on)) {
+			DBG("ignoring managed status change notify");
+			return;
+		} else if (on) {
+			DBG("ignoring managed false to true with status on");
+			return;
+		}
+	} else if (!connman_device_has_status_changed_to(device, on)) {
+		/*
+		 * If non-managed device has no change, it is managed true to
+		 * false notify, which can be ignored.
+		 */
+		DBG("ignoring managed status change to false notify");
+		return;
+	}
+
+	if (connman_device_get_managed(device)) {
 		DBG("ignoring managed device %p", device);
 		return;
 	}
@@ -1306,7 +1330,7 @@ static void device_status_changed(struct connman_device *device, bool on,
 		return;
 	}
 
-	DBG("gadget device %s %s", ifname, on ? "up" : "down");
+	DBG("device %s %s", ifname, on ? "up" : "down");
 
 	ctx = g_hash_table_lookup(current_dynamic_rules, ifname);
 

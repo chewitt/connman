@@ -111,8 +111,11 @@ struct connman_device *connman_device_create_from_index(int index);
 struct connman_device *connman_device_find_by_index(int index);
 int connman_device_reconnect_service(struct connman_device *device);
 
-void connman_device_status_notify(struct connman_device *device, bool on,
-								bool managed);
+void connman_device_set_managed(struct connman_device *device, bool managed);
+bool connman_device_get_managed(struct connman_device *device);
+bool connman_device_has_status_changed_to(struct connman_device *device,
+					bool new_status);
+void connman_device_status_notify(struct connman_device *device, bool on);
 
 struct connman_device_driver {
 	const char *name;

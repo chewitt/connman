@@ -85,7 +85,7 @@ static const char *usb_moded_entries[] = {
 enum usb_moded_service_state_t {
 	USB_MODED_SERVICE_UNKNOWN = 0,
 	USB_MODED_SERVICE_CONNECT,
-	USB_MODED_SERVICE_DISCONNECT
+	USB_MODED_SERVICE_DISCONNECT,
 };
 
 struct usb_moded_service_data {
@@ -237,18 +237,22 @@ static bool pending_devices_remove(struct connman_device *device)
 	return g_hash_table_remove(pending_devices, interface);
 }
 
-static bool pending_devices_add(struct connman_device *device)
+static int pending_devices_add(struct connman_device *device)
 {
 	const char *interface;
 
 	DBG("");
 
-	if (!pending_devices || !device) {
-		DBG("hash table unset or no device");
-		return false;
+	if (!pending_devices) {
+		DBG("hash table is not set");
+		return -EINVAL;
 	}
 
 	interface = connman_device_get_string(device, "Interface");
+	if (!interface) {
+		DBG("device %p has no interface", device);
+		return -ENOENT;
+	}
 
 	DBG("add device %d %s %s", connman_device_get_index(device),
 				connman_device_get_ident(device), interface);
@@ -256,11 +260,11 @@ static bool pending_devices_add(struct connman_device *device)
 	/* Interfaces are unique, second notification should not replace old */
 	if (g_hash_table_contains(pending_devices, interface)) {
 		DBG("interface %s already exists", interface);
-		return false;
+		return -EEXIST;
 	}
 
 	return g_hash_table_replace(pending_devices, g_strdup(interface),
-				connman_device_ref(device));
+				connman_device_ref(device)) ? 0 : -EEXIST;
 
 }
 
@@ -291,7 +295,7 @@ static void send_notify(struct connman_device *device, bool on)
 		return;
 	}
 
-	connman_device_status_notify(device, on, NOT_MANAGED);
+	connman_device_status_notify(device, on);
 
 	/* Reset the developer mode interface interface goes down */
 	if (!on && usb_moded_status != USB_MODED_DEVELOPER_MODE) {
@@ -642,8 +646,19 @@ static void developer_mode_newlink(unsigned short type, int index,
 		return;
 	}
 
-	if (!pending_devices_add(device))
-		DBG("cannot add pending device %p", device);
+	switch (pending_devices_add(device)) {
+	case 0:
+		break;
+	case -EINVAL:
+	case -ENOENT:
+	case -EEXIST:
+		/* fallthrough */
+		DBG("no notification for device %p", device); 
+	default:
+		return;
+	}
+
+	connman_device_set_managed(device, false);
 
 	/*
 	 * Status check is necessary only when enabling. Notify if in developer
@@ -671,8 +686,12 @@ static void developer_mode_dellink(unsigned short type, int index,
 		return;
 	}
 
-	/* Notify is sent if interface matches */
-	send_notify(device, false);
+	/*
+	 * If this is a non-managed device the notify is sent if interface
+	 * matches
+	 */
+	if (!connman_device_get_managed(device))
+		send_notify(device, false);
 
 	/* Interface down, remove device, not needed anymore */
 	if (!pending_devices_remove(device))

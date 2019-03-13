@@ -377,6 +377,17 @@ enum connman_device_type connman_device_get_type(struct connman_device *device)
 	return 0;
 }
 
+bool connman_device_get_managed(struct connman_device *device)
+{
+	return true;
+}
+
+bool connman_device_has_status_changed_to(struct connman_device *device,
+					bool new_status)
+{
+	return true;
+}
+
 // rtnl dummies
 
 int connman_rtnl_register(struct connman_rtnl *rtnl)

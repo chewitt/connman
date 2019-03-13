@@ -385,7 +385,7 @@ void __connman_notifier_tethering_changed(struct connman_technology* tech,
 }
 
 void __connman_notifier_device_status_changed(struct connman_device *device,
-							bool on, bool managed)
+									bool on)
 {
 	GSList *l = notifier_list;
 
@@ -394,7 +394,7 @@ void __connman_notifier_device_status_changed(struct connman_device *device,
 		const struct connman_notifier *notifier = l->data;
 
 		if (notifier->device_status_changed)
-			notifier->device_status_changed(device, on, managed);
+			notifier->device_status_changed(device, on);
 
 		l = next;
 	}

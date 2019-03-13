@@ -503,6 +503,7 @@ struct connman_device {
 	const char *ident;
 	const char *ifname;
 	int refcount;
+	bool managed;
 };
 
 static struct connman_device test_device1 = {
@@ -511,6 +512,7 @@ static struct connman_device test_device1 = {
 	.ident = "gadget123",
 	.ifname = "rndis0",
 	.refcount = 0,
+	.managed = true,
 };
 
 static struct connman_device test_device2 = {
@@ -519,6 +521,7 @@ static struct connman_device test_device2 = {
 	.ident = "unknown456",
 	.ifname = "rndis0",
 	.refcount = 0,
+	.managed = true,
 };
 
 static struct connman_device test_device3 = {
@@ -527,6 +530,7 @@ static struct connman_device test_device3 = {
 	.ident = "gadget789",
 	.ifname = "rndis0",
 	.refcount = 0,
+	.managed = true,
 };
 
 static struct connman_device test_device4 = {
@@ -535,6 +539,7 @@ static struct connman_device test_device4 = {
 	.ident = "ethernet321",
 	.ifname = "rndis1",
 	.refcount = 0,
+	.managed = true,
 };
 
 
@@ -608,14 +613,29 @@ enum device_notify_status { NOTIFY_UNSET = 0, NOTIFY_TRUE, NOTIFY_FALSE };
 static struct connman_device *notify_device = NULL;
 static enum device_notify_status notify_status = NOTIFY_UNSET;
 
-void connman_device_status_notify(struct connman_device *device, bool status,
-			bool managed)
+bool connman_device_get_managed(struct connman_device *device)
+{
+	g_assert(device);
+
+	return device->managed;
+}
+
+void connman_device_set_managed(struct connman_device *device, bool managed)
+{
+	DBG("");
+
+	g_assert(device);
+	g_assert_false(managed);
+
+	device->managed = managed;
+}
+
+void connman_device_status_notify(struct connman_device *device, bool status)
 {
 	DBG("%p %s", device, status ? "on" : "off");
 
 	notify_device = device;
 	notify_status = status ? NOTIFY_TRUE : NOTIFY_FALSE;
-	g_assert(managed == false);
 }
 
 // rtnl dummies
@@ -804,6 +824,9 @@ void reset_test(void)
 	test_interface_index = -1;
 	set_usb_moded_ignore(IGNORE_UNSET);
 	rtnl_on = true;
+
+	test_device1.managed = test_device2.managed = test_device3.managed =
+				test_device4.managed = true;
 }
 
 /* Device enabling, all status changes and react to D-Bus reply */
@@ -951,12 +974,14 @@ static void developer_mode_plugin_test_rtnl3()
 	g_assert(notify_status == NOTIFY_UNSET);
 	g_assert_cmpint(test_device1.refcount, ==, 0);
 	
-	/* If the device is valid, remove notification is sent */
+	/*
+	 * If the device is valid but not set up by the plugin, remove
+	 * notification is not sent
+	 */
 	set_test_interface(&test_device1);
 	send_dbus_signal("developer_mode");
 	rtnl_device_off(test_device1.index, 0);
-	g_assert(notify_status == NOTIFY_FALSE);
-	g_assert(notify_device == &test_device1);
+	g_assert(notify_status == NOTIFY_UNSET);
 	g_assert_cmpint(test_device1.refcount, ==, 0);
 
 	__connman_builtin_sailfish_developer_mode.exit();
@@ -1243,6 +1268,49 @@ static void developer_mode_plugin_test_rtnl8()
 	rtnl_device_off(test_device1.index, 0);
 	g_assert(notify_status == NOTIFY_FALSE);
 	g_assert(notify_device == &test_device1);
+	g_assert_cmpint(test_device1.refcount, ==, 0);
+	reset_dbus_pending_notify();
+	reset_notify();
+
+	__connman_builtin_sailfish_developer_mode.exit();
+}
+
+/*
+ * Test by first enabling device normally and then change managed to true
+ * before setting the device off
+ */
+static void developer_mode_plugin_test_rtnl9()
+{
+	reset_test();
+	set_test_interface(&test_device1);
+	g_assert(__connman_builtin_sailfish_developer_mode.init() == 0);
+
+	rtnl_device_on(test_device1.index, IFF_UP|IFF_RUNNING|IFF_LOWER_UP);
+
+	/* Query has been made, no notify is done, reference is kept */
+	g_assert(sent_message);
+	g_assert(notify_status == NOTIFY_UNSET);
+	g_assert_cmpint(test_device1.refcount, ==, 1);
+
+	/* Notify with device1 interface */
+	call_dbus_pending_notify();
+	g_assert(notify_status == NOTIFY_TRUE);
+	g_assert(notify_device == &test_device1);
+	g_assert_cmpint(test_device1.refcount, ==, 1);
+
+	/* No new query has been made */
+	g_assert_null(sent_message);
+	g_assert_null(pending_call);
+	reset_dbus_pending_notify();
+	reset_notify();
+
+	/* Away from developer mode and device goes off */
+	send_dbus_signal("undefined");
+	test_device1.managed = true;
+
+	/* No notify for managed device */
+	rtnl_device_off(test_device1.index, 0);
+	g_assert(notify_status == NOTIFY_UNSET);
 	g_assert_cmpint(test_device1.refcount, ==, 0);
 	reset_dbus_pending_notify();
 	reset_notify();
@@ -1820,6 +1888,8 @@ int main (int argc, char *argv[])
 				developer_mode_plugin_test_rtnl7);
 	g_test_add_func("/developer_mode_plugin/test_rtnl8",
 				developer_mode_plugin_test_rtnl8);
+	g_test_add_func("/developer_mode_plugin/test_rtnl9",
+				developer_mode_plugin_test_rtnl9);
 	g_test_add_func("/developer_mode_plugin/test_rtnl_fail0",
 				developer_mode_plugin_test_rtnl_fail0);
 	g_test_add_func("/developer_mode_plugin/test_rtnl_fail1",

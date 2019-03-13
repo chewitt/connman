@@ -913,7 +913,7 @@ void __connman_notifier_ipconfig_changed(struct connman_service *service,
 void __connman_notifier_tethering_changed(struct connman_technology* tech,
 								bool on);
 void __connman_notifier_device_status_changed(struct connman_device *device,
-							bool on, bool managed);
+								bool on);
 
 bool __connman_notifier_is_connected(void);
 const char *__connman_notifier_get_state(void);

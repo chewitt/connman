@@ -446,21 +446,45 @@ static struct connman_technology_driver eth_tech_driver = {
 };
 
 static void ethernet_device_status_changed(struct connman_device *device,
-			bool on, bool managed)
+									bool on)
 {
 	int index;
 
 	if (!device)
 		return;
 
-	/* This is connman device, do not add them to ignore list */
-	if (managed)
-		return;
-
 	if (connman_device_get_type(device) != CONNMAN_DEVICE_TYPE_ETHERNET)
 		return;
 
 	index = connman_device_get_index(device);
+
+	/* Device is managed by connman */
+	if (connman_device_get_managed(device)) {
+		/*
+		 * If there is a status change, this is a status change
+		 * notification from a managed device, which can be ignored.
+		 * Otherwise when the status has not changed and transition is
+		 * from non-managed to managed this must be processed to remove
+		 * the device index from the list in case device is off.
+		 */
+		if (connman_device_has_status_changed_to(device, on)) {
+			DBG("ignoring managed status change notify");
+			return;
+		} else {
+			DBG("device %p is set as managed, remove from list",
+						device);
+			ignore_index_list = g_slist_remove(ignore_index_list,
+						GINT_TO_POINTER(index));
+			return;
+		}
+	} else if (!connman_device_has_status_changed_to(device, on)) {
+		/*
+		 * If non-managed device has no change, it is managed true to
+		 * false notify, which can be ignored.
+		 */
+		DBG("ignoring managed status change to false notify");
+		return;
+	}
 
 	if (on) {
 		DBG("add device %p", device);

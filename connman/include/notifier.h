@@ -58,13 +58,7 @@ struct connman_notifier {
 					struct connman_ipconfig *ipconfig);
 	void (*idle_state) (bool idle);
 	void (*tethering_changed) (struct connman_technology *tech, bool on);
-	/*
-	 * The boolean 'on' defines device state, boolean 'managed' tells if
-	 * connman should manage this device or not. If device is not managed it
-	 * means that an external component brought that up.
-	 */
-	void (*device_status_changed) (struct connman_device *device, bool on,
-				bool managed);
+	void (*device_status_changed) (struct connman_device *device, bool on);
 
 	/* Placeholders for future extensions */
 	void (*_reserved[9])(void);
