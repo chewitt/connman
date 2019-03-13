@@ -127,6 +127,7 @@ struct connman_service {
 	char *pac;
 	bool wps;
 	bool wps_advertizing;
+	guint online_timeout;
 	int online_check_count_ipv4;
 	int online_check_count_ipv6;
 	bool do_split_routing;
@@ -5996,13 +5997,8 @@ static void service_rp_filter(struct connman_service *service,
 static void redo_wispr(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
-	int refcount = service->refcount - 1;
-
+	service->online_timeout = 0;
 	connman_service_unref(service);
-	if (refcount == 0) {
-		DBG("Service %p already removed", service);
-		return;
-	}
 
 	DBG("Retrying %s WISPr for %p %s",
 		__connman_ipconfig_type2string(type),
@@ -6060,9 +6056,20 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	 * necessary IPv6 router advertisement messages that might have
 	 * DNS data etc.
 	 */
-	g_timeout_add_seconds(1, redo_func, connman_service_ref(service));
+	service->online_timeout = g_timeout_add_seconds(1, redo_func,
+					connman_service_ref(service));
 
 	return EAGAIN;
+}
+
+static void cancel_online_check(struct connman_service *service)
+{
+	if (service->online_timeout == 0)
+		return;
+
+	g_source_remove(service->online_timeout);
+	service->online_timeout = 0;
+	connman_service_unref(service);
 }
 
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
@@ -6165,8 +6172,10 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		break;
 	}
 
-	if (is_connected(old_state) && !is_connected(new_state))
+	if (is_connected(old_state) && !is_connected(new_state)) {
 		nameserver_remove_all(service, type);
+		cancel_online_check(service);
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->state_ipv4 = new_state;
