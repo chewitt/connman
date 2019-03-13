@@ -8605,8 +8605,10 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		break;
 	}
 
-	if (is_connected(old_state) && !is_connected(new_state))
+	if (is_connected(old_state) && !is_connected(new_state)) {
 		nameserver_remove_all(service, type);
+		cancel_online_check(service);
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->state_ipv4 = new_state;
