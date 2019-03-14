@@ -311,7 +311,8 @@ endif
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables
+	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-device
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -391,6 +392,12 @@ unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				src/iptables-validate.c unit/test-firewall.c
 unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+unit_test_device_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
+unit_test_device_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
+				src/inotify.c plugins/ethernet.c \
+				src/device.c unit/test-device.c
+unit_test_device_LDADD = @GLIB_LIBS@ -ldl
+
 unit_test_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
 unit_test_iptables_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				unit/test-iptables.c src/iptables.c
@@ -399,7 +406,8 @@ unit_test_iptables_LDADD = @GLIB_LIBS@ -ldl
 TESTS = unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables
+	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-device
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)

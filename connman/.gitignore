@@ -82,6 +82,7 @@ unit/test-sailfish_developer_mode
 unit/test-firewall
 unit/test-globalproxy
 unit/test-iptables
+unit/test-device
 
 *.gcda
 *.gcno
