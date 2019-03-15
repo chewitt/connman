@@ -7652,15 +7652,14 @@ static int service_indicate_state(struct connman_service *service)
 						service_retry_connect, service);
 		}
 
-		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER &&
+		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
 			connman_agent_report_error(service, service->path,
-					error2string(service->error),
-					report_error_cb,
-					get_dbus_sender(service),
-					NULL) == -EINPROGRESS)
-			return 0;
+						error2string(service->error),
+						report_error_cb,
+						get_dbus_sender(service),
+						NULL);
+		}
 		service_complete(service);
-
 		break;
 	}
 
