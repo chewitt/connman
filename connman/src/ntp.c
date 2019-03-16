@@ -194,7 +194,7 @@ static void send_packet(struct ntp_data *nd, struct sockaddr *server,
 		size = sizeof(struct sockaddr_in6);
 		addr = (void *)&nd->timeserver_addr.sin6_addr;
 	} else {
-		connman_error("Family is neither ipv4 nor ipv6");
+		DBG("Family is neither ipv4 nor ipv6");
 		nd->cb(false, nd->user_data);
 		return;
 	}
@@ -207,20 +207,8 @@ static void send_packet(struct ntp_data *nd, struct sockaddr *server,
 
 	len = sendto(nd->transmit_fd, &msg, sizeof(msg), MSG_DONTWAIT,
 						server, size);
-
-	if (len < 0) {
-		connman_error("Time request for server %s failed (%d/%s)",
-			inet_ntop(server->sa_family, addr, ipaddrstring, sizeof(ipaddrstring)),
-			errno, strerror(errno));
-
-		if (errno == ENETUNREACH || errno == EPERM)
-			nd->cb(false, nd->user_data);
-
-		return;
-	}
-
-	if (len != sizeof(msg)) {
-		connman_error("Broken time request for server %s",
+	if (len < 0 || len != sizeof(msg)) {
+		DBG("Time request for server %s failed",
 			inet_ntop(server->sa_family, addr, ipaddrstring, sizeof(ipaddrstring)));
 		nd->cb(false, nd->user_data);
 		return;
