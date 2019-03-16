@@ -34,6 +34,7 @@
 
 #define TS_RECHECK_INTERVAL     7200
 
+static struct connman_service *ts_service;
 static GSList *timeservers_list = NULL;
 static GSList *ts_list = NULL;
 static char *ts_current = NULL;
@@ -373,6 +374,9 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 	if (!service)
 		return -EINVAL;
 
+	if (service == ts_service)
+		return -EALREADY;
+
 	if (!resolv)
 		return 0;
 	/*
@@ -411,6 +415,7 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 
 	ts_recheck_enable();
 
+	ts_service = service;
 	timeserver_sync_start();
 
 	return 0;
@@ -461,6 +466,8 @@ static int timeserver_start(struct connman_service *service)
 static void timeserver_stop(void)
 {
 	DBG(" ");
+
+	ts_service = NULL;
 
 	if (resolv) {
 		g_resolv_unref(resolv);
