@@ -188,7 +188,7 @@ static struct {
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
-#define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewayAsTimeservers"
+#define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
