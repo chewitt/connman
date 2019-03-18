@@ -128,8 +128,8 @@ struct connman_service {
 	bool wps;
 	bool wps_advertizing;
 	guint online_timeout;
-	int online_check_count_ipv4;
-	int online_check_count_ipv6;
+	int online_check_interval_ipv4;
+	int online_check_interval_ipv6;
 	bool do_split_routing;
 	bool new_service;
 	bool hidden_service;
@@ -3434,15 +3434,25 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 	return err;
 }
 
+/*
+ * We set the timeout to 1 sec so that we have a chance to get
+ * necessary IPv6 router advertisement messages that might have
+ * DNS data etc.
+ */
+#define ONLINE_CHECK_INITIAL_INTERVAL 1
+#define ONLINE_CHECK_MAX_INTERVAL 12
+
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	DBG("service %p type %s", service, __connman_ipconfig_type2string(type));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		service->online_check_count_ipv4 = 1;
+		service->online_check_interval_ipv4 =
+					ONLINE_CHECK_INITIAL_INTERVAL;
 	else
-		service->online_check_count_ipv6 = 1;
+		service->online_check_interval_ipv6 =
+					ONLINE_CHECK_INITIAL_INTERVAL;
 
 	__connman_wispr_start(service, type);
 }
@@ -6035,35 +6045,27 @@ int __connman_service_online_check_failed(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	GSourceFunc redo_func;
-	int *count;
+	int *interval;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
-		count = &service->online_check_count_ipv4;
+		interval = &service->online_check_interval_ipv4;
 		redo_func = redo_wispr_ipv4;
 	} else {
-		count = &service->online_check_count_ipv6;
+		interval = &service->online_check_interval_ipv6;
 		redo_func = redo_wispr_ipv6;
 	}
 
-	DBG("service %p type %s count %d", service,
-		__connman_ipconfig_type2string(type), *count);
+	DBG("service %p type %s interval %d", service,
+		__connman_ipconfig_type2string(type), *interval);
 
-	if (*count == 0) {
-		connman_warn("%s online check failed for %p %s",
-			__connman_ipconfig_type2string(type),
-			service, service->name);
-		return 0;
-	}
+	service->online_timeout = g_timeout_add_seconds(*interval * *interval,
+				redo_func, connman_service_ref(service));
 
-	*count -= 1;
-
-	/*
-	 * We set the timeout to 1 sec so that we have a chance to get
-	 * necessary IPv6 router advertisement messages that might have
-	 * DNS data etc.
+	/* Increment the interval for the next time, set a maximum timeout of
+	 * ONLINE_CHECK_MAX_INTERVAL * ONLINE_CHECK_MAX_INTERVAL seconds.
 	 */
-	service->online_timeout = g_timeout_add_seconds(1, redo_func,
-					connman_service_ref(service));
+	if (*interval < ONLINE_CHECK_MAX_INTERVAL)
+		(*interval)++;
 
 	return EAGAIN;
 }
