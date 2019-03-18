@@ -360,8 +360,8 @@ struct connman_service {
 	char **excludes;
 	char *pac;
 	bool wps;
-	int online_check_count_ipv4;
-	int online_check_count_ipv6;
+	int online_check_interval_ipv4;
+	int online_check_interval_ipv6;
 	guint online_check_timer_ipv4;
 	guint online_check_timer_ipv6;
 	guint connect_retry_timer;
@@ -450,10 +450,10 @@ static void do_single_online_check(struct connman_service *service, enum connman
 
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		service->online_check_count_ipv4 = ONLINE_CHECK_RETRY_COUNT;
+		service->online_check_timer_ipv4 = ONLINE_CHECK_RETRY_COUNT;
 		break;
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		service->online_check_count_ipv6 = ONLINE_CHECK_RETRY_COUNT;
+		service->online_check_timer_ipv6 = ONLINE_CHECK_RETRY_COUNT;
 		break;
 	default:
 		;
@@ -4766,15 +4766,25 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 static void set_error(struct connman_service *service,
 					enum connman_service_error error);
 
+/*
+ * We set the timeout to 1 sec so that we have a chance to get
+ * necessary IPv6 router advertisement messages that might have
+ * DNS data etc.
+ */
+#define ONLINE_CHECK_INITIAL_INTERVAL 1
+#define ONLINE_CHECK_MAX_INTERVAL 12
+
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	DBG("service %p type %s", service, __connman_ipconfig_type2string(type));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		service->online_check_count_ipv4 = 1;
+		service->online_check_interval_ipv4 =
+					ONLINE_CHECK_INITIAL_INTERVAL;
 	else
-		service->online_check_count_ipv6 = 1;
+		service->online_check_interval_ipv6 =
+					ONLINE_CHECK_INITIAL_INTERVAL;
 
 	__connman_wispr_start(service, type);
 }
@@ -8139,22 +8149,22 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	guint *online_check_timer;
 	GSourceFunc downgrade_func;
 	GSourceFunc redo_func;
-	int *count;
+	int *interval;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
-		count = &service->online_check_count_ipv4;
 		online_check_timer = &service->online_check_timer_ipv4;
 		downgrade_func = downgrade_state_ipv4;
+		interval = &service->online_check_interval_ipv4;
 		redo_func = redo_wispr_ipv4;
 	} else {
-		count = &service->online_check_count_ipv6;
 		online_check_timer = &service->online_check_timer_ipv6;
 		downgrade_func = downgrade_state_ipv6;
+		interval = &service->online_check_interval_ipv6;
 		redo_func = redo_wispr_ipv6;
 	}
 
-	DBG("service %p type %s count %d", service,
-		__connman_ipconfig_type2string(type), *count);
+	DBG("service %p type %s interval %d", service,
+		__connman_ipconfig_type2string(type), *interval);
 
 	if (!__connman_service_is_connected_state(service, type))
 		return 0;
@@ -8173,26 +8183,23 @@ int __connman_service_online_check_failed(struct connman_service *service,
 		;
 	}
 
-	if (*count == 0) {
-		connman_warn("%s online check failed for %p %s",
-			__connman_ipconfig_type2string(type),
-			service, service->name);
-		return 0;
-	}
-
-	int timeout = ONLINE_CHECK_RETRY_COUNT - *count;
-	*count -= 1;
-
-	/*
-	 * We set the timeout to 1 sec so that we have a chance to get
-	 * necessary IPv6 router advertisement messages that might have
-	 * DNS data etc.
+	/* Increment the interval for the next time, set a maximum timeout of
+	 * ONLINE_CHECK_MAX_INTERVAL * ONLINE_CHECK_MAX_INTERVAL seconds.
 	 */
 	*online_check_timer = connman_wakeup_timer_add_seconds(
-				timeout * timeout, redo_func,
+				*interval * *interval, redo_func,
 				connman_service_ref(service));
+	if (*interval < ONLINE_CHECK_MAX_INTERVAL)
+		(*interval)++;
 
 	return -EAGAIN;
+}
+
+static void cancel_online_check(struct connman_service *service)
+{
+	if (service->online_check_timer_ipv4 == 0 ||
+				service->online_check_timer_ipv6 == 0)
+		return;
 }
 
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
@@ -8212,14 +8219,14 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		return -EINVAL;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		service->online_check_count_ipv4 = ONLINE_CHECK_RETRY_COUNT;
+		service->online_check_timer_ipv4 = ONLINE_CHECK_RETRY_COUNT;
 		old_state = service->state_ipv4;
 		ipconfig = service->ipconfig_ipv4;
 
 		break;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		service->online_check_count_ipv6 = ONLINE_CHECK_RETRY_COUNT;
+		service->online_check_timer_ipv6 = ONLINE_CHECK_RETRY_COUNT;
 		old_state = service->state_ipv6;
 		ipconfig = service->ipconfig_ipv6;
 
@@ -8270,7 +8277,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 			check_proxy_setup(service);
 			service_rp_filter(service, true);
 		} else {
-			service->online_check_count_ipv6 = ONLINE_CHECK_RETRY_COUNT;
+			service->online_check_timer_ipv6 = ONLINE_CHECK_RETRY_COUNT;
 			__connman_service_wispr_start(service, type);
 		}
 		break;
