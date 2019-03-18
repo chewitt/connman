@@ -135,7 +135,7 @@ static struct {
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
-#define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewayAsTimeservers"
+#define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
