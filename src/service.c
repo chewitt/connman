@@ -2638,11 +2638,10 @@ void __connman_service_set_hostname(struct connman_service *service,
 		return;
 
 	g_free(service->hostname);
+	service->hostname = NULL;
 
-	if (g_str_is_ascii(hostname))
+	if (hostname && g_str_is_ascii(hostname))
 		service->hostname = g_strdup(hostname);
-	else
-		service->hostname = NULL;
 }
 
 const char *__connman_service_get_hostname(struct connman_service *service)
@@ -2660,11 +2659,10 @@ void __connman_service_set_domainname(struct connman_service *service,
 		return;
 
 	g_free(service->domainname);
+	service->domainname = NULL;
 
-	if (g_str_is_ascii(domainname))
+	if (domainname && g_str_is_ascii(domainname))
 		service->domainname = g_strdup(domainname);
-	else
-		service->domainname = NULL;
 
 	domain_changed(service);
 }
