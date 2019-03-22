@@ -308,3 +308,8 @@ builtin_modules += globalproxy
 builtin_sources += plugins/globalproxy.c
 src_connmand_CFLAGS += -DGLOBALPROXY_PLUGIN
 endif
+
+if SAILFISH_DEVELOPER_MODE
+builtin_modules += sailfish_developer_mode
+builtin_sources += plugins/sailfish_developer_mode.c
+endif

@@ -78,9 +78,11 @@ unit/test-sailfish_iptables_ext
 unit/test-sailfish_datacounter
 unit/test-sailfish_datacounters
 unit/test-sailfish_datahistory
+unit/test-sailfish_developer_mode
 unit/test-firewall
 unit/test-globalproxy
 unit/test-iptables
+unit/test-device
 
 *.gcda
 *.gcno

@@ -45,6 +45,13 @@ enum connman_pending_type {
 	PENDING_DISABLE = 2,
 };
 
+enum connman_device_status {
+	CONNMAN_DEVICE_STATUS_UNSET   = -1,	/* initial */
+	CONNMAN_DEVICE_STATUS_OFF     = 0,	/* false */
+	CONNMAN_DEVICE_STATUS_ON      = 1,	/* true */
+};
+
+
 struct connman_device {
 	int refcount;
 	enum connman_device_type type;
@@ -69,6 +76,9 @@ struct connman_device {
 	char *last_network;
 	struct connman_network *network;
 	GHashTable *networks;
+
+	enum connman_device_status status;
+	bool managed; /* Whether this device is managed by connman or not */
 };
 
 static void clear_pending_trigger(struct connman_device *device)
@@ -434,6 +444,8 @@ struct connman_device *connman_device_create(const char *node,
 
 	device->refcount = 1;
 
+	device->status = CONNMAN_DEVICE_STATUS_UNSET;
+	device->managed = true; /* By default, device is managed */
 	device->type = type;
 	device->name = g_strdup(type2description(device->type));
 
@@ -666,6 +678,83 @@ int connman_device_reconnect_service(struct connman_device *device)
 	__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	return 0;
+}
+
+void connman_device_set_managed(struct connman_device *device, bool managed)
+{
+	bool notify_change = false;
+
+	if (!device)
+		return;
+
+	DBG("device %p managed: %d -> %d", device, device->managed, managed);
+
+	if (device->managed != managed)
+		notify_change = true;
+
+	device->managed = managed;
+
+	/*
+	 * If there is a change in managed state and device status has been
+	 * set notify current status. The status does not change -> no state
+	 * transition was in place.
+	 */
+	if (notify_change) {
+		switch (device->status) {
+		case CONNMAN_DEVICE_STATUS_OFF:
+		case CONNMAN_DEVICE_STATUS_ON:
+			__connman_notifier_device_status_changed(device,
+						(bool)device->status);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+bool connman_device_get_managed(struct connman_device *device)
+{
+	if (!device)
+		return true;
+
+	return device->managed;
+}
+
+bool connman_device_has_status_changed_to(struct connman_device *device,
+			bool new_status)
+{
+	if (!device)
+		return false;
+
+	DBG("device %p status %d -> %d", device, device->status, new_status);
+
+	switch (device->status) {
+	case CONNMAN_DEVICE_STATUS_UNSET:
+		return true;
+	case CONNMAN_DEVICE_STATUS_OFF:
+	case CONNMAN_DEVICE_STATUS_ON:
+		return (int)new_status != device->status;
+	}
+
+	return false;
+}
+
+void connman_device_status_notify(struct connman_device *device, bool on)
+{
+	if (!device)
+		return;
+
+	DBG("device %p on:%d managed:%d", device, on, device->managed);
+
+	if (!connman_device_has_status_changed_to(device, on)) {
+		DBG("state has not changed, notify is not done");
+		return;
+	}
+
+	/* Notify new state to indicate state transition */
+	__connman_notifier_device_status_changed(device, on);
+	device->status = on ? CONNMAN_DEVICE_STATUS_ON :
+				CONNMAN_DEVICE_STATUS_OFF;
 }
 
 static void mark_network_available(gpointer key, gpointer value,

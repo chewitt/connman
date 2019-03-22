@@ -25,6 +25,7 @@
 #include <connman/service.h>
 #include <connman/ipconfig.h>
 #include <connman/technology.h>
+#include <connman/device.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,9 +58,10 @@ struct connman_notifier {
 					struct connman_ipconfig *ipconfig);
 	void (*idle_state) (bool idle);
 	void (*tethering_changed) (struct connman_technology *tech, bool on);
+	void (*device_status_changed) (struct connman_device *device, bool on);
 
 	/* Placeholders for future extensions */
-	void (*_reserved[10])(void);
+	void (*_reserved[9])(void);
 
 	/* api_level will remain zero (and ignored) until we run out of
 	 * the above placeholders. Hopefully, forever. */

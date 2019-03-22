@@ -311,7 +311,8 @@ endif
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables
+	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-device
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -391,6 +392,12 @@ unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				src/iptables-validate.c unit/test-firewall.c
 unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+unit_test_device_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
+unit_test_device_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
+				src/inotify.c plugins/ethernet.c \
+				src/device.c unit/test-device.c
+unit_test_device_LDADD = @GLIB_LIBS@ -ldl
+
 unit_test_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
 unit_test_iptables_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				unit/test-iptables.c src/iptables.c
@@ -399,7 +406,8 @@ unit_test_iptables_LDADD = @GLIB_LIBS@ -ldl
 TESTS = unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables
+	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-device
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
@@ -470,6 +478,17 @@ unit_test_sailfish_datahistory_SOURCES = unit/test-sailfish_datahistory.c \
 	$(backtrace_sources)
 noinst_PROGRAMS += unit/test-sailfish_datahistory
 TESTS += unit/test-sailfish_datahistory
+endif
+
+if SAILFISH_DEVELOPER_MODE
+unit_test_sailfish_developer_mode_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				@GLIB_CFLAGS@
+unit_test_sailfish_developer_mode_SOURCES = $(backtrace_sources) src/connman.h \
+				src/log.c plugins/sailfish_developer_mode.c \
+				unit/test-sailfish_developer_mode.c
+unit_test_sailfish_developer_mode_LDADD = @GLIB_LIBS@ -ldl
+noinst_PROGRAMS += unit/test-sailfish_developer_mode
+TESTS += unit/test-sailfish_developer_mode
 endif
 
 if WISPR
@@ -548,8 +567,7 @@ tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c src/firewall.c src/nat.c \
 		src/inet.c src/iptables-validate.c tools/iptables-unit.c
-tools_iptables_unit_LDADD = gdbus/libgdbus-internal.la \
-				@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
+tools_iptables_unit_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
