@@ -389,6 +389,8 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
+static void start_online_check(struct connman_service *service,
+				enum connman_ipconfig_type type);
 
 static void vpn_auto_connect(void);
 static bool is_connecting(struct connman_service *service);
@@ -1924,6 +1926,7 @@ static void address_updated(struct connman_service *service,
 			service == connman_service_get_default()) {
 		nameserver_remove_all(service, type);
 		nameserver_add_all(service, type);
+		start_online_check(service, type);
 
 		__connman_timeserver_sync(service);
 	}
@@ -8012,7 +8015,7 @@ enum connman_service_state __connman_service_ipconfig_get_state(
 	return CONNMAN_SERVICE_STATE_UNKNOWN;
 }
 
-static void check_proxy_setup(struct connman_service *service)
+static bool check_proxy_setup(struct connman_service *service)
 {
 	/*
 	 * We start WPAD if we haven't got a PAC URL from DHCP and
@@ -8021,23 +8024,20 @@ static void check_proxy_setup(struct connman_service *service)
 	 */
 
 	if (service->proxy != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN)
-		goto done;
+		return true;
 
 	if (service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN &&
 		(service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_AUTO ||
 			service->pac))
-		goto done;
+		return true;
 
 	if (__connman_wpad_start(service) < 0) {
 		service->proxy = CONNMAN_SERVICE_PROXY_METHOD_DIRECT;
 		__connman_notifier_proxy_changed(service);
-		goto done;
+		return true;
 	}
 
-	return;
-
-done:
-	__connman_service_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+	return false;
 }
 
 /*
@@ -8200,6 +8200,21 @@ static void cancel_online_check(struct connman_service *service)
 	if (service->online_check_timer_ipv4 == 0 ||
 				service->online_check_timer_ipv6 == 0)
 		return;
+}
+
+static void start_online_check(struct connman_service *service,
+				enum connman_ipconfig_type type)
+{
+	if (!connman_setting_get_bool("EnableOnlineCheck")) {
+		connman_info("Online check disabled. "
+			"Default service remains in READY state.");
+		return;
+	}
+
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV4 || check_proxy_setup(service)) {
+		cancel_online_check(service);
+		__connman_service_wispr_start(service, type);
+	}
 }
 
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
