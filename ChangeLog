@@ -1,3 +1,12 @@
+ver 1.37:
+	Fix issue with handling invalid gateway addresses.
+	Fix issue with handling updates of default gateway.
+	Fix issue with DHCP servers that require broadcast flag.
+	Add support for option to use gateways as time servers.
+	Add support for option to select default technology.
+	Add support for Address Conflict Detection (ACD).
+	Add support for IPv6 iptables management.
+
 ver 1.36:
 	Fix issue with DNS short response on error handling.
 	Fix issue with handling incoming DNS requests.
