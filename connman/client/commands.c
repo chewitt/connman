@@ -154,10 +154,19 @@ static int enable_return(DBusMessageIter *iter, int errnum, const char *error,
 	else
 		str = tech;
 
-	if (!error)
+	switch (errnum) {
+	case 0:
 		fprintf(stdout, "Enabled %s\n", str);
-	else
+		break;
+	case -ENODEV:
+		fprintf(stderr, "%s is not available\n", str);
+		break;
+	case -EALREADY:
+		fprintf(stderr, "%s is already enabled\n", str);
+		break;
+	default:
 		fprintf(stderr, "Error %s: %s\n", str, error);
+	}
 
 	g_free(user_data);
 
@@ -203,10 +212,19 @@ static int disable_return(DBusMessageIter *iter, int errnum, const char *error,
 	else
 		str = tech;
 
-	if (!error)
-		fprintf(stdout, "Disabled %s\n", str);
-	else
+	switch (errnum) {
+	case 0:
+		fprintf(stdout, "Disable %s\n", str);
+		break;
+	case -ENODEV:
+		fprintf(stderr, "%s is not available\n", str);
+		break;
+	case -EALREADY:
+		fprintf(stderr, "%s is already disabled\n", str);
+		break;
+	default:
 		fprintf(stderr, "Error %s: %s\n", str, error);
+	}
 
 	g_free(user_data);
 
