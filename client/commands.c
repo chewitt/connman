@@ -142,7 +142,7 @@ static int parse_args(char *arg, struct connman_option *options)
 	return '?';
 }
 
-static int enable_return(DBusMessageIter *iter, const char *error,
+static int enable_return(DBusMessageIter *iter, int errnum, const char *error,
 		void *user_data)
 {
 	char *tech = user_data;
@@ -191,7 +191,7 @@ static int cmd_enable(char *args[], int num, struct connman_option *options)
 				"Powered", DBUS_TYPE_BOOLEAN, &b);
 }
 
-static int disable_return(DBusMessageIter *iter, const char *error,
+static int disable_return(DBusMessageIter *iter, int errnum, const char *error,
 		void *user_data)
 {
 	char *tech = user_data;
@@ -240,7 +240,7 @@ static int cmd_disable(char *args[], int num, struct connman_option *options)
 				"Powered", DBUS_TYPE_BOOLEAN, &b);
 }
 
-static int state_print(DBusMessageIter *iter, const char *error,
+static int state_print(DBusMessageIter *iter, int errnum, const char *error,
 		void *user_data)
 {
 	DBusMessageIter entry;
@@ -267,7 +267,7 @@ static int cmd_state(char *args[], int num, struct connman_option *options)
 			state_print, NULL, NULL, NULL);
 }
 
-static int clock_print(DBusMessageIter *iter, const char *error,
+static int clock_print(DBusMessageIter *iter, int errnum, const char *error,
 		void *user_data)
 {
 	DBusMessageIter entry;
@@ -294,7 +294,7 @@ static int cmd_clock(char *args[], int num, struct connman_option *options)
 			clock_print, NULL, NULL, NULL);
 }
 
-static int services_list(DBusMessageIter *iter, const char *error,
+static int services_list(DBusMessageIter *iter, int errnum, const char *error,
 		void *user_data)
 {
 	if (!error) {
@@ -307,7 +307,7 @@ static int services_list(DBusMessageIter *iter, const char *error,
 	return 0;
 }
 
-static int peers_list(DBusMessageIter *iter,
+static int peers_list(DBusMessageIter *iter, int errnum,
 					const char *error, void *user_data)
 {
 	if (!error) {
@@ -319,7 +319,7 @@ static int peers_list(DBusMessageIter *iter,
 	return 0;
 }
 
-static int tethering_clients_list(DBusMessageIter *iter,
+static int tethering_clients_list(DBusMessageIter *iter, int errnum,
 					const char *error, void *user_data)
 {
 	if (!error) {
@@ -331,7 +331,7 @@ static int tethering_clients_list(DBusMessageIter *iter,
 	return 0;
 }
 
-static int object_properties(DBusMessageIter *iter,
+static int object_properties(DBusMessageIter *iter, int errnum,
 					const char *error, void *user_data)
 {
 	char *path = user_data;
@@ -429,7 +429,7 @@ static int cmd_peers(char *args[], int num, struct connman_option *options)
 				object_properties, path, NULL, NULL);
 }
 
-static int technology_print(DBusMessageIter *iter, const char *error,
+static int technology_print(DBusMessageIter *iter, int errnum, const char *error,
 		void *user_data)
 {
 	DBusMessageIter array;
@@ -476,8 +476,8 @@ struct tether_enable {
 	dbus_bool_t enable;
 };
 
-static int tether_set_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int tether_set_return(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	struct tether_enable *tether = user_data;
 	char *str;
@@ -553,8 +553,8 @@ static int tether_update(struct tether_properties *tether)
 	return -EINPROGRESS;
 }
 
-static int tether_set_ssid_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int tether_set_ssid_return(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	struct tether_properties *tether = user_data;
 
@@ -569,8 +569,8 @@ static int tether_set_ssid_return(DBusMessageIter *iter, const char *error,
 	return tether_update(tether);
 }
 
-static int tether_set_passphrase_return(DBusMessageIter *iter,
-		const char *error, void *user_data)
+static int tether_set_passphrase_return(DBusMessageIter *iter, int errnum,
+					const char *error, void *user_data)
 {
 	struct tether_properties *tether = user_data;
 
@@ -663,7 +663,7 @@ static int cmd_tethering_clients(char *args[], int num, struct connman_option *o
 				tethering_clients_list, NULL, NULL, NULL);
 }
 
-static int scan_return(DBusMessageIter *iter, const char *error,
+static int scan_return(DBusMessageIter *iter, int ernnum, const char *error,
 		void *user_data)
 {
 	char *path = user_data;
@@ -699,8 +699,8 @@ static int cmd_scan(char *args[], int num, struct connman_option *options)
 			scan_return, path, NULL, NULL);
 }
 
-static int connect_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int connect_return(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	char *path = user_data;
 
@@ -740,8 +740,8 @@ static int cmd_connect(char *args[], int num, struct connman_option *options)
 			iface, "Connect", connect_return, path, NULL, NULL);
 }
 
-static int disconnect_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int disconnect_return(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	char *path = user_data;
 
@@ -787,8 +787,8 @@ struct move_service {
 	char *target;
 };
 
-static int move_before_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int move_before_return(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	struct move_service *services = user_data;
 	char *service;
@@ -845,8 +845,8 @@ static int cmd_service_move_before(char *args[], int num,
 					services->target);
 }
 
-static int move_after_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int move_after_return(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	struct move_service *services = user_data;
 	char *service;
@@ -903,8 +903,8 @@ static int cmd_service_move_after(char *args[], int num,
 					services->target);
 }
 
-static int config_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int config_return(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	char *service_name = user_data;
 
@@ -1560,8 +1560,8 @@ static int cmd_agent(char *args[], int num, struct connman_option *options)
 	return 0;
 }
 
-static int vpnconnections_properties(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int vpnconnections_properties(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	char *path = user_data;
 	char *str;
@@ -1590,8 +1590,8 @@ static int vpnconnections_properties(DBusMessageIter *iter, const char *error,
 	return 0;
 }
 
-static int vpnconnections_list(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int vpnconnections_list(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	if (!error)
 		__connmanctl_vpnconnections_list(iter);
@@ -1782,8 +1782,8 @@ static void session_notify_remove(void)
 	session_notify_path = NULL;
 }
 
-static int session_connect_cb(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int session_connect_cb(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	if (error) {
 		fprintf(stderr, "Error: %s\n", error);
@@ -1801,8 +1801,8 @@ static int session_connect(void)
 			session_connect_cb, NULL, NULL, NULL);
 }
 
-static int session_disconnect_cb(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int session_disconnect_cb(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	if (error)
 		fprintf(stderr, "Error: %s\n", error);
@@ -1817,8 +1817,8 @@ static int session_disconnect(void)
 			session_disconnect_cb, NULL, NULL, NULL);
 }
 
-static int session_create_cb(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int session_create_cb(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	gboolean connect = GPOINTER_TO_INT(user_data);
 	char *str;
@@ -1990,8 +1990,8 @@ static int session_create(gboolean connect, char *args[], int num,
 	return res;
 }
 
-static int session_destroy_cb(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int session_destroy_cb(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	if (error) {
 		fprintf(stderr, "Error destroying session: %s", error);
@@ -2022,8 +2022,8 @@ static int session_destroy(void)
 			session_destroy_append, session_path);
 }
 
-static int session_config_return(DBusMessageIter *iter, const char *error,
-		void *user_data)
+static int session_config_return(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	char *property_name = user_data;
 
@@ -2462,8 +2462,8 @@ static char *lookup_session(const char *text, int state)
 	return lookup_options(session_options, text, state);
 }
 
-static int peer_service_cb(DBusMessageIter *iter, const char *error,
-							void *user_data)
+static int peer_service_cb(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	bool registration = GPOINTER_TO_INT(user_data);
 
@@ -2972,8 +2972,8 @@ static void update_services(DBusMessageIter *iter)
 	}
 }
 
-static int populate_service_hash(DBusMessageIter *iter, const char *error,
-				void *user_data)
+static int populate_service_hash(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	if (error) {
 		fprintf(stderr, "Error getting services: %s", error);
@@ -3030,8 +3030,8 @@ static void add_vpnconnections(DBusMessageIter *iter)
 	}
 }
 
-static int populate_vpnconnection_hash(DBusMessageIter *iter, const char *error,
-				void *user_data)
+static int populate_vpnconnection_hash(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	DBusMessageIter array;
 
@@ -3104,8 +3104,8 @@ static void update_peers(DBusMessageIter *iter)
 	}
 }
 
-static int populate_peer_hash(DBusMessageIter *iter,
-					const char *error, void *user_data)
+static int populate_peer_hash(DBusMessageIter *iter, int errnum,
+			const char *error, void *user_data)
 {
 	if (error) {
 		fprintf(stderr, "Error getting peers: %s", error);
@@ -3169,8 +3169,8 @@ static void update_technologies(DBusMessageIter *iter)
 	}
 }
 
-static int populate_technology_hash(DBusMessageIter *iter, const char *error,
-				void *user_data)
+static int populate_technology_hash(DBusMessageIter *iter, int errnum,
+				const char *error, void *user_data)
 {
 	if (error) {
 		fprintf(stderr, "Error getting technologies: %s\n", error);

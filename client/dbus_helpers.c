@@ -30,6 +30,34 @@
 
 #define TIMEOUT         120000
 
+#ifndef DBUS_ERROR_UNKNOWN_METHOD
+#define DBUS_ERROR_UNKNOWN_METHOD "org.freedesktop.DBus.Error.UnknownMethod"
+#endif
+
+#ifndef DBUS_ERROR_UNKNOWN_PROPERTY
+#define DBUS_ERROR_UNKNOWN_PROPERTY "org.freedesktop.DBus.Error.UnknownProperty"
+#endif
+
+#ifndef DBUS_ERROR_UNKNOWN_OBJECT
+#define DBUS_ERROR_UNKNOWN_OBJECT "org.freedesktop.DBus.Error.UnknownObject"
+#endif
+
+static int string2errno(const char *error)
+{
+	if (!g_strcmp0(error, DBUS_ERROR_UNKNOWN_METHOD))
+		return -ENOTSUP;
+	if (!g_strcmp0(error, DBUS_ERROR_UNKNOWN_PROPERTY))
+		return -ENOENT;
+	if (!g_strcmp0(error, DBUS_ERROR_UNKNOWN_OBJECT))
+		return -ENODEV;
+	if (!g_strcmp0(error, "net.connman.Error.AlreadyEnabled"))
+		return -EALREADY;
+	if (!g_strcmp0(error, "net.connman.Error.AlreadyDisabled"))
+		return -EALREADY;
+
+	return -EINVAL;
+}
+
 void __connmanctl_dbus_print(DBusMessageIter *iter, const char *pre,
 		const char *dict, const char *sep)
 {
@@ -159,14 +187,15 @@ static void dbus_method_reply(DBusPendingCall *call, void *user_data)
 		dbus_error_init(&err);
 		dbus_set_error_from_message(&err, reply);
 
-		callback->cb(NULL, err.message, callback->user_data);
+		callback->cb(NULL, string2errno(err.name), err.message,
+			callback->user_data);
 
 		dbus_error_free(&err);
 		goto end;
 	}
 
 	dbus_message_iter_init(reply, &iter);
-	res = callback->cb(&iter, NULL, callback->user_data);
+	res = callback->cb(&iter, 0, NULL, callback->user_data);
 
 end:
 	__connmanctl_redraw_rl();
