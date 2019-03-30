@@ -38,7 +38,7 @@ void __connmanctl_dbus_print(DBusMessageIter *iter, const char *pre,
 		const char *dict, const char *sep);
 
 typedef int (*connmanctl_dbus_method_return_func_t)(DBusMessageIter *iter,
-		const char *error, void *user_data);
+		int errnum, const char *error, void *user_data);
 
 typedef void (*connmanctl_dbus_append_func_t)(DBusMessageIter *iter,
 		void *user_data);
