@@ -396,8 +396,6 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
-static void start_online_check(struct connman_service *service,
-				enum connman_ipconfig_type type);
 
 static void vpn_auto_connect(void);
 static bool is_connecting(enum connman_service_state state);
