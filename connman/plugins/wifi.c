@@ -2215,7 +2215,7 @@ static void disconnect_callback(int result, GSupplicantInterface *interface,
 		return;
 	}
 
-	if (wifi->network != wifi->pending_network)
+	if (wifi->network && wifi->network != wifi->pending_network)
 		connman_network_set_connected(wifi->network, false);
 	wifi->network = NULL;
 
