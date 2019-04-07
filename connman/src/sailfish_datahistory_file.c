@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2016-2018 Jolla Ltd. All rights reserved.
- *  Copyright (C) 2016-2018 Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2016-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2016-2019 Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -230,6 +230,7 @@ static gboolean datahistory_file_validate_data(struct datahistory_file *self)
 	} else {
 		guint i;
 		const guint max_depth = self->super.type->max_depth;
+		const struct datahistory_sample *hs = &self->super.last_sample;
 
 		for (i = 1; i < self->total; i++) {
 			struct datahistory_sample next;
@@ -243,6 +244,12 @@ static gboolean datahistory_file_validate_data(struct datahistory_file *self)
 				/* The data make no sense */
 				return FALSE;
 			}
+		}
+
+		/* Check the last sample against the current counter */
+		if (hs->time < last.time || hs->bytes_sent < last.bytes_sent ||
+				hs->bytes_received < last.bytes_received) {
+			return FALSE;
 		}
 
 		/* The contents of the file makes sense */
@@ -353,31 +360,6 @@ static void datahistory_file_finish_init(struct datahistory *history)
 			HISTORY_FILE_PREFIX, history->counter->name, ".",
 			history->type->name, NULL);
 	DBG("%s", self->path);
-	datahistory_file_open(self);
-
-	/*
-	 * Make sure that the counter is consistent with the history.
-	 * If it's not - reset the history.
-	 */
-	if (self->fd >= 0 && self->total > 0) {
-		const struct datahistory_sample *last = &history->last_sample;
-		struct datahistory_sample saved;
-
-		if (datahistory_file_read_sample_at(self, self->total - 1,
-								&saved)) {
-			if (last->time < saved.time ||
-				last->bytes_sent < saved.bytes_sent ||
-				last->bytes_received < saved.bytes_received) {
-				connman_warn("Resetting %s due to "
-						"inconsistency", self->path);
-				if (!datahistory_file_reset(self)) {
-					datahistory_file_remove(self);
-				}
-			}
-		} else {
-			datahistory_file_remove(self);
-		}
-	}
 }
 
 static gboolean datahistory_file_is_empty(struct datahistory *history)

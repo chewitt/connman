@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2016-2018 Jolla Ltd. All rights reserved.
- *  Copyright (C) 2016-2018 Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2016-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2016-2019 Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -151,31 +151,24 @@ static struct connman_stats *stats_new(struct connman_service *service,
 struct connman_stats *__connman_stats_new(struct connman_service *service,
 							gboolean roaming)
 {
-	int err = 0;
-	struct connman_stats *stats = NULL;
 	const char *ident = connman_service_get_identifier(service);
 	char *dir = g_build_filename(STORAGEDIR, ident, NULL);
 
 	DBG("%s %d", ident, roaming);
 
-	/* If the dir doesn't exist, create it */
-	if (!g_file_test(dir, G_FILE_TEST_IS_DIR)) {
-		if (g_mkdir_with_parents(dir, STORAGE_DIR_MODE) < 0) {
-			if (errno != EEXIST) {
-				err = -errno;
-			}
-		}
-	}
-
-	if (!err) {
-		stats = stats_new(service, stats_name(roaming));
+	/*
+	 * The directory gets created when the service is saved.
+	 * Until then it should never become connected, no data
+	 * should be transferred and therefore no statistics or
+	 * history needs to be stored. We only check the directory
+	 * to see if there are any stale files there to delete.
+	 */
+	if (g_file_test(dir, G_FILE_TEST_IS_DIR)) {
 		stats_delete_obsolete_files(dir);
-	} else {
-		connman_error("failed to create %s: %s", dir, strerror(errno));
 	}
 
 	g_free(dir);
-	return stats;
+	return stats_new(service, stats_name(roaming));
 }
 
 struct connman_stats *__connman_stats_new_existing(
