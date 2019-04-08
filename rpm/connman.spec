@@ -177,6 +177,12 @@ cp %{etc_resolv_conf} %{run_resolv_conf} || :
 fi
 rm -f %{etc_resolv_conf} || :
 ln -s %{run_resolv_conf} %{etc_resolv_conf} || :
+# Remove directories created by mistake in release 3.0.2
+for d in $(find /var/lib/connman -type d -name "wifi*") ; do
+if [ ! -f $d/settings ] ; then
+rm -fr $d
+fi
+done
 
 systemctl daemon-reload || :
 # Do not restart connman here or network breaks.
