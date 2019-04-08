@@ -1947,7 +1947,7 @@ static int enable_general_firewall()
 
 	if (!general_firewall || !general_firewall->ctx) {
 		DBG("no general firewall or firewall context set");
-		return -EINVAL;
+		return 0;
 	}
 
 	if (!g_list_length(general_firewall->ctx->rules)) {
@@ -2863,8 +2863,6 @@ int __connman_firewall_init(void)
 	} else {
 		DBG("dynamic rules disabled, policy ACCEPT set for all chains");
 		connman_error("firewall initialization error, reset iptables");
-		__connman_iptables_cleanup();
-		__connman_iptables_init();
 		__connman_iptables_iterate_chains(AF_INET, "filter",
 					firewall_failsafe,
 					GINT_TO_POINTER(AF_INET));
