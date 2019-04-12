@@ -5096,7 +5096,7 @@ void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 static gboolean run_vpn_auto_connect(gpointer data) {
 	GList *list;
 	bool need_split = false;
-	int autoconnectable_vpns = 0;
+	bool autoconnectable_vpns = false;
 	int attempts = 0;
 	int timeout = VPN_AUTOCONNECT_TIMEOUT_DEFAULT;
 	struct connman_service *def_service;
@@ -5135,7 +5135,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 			 * for to keep the autoconnection in main loop.
 			 */
 			if (is_connecting(service))
-				autoconnectable_vpns++;
+				autoconnectable_vpns = true;
 
 			continue;
 		}
@@ -5152,13 +5152,17 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 				service->do_split_routing ?
 				"split routing" : "");
 
-		/* Autoconnect has been set for this service */
-		autoconnectable_vpns++;
-
 		res = __connman_service_connect(service,
 				CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-		if (res < 0 && res != -EINPROGRESS)
+
+		switch (res) {
+		case 0:
+		case -EINPROGRESS:
+			autoconnectable_vpns = true;
+			break;
+		default:
 			continue;
+		}
 
 		if (!service->do_split_routing)
 			need_split = true;
