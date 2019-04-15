@@ -645,11 +645,16 @@ static void set_vpn_dependency(struct connman_service *vpn_service)
 		return;
 	}
 
-	if (vpn_service->depends_on) {
+	if (vpn_service->depends_on && vpn_service->depends_on != service) {
 		DBG("dependency already set for %s (depends on %s)",
 			vpn_service->identifier,
 			vpn_service->depends_on->identifier);
-		return;
+
+		if (is_connected(vpn_service) || is_connecting(vpn_service)) {
+			DBG("disconnect connected or connecting vpn service %p",
+						vpn_service);
+			__connman_service_disconnect(vpn_service);
+		}
 	}
 
 	switch (service->type) {
