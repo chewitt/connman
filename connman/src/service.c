@@ -4910,6 +4910,8 @@ static GList *preferred_tech_list_get(void)
 	return tech_data.preferred_list;
 }
 
+static int service_indicate_state(struct connman_service *service);
+
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
 				bool preferred)
@@ -5031,7 +5033,8 @@ static bool auto_connect_service(GList *services,
 		DBG("service %p %s %s", service, service->name,
 			(preferred) ? "preferred" : reason2string(reason));
 
-		__connman_service_connect(service, reason);
+		if (__connman_service_connect(service, reason) == 0)
+			service_indicate_state(service);
 
 		/*
 		 * Stop autoconnection of services if no service is active only
@@ -5162,6 +5165,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 
 		switch (res) {
 		case 0:
+			service_indicate_state(service);
 		case -EINPROGRESS:
 			autoconnectable_vpns = true;
 			break;
