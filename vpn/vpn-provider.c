@@ -1098,7 +1098,30 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 {
 	int err;
 
-	DBG("provider %p", provider);
+	DBG("provider %p state %d", provider, provider->state);
+
+	switch (provider->state) {
+	/*
+	 * When previous connection has failed change state to idle and let
+	 * the connmand to process this information as well. Return -EINPROGRESS
+	 * to indicate that transition is in progress and next connection
+	 * attempt will continue as normal.
+	 */
+	case VPN_PROVIDER_STATE_FAILURE:
+		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
+	/*
+	 * If re-using a provider and it is being disconnected let it finish
+	 * the disconnect process in order to let vpn.c:vpn_died() to get
+	 * processed and everything cleaned up. Otherwise the reference
+	 * counters are not decreased properly causing the previous interface
+	 * being left up and its routes will remain in routing table. Return
+	 * -EINPROGRESS to indicate that transition is in progress.
+	 */
+	case VPN_PROVIDER_STATE_DISCONNECT:
+		return -EINPROGRESS;
+	default:
+		break;
+	}
 
 	if (provider->driver && provider->driver->connect) {
 		const char *dbus_sender = dbus_message_get_sender(msg);
