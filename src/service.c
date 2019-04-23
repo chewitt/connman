@@ -39,6 +39,10 @@
 
 #define CONNECT_TIMEOUT		120
 
+#define VPN_AUTOCONNECT_TIMEOUT_DEFAULT 1
+#define VPN_AUTOCONNECT_TIMEOUT_STEP 30
+#define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD 270
+
 static DBusConnection *connection = NULL;
 
 static GList *service_list = NULL;
@@ -4206,8 +4210,28 @@ void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 static gboolean run_vpn_auto_connect(gpointer data) {
 	GList *list;
 	bool need_split = false;
+	bool autoconnectable_vpns = false;
+	int attempts = 0;
+	int timeout = VPN_AUTOCONNECT_TIMEOUT_DEFAULT;
+	struct connman_service *def_service;
 
-	vpn_autoconnect_id = 0;
+	attempts = GPOINTER_TO_INT(data);
+	def_service = connman_service_get_default();
+
+	/*
+	 * Stop auto connecting VPN if there is no transport service or the
+	 * transport service is not connected or if the  current default service
+	 * is a connected VPN (in ready state).
+	 */
+	if (!def_service || !is_connected(def_service->state) ||
+		(def_service->type == CONNMAN_SERVICE_TYPE_VPN &&
+		is_connected(def_service->state))) {
+
+		DBG("stopped, default service %s connected %d",
+			def_service ? def_service->identifier : "NULL",
+			def_service ? is_connected(def_service->state) : -1);
+		goto out;
+	}
 
 	for (list = service_list; list; list = list->next) {
 		struct connman_service *service = list->data;
@@ -4217,9 +4241,17 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 			continue;
 
 		if (is_connected(service->state) ||
-				is_connecting(service->state)) {
+					is_connecting(service->state)) {
 			if (!service->do_split_routing)
 				need_split = true;
+
+			/*
+			 * If the service is connecting it must be accounted
+			 * for to keep the autoconnection in main loop.
+			 */
+			if (is_connecting(service->state))
+				autoconnectable_vpns = true;
+
 			continue;
 		}
 
@@ -4237,14 +4269,50 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 
 		res = __connman_service_connect(service,
 				CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-		if (res < 0 && res != -EINPROGRESS)
+
+		switch (res) {
+		case 0:
+		case -EINPROGRESS:
+			autoconnectable_vpns = true;
+			break;
+		default:
 			continue;
+		}
 
 		if (!service->do_split_routing)
 			need_split = true;
 	}
 
-	return FALSE;
+	/* Stop if there is no VPN to automatically connect.*/
+	if (!autoconnectable_vpns) {
+		DBG("stopping, no autoconnectable VPNs found");
+		goto out;
+	}
+
+	/* Increase the attempt count up to the treshold.*/
+	if (attempts < VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD)
+		attempts++;
+
+	/*
+	 * Timeout increases with 1s after VPN_AUTOCONNECT_TIMEOUT_STEP amount
+	 * of attempts made. After VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD is
+	 * reached the delay does not increase.
+	 */
+	timeout = timeout + (int)(attempts / VPN_AUTOCONNECT_TIMEOUT_STEP);
+
+	/* Re add this to main loop */
+	vpn_autoconnect_id =
+		g_timeout_add_seconds(timeout, run_vpn_auto_connect,
+			GINT_TO_POINTER(attempts));
+
+	DBG("re-added to main loop, next VPN autoconnect in %d seconds (#%d)",
+		timeout, attempts);
+
+	return G_SOURCE_REMOVE;
+
+out:
+	vpn_autoconnect_id = 0;
+	return G_SOURCE_REMOVE;
 }
 
 static void vpn_auto_connect(void)
