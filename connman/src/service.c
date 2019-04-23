@@ -4173,25 +4173,18 @@ static void do_auto_connect(struct connman_service *service,
 	 * always have reason CONNMAN_SERVICE_CONNECT_REASON_USER/AUTO.
 	 */
 	if (!service || (service->type == CONNMAN_SERVICE_TYPE_VPN &&
-		reason == CONNMAN_SERVICE_CONNECT_REASON_NONE))
+				reason == CONNMAN_SERVICE_CONNECT_REASON_NONE))
 		return;
 
 	/*
-	 * Run service auto connect when a service is changed. This is not
-	 * needed to be run when VPN service changes, then vpn auto connect is
-	 * sufficient.
-	 *
-	 * Do not run vpn_auto_connect() when VPN entering failure state
-	 * triggers this via service_complete() that is called for each service
-	 * that is set to failure state in service_indicate_state(). Otherwise
-	 * the timeout of vpn_auto_connect() will be reset and the delays for
-	 * VPN connections are reset likewise. User request should reset the
-	 * timer.
+	 * Run service auto connect for other than VPN services. Afterwards
+	 * start also VPN auto connect process.
 	 */
 	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 		__connman_service_auto_connect(reason);
+	/* Only user interaction should get VPN connected in failure state. */
 	else if (service->state == CONNMAN_SERVICE_STATE_FAILURE &&
-		reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
+				reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
 		return;
 
 	vpn_auto_connect();
@@ -5219,7 +5212,6 @@ static void vpn_auto_connect(void)
 	 */
 	if (vpn_autoconnect_timeout) {
 		if (!g_source_remove(vpn_autoconnect_timeout)) {
-			DBG("cannot remove VPN autoconnect from main loop");
 			return;
 		}
 	}
@@ -8785,12 +8777,11 @@ bool __connman_service_create_from_network(struct connman_network *network)
 				/* fall through */
 			case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 			case CONNMAN_SERVICE_TYPE_GPS:
+			case CONNMAN_SERVICE_TYPE_VPN:
 			case CONNMAN_SERVICE_TYPE_WIFI:
 			case CONNMAN_SERVICE_TYPE_CELLULAR:
-				__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-				break;
-			case CONNMAN_SERVICE_TYPE_VPN:
-				vpn_auto_connect();
+				do_auto_connect(service,
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 				break;
 			}
 		}
