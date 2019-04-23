@@ -1909,13 +1909,14 @@ static bool vpn_is_valid_transport(struct connman_service *transport)
 
 static void vpn_disconnect_check_provider(struct connection_data *data)
 {
-	if (data->service_ident && provider_is_connected(data)) {
+	if (provider_is_connected(data)) {
+		/* With NULL service ident NULL is returned immediately */
 		struct connman_service *service =
 			connman_service_lookup_from_identifier
 						(data->service_ident);
 
 		if (!vpn_is_valid_transport(service)) {
-			disconnect_provider(data);
+			connman_provider_disconnect(data->provider);
 		}
 	}
 }
