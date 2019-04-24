@@ -4321,8 +4321,14 @@ out:
 
 static void vpn_auto_connect(void)
 {
-	if (vpn_autoconnect_id)
-		return;
+	/*
+	 * Remove existing autoconnect from main loop to reset the attempt
+	 * counter in order to get VPN connected when there is a network change.
+	 */
+	if (vpn_autoconnect_id) {
+		if (!g_source_remove(vpn_autoconnect_id))
+			return;
+	}
 
 	vpn_autoconnect_id =
 		g_idle_add(run_vpn_auto_connect, NULL);
