@@ -3413,6 +3413,33 @@ error:
 	return -EINVAL;
 }
 
+static void vpn_auto_connect(void);
+
+static void do_auto_connect(struct connman_service *service,
+	enum connman_service_connect_reason reason)
+{
+	/*
+	 * CONNMAN_SERVICE_CONNECT_REASON_NONE must be ignored for VPNs. VPNs
+	 * always have reason CONNMAN_SERVICE_CONNECT_REASON_USER/AUTO.
+	 */
+	if (!service || (service->type == CONNMAN_SERVICE_TYPE_VPN &&
+				reason == CONNMAN_SERVICE_CONNECT_REASON_NONE))
+		return;
+
+	/*
+	 * Run service auto connect for other than VPN services. Afterwards
+	 * start also VPN auto connect process.
+	 */
+	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
+		__connman_service_auto_connect(reason);
+	/* Only user interaction should get VPN connected in failure state. */
+	else if (service->state == CONNMAN_SERVICE_STATE_FAILURE &&
+				reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
+		return;
+
+	vpn_auto_connect();
+}
+
 int __connman_service_reset_ipconfig(struct connman_service *service,
 		enum connman_ipconfig_type type, DBusMessageIter *array,
 		enum connman_service_state *new_state)
@@ -3477,7 +3504,7 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 		settings_changed(service, new_ipconfig);
 		address_updated(service, type);
 
-		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
 
 	DBG("err %d ipconfig %p type %d method %d state %s", err,
@@ -3555,7 +3582,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 		autoconnect_changed(service);
 
 		if (autoconnect)
-			__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+			do_auto_connect(service,
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 		service_save(service);
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
@@ -3881,7 +3909,7 @@ static void service_complete(struct connman_service *service)
 	reply_pending(service, EIO);
 
 	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
-		__connman_service_auto_connect(service->connect_reason);
+		do_auto_connect(service, service->connect_reason);
 
 	g_get_current_time(&service->modified);
 	service_save(service);
@@ -4431,7 +4459,7 @@ static gboolean connect_timeout(gpointer user_data)
 	if (autoconnect &&
 			service->connect_reason !=
 				CONNMAN_SERVICE_CONNECT_REASON_USER)
-		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
 	return FALSE;
 }
@@ -5935,7 +5963,7 @@ static int service_indicate_state(struct connman_service *service)
 		 */
 		downgrade_connected_services();
 
-		__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		break;
 
 	case CONNMAN_SERVICE_STATE_FAILURE:
@@ -7286,7 +7314,8 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 			case CONNMAN_SERVICE_TYPE_VPN:
 			case CONNMAN_SERVICE_TYPE_WIFI:
 			case CONNMAN_SERVICE_TYPE_CELLULAR:
-				__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+				do_auto_connect(service,
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 				break;
 			}
 		}
