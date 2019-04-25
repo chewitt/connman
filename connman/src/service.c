@@ -645,11 +645,16 @@ static void set_vpn_dependency(struct connman_service *vpn_service)
 		return;
 	}
 
-	if (vpn_service->depends_on) {
+	if (vpn_service->depends_on && vpn_service->depends_on != service) {
 		DBG("dependency already set for %s (depends on %s)",
 			vpn_service->identifier,
 			vpn_service->depends_on->identifier);
-		return;
+
+		if (is_connected(vpn_service) || is_connecting(vpn_service)) {
+			DBG("disconnect connected or connecting vpn service %p",
+						vpn_service);
+			__connman_service_disconnect(vpn_service);
+		}
 	}
 
 	switch (service->type) {
@@ -4168,25 +4173,18 @@ static void do_auto_connect(struct connman_service *service,
 	 * always have reason CONNMAN_SERVICE_CONNECT_REASON_USER/AUTO.
 	 */
 	if (!service || (service->type == CONNMAN_SERVICE_TYPE_VPN &&
-		reason == CONNMAN_SERVICE_CONNECT_REASON_NONE))
+				reason == CONNMAN_SERVICE_CONNECT_REASON_NONE))
 		return;
 
 	/*
-	 * Run service auto connect when a service is changed. This is not
-	 * needed to be run when VPN service changes, then vpn auto connect is
-	 * sufficient.
-	 *
-	 * Do not run vpn_auto_connect() when VPN entering failure state
-	 * triggers this via service_complete() that is called for each service
-	 * that is set to failure state in service_indicate_state(). Otherwise
-	 * the timeout of vpn_auto_connect() will be reset and the delays for
-	 * VPN connections are reset likewise. User request should reset the
-	 * timer.
+	 * Run service auto connect for other than VPN services. Afterwards
+	 * start also VPN auto connect process.
 	 */
 	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 		__connman_service_auto_connect(reason);
+	/* Only user interaction should get VPN connected in failure state. */
 	else if (service->state == CONNMAN_SERVICE_STATE_FAILURE &&
-		reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
+				reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
 		return;
 
 	vpn_auto_connect();
@@ -4905,6 +4903,8 @@ static GList *preferred_tech_list_get(void)
 	return tech_data.preferred_list;
 }
 
+static int service_indicate_state(struct connman_service *service);
+
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
 				bool preferred)
@@ -5026,7 +5026,8 @@ static bool auto_connect_service(GList *services,
 		DBG("service %p %s %s", service, service->name,
 			(preferred) ? "preferred" : reason2string(reason));
 
-		__connman_service_connect(service, reason);
+		if (__connman_service_connect(service, reason) == 0)
+			service_indicate_state(service);
 
 		/*
 		 * Stop autoconnection of services if no service is active only
@@ -5096,7 +5097,7 @@ void __connman_service_auto_connect(enum connman_service_connect_reason reason)
 static gboolean run_vpn_auto_connect(gpointer data) {
 	GList *list;
 	bool need_split = false;
-	int autoconnectable_vpns = 0;
+	bool autoconnectable_vpns = false;
 	int attempts = 0;
 	int timeout = VPN_AUTOCONNECT_TIMEOUT_DEFAULT;
 	struct connman_service *def_service;
@@ -5135,7 +5136,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 			 * for to keep the autoconnection in main loop.
 			 */
 			if (is_connecting(service))
-				autoconnectable_vpns++;
+				autoconnectable_vpns = true;
 
 			continue;
 		}
@@ -5152,13 +5153,18 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 				service->do_split_routing ?
 				"split routing" : "");
 
-		/* Autoconnect has been set for this service */
-		autoconnectable_vpns++;
-
 		res = __connman_service_connect(service,
 				CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-		if (res < 0 && res != -EINPROGRESS)
+
+		switch (res) {
+		case 0:
+			service_indicate_state(service);
+		case -EINPROGRESS:
+			autoconnectable_vpns = true;
+			break;
+		default:
 			continue;
+		}
 
 		if (!service->do_split_routing)
 			need_split = true;
@@ -5206,7 +5212,6 @@ static void vpn_auto_connect(void)
 	 */
 	if (vpn_autoconnect_timeout) {
 		if (!g_source_remove(vpn_autoconnect_timeout)) {
-			DBG("cannot remove VPN autoconnect from main loop");
 			return;
 		}
 	}
@@ -8772,12 +8777,11 @@ bool __connman_service_create_from_network(struct connman_network *network)
 				/* fall through */
 			case CONNMAN_SERVICE_TYPE_BLUETOOTH:
 			case CONNMAN_SERVICE_TYPE_GPS:
+			case CONNMAN_SERVICE_TYPE_VPN:
 			case CONNMAN_SERVICE_TYPE_WIFI:
 			case CONNMAN_SERVICE_TYPE_CELLULAR:
-				__connman_service_auto_connect(CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-				break;
-			case CONNMAN_SERVICE_TYPE_VPN:
-				vpn_auto_connect();
+				do_auto_connect(service,
+					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 				break;
 			}
 		}
