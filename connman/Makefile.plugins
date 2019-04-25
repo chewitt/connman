@@ -180,6 +180,29 @@ vpn_plugins_pptp_la_LDFLAGS = $(plugin_ldflags)
 endif
 endif
 
+if SAILFISH_VPN_ACCESS
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
+if SAILFISH_VPN_ACCESS_BUILTIN
+builtin_vpn_modules += sailfish_access
+builtin_vpn_sources += vpn/plugins/sailfish_access.c
+builtin_vpn_cflags += -DSAILFISH_VPN_ACCESS=\"@SAILFISH_VPN_ACCESS@\"
+else
+vpn_plugin_LTLIBRARIES += vpn/plugins/sailfish_access.la
+vpn_plugin_objects += $(plugins_sailfish_access_la_OBJECTS)
+vpn_plugins_sailfish_access_la_SOURCES = vpn/plugins/sailfish_access.c
+vpn_plugins_sailfish_access_la_CFLAGS = $(plugin_cflags) \
+					-DSAILFISH_VPN_ACCESS=\"@SAILFISH_VPN_ACCESS@\" \
+					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
+					-DSCRIPTDIR=\""$(build_scriptdir)"\"
+vpn_plugins_sailfish_access_la_LDFLAGS = $(plugin_ldflags)
+endif
+
+vpnconfigdir = $(configdir)
+vpnconfig_DATA = vpn/plugins/vpn-dbus-access.conf
+EXTRA_DIST += vpnconfig_DATA
+
+endif
+
 if PPTP
 script_LTLIBRARIES += scripts/libppp-plugin.la
 scripts_libppp_plugin_la_LDFLAGS = $(plugin_ldflags)

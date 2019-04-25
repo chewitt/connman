@@ -144,3 +144,16 @@ const char * vpn_settings_get_binary_group(struct vpn_plugin_data *data);
 char ** vpn_settings_get_binary_supplementary_groups(
 	struct vpn_plugin_data *data);
 
+GKeyFile *__vpn_settings_load_config(const char *file);
+char *__vpn_settings_get_string(GKeyFile *config, const char *group,
+		const char *key);
+char **__vpn_settings_get_string_list(GKeyFile *config,
+		const char *group, const char *key);
+
+#include "access.h"
+
+/* VPN Connection and Manager*/
+bool __vpn_access_policy_check(const char *sender,
+					  enum vpn_access_method method,
+					  const char *arg,
+					  bool default_access);
