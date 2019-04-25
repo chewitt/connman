@@ -1119,7 +1119,10 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 	 */
 	case VPN_PROVIDER_STATE_DISCONNECT:
 		return -EINPROGRESS;
-	default:
+	case VPN_PROVIDER_STATE_UNKNOWN:
+	case VPN_PROVIDER_STATE_IDLE:
+	case VPN_PROVIDER_STATE_CONNECT:
+	case VPN_PROVIDER_STATE_READY:
 		break;
 	}
 

@@ -555,7 +555,7 @@ static int vpn_disconnect(struct vpn_provider *provider)
 	data->state = VPN_STATE_DISCONNECT;
 
 	if (!vpn_driver_data->vpn_driver->disconnect) {
-		DBG("Driver has no disconnect() implementation, set provider"
+		DBG("Driver has no disconnect() implementation, set provider "
 					"state to disconnect.");
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_DISCONNECT);
 	}
