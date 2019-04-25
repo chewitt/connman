@@ -5159,6 +5159,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 		switch (res) {
 		case 0:
 			service_indicate_state(service);
+			/* fall through */
 		case -EINPROGRESS:
 			autoconnectable_vpns = true;
 			break;
