@@ -148,6 +148,7 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
+static void vpn_auto_connect(void);
 
 struct find_data {
 	const char *path;
@@ -1593,6 +1594,16 @@ static void default_changed(void)
 		if (service->domainname &&
 				connman_setting_get_bool("AllowDomainnameUpdates"))
 			__connman_utsname_set_domainname(service->domainname);
+
+		/*
+		 * Connect VPN automatically when new default service
+		 * is set and connected, unless new default is VPN
+		 */
+		if (is_connected(service->state) &&
+				service->type != CONNMAN_SERVICE_TYPE_VPN) {
+			DBG("running vpn_auto_connect");
+			vpn_auto_connect();
+		}
 	}
 
 	__connman_notifier_default_changed(service);
@@ -3412,8 +3423,6 @@ error:
 
 	return -EINVAL;
 }
-
-static void vpn_auto_connect(void);
 
 static void do_auto_connect(struct connman_service *service,
 	enum connman_service_connect_reason reason)
