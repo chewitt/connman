@@ -209,6 +209,11 @@ int main(int argc, char *argv[])
 	__connman_log_init(argv[0], option_debug, option_detach, false,
 			"Connection Manager VPN daemon", VERSION);
 
+	if (!option_config)
+		__vpn_settings_init(CONFIGMAINFILE);
+	else
+		__vpn_settings_init(option_config);
+
 	const char* fs_identity = NULL;
 	if ((fs_identity = __vpn_settings_get_fs_identity()))
 		__connman_set_fsid(fs_identity);
@@ -251,12 +256,6 @@ int main(int argc, char *argv[])
 	g_dbus_set_disconnect_function(conn, disconnect_callback, NULL, NULL);
 
 	__connman_dbus_init(conn);
-
-	if (!option_config)
-		__vpn_settings_init(CONFIGMAINFILE);
-	else
-		__vpn_settings_init(option_config);
-
 	__connman_agent_init();
 	__vpn_provider_init(option_routes);
 	__vpn_manager_init();
