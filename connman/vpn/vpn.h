@@ -117,7 +117,9 @@ char *__vpn_config_get_string(GKeyFile *key_file,
 char **__vpn_config_get_string_list(GKeyFile *key_file,
         const char *group_name, const char *key, gsize *length, GError **error);
 
+#ifndef VPN_STATEDIR
 #define VPN_STATEDIR __vpn_settings_state_dir()
+#endif
 
 struct vpn_plugin_data;
 
