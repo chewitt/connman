@@ -1109,6 +1109,7 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 	 */
 	case VPN_PROVIDER_STATE_FAILURE:
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
+		/* fall through */
 	/*
 	 * If re-using a provider and it is being disconnected let it finish
 	 * the disconnect process in order to let vpn.c:vpn_died() to get
