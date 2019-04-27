@@ -1656,11 +1656,12 @@ int __connman_service_nameserver_append(struct connman_service *service,
 	else
 		nameservers = service->nameservers;
 
-	for (i = 0; nameservers && nameservers[i]; i++)
-		if (g_strcmp0(nameservers[i], nameserver) == 0)
-			return -EEXIST;
-
 	if (nameservers) {
+		for (i = 0; nameservers[i]; i++) {
+			if (g_strcmp0(nameservers[i], nameserver) == 0)
+				return -EEXIST;
+		}
+
 		len = g_strv_length(nameservers);
 		nameservers = g_try_renew(char *, nameservers, len + 2);
 	} else {
