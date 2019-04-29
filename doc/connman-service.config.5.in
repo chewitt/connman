@@ -59,6 +59,10 @@ IPv6 privacy settings as per RFC3041.
 MAC address of the interface to be used. If not specified, the first
 found interface is used. Must be in format ab:cd:ef:01:23:45.
 .TP
+.BI DeviceName= ifname
+Device name the interface to be used, e.g. eth0. MAC takes preference
+over DeviceName.
+.TP
 .BI Nameservers= servers
 Comma separated list of nameservers.
 .TP
@@ -209,6 +213,11 @@ Name = my_home_wifi
 Passphrase = password
 IPv4 = 192.168.2.2/255.255.255.0/192.168.2.1
 MAC = 06:05:04:03:02:01
+
+[service_vlan]
+Type = ethernet
+DeviceName = enp4s0.1
+IPv4 = 192.168.1.42/255.255.255.0/192.168.1.1
 .fi
 .SH "SEE ALSO"
 .BR connman (8)
