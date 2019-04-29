@@ -287,12 +287,11 @@ int main(int argc, char *argv[])
 	__connman_inotify_cleanup();
 	__connman_dbus_cleanup();
 	__connman_log_cleanup(false);
+	__vpn_settings_cleanup();
 
 	dbus_connection_unref(conn);
 
 	g_main_loop_unref(main_loop);
-
-	__vpn_settings_free();
 
 	g_free(option_debug);
 

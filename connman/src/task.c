@@ -45,10 +45,10 @@ struct connman_task {
 	GPtrArray *argv;
 	GPtrArray *envp;
 	connman_task_exit_t exit_func;
-	connman_task_setup_t custom_setup_func;
+	connman_task_setup_t setup_func;
 	void *exit_data;
 	GHashTable *notify;
-	void *user_data;
+	void *setup_data;
 };
 
 static GHashTable *task_hash = NULL;
@@ -96,7 +96,8 @@ static void free_task(gpointer data)
  * Returns: a newly-allocated #connman_task structure
  */
 struct connman_task *connman_task_create(const char *program,
-	connman_task_setup_t custom_task_setup, void *user_data)
+					connman_task_setup_t custom_task_setup,
+					void *setup_data)
 {
 	struct connman_task *task;
 	gint counter;
@@ -118,17 +119,17 @@ struct connman_task *connman_task_create(const char *program,
 
 	str = g_strdup(program);
 	g_ptr_array_add(task->argv, str);
-	
-	task->custom_setup_func = custom_task_setup;
+
+	task->setup_func = custom_task_setup;
 
 	task->notify = g_hash_table_new_full(g_str_hash, g_str_equal,
 							g_free, g_free);
 
+	task->setup_data = setup_data;
+
 	DBG("task %p", task);
 
 	g_hash_table_insert(task_hash, task->path, task);
-	
-	task->user_data = user_data;
 
 	return task;
 }
@@ -284,9 +285,9 @@ static void task_setup(gpointer user_data)
 	sigemptyset(&mask);
 	if (sigprocmask(SIG_SETMASK, &mask, NULL) < 0)
 		connman_error("Failed to clean signal mask");
-	
-	if (task->custom_setup_func)
-		task->custom_setup_func(task->user_data);
+
+	if (task->setup_func)
+		task->setup_func(task->setup_data);
 }
 
 /**

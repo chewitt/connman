@@ -17,6 +17,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "src/connman.h"
 #include "../vpn/vpn.h"
@@ -95,12 +96,12 @@ static void test_vpn_settings_no_config()
 
 	g_assert(__vpn_settings_get_timeout_inputreq() == timeout);
 
-	g_assert(__vpn_settings_get_binary_user(NULL) == NULL);
-	g_assert(__vpn_settings_get_binary_group(NULL) == NULL);
+	g_assert(vpn_settings_get_binary_user(NULL) == NULL);
+	g_assert(vpn_settings_get_binary_group(NULL) == NULL);
 
-	g_assert(!__vpn_settings_get_binary_supplementary_groups(NULL));
+	g_assert(!vpn_settings_get_binary_supplementary_groups(NULL));
 
-	__vpn_settings_free();
+	__vpn_settings_cleanup();
 
 	g_remove(file_path);
 	cleanup_test_directory(test_path);
@@ -130,12 +131,12 @@ static void test_vpn_settings_empty_config()
 
 	g_assert(__vpn_settings_get_timeout_inputreq() == timeout);
 
-	g_assert(__vpn_settings_get_binary_user(NULL) == NULL);
-	g_assert(__vpn_settings_get_binary_group(NULL) == NULL);
+	g_assert(vpn_settings_get_binary_user(NULL) == NULL);
+	g_assert(vpn_settings_get_binary_group(NULL) == NULL);
 
-	g_assert(!__vpn_settings_get_binary_supplementary_groups(NULL));
+	g_assert(!vpn_settings_get_binary_supplementary_groups(NULL));
 
-	__vpn_settings_free();
+	__vpn_settings_cleanup();
 
 	g_remove(file_path);
 	cleanup_test_directory(test_path);
@@ -154,18 +155,21 @@ static void test_vpn_settings_plugin_empty_config()
 
 	set_and_verify_content(file_path, NULL);
 
-	g_assert(__vpn_settings_parse_vpn_plugin_config(test_plugin) == 1);
+	g_assert_cmpint(vpn_settings_parse_vpn_plugin_config(NULL), ==,
+								-EINVAL);
+	g_assert_cmpint(vpn_settings_parse_vpn_plugin_config(test_plugin), ==,
+								-ENOENT);
 
-	test_data =  __vpn_settings_get_vpn_plugin_config(test_plugin);
+	test_data = vpn_settings_get_vpn_plugin_config(test_plugin);
 
 	g_assert(!test_data);
 
-	g_assert(__vpn_settings_get_binary_user(test_data) == NULL);
-	g_assert(__vpn_settings_get_binary_group(test_data) == NULL);
+	g_assert(vpn_settings_get_binary_user(test_data) == NULL);
+	g_assert(vpn_settings_get_binary_group(test_data) == NULL);
 	
-	g_assert(!__vpn_settings_get_binary_supplementary_groups(test_data));
+	g_assert(!vpn_settings_get_binary_supplementary_groups(test_data));
 
-	__vpn_settings_free();
+	__vpn_settings_cleanup();
 
 	g_remove(file_path);
 	cleanup_test_directory(test_path);
@@ -178,7 +182,8 @@ static void test_vpn_settings_plugin_default_config()
 {
 	gchar* test_path = setup_test_directory();
 	gchar* test_plugin = "test_plugin";
-	gchar* file_path = g_build_filename(test_path, "connman-vpn.conf", NULL);
+	gchar* file_path = g_build_filename(test_path, "connman-vpn.conf",
+									NULL);
 	gchar *content_min[] = {
 		"# ConnMan vpn-settings test minimal",
 		"[General]",
@@ -191,7 +196,8 @@ static void test_vpn_settings_plugin_default_config()
 	};
 	
 	gchar **groups = NULL;
-	const gchar const *group_verify[] = {"inet", "net_admin", "net_raw", NULL};
+	const gchar const *group_verify[] = {"inet", "net_admin", "net_raw",
+									NULL};
 	gint i = 0;
 	struct vpn_plugin_data *test_data = NULL;
 
@@ -199,24 +205,25 @@ static void test_vpn_settings_plugin_default_config()
 
 	__vpn_settings_init(file_path);
 
-	g_assert(__vpn_settings_parse_vpn_plugin_config(test_plugin) == 1);
+	g_assert_cmpint(vpn_settings_parse_vpn_plugin_config(test_plugin), ==,
+								-ENOENT);
 
-	test_data =  __vpn_settings_get_vpn_plugin_config(test_plugin);
+	test_data = vpn_settings_get_vpn_plugin_config(test_plugin);
 
 	g_assert(!test_data);
 
-	g_assert(g_ascii_strcasecmp(__vpn_settings_get_binary_user(test_data),
-		"user") == 0);
-	g_assert(g_ascii_strcasecmp(__vpn_settings_get_binary_group(test_data),
-		"vpn") == 0);
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
+								"user") == 0);
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_group(test_data),
+								"vpn") == 0);
 
-	groups = __vpn_settings_get_binary_supplementary_groups(test_data);
+	groups = vpn_settings_get_binary_supplementary_groups(test_data);
 	g_assert(groups);
 
 	for(i = 0; groups[i]; i++)
 		g_assert(g_ascii_strcasecmp(groups[i], group_verify[i]) == 0);
 
-	__vpn_settings_free();
+	__vpn_settings_cleanup();
 
 	g_remove(file_path);
 	cleanup_test_directory(test_path);
@@ -228,7 +235,8 @@ static void test_vpn_settings_plugin_default_config()
 static void test_vpn_settings_min_config()
 {
 	gchar* test_path = setup_test_directory();
-	gchar* file_path = g_build_filename(test_path, "connman-vpn.conf", NULL);
+	gchar* file_path = g_build_filename(test_path, "connman-vpn.conf",
+									NULL);
 	gchar *content_min[] = {
 		"# ConnMan vpn-settings test minimal",
 		"[General]",
@@ -241,7 +249,8 @@ static void test_vpn_settings_min_config()
 	};
 	
 	gchar **groups = NULL;
-	const gchar const * group_verify[] = {"inet", "net_admin", "net_raw", NULL};
+	const gchar const * group_verify[] = {"inet", "net_admin", "net_raw",
+									NULL};
 	mode_t dir_p = 0700, file_p = 0600, umask = 0077;
 	gint i = 0;
 	guint timeout = 200 * 1000;
@@ -259,18 +268,18 @@ static void test_vpn_settings_min_config()
 
 	g_assert(__vpn_settings_get_timeout_inputreq() == timeout);
 
-	g_assert(g_ascii_strcasecmp(__vpn_settings_get_binary_user(NULL), "user")
-		== 0);
-	g_assert(g_ascii_strcasecmp(__vpn_settings_get_binary_group(NULL), "vpn")
-		== 0);
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(NULL), "user")
+									== 0);
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_group(NULL), "vpn")
+									== 0);
 
-	groups = __vpn_settings_get_binary_supplementary_groups(NULL);
+	groups = vpn_settings_get_binary_supplementary_groups(NULL);
 	g_assert(groups);
 
 	for(i = 0; groups[i]; i++)
 		g_assert(g_ascii_strcasecmp(groups[i], group_verify[i]) == 0);
 
-	__vpn_settings_free();
+	__vpn_settings_cleanup();
 
 	g_remove(file_path);
 	cleanup_test_directory(test_path);
@@ -282,7 +291,8 @@ static void test_vpn_settings_min_config()
 static void test_vpn_settings_full_config()
 {
 	gchar* test_path = setup_test_directory();
-	gchar* file_path = g_build_filename(test_path, "connman-vpn.conf", NULL);
+	gchar* file_path = g_build_filename(test_path, "connman-vpn.conf",
+									NULL);
 	gchar *content_full[] = {
 		"# ConnMan vpn-settings test full",
 		"[General]",
@@ -323,18 +333,18 @@ static void test_vpn_settings_full_config()
 
 	g_assert(__vpn_settings_get_timeout_inputreq() == timeout);
 
-	g_assert(g_ascii_strcasecmp(__vpn_settings_get_binary_user(NULL), "user")
-		== 0);
-	g_assert(g_ascii_strcasecmp(__vpn_settings_get_binary_group(NULL), "vpn")
-		== 0);
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(NULL), "user")
+									== 0);
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_group(NULL), "vpn")
+									== 0);
 
-	groups = __vpn_settings_get_binary_supplementary_groups(NULL);
+	groups = vpn_settings_get_binary_supplementary_groups(NULL);
 	g_assert(groups);
 
 	for(i = 0; groups[i]; i++)
 		g_assert(g_ascii_strcasecmp(groups[i], group_verify[i]) == 0);
 
-	__vpn_settings_free();
+	__vpn_settings_cleanup();
 
 	g_remove(file_path);
 	cleanup_test_directory(test_path);
