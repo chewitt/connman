@@ -99,16 +99,15 @@ builtin_modules += vpn
 builtin_sources += plugins/vpn.c
 
 if OPENCONNECT
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if OPENCONNECT_BUILTIN
 builtin_vpn_modules += openconnect
 builtin_vpn_sources += vpn/plugins/openconnect.c
-builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 builtin_vpn_cflags += -DOPENCONNECT=\"@OPENCONNECT@\"
 else
 vpn_plugin_LTLIBRARIES += vpn/plugins/openconnect.la
 vpn_plugin_objects += $(plugins_openconnect_la_OBJECTS)
-vpn_plugins_openconnect_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
-						vpn/plugins/openconnect.c
+vpn_plugins_openconnect_la_SOURCES = vpn/plugins/openconnect.c
 vpn_plugins_openconnect_la_CFLAGS = $(plugin_cflags) \
 					-DOPENCONNECT=\"@OPENCONNECT@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
@@ -118,16 +117,15 @@ endif
 endif
 
 if OPENVPN
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if OPENVPN_BUILTIN
 builtin_vpn_modules += openvpn
 builtin_vpn_sources += vpn/plugins/openvpn.c
-builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 builtin_vpn_cflags += -DOPENVPN=\"@OPENVPN@\"
 else
 vpn_plugin_LTLIBRARIES += vpn/plugins/openvpn.la
 vpn_plugin_objects += $(plugins_openvpn_la_OBJECTS)
-vpn_plugins_openvpn_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
-						vpn/plugins/openvpn.c
+vpn_plugins_openvpn_la_SOURCES = vpn/plugins/openvpn.c
 vpn_plugins_openvpn_la_CFLAGS = $(plugin_cflags) -DOPENVPN=\"@OPENVPN@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
@@ -136,16 +134,15 @@ endif
 endif
 
 if VPNC
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if VPNC_BUILTIN
 builtin_vpn_modules += vpnc
 builtin_vpn_sources += vpn/plugins/vpnc.c
-builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 builtin_vpn_cflags += -DVPNC=\"@VPNC@\"
 else
 vpn_plugin_LTLIBRARIES += vpn/plugins/vpnc.la
 vpn_plugin_objects += $(plugins_vpnc_la_OBJECTS)
-vpn_plugins_vpnc_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
-						vpn/plugins/vpnc.c
+vpn_plugins_vpnc_la_SOURCES = vpn/plugins/vpnc.c
 vpn_plugins_vpnc_la_CFLAGS = $(plugin_cflags) -DVPNC=\"@VPNC@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
@@ -154,16 +151,15 @@ endif
 endif
 
 if L2TP
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if L2TP_BUILTIN
 builtin_vpn_modules += l2tp
 builtin_vpn_sources += vpn/plugins/l2tp.c
-builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 builtin_vpn_cflags += -DL2TP=\"@L2TP@\"
 else
 vpn_plugin_LTLIBRARIES += vpn/plugins/l2tp.la
 vpn_plugin_objects += $(plugins_l2tp_la_OBJECTS)
-vpn_plugins_l2tp_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
-						vpn/plugins/l2tp.c
+vpn_plugins_l2tp_la_SOURCES = vpn/plugins/l2tp.c
 vpn_plugins_l2tp_la_CFLAGS = $(plugin_cflags) -DL2TP=\"@L2TP@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
@@ -172,16 +168,15 @@ endif
 endif
 
 if PPTP
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if PPTP_BUILTIN
 builtin_vpn_modules += pptp
 builtin_vpn_sources += vpn/plugins/pptp.c
-builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 builtin_vpn_cflags += -DPPPD=\"@PPPD@\" -DPPTP=\"@PPTP@\"
 else
 vpn_plugin_LTLIBRARIES += vpn/plugins/pptp.la
 vpn_plugin_objects += $(plugins_pptp_la_OBJECTS)
-vpn_plugins_pptp_la_SOURCES = vpn/plugins/vpn.h vpn/plugins/vpn.c \
-						vpn/plugins/pptp.c
+vpn_plugins_pptp_la_SOURCES = vpn/plugins/pptp.c
 vpn_plugins_pptp_la_CFLAGS = $(plugin_cflags) -DPPPD=\"@PPPD@\" \
 					-DPPTP=\"@PPTP@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
