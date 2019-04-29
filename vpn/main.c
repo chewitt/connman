@@ -44,70 +44,9 @@
 
 #define CONFIGMAINFILE CONFIGDIR "/connman-vpn.conf"
 
-#define DEFAULT_INPUT_REQUEST_TIMEOUT 300 * 1000
-
 static GMainLoop *main_loop = NULL;
 
 static unsigned int __terminated = 0;
-
-static struct {
-	unsigned int timeout_inputreq;
-} connman_vpn_settings  = {
-	.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT,
-};
-
-static GKeyFile *load_config(const char *file)
-{
-	GError *err = NULL;
-	GKeyFile *keyfile;
-
-	keyfile = g_key_file_new();
-
-	g_key_file_set_list_separator(keyfile, ',');
-
-	if (!g_key_file_load_from_file(keyfile, file, 0, &err)) {
-		if (err->code != G_FILE_ERROR_NOENT) {
-			connman_error("Parsing %s failed: %s", file,
-								err->message);
-		}
-
-		g_error_free(err);
-		g_key_file_free(keyfile);
-		return NULL;
-	}
-
-	return keyfile;
-}
-
-static void parse_config(GKeyFile *config, const char *file)
-{
-	GError *error = NULL;
-	int timeout;
-
-	if (!config)
-		return;
-
-	DBG("parsing %s", file);
-
-	timeout = g_key_file_get_integer(config, "General",
-			"InputRequestTimeout", &error);
-	if (!error && timeout >= 0)
-		connman_vpn_settings.timeout_inputreq = timeout * 1000;
-
-	g_clear_error(&error);
-}
-
-static int config_init(const char *file)
-{
-	GKeyFile *config;
-
-	config = load_config(file);
-	parse_config(config, file);
-	if (config)
-		g_key_file_free(config);
-
-	return 0;
-}
 
 static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 							gpointer user_data)
@@ -230,7 +169,7 @@ static GOptionEntry options[] = {
  */
 unsigned int connman_timeout_input_request(void)
 {
-	return connman_vpn_settings.timeout_inputreq;
+	return __vpn_settings_get_timeout_inputreq();
 }
 
 int main(int argc, char *argv[])
@@ -314,9 +253,9 @@ int main(int argc, char *argv[])
 	__connman_dbus_init(conn);
 
 	if (!option_config)
-		config_init(CONFIGMAINFILE);
+		__vpn_settings_init(CONFIGMAINFILE);
 	else
-		config_init(option_config);
+		__vpn_settings_init(option_config);
 
 	__connman_inotify_init();
 	__connman_agent_init();
@@ -348,6 +287,7 @@ int main(int argc, char *argv[])
 	__connman_inotify_cleanup();
 	__connman_dbus_cleanup();
 	__connman_log_cleanup(false);
+	__vpn_settings_cleanup();
 
 	dbus_connection_unref(conn);
 

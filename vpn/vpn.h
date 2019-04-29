@@ -116,3 +116,8 @@ char *__vpn_config_get_string(GKeyFile *key_file,
         const char *group_name, const char *key, GError **error);
 char **__vpn_config_get_string_list(GKeyFile *key_file,
         const char *group_name, const char *key, gsize *length, GError **error);
+
+int __vpn_settings_init(const char *file);
+void __vpn_settings_cleanup(void);
+GKeyFile *__vpn_settings_load_config(const char *file);
+unsigned int __vpn_settings_get_timeout_inputreq(void);
