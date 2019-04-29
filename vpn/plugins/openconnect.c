@@ -248,8 +248,7 @@ static int run_connect(struct vpn_provider *provider,
 	connman_task_add_argument(task, "--syslog", NULL);
 	connman_task_add_argument(task, "--cookie-on-stdin", NULL);
 
-	connman_task_add_argument(task, "--script",
-				  SCRIPTDIR "/openconnect-script");
+	connman_task_add_argument(task, "--script", SCRIPTDIR "/vpn-script");
 
 	connman_task_add_argument(task, "--interface", if_name);
 
