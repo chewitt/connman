@@ -230,14 +230,14 @@ plugins_iospm_la_LDFLAGS = $(plugin_ldflags)
 endif
 
 if OPENCONNECT
-script_PROGRAMS += scripts/openconnect-script
+script_PROGRAMS += scripts/vpn-script
 
-scripts_openconnect_script_LDADD = @DBUS_LIBS@
+scripts_vpn_script_LDADD = @DBUS_LIBS@
 else
 if VPNC
-script_PROGRAMS += scripts/openconnect-script
+script_PROGRAMS += scripts/vpn-script
 
-scripts_openconnect_script_LDADD = @DBUS_LIBS@
+scripts_vpn_script_LDADD = @DBUS_LIBS@
 endif
 endif
 
