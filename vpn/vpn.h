@@ -121,3 +121,14 @@ int __vpn_settings_init(const char *file);
 void __vpn_settings_cleanup(void);
 GKeyFile *__vpn_settings_load_config(const char *file);
 unsigned int __vpn_settings_get_timeout_inputreq(void);
+
+struct vpn_plugin_data;
+
+int vpn_settings_parse_vpn_plugin_config(const char* plugin_name);
+void vpn_settings_delete_vpn_plugin_config(const char *name);
+struct vpn_plugin_data* vpn_settings_get_vpn_plugin_config(const char *name);
+
+const char * vpn_settings_get_binary_user(struct vpn_plugin_data *data);
+const char * vpn_settings_get_binary_group(struct vpn_plugin_data *data);
+char ** vpn_settings_get_binary_supplementary_groups(
+	struct vpn_plugin_data *data);
