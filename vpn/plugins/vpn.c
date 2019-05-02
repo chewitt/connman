@@ -478,7 +478,7 @@ static int vpn_connect(struct vpn_provider *provider,
 			goto exist_err;
 	}
 
-	data->task = connman_task_create(vpn_driver_data->program);
+	data->task = connman_task_create(vpn_driver_data->program, NULL, NULL);
 
 	if (!data->task) {
 		ret = -ENOMEM;
