@@ -6253,7 +6253,6 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	enum connman_service_state state_a, state_b;
 	bool a_connected, b_connected;
 	gint strength;
-	int preference;
 
 	/* Compare availability first */
         const gboolean a_available = is_available(service_a);
@@ -6268,9 +6267,10 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	state_b = service_b->state;
 	a_connected = is_connected(service_a);
 	b_connected = is_connected(service_b);
-	preference = service_preferred_over(service_a, service_b);
 
 	if (a_connected && b_connected) {
+		int preference;
+
 		if (__connman_service_is_default_route(service_a) &&
 			!__connman_service_is_default_route(service_b))
 			return -1;
@@ -6298,6 +6298,7 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 		}
 
 		/* Set as -1, 0 or 1, return value if preferred list is used */
+		preference = service_preferred_over(service_a, service_b);
 		if (preference)
 			return preference;
 
