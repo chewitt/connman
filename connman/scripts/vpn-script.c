@@ -54,9 +54,11 @@ static void append(DBusMessageIter *dict, const char *pattern)
 	key = pattern;
 	value = delim + 1;
 
-	/* We clean the environment before invoking openconnect, but
-	   might as well still filter out the few things that get
-	   added that we're not interested in */
+	/*
+	 * We clean the environment before invoking openconnect/vpnc,
+	 * but might as well still filter out the few things that get
+	 * added that we're not interested in
+	 */
 	if (!strcmp(key, "PWD") || !strcmp(key, "_") ||
 	    !strcmp(key, "SHLVL") || !strcmp(key, "connman_busname") ||
 	    !strcmp(key, "connman_network"))

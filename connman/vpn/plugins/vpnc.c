@@ -298,8 +298,7 @@ static int vc_connect(struct vpn_provider *provider,
 		connman_task_add_argument(task, "--ifmode", "tun");
 	}
 
-	connman_task_add_argument(task, "--script",
-				SCRIPTDIR "/openconnect-script");
+	connman_task_add_argument(task, "--script", SCRIPTDIR "/vpn-script");
 
 	option = vpn_provider_get_string(provider, "VPNC.Debug");
 	if (option)

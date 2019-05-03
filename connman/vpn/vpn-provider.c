@@ -2433,7 +2433,7 @@ DBusMessage *__vpn_provider_get_connections(DBusMessage *msg)
 	return reply;
 }
 
-const char *__vpn_provider_get_ident(struct vpn_provider *provider)
+const char *vpn_provider_get_ident(struct vpn_provider *provider)
 {
 	if (!provider)
 		return NULL;

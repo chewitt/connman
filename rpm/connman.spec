@@ -73,7 +73,7 @@ Requires:   dbus-python
 Requires:   pygobject2
 
 %description test
-Scripts for testing Connman and its functionality
+Scripts for testing Connman and its functionality.
 
 %package tools
 Summary:    Development tools for Connection Manager
@@ -102,6 +102,61 @@ Obsoletes:  %{name}-docs
 %description doc
 Man pages for %{name}.
 
+%package vpn-scripts
+Summary:    Connection Manager VPN scripts
+Requires:   %{name} = %{version}-%{release}
+
+%description vpn-scripts
+This package provides PPP library and generic vpn-script script to be
+used by L2TP, OpenConnect, PPTP and VPNC plugins.
+
+%package plugin-vpn-l2tp
+Summary:    Connection Manager L2TP VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   xl2tpd
+Requires:   ppp
+
+%description plugin-vpn-l2tp
+This package provides L2TP VPN plugin for connman.
+
+%package plugin-vpn-openvpn
+Summary:    Connection Manager OpenVPN VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   openvpn
+
+%description plugin-vpn-openvpn
+This package provides OpenVPN VPN plugin for connman.
+
+%package plugin-vpn-openconnect
+Summary:    Connection Manager OpenConnect VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   openconnect
+
+%description plugin-vpn-openconnect
+This package provides OpenConnect VPN plugin for connman.
+
+%package plugin-vpn-pptp
+Summary:    Connection Manager PPTP VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   pptp
+Requires:   ppp
+
+%description plugin-vpn-pptp
+This package provides PPTP VPN plugin for connman.
+
+%package plugin-vpn-vpnc
+Summary:    Connection Manager Cisco3000 (VPNC) VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   vpnc
+
+%description plugin-vpn-vpnc
+This package provides Cisco3000 (VPNC) VPN plugin for connman.
+
 %prep
 %setup -q -n %{name}-%{version}/connman
 
@@ -111,11 +166,11 @@ Man pages for %{name}.
     --enable-ethernet=builtin \
     --disable-wifi \
     --enable-bluetooth=builtin \
-    --enable-openconnect=builtin \
-    --enable-openvpn=builtin \
-    --enable-vpnc=builtin \
-    --enable-l2tp=builtin \
-    --enable-pptp=builtin \
+    --enable-openconnect \
+    --enable-openvpn \
+    --enable-vpnc \
+    --enable-l2tp \
+    --enable-pptp \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
     --enable-client \
@@ -201,7 +256,7 @@ systemctl daemon-reload || :
 %{_sbindir}/connman-vpnd
 %{_sbindir}/connmand
 %dir %{_libdir}/%{name}
-%{_libdir}/%{name}/scripts
+%dir %{_libdir}/%{name}/plugins-vpn
 %{_libdir}/tmpfiles.d/connman_resolvconf.conf
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
 /%{_lib}/systemd/system/connman.service
@@ -236,3 +291,37 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %{_mandir}/man*/%{name}*.*
 %{_docdir}/%{name}-%{version}
+
+%files vpn-scripts
+%defattr(-,root,root,-)
+%license COPYING
+%dir %{_libdir}/%{name}/scripts
+%{_libdir}/%{name}/scripts/libppp-plugin.so
+%{_libdir}/%{name}/scripts/vpn-script
+%{_libdir}/%{name}/scripts/openvpn-script
+
+%files plugin-vpn-l2tp
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/l2tp.so
+
+%files plugin-vpn-openvpn
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/openvpn.so
+
+%files plugin-vpn-openconnect
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/openconnect.so
+
+%files plugin-vpn-pptp
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/pptp.so
+
+%files plugin-vpn-vpnc
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/vpnc.so
+
