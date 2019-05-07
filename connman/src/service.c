@@ -3496,9 +3496,7 @@ bool __connman_service_is_default_route(struct connman_service *service)
 {
 	if (!service)
 		return true;
-	
-	DBG("");
-	
+
 	return __connman_provider_is_default_route(service->provider);
 }
 
@@ -6204,15 +6202,19 @@ void connman_service_unref_debug(struct connman_service *service,
 }
 
 /*
- * Return -1 b preferred over a
- * Return 0 a == b, does not apply to sorting
- * Return 1 a preferred over b
+ * Check service preference using the list of preferred technology types
+ *
+ * Return 1 when b is preferred over a
+ * Return 0 when a == b, does not apply to sorting
+ * Return -1 when a is preferred over b
  */
-static gint service_preferred_over(struct connman_service *a,
-	struct connman_service *b)
+static int service_preferred_over(struct connman_service *a,
+						struct connman_service *b)
 {
-	GList *preferred_list = NULL;
-	int position_a = -1, position_b = -1;
+	unsigned int *tech_array;
+	unsigned int position_a = G_MAXUINT;
+	unsigned int position_b = G_MAXUINT;
+	unsigned int i;
 
 	/*
 	 * If either or both are NULL or the types match preference is not used
@@ -6221,26 +6223,52 @@ static gint service_preferred_over(struct connman_service *a,
 	if (!(a && b) || (a->type == b->type))
 		return 0;
 
-	preferred_list = preferred_tech_list_get();
-
-	if (!preferred_list)
+	tech_array = connman_setting_get_uint_list("PreferredTechnologies");
+	if (!tech_array)
 		return 0;
 
-	position_a = g_list_index(preferred_list, a);
-	position_b = g_list_index(preferred_list, b);
+	/*
+	 * VPNs are not in the preferred tech list as they rely on other
+	 * services as transport. Prefer connected VPN over any other service.
+	 */
+	if (a->type == CONNMAN_SERVICE_TYPE_VPN) {
+		 /* Prefer a if connected */
+		if (is_connected(a))
+			position_a = 0;
+		else
+			position_b = 0;
 
-	DBG("service a %p %s position %d service b %p %s position %d",
+		goto out;
+	}
+
+	if (b->type == CONNMAN_SERVICE_TYPE_VPN) {
+		/* Prefer b if connected */
+		if (is_connected(b))
+			position_b = 0;
+		else
+			position_a = 0;
+
+		goto out;
+	}
+
+	for (i = 0; tech_array[i] != 0; i++) {
+		if (tech_array[i] == a->type)
+			position_a = i;
+
+		if (tech_array[i] == b->type)
+			position_b = i;
+	}
+
+out:
+	DBG("service a %p %s position %u service b %p %s position %u",
 		a, a->identifier, position_a, b, b->identifier, position_b);
 
-	g_list_free(preferred_list);
-
-	/* Not found, which means that the service is not available. */
-	if (position_a == -1 || position_b == -1)
-		return 0;
-
-	if (position_b < position_a)
+	/* Index of a is lower than b's index , prefer a */
+	if (position_a < position_b)
 		return -1;
-	else if (position_b > position_a)
+
+	/* Index of b is lower than a's index, prefer b */
+	if (position_a > position_b)
 		return 1;
 
 	return 0;
