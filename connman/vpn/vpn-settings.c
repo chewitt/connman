@@ -68,7 +68,7 @@ struct vpn_plugin_data {
 
 GHashTable *plugin_hash = NULL;
 
-const char *__vpn_settings_state_dir()
+const char *vpn_settings_get_state_dir()
 {
 	return connman_vpn_settings.state_dir ?
 		connman_vpn_settings.state_dir :
@@ -82,7 +82,9 @@ const char *__vpn_settings_get_fs_identity(void)
 
 const char *__vpn_settings_get_storage_root()
 {
-	return connman_vpn_settings.storage_root;
+	return connman_vpn_settings.storage_root ?
+				connman_vpn_settings.storage_root :
+				DEFAULT_STORAGE_ROOT;
 }
 
 mode_t __vpn_settings_get_storage_dir_permissions()

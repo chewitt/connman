@@ -118,10 +118,10 @@ char **__vpn_config_get_string_list(GKeyFile *key_file,
         const char *group_name, const char *key, gsize *length, GError **error);
 
 #ifndef VPN_STATEDIR
-#define VPN_STATEDIR __vpn_settings_state_dir()
+#define VPN_STATEDIR vpn_settings_get_state_dir()
 #endif
 
-const char * __vpn_settings_state_dir(void);
+const char *vpn_settings_get_state_dir(void);
 int __vpn_settings_init(const char *file);
 void __vpn_settings_cleanup(void);
 GKeyFile *__vpn_settings_load_config(const char *file);

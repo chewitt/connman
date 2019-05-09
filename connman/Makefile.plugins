@@ -110,7 +110,6 @@ vpn_plugin_objects += $(plugins_openconnect_la_OBJECTS)
 vpn_plugins_openconnect_la_SOURCES = vpn/plugins/openconnect.c
 vpn_plugins_openconnect_la_CFLAGS = $(plugin_cflags) \
 					-DOPENCONNECT=\"@OPENCONNECT@\" \
-					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
 vpn_plugins_openconnect_la_LDFLAGS = $(plugin_ldflags)
 endif
@@ -127,7 +126,6 @@ vpn_plugin_LTLIBRARIES += vpn/plugins/openvpn.la
 vpn_plugin_objects += $(plugins_openvpn_la_OBJECTS)
 vpn_plugins_openvpn_la_SOURCES = vpn/plugins/openvpn.c
 vpn_plugins_openvpn_la_CFLAGS = $(plugin_cflags) -DOPENVPN=\"@OPENVPN@\" \
-					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
 vpn_plugins_openvpn_la_LDFLAGS = $(plugin_ldflags)
 endif
@@ -144,7 +142,6 @@ vpn_plugin_LTLIBRARIES += vpn/plugins/vpnc.la
 vpn_plugin_objects += $(plugins_vpnc_la_OBJECTS)
 vpn_plugins_vpnc_la_SOURCES = vpn/plugins/vpnc.c
 vpn_plugins_vpnc_la_CFLAGS = $(plugin_cflags) -DVPNC=\"@VPNC@\" \
-					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
 vpn_plugins_vpnc_la_LDFLAGS = $(plugin_ldflags)
 endif
@@ -161,7 +158,6 @@ vpn_plugin_LTLIBRARIES += vpn/plugins/l2tp.la
 vpn_plugin_objects += $(plugins_l2tp_la_OBJECTS)
 vpn_plugins_l2tp_la_SOURCES = vpn/plugins/l2tp.c
 vpn_plugins_l2tp_la_CFLAGS = $(plugin_cflags) -DL2TP=\"@L2TP@\" \
-					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
 vpn_plugins_l2tp_la_LDFLAGS = $(plugin_ldflags)
 endif
@@ -179,7 +175,6 @@ vpn_plugin_objects += $(plugins_pptp_la_OBJECTS)
 vpn_plugins_pptp_la_SOURCES = vpn/plugins/pptp.c
 vpn_plugins_pptp_la_CFLAGS = $(plugin_cflags) -DPPPD=\"@PPPD@\" \
 					-DPPTP=\"@PPTP@\" \
-					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
 vpn_plugins_pptp_la_LDFLAGS = $(plugin_ldflags)
 endif
