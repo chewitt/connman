@@ -47,12 +47,15 @@ struct connman_config_service {
 	char *identity;
 	char *anonymous_identity;
 	char *ca_cert_file;
+	char *ca_cert;
 	char *subject_match;
 	char *altsubject_match;
 	char *domain_suffix_match;
 	char *domain_match;
 	char *client_cert_file;
+	char *client_cert;
 	char *private_key_file;
+	char *private_key;
 	char *private_key_passphrase;
 	char *private_key_passphrase_type;
 	char *phase2;
@@ -98,8 +101,11 @@ static bool cleanup = false;
 #define SERVICE_KEY_SSID               "SSID"
 #define SERVICE_KEY_EAP                "EAP"
 #define SERVICE_KEY_CA_CERT            "CACertFile"
+#define SERVICE_KEY_CA_CERT_DATA       "CACert"
 #define SERVICE_KEY_CL_CERT            "ClientCertFile"
+#define SERVICE_KEY_CL_CERT_DATA       "ClientCert"
 #define SERVICE_KEY_PRV_KEY            "PrivateKeyFile"
+#define SERVICE_KEY_PRV_KEY_DATA       "PrivateKey"
 #define SERVICE_KEY_PRV_KEY_PASS       "PrivateKeyPassphrase"
 #define SERVICE_KEY_PRV_KEY_PASS_TYPE  "PrivateKeyPassphraseType"
 #define SERVICE_KEY_IDENTITY           "Identity"
@@ -134,8 +140,11 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_SSID,
 	SERVICE_KEY_EAP,
 	SERVICE_KEY_CA_CERT,
+	SERVICE_KEY_CA_CERT_DATA,
 	SERVICE_KEY_CL_CERT,
+	SERVICE_KEY_CL_CERT_DATA,
 	SERVICE_KEY_PRV_KEY,
+	SERVICE_KEY_PRV_KEY_DATA,
 	SERVICE_KEY_PRV_KEY_PASS,
 	SERVICE_KEY_PRV_KEY_PASS_TYPE,
 	SERVICE_KEY_IDENTITY,
@@ -237,12 +246,15 @@ free_only:
 	g_free(config_service->identity);
 	g_free(config_service->anonymous_identity);
 	g_free(config_service->ca_cert_file);
+	g_free(config_service->ca_cert);
 	g_free(config_service->subject_match);
 	g_free(config_service->altsubject_match);
 	g_free(config_service->domain_suffix_match);
 	g_free(config_service->domain_match);
 	g_free(config_service->client_cert_file);
+	g_free(config_service->client_cert);
 	g_free(config_service->private_key_file);
+	g_free(config_service->private_key);
 	g_free(config_service->private_key_passphrase);
 	g_free(config_service->private_key_passphrase_type);
 	g_free(config_service->phase2);
@@ -637,22 +649,58 @@ static bool load_service(GKeyFile *keyfile, const char *group,
 		service->eap = str;
 	}
 
-	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CA_CERT, NULL);
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CA_CERT_DATA, NULL);
 	if (str) {
+		g_free(service->ca_cert);
+		service->ca_cert = str;
+
 		g_free(service->ca_cert_file);
-		service->ca_cert_file = str;
+		service->ca_cert_file = NULL;
+	} else {
+		str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CA_CERT, NULL);
+		if (str) {
+			g_free(service->ca_cert_file);
+			service->ca_cert_file = str;
+
+			g_free(service->ca_cert);
+			service->ca_cert = NULL;
+		}
 	}
 
-	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CL_CERT, NULL);
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CL_CERT_DATA, NULL);
 	if (str) {
+		g_free(service->client_cert);
+		service->client_cert = str;
+
 		g_free(service->client_cert_file);
-		service->client_cert_file = str;
+		service->client_cert_file = NULL;
+	} else {
+		str = __connman_config_get_string(keyfile, group, SERVICE_KEY_CL_CERT, NULL);
+		if (str) {
+			g_free(service->client_cert_file);
+			service->client_cert_file = str;
+
+			g_free(service->client_cert);
+			service->client_cert = NULL;
+		}
 	}
 
-	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_PRV_KEY, NULL);
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_PRV_KEY_DATA, NULL);
 	if (str) {
+		g_free(service->private_key);
+		service->private_key = str;
+
 		g_free(service->private_key_file);
-		service->private_key_file = str;
+		service->private_key_file = NULL;
+	} else {
+		str = __connman_config_get_string(keyfile, group, SERVICE_KEY_PRV_KEY, NULL);
+		if (str) {
+			g_free(service->private_key_file);
+			service->private_key_file = str;
+
+			g_free(service->private_key);
+			service->private_key = NULL;
+		}
 	}
 
 	str = __connman_config_get_string(keyfile, group,
@@ -1099,7 +1147,10 @@ static void provision_service_wifi(struct connman_config_service *config,
 		__connman_service_set_string(service, "AnonymousIdentity",
 						config->anonymous_identity);
 
-	if (config->ca_cert_file)
+	if (config->ca_cert)
+		__connman_service_set_string(service, "CACert",
+							config->ca_cert);
+	else if (config->ca_cert_file)
 		__connman_service_set_string(service, "CACertFile",
 							config->ca_cert_file);
 
@@ -1119,11 +1170,17 @@ static void provision_service_wifi(struct connman_config_service *config,
 		__connman_service_set_string(service, "DomainMatch",
 							config->domain_match);
 
-	if (config->client_cert_file)
+	if (config->client_cert)
+		__connman_service_set_string(service, "ClientCert",
+						config->client_cert);
+	else if (config->client_cert_file)
 		__connman_service_set_string(service, "ClientCertFile",
 						config->client_cert_file);
 
-	if (config->private_key_file)
+	if (config->private_key)
+		__connman_service_set_string(service, "PrivateKey",
+						config->private_key);
+	else if (config->private_key_file)
 		__connman_service_set_string(service, "PrivateKeyFile",
 						config->private_key_file);
 

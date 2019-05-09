@@ -85,12 +85,15 @@ struct connman_network {
 		char *anonymous_identity;
 		char *agent_identity;
 		char *ca_cert_path;
+		char *ca_cert;
 		char *subject_match;
 		char *altsubject_match;
 		char *domain_suffix_match;
 		char *domain_match;
 		char *client_cert_path;
+		char *client_cert;
 		char *private_key_path;
+		char *private_key;
 		char *private_key_passphrase;
 		char *phase2_auth;
 		bool wps;
@@ -900,12 +903,15 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->wifi.anonymous_identity);
 	g_free(network->wifi.agent_identity);
 	g_free(network->wifi.ca_cert_path);
+	g_free(network->wifi.ca_cert);
 	g_free(network->wifi.subject_match);
 	g_free(network->wifi.altsubject_match);
 	g_free(network->wifi.domain_suffix_match);
 	g_free(network->wifi.domain_match);
 	g_free(network->wifi.client_cert_path);
+	g_free(network->wifi.client_cert);
 	g_free(network->wifi.private_key_path);
+	g_free(network->wifi.private_key);
 	g_free(network->wifi.private_key_passphrase);
 	g_free(network->wifi.phase2_auth);
 	g_free(network->wifi.pin_wps);
@@ -1909,6 +1915,9 @@ int connman_network_set_string(struct connman_network *network,
 	} else if (g_str_equal(key, "WiFi.CACertFile")) {
 		g_free(network->wifi.ca_cert_path);
 		network->wifi.ca_cert_path = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.CACert")) {
+		g_free(network->wifi.ca_cert);
+		network->wifi.ca_cert = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.SubjectMatch")) {
 		g_free(network->wifi.subject_match);
 		network->wifi.subject_match = g_strdup(value);
@@ -1924,9 +1933,15 @@ int connman_network_set_string(struct connman_network *network,
 	} else if (g_str_equal(key, "WiFi.ClientCertFile")) {
 		g_free(network->wifi.client_cert_path);
 		network->wifi.client_cert_path = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.ClientCert")) {
+		g_free(network->wifi.client_cert);
+		network->wifi.client_cert = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.PrivateKeyFile")) {
 		g_free(network->wifi.private_key_path);
 		network->wifi.private_key_path = g_strdup(value);
+	} else if (g_str_equal(key, "WiFi.PrivateKey")) {
+		g_free(network->wifi.private_key);
+		network->wifi.private_key = g_strdup(value);
 	} else if (g_str_equal(key, "WiFi.PrivateKeyPassphrase")) {
 		g_free(network->wifi.private_key_passphrase);
 		network->wifi.private_key_passphrase = g_strdup(value);
@@ -1977,6 +1992,8 @@ const char *connman_network_get_string(struct connman_network *network,
 		return network->wifi.agent_identity;
 	else if (g_str_equal(key, "WiFi.CACertFile"))
 		return network->wifi.ca_cert_path;
+	else if (g_str_equal(key, "WiFi.CACert"))
+		return network->wifi.ca_cert;
 	else if (g_str_equal(key, "WiFi.SubjectMatch"))
 		return network->wifi.subject_match;
 	else if (g_str_equal(key, "WiFi.AltSubjectMatch"))
@@ -1987,8 +2004,12 @@ const char *connman_network_get_string(struct connman_network *network,
 		return network->wifi.domain_match;
 	else if (g_str_equal(key, "WiFi.ClientCertFile"))
 		return network->wifi.client_cert_path;
+	else if (g_str_equal(key, "WiFi.ClientCert"))
+		return network->wifi.client_cert;
 	else if (g_str_equal(key, "WiFi.PrivateKeyFile"))
 		return network->wifi.private_key_path;
+	else if (g_str_equal(key, "WiFi.PrivateKey"))
+		return network->wifi.private_key;
 	else if (g_str_equal(key, "WiFi.PrivateKeyPassphrase"))
 		return network->wifi.private_key_passphrase;
 	else if (g_str_equal(key, "WiFi.Phase2"))

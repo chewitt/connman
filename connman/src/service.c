@@ -243,12 +243,15 @@ struct connman_service {
 	char *anonymous_identity;
 	char *agent_identity;
 	char *ca_cert_file;
+	char *ca_cert;
 	char *subject_match;
 	char *altsubject_match;
 	char *domain_suffix_match;
 	char *domain_match;
 	char *client_cert_file;
+	char *client_cert;
 	char *private_key_file;
+	char *private_key;
 	char *private_key_passphrase;
 	char *phase2;
 	DBusMessage *pending;
@@ -855,6 +858,8 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 					&service->anonymous_identity);
 	get_config_string(keyfile, service->identifier, "CACertFile",
 					&service->ca_cert_file);
+	get_config_string(keyfile, service->identifier, "CACert",
+					&service->ca_cert);
 	get_config_string(keyfile, service->identifier, "SubjectMatch",
 					&service->subject_match);
 	get_config_string(keyfile, service->identifier, "AltSubjectMatch",
@@ -865,8 +870,12 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 					&service->domain_match);
 	get_config_string(keyfile, service->identifier, "ClientCertFile",
 					&service->client_cert_file);
+	get_config_string(keyfile, service->identifier, "ClientCert",
+					&service->client_cert);
 	get_config_string(keyfile, service->identifier, "PrivateKeyFile",
 					&service->private_key_file);
+	get_config_string(keyfile, service->identifier, "PrivateKey",
+					&service->private_key);
 	get_config_string(keyfile, service->identifier, "PrivateKeyPassphrase",
 					&service->private_key_passphrase);
 	get_config_string(keyfile, service->identifier, "Phase2",
@@ -1041,6 +1050,8 @@ static int service_save(struct connman_service *service)
 		set_config_string(keyfile, service->identifier,
 			"CACertFile", service->ca_cert_file);
 		set_config_string(keyfile, service->identifier,
+			"CACert", service->ca_cert);
+		set_config_string(keyfile, service->identifier,
 			"SubjectMatch", service->subject_match);
 		set_config_string(keyfile, service->identifier,
 			"AltSubjectMatch", service->altsubject_match);
@@ -1051,7 +1062,11 @@ static int service_save(struct connman_service *service)
 		set_config_string(keyfile, service->identifier,
 			"ClientCertFile", service->client_cert_file);
 		set_config_string(keyfile, service->identifier,
+			"ClientCert", service->client_cert);
+		set_config_string(keyfile, service->identifier,
 			"PrivateKeyFile", service->private_key_file);
+		set_config_string(keyfile, service->identifier,
+			"PrivateKey", service->private_key);
 		set_config_string(keyfile, service->identifier,
 			"PrivateKeyPassphrase", service->private_key_passphrase);
 		set_config_string(keyfile, service->identifier,
@@ -6041,12 +6056,15 @@ static void service_free(gpointer user_data)
 	g_free(service->anonymous_identity);
 	g_free(service->agent_identity);
 	g_free(service->ca_cert_file);
+	g_free(service->ca_cert);
 	g_free(service->subject_match);
 	g_free(service->altsubject_match);
 	g_free(service->domain_suffix_match);
 	g_free(service->domain_match);
 	g_free(service->client_cert_file);
+	g_free(service->client_cert);
 	g_free(service->private_key_file);
+	g_free(service->private_key);
 	g_free(service->private_key_passphrase);
 	g_free(service->phase2);
 	g_free(service->config_file);
@@ -6645,6 +6663,9 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "CACertFile")) {
 		g_free(service->ca_cert_file);
 		service->ca_cert_file = g_strdup(value);
+	} else if (g_str_equal(key, "CACert")) {
+		g_free(service->ca_cert);
+		service->ca_cert = g_strdup(value);
 	} else if (g_str_equal(key, "SubjectMatch")) {
 		g_free(service->subject_match);
 		service->subject_match = g_strdup(value);
@@ -6660,9 +6681,15 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "ClientCertFile")) {
 		g_free(service->client_cert_file);
 		service->client_cert_file = g_strdup(value);
+	} else if (g_str_equal(key, "ClientCert")) {
+		g_free(service->client_cert);
+		service->client_cert = g_strdup(value);
 	} else if (g_str_equal(key, "PrivateKeyFile")) {
 		g_free(service->private_key_file);
 		service->private_key_file = g_strdup(value);
+	} else if (g_str_equal(key, "PrivateKey")) {
+		g_free(service->private_key);
+		service->private_key = g_strdup(value);
 	} else if (g_str_equal(key, "PrivateKeyPassphrase")) {
 		g_free(service->private_key_passphrase);
 		service->private_key_passphrase = g_strdup(value);
@@ -7571,7 +7598,10 @@ static void prepare_8021x(struct connman_service *service)
 						"WiFi.AnonymousIdentity",
 						service->anonymous_identity);
 
-	if (service->ca_cert_file)
+	if (service->ca_cert)
+		connman_network_set_string(service->network, "WiFi.CACert",
+							service->ca_cert);
+	else if (service->ca_cert_file)
 		connman_network_set_string(service->network, "WiFi.CACertFile",
 							service->ca_cert_file);
 
@@ -7591,12 +7621,20 @@ static void prepare_8021x(struct connman_service *service)
 		connman_network_set_string(service->network, "WiFi.DomainMatch",
 							service->domain_match);
 
-	if (service->client_cert_file)
+	if (service->client_cert)
+		connman_network_set_string(service->network,
+						"WiFi.ClientCert",
+						service->client_cert);
+	else if (service->client_cert_file)
 		connman_network_set_string(service->network,
 						"WiFi.ClientCertFile",
 						service->client_cert_file);
 
-	if (service->private_key_file)
+	if (service->private_key)
+		connman_network_set_string(service->network,
+						"WiFi.PrivateKey",
+						service->private_key);
+	else if (service->private_key_file)
 		connman_network_set_string(service->network,
 						"WiFi.PrivateKeyFile",
 						service->private_key_file);
