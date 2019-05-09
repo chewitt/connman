@@ -80,13 +80,16 @@
 #define NETWORK_KEY_WIFI_AGENT_IDENTITY         "WiFi.AgentIdentity"
 #define NETWORK_KEY_WIFI_PASSPHRASE             "WiFi.Passphrase"
 #define NETWORK_KEY_WIFI_ANONYMOUS_IDENTITY     "WiFi.AnonymousIdentity"
+#define NETWORK_KEY_WIFI_CA_CERT                "WiFi.CACert"
 #define NETWORK_KEY_WIFI_CA_CERT_FILE           "WiFi.CACertFile"
 #define NETWORK_KEY_WIFI_SUBJECT_MATCH          "WiFi.SubjectMatch"
 #define NETWORK_KEY_WIFI_ALT_SUBJECT_MATCH      "WiFi.AltSubjectMatch"
 #define NETWORK_KEY_WIFI_DOMAIN_SUFFIX_MATCH    "WiFi.DomainSuffixMatch"
 #define NETWORK_KEY_WIFI_DOMAIN_MATCH           "WiFi.DomainMatch"
 #define NETWORK_KEY_WIFI_CLIENT_CERT_FILE       "WiFi.ClientCertFile"
+#define NETWORK_KEY_WIFI_CLIENT_CERT            "WiFi.ClientCert"
 #define NETWORK_KEY_WIFI_PRIVATE_KEY_FILE       "WiFi.PrivateKeyFile"
+#define NETWORK_KEY_WIFI_PRIVATE_KEY            "WiFi.PrivateKey"
 #define NETWORK_KEY_WIFI_PRIVATE_KEY_PASSPHRASE "WiFi.PrivateKeyPassphrase"
 #define NETWORK_KEY_WIFI_PHASE2                 "WiFi.Phase2"
 
@@ -1075,8 +1078,24 @@ static void wifi_network_save_network_param(struct wifi_network *net,
 	}
 }
 
+static void wifi_network_init_add_blob(GHashTable **blobs,
+					const char *name,
+					const char *blob)
+{
+	if (!*blobs)
+		*blobs = g_hash_table_new_full(g_str_hash,
+						g_str_equal,
+						NULL,
+						(GDestroyNotify)g_bytes_unref);
+
+	g_hash_table_replace(*blobs, (gpointer)name,
+				g_bytes_new_static(blob,
+							strlen(blob)));
+}
+
 static void wifi_network_init_connect_params(struct wifi_network *net,
-		struct wifi_bss *bss_data, GSupplicantNetworkParams *params)
+		struct wifi_bss *bss_data, GSupplicantNetworkParams *params,
+		GHashTable **blobs)
 {
 	const char *eap;
 
@@ -1089,11 +1108,17 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 
 	eap = connman_network_get_string(net->network, NETWORK_KEY_WIFI_EAP);
 	if (eap) {
+		const char *value;
+
 		if (!g_ascii_strcasecmp(eap, "tls")) {
 			params->eap = GSUPPLICANT_EAP_METHOD_TLS;
 		} else if (!g_ascii_strcasecmp(eap, "ttls")) {
 			params->eap = GSUPPLICANT_EAP_METHOD_TTLS;
 		} else {
+			if (!g_ascii_strcasecmp(eap, "peapv0"))
+				params->auth_flags |= GSUPPLICANT_AUTH_PHASE1_PEAPV0;
+			else if (!g_ascii_strcasecmp(eap, "peapv1"))
+				params->auth_flags |= GSUPPLICANT_AUTH_PHASE1_PEAPV1;
 			params->eap = GSUPPLICANT_EAP_METHOD_PEAP;
 		}
 		if (params->eap != GSUPPLICANT_EAP_METHOD_TLS ||
@@ -1136,18 +1161,39 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 						NETWORK_KEY_WIFI_IDENTITY);
 			}
 		}
-		params->client_cert_file =
-			connman_network_get_string(net->network,
-				NETWORK_KEY_WIFI_CLIENT_CERT_FILE);
-		params->private_key_file =
-			connman_network_get_string(net->network,
-				NETWORK_KEY_WIFI_PRIVATE_KEY_FILE);
+		if ((value = connman_network_get_string(net->network,
+				NETWORK_KEY_WIFI_CLIENT_CERT))) {
+			params->client_cert_file = "blob://client_cert";
+			wifi_network_init_add_blob(blobs, "client_cert",
+							value);
+		} else {
+			params->client_cert_file =
+				connman_network_get_string(net->network,
+					NETWORK_KEY_WIFI_CLIENT_CERT_FILE);
+		}
+		if ((value = connman_network_get_string(net->network,
+				NETWORK_KEY_WIFI_PRIVATE_KEY))) {
+			params->private_key_file = "blob://private_key";
+			wifi_network_init_add_blob(blobs, "private_key",
+							value);
+		} else {
+			params->private_key_file =
+				connman_network_get_string(net->network,
+					NETWORK_KEY_WIFI_PRIVATE_KEY_FILE);
+		}
 		params->private_key_passphrase =
 			connman_network_get_string(net->network,
 				NETWORK_KEY_WIFI_PRIVATE_KEY_PASSPHRASE);
-		params->ca_cert_file =
-			connman_network_get_string(net->network,
-				NETWORK_KEY_WIFI_CA_CERT_FILE);
+		if ((value = connman_network_get_string(net->network,
+				NETWORK_KEY_WIFI_CA_CERT))) {
+			params->ca_cert_file = "blob://ca_cert";
+			wifi_network_init_add_blob(blobs, "ca_cert",
+							value);
+		} else {
+			params->ca_cert_file =
+				connman_network_get_string(net->network,
+					NETWORK_KEY_WIFI_CA_CERT_FILE);
+		}
 		params->anonymous_identity =
 			connman_network_get_string(net->network,
 				NETWORK_KEY_WIFI_ANONYMOUS_IDENTITY);
@@ -1309,17 +1355,21 @@ static int wifi_network_connect(struct wifi_network *net)
 			}
 		} else {
 			GSupplicantNetworkParams np;
+			GHashTable *blobs = NULL;
 			if (net->connecting_to != bss) {
 				gsupplicant_bss_unref(net->connecting_to);
 				net->connecting_to = gsupplicant_bss_ref(bss);
 			}
-			wifi_network_init_connect_params(net, bss_data, &np);
+			wifi_network_init_connect_params(net, bss_data, &np, &blobs);
 			net->pending =
-				gsupplicant_interface_add_network(net->iface,
-					&np, GSUPPLICANT_ADD_NETWORK_SELECT |
+				gsupplicant_interface_add_network_full2(net->iface,
+					NULL, &np, GSUPPLICANT_ADD_NETWORK_SELECT |
 					GSUPPLICANT_ADD_NETWORK_DELETE_OTHER |
 					GSUPPLICANT_ADD_NETWORK_ENABLE,
-					wifi_network_connected, net);
+					blobs,
+					wifi_network_connected, NULL, net);
+			if (blobs)
+				g_hash_table_unref(blobs);
 		}
 
 		if (net->pending) {
