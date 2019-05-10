@@ -100,7 +100,7 @@ static char *usb_moded_interface = NULL;
 static enum usb_moded_service_state_t usb_moded_service_state =
 			USB_MODED_SERVICE_UNKNOWN;
 static DBusConnection *connection = NULL;
-static GHashTable *pending_devices = NULL;
+static GHashTable *devmode_devices = NULL;
 static DBusPendingCall *pending_call = NULL;
 
 static const char *usb_moded_status_to_str()
@@ -205,7 +205,7 @@ static void reset_pending_call(bool cancel)
 	pending_call = NULL;
 }
 
-static void pending_devices_remove1(gpointer user_data)
+static void devmode_devices_remove1(gpointer user_data)
 {
 	struct connman_device *device = user_data;
 
@@ -215,13 +215,13 @@ static void pending_devices_remove1(gpointer user_data)
 		connman_device_unref(device);
 }
 
-static bool pending_devices_remove(struct connman_device *device)
+static bool devmode_devices_remove(struct connman_device *device)
 {
 	const char *interface;
 
 	DBG("");
 
-	if (!pending_devices || !device)
+	if (!devmode_devices || !device)
 		return false;
 
 	interface = connman_device_get_string(device, "Interface");
@@ -234,16 +234,16 @@ static bool pending_devices_remove(struct connman_device *device)
 	DBG("remove device %d %s %s", connman_device_get_index(device),
 				connman_device_get_ident(device), interface);
 
-	return g_hash_table_remove(pending_devices, interface);
+	return g_hash_table_remove(devmode_devices, interface);
 }
 
-static int pending_devices_add(struct connman_device *device)
+static int devmode_devices_add(struct connman_device *device)
 {
 	const char *interface;
 
 	DBG("");
 
-	if (!pending_devices) {
+	if (!devmode_devices) {
 		DBG("hash table is not set");
 		return -EINVAL;
 	}
@@ -258,20 +258,20 @@ static int pending_devices_add(struct connman_device *device)
 				connman_device_get_ident(device), interface);
 
 	/* Interfaces are unique, second notification should not replace old */
-	if (g_hash_table_contains(pending_devices, interface)) {
+	if (g_hash_table_contains(devmode_devices, interface)) {
 		DBG("interface %s already exists", interface);
 		return -EEXIST;
 	}
 
-	return g_hash_table_replace(pending_devices, g_strdup(interface),
+	return g_hash_table_replace(devmode_devices, g_strdup(interface),
 				connman_device_ref(device)) ? 0 : -EEXIST;
 
 }
 
-static struct connman_device *pending_devices_find_by_interface(
+static struct connman_device *devmode_devices_find_by_interface(
 			const char *interface)
 {
-	return g_hash_table_lookup(pending_devices, interface);
+	return g_hash_table_lookup(devmode_devices, interface);
 }
 
 /* DBus service state callbacks */
@@ -455,7 +455,7 @@ static void get_usb_moded_state_reply(DBusPendingCall *call, void *user_data)
 	}
 
 	/* Get a pending device, if no such device exists yet do nothing */
-	device = pending_devices_find_by_interface(data.interface);
+	device = devmode_devices_find_by_interface(data.interface);
 
 	if (!device || (index != connman_device_get_index(device))) {
 		DBG("no device for interface %d/%s", index, data.interface);
@@ -559,7 +559,7 @@ static gboolean usb_moded_signal(DBusConnection *conn, DBusMessage *message,
 			return TRUE;
 		}
 
-		device = pending_devices_find_by_interface(data.interface);
+		device = devmode_devices_find_by_interface(data.interface);
 
 		if (!device || (index != connman_device_get_index(device))) {
 			DBG("no device for interface %d/%s", index,
@@ -646,7 +646,7 @@ static void developer_mode_newlink(unsigned short type, int index,
 		return;
 	}
 
-	switch (pending_devices_add(device)) {
+	switch (devmode_devices_add(device)) {
 	case 0:
 		break;
 	case -EINVAL:
@@ -694,7 +694,7 @@ static void developer_mode_dellink(unsigned short type, int index,
 		send_notify(device, false);
 
 	/* Interface down, remove device, not needed anymore */
-	if (!pending_devices_remove(device))
+	if (!devmode_devices_remove(device))
 		DBG("cannot remove device %p", device);
 }
 
@@ -726,8 +726,8 @@ static int sailfish_developer_mode_init(void)
 	usb_moded_status = USB_MODED_NOT_SET;
 
 	connection = connman_dbus_get_connection();
-	pending_devices = g_hash_table_new_full(g_str_hash, g_str_equal,
-				g_free, pending_devices_remove1);
+	devmode_devices = g_hash_table_new_full(g_str_hash, g_str_equal,
+				g_free, devmode_devices_remove1);
 
 	usb_moded_service_watch = g_dbus_add_service_watch(connection,
 				USB_MODE_SERVICE, usb_moded_connect,
@@ -765,8 +765,8 @@ static void sailfish_developer_mode_exit(void)
 	g_free(usb_moded_interface);
 	usb_moded_interface = NULL;
 
-	if (pending_devices)
-		g_hash_table_destroy(pending_devices);
+	if (devmode_devices)
+		g_hash_table_destroy(devmode_devices);
 }
 
 CONNMAN_PLUGIN_DEFINE(sailfish_developer_mode, "Sailfish developer mode plugin",
