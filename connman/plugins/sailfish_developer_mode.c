@@ -687,7 +687,7 @@ static void developer_mode_dellink(unsigned short type, int index,
  */
 static struct connman_rtnl developer_mode_rtnl = {
 	.name		= "developer_mode_plugin",
-	.priority	= CONNMAN_RTNL_PRIORITY_LOW,
+	.priority	= CONNMAN_RTNL_PRIORITY_LOW - 1,
 	.newlink	= developer_mode_newlink,
 	.dellink	= developer_mode_dellink,
 };
