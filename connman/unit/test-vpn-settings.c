@@ -14,6 +14,10 @@
  *  GNU General Public License for more details.
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <unistd.h>
@@ -86,9 +90,13 @@ static void test_vpn_settings_no_config()
 
 	__vpn_settings_init(file_path);
 
-	//g_assert(g_ascii_strcasecmp( __vpn_settings_state_dir()) == 0);
+	g_assert(vpn_settings_get_state_dir());
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_state_dir(),
+				DEFAULT_VPN_STATEDIR) == 0);
 	g_assert(__vpn_settings_get_fs_identity() == NULL);
-	g_assert(__vpn_settings_get_storage_root() == NULL);
+	g_assert(__vpn_settings_get_storage_root());
+	g_assert(g_ascii_strcasecmp(__vpn_settings_get_storage_root(),
+				DEFAULT_STORAGE_ROOT) == 0);
 
 	g_assert(__vpn_settings_get_storage_dir_permissions() == dir_p);
 	g_assert(__vpn_settings_get_storage_file_permissions() == file_p);
@@ -121,9 +129,13 @@ static void test_vpn_settings_empty_config()
 
 	__vpn_settings_init(file_path);
 
-	//g_assert(g_ascii_strcasecmp( __vpn_settings_state_dir()) == 0);
+	g_assert(vpn_settings_get_state_dir());
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_state_dir(),
+				DEFAULT_VPN_STATEDIR) == 0);
 	g_assert(__vpn_settings_get_fs_identity() == NULL);
-	g_assert(__vpn_settings_get_storage_root() == NULL);
+	g_assert(__vpn_settings_get_storage_root());
+	g_assert(g_ascii_strcasecmp(__vpn_settings_get_storage_root(),
+				DEFAULT_STORAGE_ROOT) == 0);
 
 	g_assert(__vpn_settings_get_storage_dir_permissions() == dir_p);
 	g_assert(__vpn_settings_get_storage_file_permissions() == file_p);
@@ -260,7 +272,9 @@ static void test_vpn_settings_min_config()
 	__vpn_settings_init(file_path);
 
 	g_assert(__vpn_settings_get_fs_identity() == NULL);
-	g_assert(__vpn_settings_get_storage_root() == NULL);
+	g_assert(__vpn_settings_get_storage_root());
+	g_assert(g_ascii_strcasecmp(__vpn_settings_get_storage_root(),
+				DEFAULT_STORAGE_ROOT) == 0);
 
 	g_assert(__vpn_settings_get_storage_dir_permissions() == dir_p);
 	g_assert(__vpn_settings_get_storage_file_permissions() == file_p);
@@ -322,8 +336,8 @@ static void test_vpn_settings_full_config()
 
 	g_assert(g_ascii_strcasecmp(__vpn_settings_get_fs_identity(),
 		"root")== 0);
-	g_assert(g_ascii_strcasecmp( __vpn_settings_state_dir(),
-		"/tmp/state") == 0);	
+	g_assert(g_ascii_strcasecmp(vpn_settings_get_state_dir(),
+		"/tmp/state") == 0);
 	g_assert(g_ascii_strcasecmp(__vpn_settings_get_storage_root(),
 		"/tmp/storage") == 0);
 
@@ -353,9 +367,50 @@ static void test_vpn_settings_full_config()
 	g_free(file_path);
 }
 
+static gchar *option_debug = NULL;
+
+static bool parse_debug(const char *key, const char *value,
+					gpointer user_data, GError **error)
+{
+	if (value)
+		option_debug = g_strdup(value);
+	else
+		option_debug = g_strdup("*");
+
+	return true;
+}
+
+static GOptionEntry options[] = {
+	{ "debug", 'd', G_OPTION_FLAG_OPTIONAL_ARG,
+				G_OPTION_ARG_CALLBACK, parse_debug,
+				"Specify debug options to enable", "DEBUG" },
+	{ NULL },
+};
+
 int main(int argc, char **argv)
 {
+	GOptionContext *context;
+	GError *error = NULL;
+
 	g_test_init(&argc, &argv, NULL);
+
+	context = g_option_context_new(NULL);
+	g_option_context_add_main_entries(context, options, NULL);
+
+	if (!g_option_context_parse(context, &argc, &argv, &error)) {
+		if (error) {
+			g_printerr("%s\n", error->message);
+			g_error_free(error);
+		} else {
+			g_printerr("An unknown error occurred\n");
+		}
+		return 1;
+	}
+
+	g_option_context_free(context);
+
+	__connman_log_init(argv[0], option_debug, false, false,
+			"Unit Tests Connection Manager", VERSION);
 
 	g_test_add_func(TEST_PREFIX "/no_config",
 		test_vpn_settings_no_config);
