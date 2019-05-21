@@ -1014,6 +1014,7 @@ static gchar **create_network_list(GSList *networks, gsize *count)
 static int vpn_provider_save(struct vpn_provider *provider)
 {
 	GKeyFile *keyfile;
+	const char *default_route;
 
 	DBG("provider %p immutable %s", provider,
 					provider->immutable ? "yes" : "no");
@@ -1038,6 +1039,12 @@ static int vpn_provider_save(struct vpn_provider *provider)
 			"Host", provider->host);
 	g_key_file_set_string(keyfile, provider->identifier,
 			"VPN.Domain", provider->domain);
+
+	default_route = vpn_provider_get_string(provider, "DefaultRoute");
+	if (default_route && *default_route)
+		g_key_file_set_string(keyfile, provider->identifier,
+				"DefaultRoute", default_route);
+
 	if (provider->user_networks) {
 		gchar **networks;
 		gsize network_count;
