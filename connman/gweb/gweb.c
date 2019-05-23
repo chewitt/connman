@@ -1329,7 +1329,8 @@ static bool is_ip_address(const char *host)
 	addr = NULL;
 
 	result = getaddrinfo(host, NULL, &hints, &addr);
-	freeaddrinfo(addr);
+	if(!result)
+		freeaddrinfo(addr);
 
 	return result == 0;
 }
