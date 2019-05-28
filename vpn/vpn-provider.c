@@ -87,6 +87,7 @@ struct vpn_provider {
 	bool immutable;
 	struct connman_ipaddress *prev_ipv4_addr;
 	struct connman_ipaddress *prev_ipv6_addr;
+	void *plugin_data;
 };
 
 static void append_properties(DBusMessageIter *iter,
@@ -2323,6 +2324,16 @@ void *vpn_provider_get_data(struct vpn_provider *provider)
 void vpn_provider_set_data(struct vpn_provider *provider, void *data)
 {
 	provider->driver_data = data;
+}
+
+void *vpn_provider_get_plugin_data(struct vpn_provider *provider)
+{
+	return provider->plugin_data;
+}
+
+void vpn_provider_set_plugin_data(struct vpn_provider *provider, void *data)
+{
+	provider->plugin_data = data;
 }
 
 void vpn_provider_set_index(struct vpn_provider *provider, int index)
