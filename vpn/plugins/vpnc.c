@@ -89,8 +89,15 @@ static int vc_notify(DBusMessage *msg, struct vpn_provider *provider)
 	char *address = NULL, *netmask = NULL, *gateway = NULL;
 	struct connman_ipaddress *ipaddress;
 	const char *reason, *key, *value;
+	int type;
 
 	dbus_message_iter_init(msg, &iter);
+
+	type = dbus_message_iter_get_arg_type(&iter);
+	if (type != DBUS_TYPE_STRING) {
+		DBG("invalid D-Bus arg type %d", type);
+		return VPN_STATE_FAILURE;
+	}
 
 	dbus_message_iter_get_basic(&iter, &reason);
 	dbus_message_iter_next(&iter);
@@ -109,8 +116,18 @@ static int vc_notify(DBusMessage *msg, struct vpn_provider *provider)
 		DBusMessageIter entry;
 
 		dbus_message_iter_recurse(&dict, &entry);
+
+		type = dbus_message_iter_get_arg_type(&entry);
+		if (type != DBUS_TYPE_STRING)
+			continue;
+
 		dbus_message_iter_get_basic(&entry, &key);
 		dbus_message_iter_next(&entry);
+
+		type = dbus_message_iter_get_arg_type(&entry);
+		if (type != DBUS_TYPE_STRING)
+			continue;
+
 		dbus_message_iter_get_basic(&entry, &value);
 
 		DBG("%s = %s", key, value);
