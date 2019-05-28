@@ -453,6 +453,9 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	} else {
 		const char *str;
 
+		if (type != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
 		dbus_message_iter_get_basic(&value, &str);
 		vpn_provider_set_string(provider, name, str);
 	}
