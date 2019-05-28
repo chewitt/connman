@@ -2303,6 +2303,32 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 	return setting->value;
 }
 
+bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
+							const char *key)
+{
+	struct vpn_setting *setting;
+
+	/* These values can be changed if the provider is not immutable */
+	if (g_str_equal(key, "Type")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "Name")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "Host")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "HostIP")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "VPN.Domain") ||
+			g_str_equal(key, "Domain")) {
+		return provider->immutable;
+	}
+
+	setting = g_hash_table_lookup(provider->setting_strings, key);
+	if (!setting)
+		return true; /* Not found, regard as immutable - no changes */
+
+	return setting->immutable;
+}
+
 bool __vpn_provider_check_routes(struct vpn_provider *provider)
 {
 	if (!provider)

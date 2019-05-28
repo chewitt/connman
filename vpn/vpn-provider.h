@@ -85,6 +85,8 @@ int vpn_provider_set_string_hide_value(struct vpn_provider *provider,
 					const char *key, const char *value);
 const char *vpn_provider_get_string(struct vpn_provider *provider,
 							const char *key);
+bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
+							const char *key);
 
 int vpn_provider_set_state(struct vpn_provider *provider,
 					enum vpn_provider_state state);
