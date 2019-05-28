@@ -92,6 +92,8 @@ struct vc_private_data {
 	char *if_name;
 	vpn_provider_connect_cb_t cb;
 	void *user_data;
+	int err_ch_id;
+	GIOChannel *err_ch;
 };
 
 static void vc_connect_done(struct vc_private_data *data, int err)
@@ -106,6 +108,29 @@ static void vc_connect_done(struct vc_private_data *data, int err)
 		data->cb = NULL;
 		data->user_data = NULL;
 		cb(data->provider, user_data, err);
+	}
+}
+
+static void close_io_channel(struct vc_private_data *data, GIOChannel *channel)
+{
+	if (!data || !channel)
+		return;
+
+	if (data->err_ch == channel) {
+		DBG("closing stderr");
+
+		if (data->err_ch_id) {
+			g_source_remove(data->err_ch_id);
+			data->err_ch_id = 0;
+		}
+
+		if (!data->err_ch)
+			return;
+
+		g_io_channel_shutdown(data->err_ch, FALSE, NULL);
+		g_io_channel_unref(data->err_ch);
+
+		data->err_ch = NULL;
 	}
 }
 
@@ -351,6 +376,60 @@ static void vc_died(struct connman_task *task, int exit_code, void *user_data)
 	free_private_data(data);
 }
 
+static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
+			gpointer user_data)
+{
+	struct vc_private_data *data;
+	const char *auth_failures[] = {
+			VPNC ": hash comparison failed",
+			VPNC ": authentication unsuccessful",
+			VPNC ": expected xauth packet; rejected",
+			NULL
+	};
+	const char *conn_failures[] = {
+			VPNC ": unknown host",
+			VPNC ": no response from target",
+			VPNC ": receiving packet: No route to host",
+			NULL
+	};
+	char *str;
+	int i;
+
+	data = user_data;
+
+	if ((condition & G_IO_IN) &&
+		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
+							G_IO_STATUS_NORMAL) {
+		str[strlen(str) - 1] = '\0';
+
+		for (i = 0; auth_failures[i]; i++) {
+			if (g_str_has_prefix(str, auth_failures[i])) {
+				DBG("authentication failed: %s", str);
+
+				vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_AUTH_FAILED);
+			}
+		}
+
+		for (i = 0; conn_failures[i]; i++) {
+			if (g_str_has_prefix(str, conn_failures[i])) {
+				DBG("connection failed: %s", str);
+
+				vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+			}
+		}
+
+		g_free(str);
+	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
+		DBG("Channel termination");
+		close_io_channel(data, source);
+		return G_SOURCE_REMOVE;
+	}
+
+	return G_SOURCE_CONTINUE;
+}
+
 static int run_connect(struct vc_private_data *data)
 {
 	struct vpn_provider *provider;
@@ -360,7 +439,8 @@ static int run_connect(struct vc_private_data *data)
 	const char *if_name;
 	const char *option;
 	int err;
-	int fd;
+	int fd_in;
+	int fd_err;
 	int i;
 
 	provider = data->provider;
@@ -392,14 +472,15 @@ static int run_connect(struct vc_private_data *data)
 
 	connman_task_add_argument(task, "-", NULL);
 
-	err = connman_task_run(data->task, vc_died, data, &fd, NULL, NULL);
+	err = connman_task_run(data->task, vc_died, data, &fd_in, NULL,
+				&fd_err);
 	if (err < 0) {
 		connman_error("vpnc failed to start");
 		err = -EIO;
 		goto done;
 	}
 
-	err = vc_write_config_data(provider, fd);
+	err = vc_write_config_data(provider, fd_in);
 
 	if (err) {
 		DBG("config write error %s", strerror(err));
@@ -408,8 +489,13 @@ static int run_connect(struct vc_private_data *data)
 
 	err = -EINPROGRESS;
 
+	data->err_ch = g_io_channel_unix_new(fd_err);
+	data->err_ch_id = g_io_add_watch(data->err_ch,
+				G_IO_IN | G_IO_ERR | G_IO_HUP,
+				(GIOFunc)io_channel_cb, data);
+
 done:
-	close(fd);
+	close(fd_in);
 
 	/*
 	 * Clear out credentials if they are non-immutable. If this is called
