@@ -50,11 +50,18 @@ struct storage_subdir {
 
 struct storage_dir_context {
 	gboolean initialized;
+	gboolean vpn_initialized;
 	GList *subdirs;
+};
+
+enum storage_dir_type {
+	STORAGE_DIR_TYPE_MAIN = 0,
+	STORAGE_DIR_TYPE_VPN,
 };
 
 static struct storage_dir_context storage = {
 	.initialized = FALSE,
+	.vpn_initialized = FALSE,
 	.subdirs = NULL
 };
 
@@ -65,7 +72,8 @@ struct keyfile_record {
 
 static GHashTable *keyfile_hash = NULL;
 
-static void storage_dir_cleanup(const char *storagedir);
+static void storage_dir_cleanup(const char *storagedir,
+					enum storage_dir_type type);
 
 static void storage_inotify_subdir_cb(struct inotify_event *event,
 					const char *ident,
@@ -323,8 +331,8 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 
 	if (event->mask & IN_DELETE_SELF) {
 		DBG("delete self");
-		storage_dir_cleanup(STORAGEDIR);
-		storage_dir_cleanup(VPN_STORAGEDIR);
+		storage_dir_cleanup(STORAGEDIR, STORAGE_DIR_TYPE_MAIN);
+		storage_dir_cleanup(VPN_STORAGEDIR, STORAGE_DIR_TYPE_VPN);
 		return;
 	}
 
@@ -355,13 +363,26 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 	}
 }
 
-static void storage_dir_init(const char *storagedir)
+static void storage_dir_init(const char *storagedir, enum storage_dir_type type)
 {
 	DIR *dir;
 	struct dirent *d;
 
-	if (storage.initialized || !storagedir)
+	if (!storagedir)
 		return;
+
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		if (storage.initialized)
+			return;
+
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		if (storage.vpn_initialized)
+			return;
+
+		break;
+	}
 
 	DBG("Initializing storage directories.");
 
@@ -387,15 +408,36 @@ static void storage_dir_init(const char *storagedir)
 
 	connman_inotify_register(storagedir, storage_inotify_cb, NULL, NULL);
 
-	storage.initialized = TRUE;
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		storage.initialized = TRUE;
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		storage.vpn_initialized = TRUE;
+		break;
+	}
 
 	DBG("Initialization done.");
 }
 
-static void storage_dir_cleanup(const char *storagedir)
+static void storage_dir_cleanup(const char *storagedir,
+						enum storage_dir_type type)
 {
-	if (!storage.initialized || !storagedir)
+	if (!storagedir)
 		return;
+
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		if (!storage.initialized)
+			return;
+
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		if (!storage.vpn_initialized)
+			return;
+
+		break;
+	}
 
 	DBG("Cleaning up storage directories.");
 
@@ -405,7 +447,14 @@ static void storage_dir_cleanup(const char *storagedir)
 		storage_subdir_unregister(storage.subdirs->data);
 	storage.subdirs = NULL;
 
-	storage.initialized = FALSE;
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		storage.initialized = FALSE;
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		storage.vpn_initialized = FALSE;
+		break;
+	}
 
 	DBG("Cleanup done.");
 }
@@ -668,7 +717,7 @@ gchar **connman_storage_get_services(void)
 	DBG("");
 
 	if (!storage.initialized) {
-		storage_dir_init(STORAGEDIR);
+		storage_dir_init(STORAGEDIR, STORAGE_DIR_TYPE_MAIN);
 		if (!storage.initialized)
 			return NULL;
 	}
@@ -902,9 +951,9 @@ gchar **__connman_storage_get_providers(void)
 
 	DBG("");
 
-	if (!storage.initialized) {
-		storage_dir_init(VPN_STORAGEDIR);
-		if (!storage.initialized)
+	if (!storage.vpn_initialized) {
+		storage_dir_init(VPN_STORAGEDIR, STORAGE_DIR_TYPE_VPN);
+		if (!storage.vpn_initialized)
 			return NULL;
 	}
 
@@ -966,8 +1015,8 @@ int __connman_storage_init(const char *dir, int dir_mode, int file_mode)
 void __connman_storage_cleanup(void)
 {
 	DBG("");
-	storage_dir_cleanup(storage_dir);
-	storage_dir_cleanup(vpn_storage_dir);
+	storage_dir_cleanup(storage_dir, STORAGE_DIR_TYPE_MAIN);
+	storage_dir_cleanup(vpn_storage_dir, STORAGE_DIR_TYPE_VPN);
 	keyfile_cleanup();
 	g_free(storage_dir);
 	g_free(vpn_storage_dir);
