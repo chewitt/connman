@@ -524,6 +524,9 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	} else {
 		const char *str;
 
+		if (type != DBUS_TYPE_STRING)
+			return __connman_error_invalid_arguments(msg);
+
 		dbus_message_iter_get_basic(&value, &str);
 		vpn_provider_set_string(provider, name, str);
 	}
@@ -1014,6 +1017,7 @@ static gchar **create_network_list(GSList *networks, gsize *count)
 static int vpn_provider_save(struct vpn_provider *provider)
 {
 	GKeyFile *keyfile;
+	const char *default_route;
 
 	DBG("provider %p immutable %s", provider,
 					provider->immutable ? "yes" : "no");
@@ -1038,6 +1042,12 @@ static int vpn_provider_save(struct vpn_provider *provider)
 			"Host", provider->host);
 	g_key_file_set_string(keyfile, provider->identifier,
 			"VPN.Domain", provider->domain);
+
+	default_route = vpn_provider_get_string(provider, "DefaultRoute");
+	if (default_route && *default_route)
+		g_key_file_set_string(keyfile, provider->identifier,
+				"DefaultRoute", default_route);
+
 	if (provider->user_networks) {
 		gchar **networks;
 		gsize network_count;
@@ -2543,6 +2553,32 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 		return NULL;
 
 	return setting->value;
+}
+
+bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
+							const char *key)
+{
+	struct vpn_setting *setting;
+
+	/* These values can be changed if the provider is not immutable */
+	if (g_str_equal(key, "Type")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "Name")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "Host")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "HostIP")) {
+		return provider->immutable;
+	} else if (g_str_equal(key, "VPN.Domain") ||
+			g_str_equal(key, "Domain")) {
+		return provider->immutable;
+	}
+
+	setting = g_hash_table_lookup(provider->setting_strings, key);
+	if (!setting)
+		return true; /* Not found, regard as immutable - no changes */
+
+	return setting->immutable;
 }
 
 bool __vpn_provider_check_routes(struct vpn_provider *provider)
