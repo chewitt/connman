@@ -50,11 +50,18 @@ struct storage_subdir {
 
 struct storage_dir_context {
 	gboolean initialized;
+	gboolean vpn_initialized;
 	GList *subdirs;
+};
+
+enum storage_dir_type {
+	STORAGE_DIR_TYPE_MAIN = 0,
+	STORAGE_DIR_TYPE_VPN,
 };
 
 static struct storage_dir_context storage = {
 	.initialized = FALSE,
+	.vpn_initialized = FALSE,
 	.subdirs = NULL
 };
 
@@ -65,7 +72,8 @@ struct keyfile_record {
 
 static GHashTable *keyfile_hash = NULL;
 
-static void storage_dir_cleanup(void);
+static void storage_dir_cleanup(const char *storagedir,
+					enum storage_dir_type type);
 
 static void storage_inotify_subdir_cb(struct inotify_event *event,
 					const char *ident,
@@ -78,6 +86,12 @@ static void keyfile_inotify_cb(struct inotify_event *event,
 gboolean is_service_dir_name(const char *name);
 
 gboolean is_provider_dir_name(const char *name);
+
+gboolean is_vpn_dir_name(const char *name);
+
+gboolean is_vpn_dir(const char *name);
+
+static const char* storagedir_for(const char *name);
 
 static void debug_subdirs(void)
 {
@@ -95,6 +109,7 @@ static void debug_subdirs(void)
 			subdir->has_settings ? (
 				is_service_dir_name(subdir->name) ? "S" :
 				is_provider_dir_name(subdir->name) ? "P" :
+				is_vpn_dir_name(subdir->name) ? "V" :
 				"X") : "-");
 	}
 	DBG("}");
@@ -185,6 +200,29 @@ gboolean is_provider_dir_name(const char *name)
 	return FALSE;
 }
 
+gboolean is_vpn_dir_name(const char *name)
+{
+	DBG("name %s", name);
+
+	if (strncmp(name, "vpn_", 4) == 0)
+		return TRUE;
+
+	return FALSE;
+}
+
+gboolean is_vpn_dir(const char *name)
+{
+	if (is_vpn_dir_name(name) || is_provider_dir_name(name))
+		return TRUE;
+
+	return FALSE;
+}
+
+static const char *storagedir_for(const char *name)
+{
+	return is_vpn_dir(name) ? VPN_STORAGEDIR : STORAGEDIR;
+}
+
 gint storage_subdir_cmp(gconstpointer a, gconstpointer b)
 {
 	const struct storage_subdir *d1 = a;
@@ -210,7 +248,8 @@ static void storage_subdir_unregister(gpointer data)
 	gchar *str;
 
 	DBG("%s", subdir->name);
-	str = g_strdup_printf("%s/%s", STORAGEDIR, subdir->name);
+	str = g_strdup_printf("%s/%s", storagedir_for(subdir->name),
+				subdir->name);
 	connman_inotify_unregister(str, storage_inotify_subdir_cb, subdir);
 	g_free(str);
 }
@@ -220,6 +259,7 @@ static void storage_subdir_append(const char *name)
 	struct storage_subdir *subdir;
 	struct stat buf;
 	gchar *str;
+	const char *storagedir;
 	int ret;
 
 	DBG("%s", name);
@@ -227,7 +267,8 @@ static void storage_subdir_append(const char *name)
 	subdir = g_new0(struct storage_subdir, 1);
 	subdir->name = g_strdup(name);
 
-	str = g_strdup_printf("%s/%s/%s", STORAGEDIR, subdir->name, SETTINGS);
+	storagedir = storagedir_for(subdir->name);
+	str = g_strdup_printf("%s/%s/%s", storagedir, subdir->name, SETTINGS);
 	ret = stat(str, &buf);
 	g_free(str);
 	if (ret == 0)
@@ -235,7 +276,7 @@ static void storage_subdir_append(const char *name)
 
 	storage.subdirs = g_list_prepend(storage.subdirs, subdir);
 
-	str = g_strdup_printf("%s/%s", STORAGEDIR, subdir->name);
+	str = g_strdup_printf("%s/%s", storagedir, subdir->name);
 
 	if (connman_inotify_register(str, storage_inotify_subdir_cb, subdir,
 				storage_subdir_free) != 0)
@@ -269,7 +310,9 @@ static void storage_inotify_subdir_cb(struct inotify_event *event,
 		if (!g_strcmp0(event->name, SETTINGS)) {
 			struct stat st;
 			gchar *pathname;
-			pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR,
+
+			pathname = g_strdup_printf("%s/%s/%s",
+						storagedir_for(subdir->name),
 						subdir->name, event->name);
 			if (stat(pathname, &st) == 0 && S_ISREG(st.st_mode)) {
 				subdir->has_settings = TRUE;
@@ -288,7 +331,8 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 
 	if (event->mask & IN_DELETE_SELF) {
 		DBG("delete self");
-		storage_dir_cleanup();
+		storage_dir_cleanup(STORAGEDIR, STORAGE_DIR_TYPE_MAIN);
+		storage_dir_cleanup(VPN_STORAGEDIR, STORAGE_DIR_TYPE_VPN);
 		return;
 	}
 
@@ -319,17 +363,30 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 	}
 }
 
-static void storage_dir_init(void)
+static void storage_dir_init(const char *storagedir, enum storage_dir_type type)
 {
 	DIR *dir;
 	struct dirent *d;
 
-	if (storage.initialized)
+	if (!storagedir)
 		return;
+
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		if (storage.initialized)
+			return;
+
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		if (storage.vpn_initialized)
+			return;
+
+		break;
+	}
 
 	DBG("Initializing storage directories.");
 
-	dir = opendir(STORAGEDIR);
+	dir = opendir(storagedir);
 	if (!dir)
 		return;
 
@@ -349,27 +406,55 @@ static void storage_dir_init(void)
 
 	closedir(dir);
 
-	connman_inotify_register(STORAGEDIR, storage_inotify_cb, NULL, NULL);
+	connman_inotify_register(storagedir, storage_inotify_cb, NULL, NULL);
 
-	storage.initialized = TRUE;
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		storage.initialized = TRUE;
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		storage.vpn_initialized = TRUE;
+		break;
+	}
 
 	DBG("Initialization done.");
 }
 
-static void storage_dir_cleanup(void)
+static void storage_dir_cleanup(const char *storagedir,
+						enum storage_dir_type type)
 {
-	if (!storage.initialized)
+	if (!storagedir)
 		return;
+
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		if (!storage.initialized)
+			return;
+
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		if (!storage.vpn_initialized)
+			return;
+
+		break;
+	}
 
 	DBG("Cleaning up storage directories.");
 
-	connman_inotify_unregister(STORAGEDIR, storage_inotify_cb, NULL);
+	connman_inotify_unregister(storagedir, storage_inotify_cb, NULL);
 
 	while (storage.subdirs)
 		storage_subdir_unregister(storage.subdirs->data);
 	storage.subdirs = NULL;
 
-	storage.initialized = FALSE;
+	switch (type) {
+	case STORAGE_DIR_TYPE_MAIN:
+		storage.initialized = FALSE;
+		break;
+	case STORAGE_DIR_TYPE_VPN:
+		storage.vpn_initialized = FALSE;
+		break;
+	}
 
 	DBG("Cleanup done.");
 }
@@ -569,7 +654,8 @@ GKeyFile *__connman_storage_load_config(const char *ident)
 	gchar *pathname;
 	GKeyFile *keyfile = NULL;
 
-	pathname = g_strdup_printf("%s/%s.config", STORAGEDIR, ident);
+	pathname = g_strdup_printf("%s/%s.config", storagedir_for(ident),
+				ident);
 	if (!pathname)
 		return NULL;
 
@@ -604,7 +690,8 @@ GKeyFile *__connman_storage_open_service(const char *service_id)
 	if (!service_id_is_valid(service_id))
 		return NULL;
 
-	pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR, service_id, SETTINGS);
+	pathname = g_strdup_printf("%s/%s/%s", storagedir_for(service_id),
+				service_id, SETTINGS);
 	if (!pathname)
 		return NULL;
 
@@ -630,7 +717,7 @@ gchar **connman_storage_get_services(void)
 	DBG("");
 
 	if (!storage.initialized) {
-		storage_dir_init();
+		storage_dir_init(STORAGEDIR, STORAGE_DIR_TYPE_MAIN);
 		if (!storage.initialized)
 			return NULL;
 	}
@@ -660,7 +747,8 @@ GKeyFile *connman_storage_load_service(const char *service_id)
 	if (!service_id_is_valid(service_id))
 		return NULL;
 
-	pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR, service_id, SETTINGS);
+	pathname = g_strdup_printf("%s/%s/%s", storagedir_for(service_id),
+				service_id, SETTINGS);
 	if (!pathname)
 		return NULL;
 
@@ -678,7 +766,8 @@ int __connman_storage_save_service(GKeyFile *keyfile, const char *service_id)
 	if (!service_id_is_valid(service_id))
 		return -EINVAL;
 
-	dirname = g_strdup_printf("%s/%s", STORAGEDIR, service_id);
+	dirname = g_strdup_printf("%s/%s", storagedir_for(service_id),
+				service_id);
 	if (!dirname)
 		return -ENOMEM;
 
@@ -708,7 +797,8 @@ static bool remove_file(const char *service_id, const char *file)
 	gchar *pathname;
 	bool ret = false;
 
-	pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR, service_id, file);
+	pathname = g_strdup_printf("%s/%s/%s", storagedir_for(service_id),
+				service_id, file);
 	if (!pathname)
 		return false;
 
@@ -728,7 +818,8 @@ static bool remove_dir(const char *service_id)
 	gchar *pathname;
 	bool ret = false;
 
-	pathname = g_strdup_printf("%s/%s", STORAGEDIR, service_id);
+	pathname = g_strdup_printf("%s/%s", storagedir_for(service_id),
+				service_id);
 	if (!pathname)
 		return false;
 
@@ -746,8 +837,12 @@ static bool remove_dir(const char *service_id)
 bool __connman_storage_remove_service(const char *service_id)
 {
 	bool removed = false;
-	gchar *pathname = g_strdup_printf("%s/%s", STORAGEDIR, service_id);
-	DIR *dir = opendir(pathname);
+	gchar *pathname;
+	DIR *dir;
+
+	pathname = g_strdup_printf("%s/%s", storagedir_for(service_id),
+				service_id);
+	dir = opendir(pathname);
 
 	if (dir) {
 		struct dirent *d;
@@ -775,7 +870,7 @@ GKeyFile *__connman_storage_load_provider(const char *identifier)
 	gchar *pathname;
 	GKeyFile *keyfile;
 
-	pathname = g_strdup_printf("%s/%s_%s/%s", STORAGEDIR, "provider",
+	pathname = g_strdup_printf("%s/%s_%s/%s", VPN_STORAGEDIR, "provider",
 			identifier, SETTINGS);
 	if (!pathname)
 		return NULL;
@@ -790,7 +885,7 @@ void __connman_storage_save_provider(GKeyFile *keyfile, const char *identifier)
 {
 	gchar *pathname, *dirname;
 
-	dirname = g_strdup_printf("%s/%s_%s", STORAGEDIR,
+	dirname = g_strdup_printf("%s/%s_%s", VPN_STORAGEDIR,
 			"provider", identifier);
 	if (!dirname)
 		return;
@@ -832,7 +927,7 @@ bool __connman_storage_remove_provider(const char *identifier)
 		return false;
 
 	if (remove_all(id))
-		DBG("Removed provider dir %s/%s", STORAGEDIR, id);
+		DBG("Removed provider dir %s/%s", VPN_STORAGEDIR, id);
 
 	g_free(id);
 
@@ -841,7 +936,7 @@ bool __connman_storage_remove_provider(const char *identifier)
 		return false;
 
 	if ((removed = remove_all(id)))
-		DBG("Removed vpn dir %s/%s", STORAGEDIR, id);
+		DBG("Removed vpn dir %s/%s", VPN_STORAGEDIR, id);
 
 	g_free(id);
 
@@ -856,9 +951,9 @@ gchar **__connman_storage_get_providers(void)
 
 	DBG("");
 
-	if (!storage.initialized) {
-		storage_dir_init();
-		if (!storage.initialized)
+	if (!storage.vpn_initialized) {
+		storage_dir_init(VPN_STORAGEDIR, STORAGE_DIR_TYPE_VPN);
+		if (!storage.vpn_initialized)
 			return NULL;
 	}
 
@@ -920,7 +1015,8 @@ int __connman_storage_init(const char *dir, int dir_mode, int file_mode)
 void __connman_storage_cleanup(void)
 {
 	DBG("");
-	storage_dir_cleanup();
+	storage_dir_cleanup(storage_dir, STORAGE_DIR_TYPE_MAIN);
+	storage_dir_cleanup(vpn_storage_dir, STORAGE_DIR_TYPE_VPN);
 	keyfile_cleanup();
 	g_free(storage_dir);
 	g_free(vpn_storage_dir);
