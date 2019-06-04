@@ -465,6 +465,14 @@ static DBusMessage *get_properties(DBusConnection *conn,
 
 	DBG("provider %p", provider);
 
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_CONNECTION_GET_PROPERTIES,
+				       "", TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
+
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
 		return NULL;
@@ -500,6 +508,14 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
 		return __connman_error_invalid_arguments(msg);
+
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_CONNECTION_SET_PROPERTY,
+				       name, TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	dbus_message_iter_recurse(&iter, &value);
 
@@ -549,6 +565,14 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &name,
 							DBUS_TYPE_INVALID);
+
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_CONNECTION_CLEAR_PROPERTY,
+				       name, TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	if (g_str_equal(name, "UserRoutes")) {
 		del_routes(provider);
@@ -632,7 +656,15 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 	int err;
 
 	DBG("conn %p provider %p", conn, provider);
-	
+
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_CONNECTION_CONNECT,
+				       "", TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
+
 	/* Check if any agents have been added, otherwise delay connecting */
 	if (!connman_agent_get_info(NULL, NULL, NULL)) {
 		DBG("Provider %s start delayed because no VPN agent is present",
@@ -672,6 +704,14 @@ static DBusMessage *do_disconnect(DBusConnection *conn, DBusMessage *msg,
 {
 	struct vpn_provider *provider = data;
 	int err;
+
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_CONNECTION_DISCONNECT,
+				       "", TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	DBG("conn %p provider %p", conn, provider);
 

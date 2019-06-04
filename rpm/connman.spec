@@ -173,6 +173,7 @@ This package provides Cisco3000 (VPNC) VPN plugin for connman.
     --enable-pptp \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
+    --enable-sailfish-vpn-access=builtin \
     --enable-client \
     --enable-test \
     --enable-sailfish-gps \
@@ -286,6 +287,7 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %dir %{_sysconfdir}/connman
 %config %{_sysconfdir}/connman/main.conf
+%config %{_sysconfdir}/connman/vpn-dbus-access.conf
 
 %files doc
 %defattr(-,root,root,-)

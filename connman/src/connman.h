@@ -1154,6 +1154,7 @@ enum connman_access __connman_access_service_policy_check
 			const char *arg, const char *sender,
 			enum connman_access default_access);
 
+/* Manager */
 struct connman_access_manager_policy *__connman_access_manager_policy_create
 		(const char *spec);
 void __connman_access_manager_policy_free
@@ -1164,6 +1165,7 @@ enum connman_access __connman_access_manager_policy_check
 			const char *arg, const char *sender,
 			enum connman_access default_access);
 
+/* Technology */
 struct connman_access_tech_policy *__connman_access_tech_policy_create
 		(const char *spec);
 void __connman_access_tech_policy_free
@@ -1173,6 +1175,7 @@ enum connman_access __connman_access_tech_set_property
 			const char *name, const char *sender,
 			enum connman_access default_access);
 
+/* Firewall */
 struct connman_access_firewall_policy *__connman_access_firewall_policy_create
 		(const char *spec);
 void __connman_access_firewall_policy_free

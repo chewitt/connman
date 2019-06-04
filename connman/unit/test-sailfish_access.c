@@ -238,6 +238,7 @@ static void test_sailfish_access_deny()
 	g_assert(sp);
 	g_assert(mp);
 	g_assert(tp);
+	g_assert(fp);
 	g_assert(__connman_access_service_policy_check(sp,
 			CONNMAN_ACCESS_SERVICE_GET_PROPERTY, "foo", "x",
 			CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);

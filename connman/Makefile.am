@@ -188,7 +188,7 @@ vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) $(backtrace_sources) \
 			vpn/vpn-manager.c vpn/vpn-provider.c \
 			vpn/vpn-provider.h vpn/vpn-rtnl.h \
 			vpn/vpn-ipconfig.c src/inet.c vpn/vpn-rtnl.c \
-			src/dbus.c src/storage.c src/ipaddress.c src/agent.c \
+			src/dbus.c src/storage.c src/ipaddress.c src/agent.c vpn/access.c \
 			vpn/vpn-agent.c vpn/vpn-agent.h src/inotify.c \
 			vpn/vpn-config.c src/fsid.c vpn/vpn-settings.c
 
@@ -312,7 +312,7 @@ noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
-	unit/test-device
+	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -328,6 +328,11 @@ unit_test_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
 unit_test_access_SOURCES = unit/test-access.c src/access.c src/log.c \
 				$(backtrace_sources)
 unit_test_access_LDADD = @GLIB_LIBS@ -ldl
+
+unit_test_vpn_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_vpn_access_SOURCES = unit/test-vpn_access.c vpn/access.c src/log.c \
+				$(backtrace_sources)
+unit_test_vpn_access_LDADD = @GLIB_LIBS@ -ldl
 
 unit_test_sailfish_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 			@DBUSACCESS_CFLAGS@
@@ -403,11 +408,18 @@ unit_test_iptables_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
 				unit/test-iptables.c src/iptables.c
 unit_test_iptables_LDADD = @GLIB_LIBS@ -ldl
 
-TESTS = unit/test-access unit/test-ippool \
+unit_test_sailfish_vpn_access_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+			@DBUSACCESS_CFLAGS@
+unit_test_sailfish_vpn_access_SOURCES = unit/test-sailfish_vpn_access.c \
+			src/log.c vpn/access.c vpn/plugins/sailfish_access.c \
+			$(backtrace_sources)
+unit_test_sailfish_vpn_access_LDADD = @GLIB_LIBS@ @DBUSACCESS_LIBS@ -ldl
+
+TESTS = unit/test-access unit/test-vpn_access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
-	unit/test-device
+	unit/test-device unit/test-sailfish_vpn_access
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)

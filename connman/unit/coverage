@@ -19,7 +19,9 @@ test-sailfish_datacounter \
 test-sailfish_datacounters \
 test-sailfish_datahistory \
 test-sailfish_developer_mode \
-test-vpn-settings"
+test-vpn-settings \
+test-vpn_access \
+test-sailfish_vpn_access"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"

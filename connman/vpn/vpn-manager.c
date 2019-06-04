@@ -40,8 +40,16 @@ static DBusConnection *connection;
 static DBusMessage *create(DBusConnection *conn, DBusMessage *msg, void *data)
 {
 	int err;
+	const char *sender;
 
 	DBG("conn %p", conn);
+
+	sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender, VPN_ACCESS_MANAGER_CREATE, NULL,
+				       TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	err = __vpn_provider_create(msg);
 	if (err < 0) {
@@ -59,13 +67,20 @@ static DBusMessage *create(DBusConnection *conn, DBusMessage *msg, void *data)
 
 static DBusMessage *remove(DBusConnection *conn, DBusMessage *msg, void *data)
 {
-	const char *path;
+	const char *sender, *path;
 	int err;
 
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
 							DBUS_TYPE_INVALID);
 
 	DBG("conn %p path %s", conn, path);
+
+	sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender, VPN_ACCESS_MANAGER_REMOVE, "",
+				       TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	err = __vpn_provider_remove(path);
 	if (err < 0)
@@ -78,8 +93,17 @@ static DBusMessage *get_connections(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
 	DBusMessage *reply;
+	const char *sender;
 
 	DBG("conn %p", conn);
+
+	sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_MANAGER_GET_CONNECTIONS, "",
+				       TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	reply = __vpn_provider_get_connections(msg);
 	if (!reply)
@@ -97,6 +121,12 @@ static DBusMessage *register_agent(DBusConnection *conn,
 	DBG("conn %p", conn);
 
 	sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_MANAGER_REGISTER_AGENT, "",
+				       TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
 							DBUS_TYPE_INVALID);
@@ -117,6 +147,12 @@ static DBusMessage *unregister_agent(DBusConnection *conn,
 	DBG("conn %p", conn);
 
 	sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+				       VPN_ACCESS_MANAGER_UNREGISTER_AGENT, "",
+				       TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
 
 	dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
 							DBUS_TYPE_INVALID);

@@ -234,6 +234,17 @@ fi
 AM_CONDITIONAL(PPTP, test "${enable_pptp}" != "no")
 AM_CONDITIONAL(PPTP_BUILTIN, test "${enable_pptp}" = "builtin")
 
+AC_ARG_ENABLE(sailfish-vpn-access,
+    AC_HELP_STRING([--enable-sailfish-vpn-access], [enable Sailfish vpn access control plugin]),
+        [enable_sailfish_vpn_access=${enableval}], [enable_sailfish_vpn_access="no"])
+AM_CONDITIONAL(SAILFISH_VPN_ACCESS, test "${enable_sailfish_vpn_access}" != "no")
+AM_CONDITIONAL(SAILFISH_VPN_ACCESS_BUILTIN, test "${enable_sailfish_vpn_access}" = "builtin")
+if (test "${enable_sailfish_vpn_access}" != "no"); then
+    PKG_CHECK_MODULES(DBUSACCESS, libdbusaccess >= 1.0.3, dummy=yes,
+            AC_MSG_ERROR(libdbusaccess >= 1.0.3 is required))
+    need_glibutil=yes
+fi
+
 AC_CHECK_HEADERS(resolv.h, dummy=yes,
 	AC_MSG_ERROR(resolver header files are required))
 AC_CHECK_LIB(resolv, ns_initparse, dummy=yes, [
