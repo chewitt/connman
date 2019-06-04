@@ -842,7 +842,7 @@ int main(int argc, char *argv[])
 				connman_settings.storage_dir_permissions,
 				connman_settings.storage_file_permissions);
 
-	if (g_mkdir_with_parents(STORAGEDIR,
+	if (g_mkdir_with_parents(connman_settings.storage_root,
 			connman_settings.storage_dir_permissions) < 0) {
 		if (errno != EEXIST)
 			perror("Failed to create storage directory");
