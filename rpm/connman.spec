@@ -7,6 +7,7 @@ License:    GPLv2
 URL:        http://connman.net/
 Source0:    %{name}-%{version}.tar.bz2
 Source1:    main.conf
+Source2:    01-require-home-mount-to-be-present.conf
 Requires:   dbus >= 1.4
 Requires:   wpa_supplicant >= 0.7.1
 Requires:   ofono
@@ -212,6 +213,9 @@ cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/connman/
 mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
 ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/connman.service
 
+mkdir -p %{buildroot}/%{_lib}/systemd/system/connman.service.d
+cp -a %{SOURCE2} %{buildroot}/%{_lib}/systemd/system/connman.service.d/
+
 mkdir -p %{buildroot}/%{_docdir}/%{name}-%{version}
 install -m0644 -t %{buildroot}/%{_docdir}/%{name}-%{version} \
         AUTHORS ChangeLog README
@@ -263,6 +267,7 @@ systemctl daemon-reload || :
 /%{_lib}/systemd/system/connman.service
 /%{_lib}/systemd/system/network.target.wants/connman.service
 /%{_lib}/systemd/system/connman-vpn.service
+/%{_lib}/systemd/system/connman.service.d
 /%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 
 %files wait-online
