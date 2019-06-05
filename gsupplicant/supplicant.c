@@ -981,6 +981,24 @@ static void interface_capability(const char *key, DBusMessageIter *iter,
 				key, dbus_message_iter_get_arg_type(iter));
 }
 
+static void set_bss_expiration_age(DBusMessageIter *iter, void *user_data)
+{
+	unsigned int bss_expiration_age = GPOINTER_TO_UINT(user_data);
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_UINT32,
+				&bss_expiration_age);
+}
+
+int g_supplicant_interface_set_bss_expiration_age(GSupplicantInterface *interface,
+					unsigned int bss_expiration_age)
+{
+       return supplicant_dbus_property_set(interface->path,
+				       SUPPLICANT_INTERFACE ".Interface",
+				       "BSSExpireAge", DBUS_TYPE_UINT32_AS_STRING,
+				       set_bss_expiration_age, NULL,
+				       GUINT_TO_POINTER(bss_expiration_age), NULL);
+}
+
 struct set_apscan_data
 {
 	unsigned int ap_scan;
