@@ -196,7 +196,10 @@ static char *find_origin(void *src_map, struct stat *src_st,
 
 			if (compare_file(src_map, src_st, real_path, pathname)
 									== 0) {
-				str = g_strdup_printf("%s/%s",
+				if (!subpath)
+					str = g_strdup(d->d_name);
+				else
+					str = g_strdup_printf("%s/%s",
 							subpath, d->d_name);
 				closedir(dir);
 				return str;
