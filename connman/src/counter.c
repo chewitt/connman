@@ -85,16 +85,18 @@ int __connman_counter_register(const char *owner, const char *path,
 	counter->owner = g_strdup(owner);
 	counter->path = g_strdup(path);
 
+	g_hash_table_replace(counter_table, counter->path, counter);
+	g_hash_table_replace(owner_mapping, counter->owner, counter);
+
 	err = __connman_service_counter_register(counter->path);
 	if (err < 0) {
+		g_hash_table_remove(owner_mapping, counter->owner);
+		g_hash_table_remove(counter_table, counter->path);
 		g_free(counter->owner);
 		g_free(counter->path);
 		g_free(counter);
 		return err;
 	}
-
-	g_hash_table_replace(counter_table, counter->path, counter);
-	g_hash_table_replace(owner_mapping, counter->owner, counter);
 
 	counter->interval = interval;
 	__connman_rtnl_update_interval_add(counter->interval);
