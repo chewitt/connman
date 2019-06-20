@@ -1294,22 +1294,46 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 		if (reply)
 			g_dbus_send_message(connection, reply);
 
-		if (error == ECONNABORTED) {
+		switch (error) {
+		case EACCES:
+			vpn_provider_indicate_error(provider,
+						VPN_PROVIDER_ERROR_AUTH_FAILED);
+			break;
+		case ENOMSG:
+			/* fall through */
+		case ETIMEDOUT:
+			/* No reply or timed out -> cancel the agent request */
+			connman_agent_cancel(provider);
+			vpn_provider_indicate_error(provider,
+						VPN_PROVIDER_ERROR_UNKNOWN);
+			break;
+		case ECANCELED:
+			/* fall through */
+		case ECONNABORTED:
 			/*
-			 * Passing VPN_PROVIDER_STATE_DISCONNECT to set_state
-			 * callback (vpn_set_state() that is) sets vpn_data
-			 * state to VPN_STATE_DISCONNECT which (hopefully)
-			 * makes vpn_died() happy when vpn task (hopefully)
-			 * completes and then vpn_died() (hopefully) sets
-			 * provider state to VPN_PROVIDER_STATE_IDLE.
+			 * This can be called in other situations than when
+			 * VPN agent error checker is called. In such case
+			 * react to both ECONNABORTED and ECANCELED as if the
+			 * connection was called to terminate and do full
+			 * disconnect -> idle cycle when being connected or
+			 * ready. Setting the state also using the driver
+			 * callback (vpn_set_state()) ensures that the driver is
+			 * being disconnected as well and eventually the vpn
+			 * process gets killed and vpn_died() is called to make
+			 * the provider back to idle state.
 			 */
-			if (provider->driver->set_state)
-				provider->driver->set_state(provider,
-					VPN_PROVIDER_STATE_DISCONNECT);
+			if (provider->state == VPN_PROVIDER_STATE_CONNECT ||
+						provider->state ==
+						VPN_PROVIDER_STATE_READY) {
+				if (provider->driver->set_state)
+					provider->driver->set_state(provider,
+						VPN_PROVIDER_STATE_DISCONNECT);
 
-			vpn_provider_set_state(provider,
-					VPN_PROVIDER_STATE_DISCONNECT);
-		} else {
+				vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_DISCONNECT);
+			}
+			break;
+		default:
 			vpn_provider_indicate_error(provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
 			vpn_provider_set_state(provider,
