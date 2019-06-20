@@ -30,6 +30,8 @@
 #include <gdbus.h>
 #include <connman/log.h>
 #include <connman/agent.h>
+#include <connman/vpn-dbus.h>
+#include <connman/task.h>
 #include <vpn/vpn-provider.h>
 
 #include "vpn-agent.h"
@@ -179,4 +181,50 @@ void vpn_agent_append_allow_credential_retrieval(DBusMessageIter *iter,
 	connman_dbus_dict_append_dict(iter, "AllowRetrieveCredentials",
 				request_input_append_flag,
 				GINT_TO_POINTER(allow));
+}
+
+int vpn_agent_check_and_process_reply_error(DBusMessage *reply,
+				struct vpn_provider *provider,
+				struct connman_task *task,
+				vpn_provider_connect_cb_t cb, void *user_data)
+{
+	DBusError error;
+	int err;
+
+	if (!reply || !provider)
+		return EINVAL;
+
+	dbus_error_init(&error);
+
+	if (!dbus_set_error_from_message(&error, reply))
+		return 0;
+
+	DBG("D-Bus error: %s", error.name);
+
+	if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE ".Error.Canceled"))
+		err = ECANCELED;
+	else if (!g_strcmp0(error.name, "org.freedesktop.DBus.Error.Timeout"))
+		err = ETIMEDOUT;
+	else if (!g_strcmp0(error.name, "org.freedesktop.DBus.Error.NoReply"))
+		err = ENOMSG;
+	else
+		err = EACCES;
+
+	dbus_error_free(&error);
+
+	DBG("Error: %d/%s", err, strerror(err));
+
+	if (cb)
+		cb(provider, user_data, err);
+
+	if (task)
+		connman_task_stop(task);
+
+	/*
+	 * VPN agent dialog cancel, timeout, broken connection should set the
+	 * VPN back to idle state
+	 */
+	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
+
+	return err;
 }
