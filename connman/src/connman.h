@@ -54,6 +54,7 @@ DBusMessage *__connman_error_operation_aborted(DBusMessage *msg);
 DBusMessage *__connman_error_operation_timeout(DBusMessage *msg);
 DBusMessage *__connman_error_invalid_service(DBusMessage *msg);
 DBusMessage *__connman_error_invalid_property(DBusMessage *msg);
+DBusMessage *__connman_error_operation_canceled(DBusMessage *msg);
 
 int __connman_manager_init(void);
 void __connman_manager_cleanup(void);
