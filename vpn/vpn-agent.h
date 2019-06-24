@@ -38,6 +38,10 @@ bool vpn_agent_check_reply_has_dict(DBusMessage *reply);
 void vpn_agent_append_user_info(DBusMessageIter *iter,
 				struct vpn_provider *provider,
 				const char *username_str);
+int vpn_agent_check_and_process_reply_error(DBusMessage *reply,
+				struct vpn_provider *provider,
+				struct connman_task *task,
+				vpn_provider_connect_cb_t cb, void *user_data);
 
 #ifdef __cplusplus
 }
