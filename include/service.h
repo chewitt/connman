@@ -131,6 +131,8 @@ const char *connman_service_get_proxy_url(struct connman_service *service);
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service);
 bool connman_service_get_favorite(struct connman_service *service);
 bool connman_service_get_autoconnect(struct connman_service *service);
+bool connman_service_set_autoconnect(struct connman_service *service,
+							bool autoconnect);
 
 /* Return non-zero value to terminate the loop, zero to continue */
 typedef int (* connman_service_iterate_cb) (struct connman_service *service,

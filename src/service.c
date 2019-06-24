@@ -1705,6 +1705,18 @@ static void autoconnect_changed(struct connman_service *service)
 				DBUS_TYPE_BOOLEAN, &autoconnect);
 }
 
+bool connman_service_set_autoconnect(struct connman_service *service,
+							bool autoconnect)
+{
+	if (service->autoconnect == autoconnect)
+		return false;
+
+	service->autoconnect = autoconnect;
+	autoconnect_changed(service);
+
+	return true;
+}
+
 static void append_security(DBusMessageIter *iter, void *user_data)
 {
 	struct connman_service *service = user_data;
