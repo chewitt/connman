@@ -579,6 +579,17 @@ int connman_provider_set_nameservers(struct connman_provider *provider,
 	return 0;
 }
 
+void connman_provider_set_autoconnect(struct connman_provider *provider,
+								bool flag)
+{
+	if (!provider || !provider->vpn_service)
+		return;
+
+	/* Save VPN service if autoconnect value changes */
+	if (connman_service_set_autoconnect(provider->vpn_service, flag))
+		__connman_service_save(provider->vpn_service);
+}
+
 static void unregister_provider(gpointer data)
 {
 	struct connman_provider *provider = data;
