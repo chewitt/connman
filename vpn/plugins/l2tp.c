@@ -491,16 +491,28 @@ struct request_input_reply {
 static void request_input_reply(DBusMessage *reply, void *user_data)
 {
 	struct request_input_reply *l2tp_reply = user_data;
+	struct l2tp_private_data *data;
 	const char *error = NULL;
 	char *username = NULL, *password = NULL;
 	char *key;
 	DBusMessageIter iter, dict;
+	int err;
 
 	DBG("provider %p", l2tp_reply->provider);
 
-	if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
-		if (reply)
-			error = dbus_message_get_error_name(reply);
+	if (!reply)
+		goto done;
+
+	data = l2tp_reply->user_data;
+
+	err = vpn_agent_check_and_process_reply_error(reply,
+				l2tp_reply->provider, data->task, data->cb,
+				data->user_data);
+	if (err) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		error = dbus_message_get_error_name(reply);
 		goto done;
 	}
 
