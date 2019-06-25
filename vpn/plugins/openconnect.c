@@ -311,11 +311,21 @@ static void request_input_cookie_reply(DBusMessage *reply, void *user_data)
 	char *cookie = NULL, *servercert = NULL, *vpnhost = NULL;
 	char *key;
 	DBusMessageIter iter, dict;
+	int err;
 
 	DBG("provider %p", data->provider);
 
-	if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR)
+	if (!reply)
 		goto err;
+
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
+				data->task, data->cb, data->user_data);
+	if (err) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		goto out;
+	}
 
 	if (!vpn_agent_check_reply_has_dict(reply))
 		goto err;
@@ -387,6 +397,7 @@ err:
 	vpn_provider_indicate_error(data->provider,
 			VPN_PROVIDER_ERROR_AUTH_FAILED);
 
+out:
 	free_private_data(data);
 }
 
