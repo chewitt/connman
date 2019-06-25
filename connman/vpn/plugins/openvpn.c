@@ -592,6 +592,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *key;
 	DBusMessageIter iter, dict;
 	DBusError error;
+	int err_int;
 
 	DBG("provider %p", data->provider);
 
@@ -600,17 +601,13 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 
 	dbus_error_init(&error);
 
-	if (dbus_set_error_from_message(&error, reply)) {
-		if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE
-							".Error.Canceled")) {
-			ov_connect_done(data, ECONNABORTED);
-			connman_task_stop(data->task);
-			dbus_error_free(&error);
-			return;
-		}
-
-		dbus_error_free(&error);
-		goto err;
+	err_int = vpn_agent_check_and_process_reply_error(reply, data->provider,
+				data->task, data->cb, data->user_data);
+	if (err_int) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		return;
 	}
 
 	if (!vpn_agent_check_reply_has_dict(reply))
