@@ -606,28 +606,20 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *secret = NULL, *username = NULL, *password = NULL;
 	const char *key;
 	DBusMessageIter iter, dict;
-	DBusError error;
-	int err_int = 0;
+	int err;
 
 	DBG("provider %p", data->provider);
 
-	dbus_error_init(&error);
-
-	if (dbus_set_error_from_message(&error, reply)) {
-		if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE
-							".Error.Canceled"))
-			err_int = ECONNABORTED;
-
-		if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE
-							".Error.Timeout"))
-			err_int = ETIMEDOUT;
-
-		dbus_error_free(&error);
-
-		if (err_int)
-			goto abort;
-
+	if (!reply)
 		goto err;
+
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
+				data->task, data->cb, data->user_data);
+	if (err) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		return;
 	}
 
 	if (!vpn_agent_check_reply_has_dict(reply))
@@ -689,28 +681,14 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	if (!secret || !username || !password)
 		goto err;
 
-	err_int = run_connect(data);
-	if (err_int != -EINPROGRESS)
+	err = run_connect(data);
+	if (err != -EINPROGRESS)
 		goto err;
 
 	return;
 
 err:
-	err_int = EACCES;
-
-abort:
-	vc_connect_done(data, err_int);
-
-	switch (err_int) {
-	case EACCES:
-		vpn_provider_indicate_error(data->provider,
-					VPN_PROVIDER_ERROR_AUTH_FAILED);
-		break;
-	case ECONNABORTED:
-	case ETIMEDOUT:
-		vpn_provider_indicate_error(data->provider,
-					VPN_PROVIDER_ERROR_UNKNOWN);
-	}
+	vc_connect_done(data, EACCES);
 }
 
 static int request_input_credentials(struct vc_private_data *data,
