@@ -7619,44 +7619,34 @@ static void prepare_8021x(struct connman_service *service)
 						"WiFi.AnonymousIdentity",
 						service->anonymous_identity);
 
-	if (service->ca_cert)
-		connman_network_set_string(service->network, "WiFi.CACert",
+	connman_network_set_string(service->network, "WiFi.CACert",
 							service->ca_cert);
-	else if (service->ca_cert_file)
-		connman_network_set_string(service->network, "WiFi.CACertFile",
+	connman_network_set_string(service->network, "WiFi.CACertFile",
 							service->ca_cert_file);
 
-	if (service->subject_match)
-		connman_network_set_string(service->network, "WiFi.SubjectMatch",
+	connman_network_set_string(service->network, "WiFi.SubjectMatch",
 							service->subject_match);
 
-	if (service->altsubject_match)
-		connman_network_set_string(service->network, "WiFi.AltSubjectMatch",
+	connman_network_set_string(service->network, "WiFi.AltSubjectMatch",
 							service->altsubject_match);
 
-	if (service->domain_suffix_match)
-		connman_network_set_string(service->network, "WiFi.DomainSuffixMatch",
+	connman_network_set_string(service->network, "WiFi.DomainSuffixMatch",
 							service->domain_suffix_match);
 
-	if (service->domain_match)
-		connman_network_set_string(service->network, "WiFi.DomainMatch",
+	connman_network_set_string(service->network, "WiFi.DomainMatch",
 							service->domain_match);
 
-	if (service->client_cert)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.ClientCert",
 						service->client_cert);
-	else if (service->client_cert_file)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.ClientCertFile",
 						service->client_cert_file);
 
-	if (service->private_key)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.PrivateKey",
 						service->private_key);
-	else if (service->private_key_file)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.PrivateKeyFile",
 						service->private_key_file);
 
@@ -7665,8 +7655,7 @@ static void prepare_8021x(struct connman_service *service)
 					"WiFi.PrivateKeyPassphrase",
 					service->private_key_passphrase);
 
-	if (service->phase2)
-		connman_network_set_string(service->network, "WiFi.Phase2",
+	connman_network_set_string(service->network, "WiFi.Phase2",
 							service->phase2);
 }
 
