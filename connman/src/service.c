@@ -5466,6 +5466,39 @@ static DBusMessage *disconnect_service(DBusConnection *conn,
 
 bool __connman_service_remove(struct connman_service *service)
 {
+	size_t i;
+#define SVC_PROP(name, member, access) \
+	{ name, G_STRUCT_OFFSET(struct connman_service, member), access }
+	const struct {
+		const char *name;
+		size_t offset;
+		enum connman_access default_access;
+	} cleared_properties[] = {
+		SVC_PROP(PROP_PASSPHRASE, passphrase, GET_PASSPHRASE_ACCESS),
+		SVC_PROP(PROP_IDENTITY, identity, GET_IDENTITY_ACCESS),
+		SVC_PROP("AnonymousIdentity", anonymous_identity,
+				GET_IDENTITY_ACCESS),
+		SVC_PROP("SubjectMatch", subject_match, GET_ACCESS_ACCESS),
+		SVC_PROP("AltSubjectMatch", altsubject_match,
+				GET_ACCESS_ACCESS),
+		SVC_PROP("DomainSuffixMatch", domain_suffix_match,
+				GET_ACCESS_ACCESS),
+		SVC_PROP("DomainMatch", domain_match, GET_ACCESS_ACCESS),
+		SVC_PROP("AgentIdentity", agent_identity,
+				GET_IDENTITY_ACCESS),
+		SVC_PROP("CACert", ca_cert, GET_ACCESS_ACCESS),
+		SVC_PROP("CACertFile", ca_cert_file, GET_ACCESS_ACCESS),
+		SVC_PROP("ClientCert", client_cert, GET_ACCESS_ACCESS),
+		SVC_PROP("ClientCertFile", client_cert_file,
+				GET_ACCESS_ACCESS),
+		SVC_PROP("PrivateKey", private_key, GET_PASSPHRASE_ACCESS),
+		SVC_PROP("PrivateKeyFile", private_key_file,
+				GET_PASSPHRASE_ACCESS),
+		SVC_PROP("PrivateKeyPassphrase", private_key_passphrase,
+				GET_PASSPHRASE_ACCESS),
+	};
+#undef SVC_PROP
+
 	if (service->type == CONNMAN_SERVICE_TYPE_ETHERNET ||
 			service->type == CONNMAN_SERVICE_TYPE_GADGET)
 		return false;
@@ -5492,29 +5525,17 @@ bool __connman_service_remove(struct connman_service *service)
 
 	__connman_service_disconnect(service);
 
-	g_free(service->passphrase);
-	service->passphrase = NULL;
+	for (i = 0; i < G_N_ELEMENTS(cleared_properties); i++) {
+		char **member = &G_STRUCT_MEMBER(char *, service,
+						cleared_properties[i].offset);
 
-	g_free(service->identity);
-	service->identity = NULL;
+		g_free(*member);
+		*member = NULL;
 
-	g_free(service->anonymous_identity);
-	service->anonymous_identity = NULL;
-
-	g_free(service->subject_match);
-	service->subject_match = NULL;
-
-	g_free(service->altsubject_match);
-	service->altsubject_match = NULL;
-
-	g_free(service->domain_suffix_match);
-	service->domain_suffix_match = NULL;
-
-	g_free(service->domain_match);
-	service->domain_match = NULL;
-
-	g_free(service->agent_identity);
-	service->agent_identity = NULL;
+		restricted_string_changed(service,
+					cleared_properties[i].name, NULL,
+					cleared_properties[i].default_access);
+	}
 
 	service->error = CONNMAN_SERVICE_ERROR_UNKNOWN;
 
@@ -7598,44 +7619,34 @@ static void prepare_8021x(struct connman_service *service)
 						"WiFi.AnonymousIdentity",
 						service->anonymous_identity);
 
-	if (service->ca_cert)
-		connman_network_set_string(service->network, "WiFi.CACert",
+	connman_network_set_string(service->network, "WiFi.CACert",
 							service->ca_cert);
-	else if (service->ca_cert_file)
-		connman_network_set_string(service->network, "WiFi.CACertFile",
+	connman_network_set_string(service->network, "WiFi.CACertFile",
 							service->ca_cert_file);
 
-	if (service->subject_match)
-		connman_network_set_string(service->network, "WiFi.SubjectMatch",
+	connman_network_set_string(service->network, "WiFi.SubjectMatch",
 							service->subject_match);
 
-	if (service->altsubject_match)
-		connman_network_set_string(service->network, "WiFi.AltSubjectMatch",
+	connman_network_set_string(service->network, "WiFi.AltSubjectMatch",
 							service->altsubject_match);
 
-	if (service->domain_suffix_match)
-		connman_network_set_string(service->network, "WiFi.DomainSuffixMatch",
+	connman_network_set_string(service->network, "WiFi.DomainSuffixMatch",
 							service->domain_suffix_match);
 
-	if (service->domain_match)
-		connman_network_set_string(service->network, "WiFi.DomainMatch",
+	connman_network_set_string(service->network, "WiFi.DomainMatch",
 							service->domain_match);
 
-	if (service->client_cert)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.ClientCert",
 						service->client_cert);
-	else if (service->client_cert_file)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.ClientCertFile",
 						service->client_cert_file);
 
-	if (service->private_key)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.PrivateKey",
 						service->private_key);
-	else if (service->private_key_file)
-		connman_network_set_string(service->network,
+	connman_network_set_string(service->network,
 						"WiFi.PrivateKeyFile",
 						service->private_key_file);
 
@@ -7644,8 +7655,7 @@ static void prepare_8021x(struct connman_service *service)
 					"WiFi.PrivateKeyPassphrase",
 					service->private_key_passphrase);
 
-	if (service->phase2)
-		connman_network_set_string(service->network, "WiFi.Phase2",
+	connman_network_set_string(service->network, "WiFi.Phase2",
 							service->phase2);
 }
 
