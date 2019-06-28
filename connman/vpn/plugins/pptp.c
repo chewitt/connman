@@ -289,7 +289,7 @@ static void request_input_reply(DBusMessage *reply, void *user_data)
 	char *username = NULL, *password = NULL;
 	char *key;
 	DBusMessageIter iter, dict;
-	int err_int;
+	int err;
 
 	DBG("provider %p", pptp_reply->provider);
 
@@ -298,10 +298,10 @@ static void request_input_reply(DBusMessage *reply, void *user_data)
 
 	data = pptp_reply->user_data;
 
-	err_int = vpn_agent_check_and_process_reply_error(reply,
+	err = vpn_agent_check_and_process_reply_error(reply,
 				pptp_reply->provider, data->task, data->cb,
 				data->user_data);
-	if (err_int) {
+	if (err) {
 		/* Ensure cb is called only once */
 		data->cb = NULL;
 		data->user_data = NULL;

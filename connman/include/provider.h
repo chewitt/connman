@@ -113,7 +113,7 @@ int connman_provider_set_nameservers(struct connman_provider *provider,
 					char * const *nameservers);
 bool connman_provider_get_autoconnect(struct connman_provider *provider);
 void connman_provider_set_autoconnect(struct connman_provider *provider,
-					bool autoconnect);
+								bool flag);
 int connman_provider_append_route(struct connman_provider *provider,
 					const char *key, const char *value);
 

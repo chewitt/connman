@@ -606,16 +606,16 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *secret = NULL, *username = NULL, *password = NULL;
 	const char *key;
 	DBusMessageIter iter, dict;
-	int err_int;
+	int err;
 
 	DBG("provider %p", data->provider);
 
 	if (!reply)
 		goto err;
 
-	err_int = vpn_agent_check_and_process_reply_error(reply, data->provider,
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
 				data->task, data->cb, data->user_data);
-	if (err_int) {
+	if (err) {
 		/* Ensure cb is called only once */
 		data->cb = NULL;
 		data->user_data = NULL;
@@ -681,8 +681,8 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	if (!secret || !username || !password)
 		goto err;
 
-	err_int = run_connect(data);
-	if (err_int != -EINPROGRESS)
+	err = run_connect(data);
+	if (err != -EINPROGRESS)
 		goto err;
 
 	return;
