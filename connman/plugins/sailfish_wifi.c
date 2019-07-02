@@ -152,6 +152,7 @@ struct wifi_bss {
 	gulong event_id[BSS_EVENT_COUNT];
 	GUtilIntHistory *history;       /* Signal strength history */
 	guint strength;                 /* Median strength */
+	gboolean hidden;
 };
 
 typedef enum wifi_network_state {
@@ -2558,7 +2559,13 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 	}
 
 	if (net) {
+		struct connman_service *service;
 		DBG("adding %s to %s", bss->path, ident);
+
+		service = connman_service_lookup_from_network(net->network);
+		GASSERT(service);
+		if (service && bss_data->hidden)
+			__connman_service_set_hidden(service);
 
 		/*
 		 * We are keeping BSS-less networks alive for some time in
@@ -2589,6 +2596,8 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 		service = connman_service_lookup_from_network(net->network);
 		GASSERT(service);
 		if (service) {
+			if (bss_data->hidden)
+				__connman_service_set_hidden(service);
 			connman_service_create_ip4config(service, dev->ifi);
 			connman_service_create_ip6config(service, dev->ifi);
 		}
@@ -2705,11 +2714,14 @@ static void wifi_device_bss_add_2(struct wifi_device *dev,
 				/* Assign SSID and add put it back */
 				hidden->ssid = g_bytes_ref(bss->ssid);
 				wifi_device_bss_add_3(dev, hidden);
+
+				bss_data->hidden = TRUE;
 			}
 		} else {
 			/* No SSID broadcast */
 			struct wifi_bss *named = wifi_device_named_bss(dev,
 								bss->bssid);
+			bss_data->hidden = TRUE;
 			if (named) {
 				/* We already know SSID for this network */
 				bss_data->ssid = g_bytes_ref(named->ssid);
@@ -2717,6 +2729,7 @@ static void wifi_device_bss_add_2(struct wifi_device *dev,
 					(int)g_bytes_get_size(named->ssid),
 					(char*)g_bytes_get_data(named->ssid,
 								NULL));
+				named->hidden = TRUE;
 			}
 		}
 		wifi_device_bss_add_3(dev, bss_data);
