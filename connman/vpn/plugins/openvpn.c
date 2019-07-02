@@ -409,7 +409,7 @@ static void ov_died(struct connman_task *task, int exit_code, void *user_data)
 	struct ov_private_data *data = user_data;
 
 	/* Cancel any pending agent requests */
-	connman_agent_cancel(data);
+	connman_agent_cancel(data->provider);
 
 	close_management_interface(data);
 
@@ -711,7 +711,7 @@ static int request_credentials_input(struct ov_private_data *data)
 
 	connman_dbus_dict_close(&iter, &dict);
 
-	err = connman_agent_queue_message(data, message,
+	err = connman_agent_queue_message(data->provider, message,
 			connman_timeout_input_request(),
 			request_input_credentials_reply, data, agent);
 
