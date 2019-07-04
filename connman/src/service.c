@@ -6813,12 +6813,15 @@ static void request_input_cb(struct connman_service *service,
 				__connman_service_return_error(service,
 							ECONNABORTED,
 							user_data);
-			goto done;
 		} else {
+			err = -ETIMEDOUT;
+
 			if (service->hidden)
 				__connman_service_return_error(service,
 							ETIMEDOUT, user_data);
 		}
+
+		goto done;
 	}
 
 	if (!service->network) {
