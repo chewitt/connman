@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2013-2014  BMW Car IT GmbH.
+ *  Copyright (C) 2018,2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1370,6 +1371,123 @@ static void test_firewall_4and6_basic0(void)
 	__connman_firewall_destroy(ctx);
 }
 
+/* Test if the owner match module works */
+static void test_iptables_match_owner(void)
+{
+	int err;
+
+	/* Start with normal functionality test - ipv4, numeric IDs */
+
+	err = __connman_iptables_append(AF_INET, "filter", "OUTPUT",
+					"-m owner --uid-owner 0 -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	assert_rule_exists(AF_INET, "filter",
+				"-A OUTPUT -m owner --uid-owner 0 -j LOG");
+
+	err = __connman_iptables_delete(AF_INET, "filter", "OUTPUT",
+					"-m owner --uid-owner 0 -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	/* Proceed to other functionality - gid-owner, socket-exists */
+
+	err = __connman_iptables_append(AF_INET, "filter", "OUTPUT",
+					"-m owner --gid-owner 0 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "OUTPUT",
+					"-m owner --socket-exists -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	assert_rule_exists(AF_INET, "filter",
+				"-A OUTPUT -m owner --gid-owner 0 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+				"-A OUTPUT -m owner --socket-exists -j LOG");
+
+	err = __connman_iptables_delete(AF_INET, "filter", "OUTPUT",
+					"-m owner --gid-owner 0 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "OUTPUT",
+					"-m owner --socket-exists -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	/* Quirks test - username and groupname, INPUT chain */
+	/* INPUT chain only works on NETFILTER_XT_MATCH_QTAGUID */
+
+	err = __connman_iptables_append(AF_INET, "filter", "OUTPUT",
+					"-m owner --uid-owner root -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "OUTPUT",
+					"-m owner --gid-owner root -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "INPUT",
+					"-m owner --uid-owner 0 -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+        /* On check, the user and group names should be resolved */
+	assert_rule_exists(AF_INET, "filter",
+				"-A OUTPUT -m owner --uid-owner 0 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+				"-A OUTPUT -m owner --gid-owner 0 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+				"-A INPUT -m owner --uid-owner 0 -j LOG");
+
+	err = __connman_iptables_delete(AF_INET, "filter", "OUTPUT",
+					"-m owner --uid-owner root -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "OUTPUT",
+					"-m owner --gid-owner root -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "INPUT",
+					"-m owner --uid-owner 0 -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	/* IPv6 test */
+	/* INPUT chain only works on NETFILTER_XT_MATCH_QTAGUID */
+
+	err = __connman_iptables_append(AF_INET6, "filter", "OUTPUT",
+					"-m owner --uid-owner 0 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET6, "filter", "INPUT",
+					"-m owner --gid-owner root -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET6, "filter");
+	g_assert(err == 0);
+
+	assert_rule_exists(AF_INET6, "filter",
+				"-A OUTPUT -m owner --uid-owner 0 -j LOG");
+	assert_rule_exists(AF_INET6, "filter",
+				"-A INPUT -m owner --gid-owner 0 -j LOG");
+
+	err = __connman_iptables_delete(AF_INET6, "filter", "OUTPUT",
+					"-m owner --uid-owner 0 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET6, "filter", "INPUT",
+					"-m owner --gid-owner root -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET6, "filter");
+	g_assert(err == 0);
+
+}
 
 static const char *general_input[] = {
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
@@ -2015,6 +2133,7 @@ int main(int argc, char *argv[])
 	g_test_add_func("/firewall6/basic2", test_firewall6_basic2);
 	g_test_add_func("/firewall6/basic3", test_firewall6_basic3);
 	g_test_add_func("/firewall4and6/basic4", test_firewall_4and6_basic0);
+	g_test_add_func("/iptables/owner", test_iptables_match_owner);
 	g_test_add_func("/firewallmanaged/prep", test_firewall_managed_prep);
 	g_test_add_func("/firewallmanaged/rule0", test_firewall_managed_rules0);
 	g_test_add_func("/firewallmanaged/rule1", test_firewall_managed_rules1);
