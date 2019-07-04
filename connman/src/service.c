@@ -5647,6 +5647,8 @@ static void switch_default_service(struct connman_service *default_service,
 	downgrade_state(downgrade_service);
 }
 
+static void service_schedule_changed(void);
+
 static DBusMessage *move_service(DBusConnection *conn,
 					DBusMessage *msg, void *user_data,
 								bool before)
