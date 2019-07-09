@@ -340,7 +340,6 @@ struct iptables_type_options {
 	const int *option_count;
 };
 
-
 static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_PORT, port_options, port_options_count},
 	{IPTABLES_OPTION_MULTIPORT, multiport_options, multiport_options_count},
@@ -859,11 +858,11 @@ static bool is_icmp_int_type_valid(const char *icmp_type)
 
 typedef bool (*range_validation_cb_t)(const char *param);
 enum range_callback_operation {
-	RANGE_CALLBACK_AND = 0,
-	RANGE_CALLBACK_OR,
+	RANGE_CALLBACK_OR = 0,
+	RANGE_CALLBACK_AND,
 };
 
-static bool is_valid_range(const char *range, const char *separator,
+static bool is_valid_pair(const char *range, const char *separator,
 			range_validation_cb_t cb,
 			enum range_callback_operation operation)
 {
@@ -909,6 +908,87 @@ static bool is_valid_range(const char *range, const char *separator,
 	g_strfreev(tokens);
 
 	return value;
+}
+
+static bool is_valid_elem(const char *elem, range_validation_cb_t cb,
+			enum range_callback_operation operation)
+{
+	bool numeric = false;
+	bool result = false;
+
+	if (!elem)
+		return false;
+
+	if (is_string_digits(elem)) {
+		numeric = true;
+	}
+
+	/* We could skip the callback if numeric is enough */
+	if (numeric && operation == RANGE_CALLBACK_OR)
+		result = true;
+	else if (numeric || operation == RANGE_CALLBACK_OR)
+		if (cb && cb(elem))
+			result = true;
+	/* The other scenario - numeric false, operation AND - result in false */
+
+	return result;
+}
+
+static bool is_valid_range(const char *range, const char *separator,
+			range_validation_cb_t cb,
+			enum range_callback_operation operation)
+{
+	if (is_valid_elem(range, cb, operation))
+		return true;
+
+	gchar **tokens = NULL;
+	bool numeric = false;
+	bool result = false;
+	guint64 value1, value2;
+
+	if (!range || !separator)
+		return false;
+
+	tokens = g_strsplit(range, separator, 3);
+
+	if (!tokens)
+		return false;
+
+	if (g_strv_length(tokens) != 2) {
+		DBG("invalid amount of separators in the string %s", range);
+		goto range_free_tokens;
+	}
+
+	/* Check if the numerical conditions are met */
+	if (is_string_digits(tokens[0]) && is_string_digits(tokens[1])) {
+		value1 = g_ascii_strtoull(tokens[0], NULL, 10);
+		if (errno != 0)
+			goto range_check_string;
+
+		value2 = g_ascii_strtoull(tokens[1], NULL, 10);
+		if (errno != 0)
+			goto range_check_string;
+
+		/* Essential condition - values come in ascending order */
+		if (value1 <= value2)
+			numeric = true;
+	} /* else numeric = false, set on startup */
+
+range_check_string:
+
+	/* We could skip the callback if numeric is enough */
+	if (numeric && operation == RANGE_CALLBACK_OR)
+		result = true;
+	else if (numeric || operation == RANGE_CALLBACK_OR)
+		if (cb && cb(tokens[0]) && cb(tokens[1]))
+			result = true;
+	/* The other scenario - numeric false, operation AND - result in false */
+
+range_free_tokens:
+
+	g_strfreev(tokens);
+
+	return result;
 }
 
 static bool is_valid_param_sequence(const char **haystack, const char *needles,
@@ -1142,19 +1222,16 @@ static bool is_valid_option_type_params(int family,
 
 		/* --uid-owner */
 		if (option_position == 0) {
-
-			struct passwd *pwd;
-			if ((pwd = getpwnam(params[0])) != NULL)
+			if (getpwnam(params[0]))
 				/* a user named as the string exists */
 				return true;
 
 			return is_valid_range(params[0], "-", NULL, 0);
 		}
+
 		/* --gid-owner */
 		if (option_position == 1) {
-
-			struct group *grp;
-			if ((grp = getgrnam(params[0])) != NULL)
+			if (getgrnam(params[0]))
 				/* a group named as the string exists */
 				return true;
 
@@ -1173,7 +1250,7 @@ static bool is_valid_option_type_params(int family,
 			icmp_types = icmp_types_ipv4;
 
 		/* ICMP types are separated with '/' and type must be checked */
-		if (is_valid_range(params[0], "/", is_icmp_int_type_valid,
+		if (is_valid_pair(params[0], "/", is_icmp_int_type_valid,
 					RANGE_CALLBACK_AND))
 			return true;
 
@@ -1219,7 +1296,7 @@ static bool is_valid_option_type_params(int family,
 		 * --mark has value/mask syntax and supports decimal,
 		 * hexadecimal and TODO: octal.
 		 */
-		return is_valid_range(params[0], "/", is_string_hexadecimal,
+		return is_valid_pair(params[0], "/", is_string_hexadecimal,
 					RANGE_CALLBACK_OR);
 	/*
 	 * TODO: MH protocol support is not working, protocol specific options
