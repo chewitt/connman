@@ -26,6 +26,8 @@
 
 #include <errno.h>
 #include <netdb.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include "connman.h"
 
@@ -103,6 +105,7 @@ enum iptables_match_options_type {
 	IPTABLES_OPTION_ICMP,
 	IPTABLES_OPTION_ICMPv6,
 	IPTABLES_OPTION_DCCP,
+	IPTABLES_OPTION_OWNER,
 	IPTABLES_OPTION_NOT_SUPPORTED
 };
 
@@ -320,11 +323,23 @@ static const int icmpv6_options_count[] = {1, -1};
 static const char *dccp_options[] = {"--dccp-types", "--dccp-option", NULL};
 static const int dccp_options_count[] = {1, 1, -1};
 
+/*
+ * owner match options
+ * [!] --uid-owner userid[-userid]      Match local UID
+ * [!] --gid-owner groupid[-groupid]    Match local GID
+ * [!] --socket-exists                  Match if socket exists
+ */
+
+static const char *owner_options[] = {"--uid-owner", "--gid-owner",
+                                      "--socket-exists", NULL};
+static const int owner_options_count[] = {1, 1, 0, -1};
+
 struct iptables_type_options {
 	enum iptables_match_options_type type;
 	const char **options;
 	const int *option_count;
 };
+
 
 static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_PORT, port_options, port_options_count},
@@ -344,12 +359,13 @@ static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_ICMP, icmp_options, icmp_options_count},
 	{IPTABLES_OPTION_ICMPv6, icmpv6_options, icmpv6_options_count},
 	{IPTABLES_OPTION_DCCP, dccp_options, dccp_options_count},
+	{IPTABLES_OPTION_OWNER, owner_options, owner_options_count},
 };
 
 static const char *opt_names[] = {"port", "multiport", "tcp", "mark",
 				"conntrack", "ttl", "pkttype", "limit",
 				"helper", "ecn", "ah", "esp", "mh", "sctp",
-				"icmp", "ipv6-icmp", "dccp", NULL};
+				"icmp", "ipv6-icmp", "dccp", "owner", NULL};
 
 static GHashTable *iptables_options = NULL;
 
@@ -1122,6 +1138,33 @@ static bool is_valid_option_type_params(int family,
 			return is_string_digits(params[0]);
 
 		break;
+	case IPTABLES_OPTION_OWNER:
+
+		/* --uid-owner */
+		if (option_position == 0) {
+
+			struct passwd *pwd;
+			if ((pwd = getpwnam(params[0])) != NULL)
+				/* a user named as the string exists */
+				return true;
+
+			return is_valid_range(params[0], "-", NULL, 0);
+		}
+		/* --gid-owner */
+		if (option_position == 1) {
+
+			struct group *grp;
+			if ((grp = getgrnam(params[0])) != NULL)
+				/* a group named as the string exists */
+				return true;
+
+			return is_valid_range(params[0], "-", NULL, 0);
+		}
+		/* --socket-exists has no parameters */
+		if (option_position == 2)
+			return true;
+
+		break;
 	case IPTABLES_OPTION_ICMPv6:
 		icmp_types = icmp_types_ipv6;
 	/* Fallthrough */
@@ -1331,6 +1374,8 @@ static bool is_valid_option_for_protocol_match(const char* protocol,
 		return !g_strcmp0(match, "mark");
 	case IPTABLES_OPTION_MH:
 		return false; /* MH options not supported */
+	case IPTABLES_OPTION_OWNER:
+		return !g_strcmp0(match, "owner");
 	case IPTABLES_OPTION_MULTIPORT:
 		/* Match must be -m multiport for multiport options */
 		if (g_strcmp0(match, "multiport"))
@@ -1440,7 +1485,6 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 						"state",
 						"iprange",
 						"recent",
-						"owner",
 						"sctp",
 						"mh",
 						"hashlimit",
@@ -1453,7 +1497,6 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 						"state",
 						"iprange",
 						"recent",
-						"owner",
 						"ttl",
 						"sctp",
 						"mh",
