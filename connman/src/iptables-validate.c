@@ -856,6 +856,18 @@ static bool is_icmp_int_type_valid(const char *icmp_type)
 	return false;
 }
 
+static bool is_correct_id(const char *id)
+{
+	guint64 value = g_ascii_strtoull(id, NULL, 10);
+	if (errno != 0)
+		return false;
+
+	if (value > UINT32_MAX - 1)
+		return false;
+
+	return true;
+}
+
 typedef bool (*range_validation_cb_t)(const char *param);
 enum range_callback_operation {
 	RANGE_CALLBACK_OR = 0,
@@ -1226,7 +1238,7 @@ static bool is_valid_option_type_params(int family,
 				/* a user named as the string exists */
 				return true;
 
-			return is_valid_range(params[0], "-", NULL, 0);
+			return is_valid_range(params[0], "-", is_correct_id, RANGE_CALLBACK_AND);
 		}
 
 		/* --gid-owner */
