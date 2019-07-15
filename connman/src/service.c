@@ -5647,6 +5647,8 @@ static void switch_default_service(struct connman_service *default_service,
 	downgrade_state(downgrade_service);
 }
 
+static void service_schedule_changed(void);
+
 static DBusMessage *move_service(DBusConnection *conn,
 					DBusMessage *msg, void *user_data,
 								bool before)
@@ -5752,6 +5754,8 @@ static DBusMessage *move_service(DBusConnection *conn,
 		switch_default_service(service, target);
 
 	__connman_connection_update_gateway();
+
+	service_schedule_changed();
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
@@ -6805,18 +6809,21 @@ static void request_input_cb(struct connman_service *service,
 
 		if (g_strcmp0(error,
 				"net.connman.Agent.Error.Canceled") == 0) {
-			err = -EINVAL;
+			err = -ECONNABORTED;
 
 			if (service->hidden)
 				__connman_service_return_error(service,
 							ECONNABORTED,
 							user_data);
-			goto done;
 		} else {
+			err = -ETIMEDOUT;
+
 			if (service->hidden)
 				__connman_service_return_error(service,
 							ETIMEDOUT, user_data);
 		}
+
+		goto done;
 	}
 
 	if (!service->network) {
