@@ -303,6 +303,16 @@ PPTP VPN supports following options (see pptp(8) and pppd(8) for details)
  PPPD.NoVJ           novj                 No Van Jacobson compression (O)
 
 
+WireGuard VPN supports following options
+ Option name                              Description
+ WireGuard.Address                        Internal IP address (local/netmask/peer)
+ WireGuard.ListPort                       Local listen port (optional)
+ WireGuard.PrivateKey                     Private key of interface
+ WireGuard.PublicKey                      Public key of peer
+ WireGuard.AllowedIPs                     See Cryptokey Routing
+ WireGuard.EndpointPort                   Endpoint listen port (optional)
+
+
 Example
 =======
 
@@ -341,3 +351,15 @@ Domain = my.home.network
 OpenVPN.CACert = /etc/certs/cacert.pem
 OpenVPN.Cert = /etc/certs/cert.pem
 OpenVPN.Key = /etc/certs/cert.key
+
+[provider_wireguard]
+Type = WireGuard
+Name = Wireguard VPN Tunnel
+Host = 3.2.5.6
+Domain = my.home.network
+WireGuard.Address = 10.2.0.2/24
+WireGuard.ListenPort = 47824
+WireGuard.PrivateKey = qKIj010hDdWSjQQyVCnEgthLXusBgm3I6HWrJUaJymc=
+WireGuard.PublicKey = zzqUfWGIil6QxrAGz77HE5BGUEdD2PgHYnCg3CDKagE=
+WireGuard.AllowedIPs = 0.0.0.0/0, ::/0
+WireGuard.EndpointPort = 51820
