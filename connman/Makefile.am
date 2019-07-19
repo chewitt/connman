@@ -192,7 +192,7 @@ endif
 
 if NFTABLES
 src_connmand_SOURCES += src/firewall-nftables.c
-src_connmand_LDADD +=  @NFTABLES_LIBS@
+src_connmand_LDADD += @NFTABLES_LIBS@ @LIBMNL_LIBS@
 endif
 
 if VPN
@@ -329,8 +329,8 @@ src_connmand_CFLAGS += @XTABLES_CFLAGS@
 endif
 
 if NFTABLES
-AM_CFLAGS += @NFTABLES_CFLAGS@
-src_connmand_CFLAGS += @NFTABLES_CFLAGS@
+AM_CFLAGS += @NFTABLES_CFLAGS@ @LIBMNL_CFLAGS@
+src_connmand_CFLAGS += @NFTABLES_CFLAGS@ @LIBMNL_CFLAGS@
 endif
 
 EXTRA_DIST += vpn/vpn-dbus.conf vpn/vpn-polkit.conf

@@ -392,10 +392,19 @@ if (test "${firewall_type}" = "iptables"); then
 fi
 AM_CONDITIONAL(XTABLES, test "${found_iptables}" != "no")
 
+found_libmnl="no"
+if (test "${firewall_type}" = "nftables"); then
+	PKG_CHECK_MODULES(LIBMNL, [libmnl >= 1.0.0], [found_libmnl="yes"],
+		AC_MSG_ERROR([libmnl >= 1.0.0 not found]))
+	AC_SUBST(LIBMNL_CFLAGS)
+	AC_SUBST(LIBMNL_LIBS)
+fi
+AM_CONDITIONAL(LIBMNL, test "${found_libmnl}" != "no")
+
 found_nftables="no"
 if (test "${firewall_type}" = "nftables"); then
-	PKG_CHECK_MODULES(NFTABLES, [libnftnl >= 1.0.4 libmnl >= 1.0.0], [found_nftables="yes"],
-		AC_MSG_ERROR([libnftnl >= 1.0.4 or libmnl >= 1.0.0 not found]))
+	PKG_CHECK_MODULES(NFTABLES, [libnftnl >= 1.0.4], [found_nftables="yes"],
+		AC_MSG_ERROR([libnftnl >= 1.0.4]))
 	AC_SUBST(NFTABLES_CFLAGS)
 	AC_SUBST(NFTABLES_LIBS)
 fi
