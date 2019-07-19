@@ -447,6 +447,12 @@ AC_ARG_ENABLE(ethernet, AC_HELP_STRING([--disable-ethernet],
 					[enable_ethernet=${enableval}])
 AM_CONDITIONAL(ETHERNET, test "${enable_ethernet}" != "no")
 
+AC_ARG_ENABLE(wireguard, AC_HELP_STRING([--disable-wireguard],
+				[disable Wireguard support]),
+					[enable_wireguard=${enableval}])
+AM_CONDITIONAL(WIREGUARD, test "${enable_wireguard}" != "no")
+AM_CONDITIONAL(WIREGUARD_BUILTIN, test "${enable_wireguard}" = "builtin")
+
 AC_ARG_ENABLE(gadget, AC_HELP_STRING([--disable-gadget],
 				[disable USB Gadget support]),
 					[enable_gadget=${enableval}])
@@ -656,7 +662,8 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_openvpn}" != "no" -o \
 			"${enable_vpnc}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
-			"${enable_pptp}" != "no")
+			"${enable_pptp}" != "no" -o \
+			"${enable_wireguard}" != "no")
 
 AC_MSG_CHECKING(which DNS backend to use)
 AC_ARG_WITH(dns-backend, AC_HELP_STRING([--with-dns-backend=TYPE],

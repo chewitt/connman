@@ -103,6 +103,24 @@ if VPN
 builtin_modules += vpn
 builtin_sources += plugins/vpn.c
 
+if WIREGUARD
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
+if WIREGUARD_BUILTIN
+builtin_vpn_modules += wireguard
+builtin_vpn_sources += vpn/plugins/wireguard.c
+builtin_vpn_cflags += -DWIREGUARD=\"@WIREGUARD@\"
+else
+vpn_plugin_LTLIBRARIES += vpn/plugins/wireguard.la
+vpn_plugin_objects += $(plugins_wireguard_la_OBJECTS)
+vpn_plugins_wireguard_la_SOURCES = vpn/plugins/wireguard.c
+vpn_plugins_wireguard_la_CFLAGS = $(plugin_cflags) \
+					-DWIREGUARD=\"@WIREGUARD@\" \
+					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
+					-DSCRIPTDIR=\""$(build_scriptdir)"\"
+vpn_plugins_wireguard_la_LDFLAGS = $(plugin_ldflags)
+endif
+endif
+
 if OPENCONNECT
 builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if OPENCONNECT_BUILTIN
