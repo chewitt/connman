@@ -28,7 +28,8 @@
 extern "C" {
 #endif
 
-#define VPN_FLAG_NO_TUN	1
+#define VPN_FLAG_NO_TUN     1
+#define VPN_FLAG_NO_DAEMON  2
 
 enum vpn_state {
 	VPN_STATE_UNKNOWN       = 0,
