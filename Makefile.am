@@ -55,7 +55,6 @@ stats_sources = src/nostats.c
 endif
 
 shared_sources = src/shared/util.h src/shared/util.c \
-		src/shared/netlink.h src/shared/netlink.c \
 		src/shared/arp.h src/shared/arp.c
 
 if DATAFILES
@@ -340,7 +339,7 @@ noinst_PROGRAMS += tools/supplicant-test \
 			tools/tap-test tools/wpad-test \
 			tools/stats-tool tools/private-network-test \
 			tools/session-test \
-			tools/dnsproxy-test tools/netlink-test
+			tools/dnsproxy-test
 
 tools_supplicant_test_SOURCES = tools/supplicant-test.c \
 			tools/supplicant-dbus.h tools/supplicant-dbus.c \
@@ -412,10 +411,6 @@ endif
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
-
-tools_netlink_test_SOURCES = src/shared/util.c src/shared/netlink.c \
-		tools/netlink-test.c
-tools_netlink_test_LDADD = @GLIB_LIBS@
 
 endif
 
