@@ -393,7 +393,8 @@ fi
 AM_CONDITIONAL(XTABLES, test "${found_iptables}" != "no")
 
 found_libmnl="no"
-if (test "${firewall_type}" = "nftables"); then
+if (test "${firewall_type}" = "nftables" -o \
+		"${enable_wireguard}" != "no"); then
 	PKG_CHECK_MODULES(LIBMNL, [libmnl >= 1.0.0], [found_libmnl="yes"],
 		AC_MSG_ERROR([libmnl >= 1.0.0 not found]))
 	AC_SUBST(LIBMNL_CFLAGS)
