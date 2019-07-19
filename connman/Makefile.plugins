@@ -108,6 +108,7 @@ builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if WIREGUARD_BUILTIN
 builtin_vpn_modules += wireguard
 builtin_vpn_sources += src/shared/mnlg.h src/shared/mnlg.c \
+			vpn/plugins/wireguard.h vpn/plugins/libwireguard.c \
 			vpn/plugins/wireguard.c
 builtin_vpn_cflags += @LIBMNL_CFLAGS@ -DWIREGUARD=\"@WIREGUARD@\"
 builtin_vpn_libadd += @LIBMNL_LIBS@
@@ -115,6 +116,8 @@ else
 vpn_plugin_LTLIBRARIES += vpn/plugins/wireguard.la
 vpn_plugin_objects += $(plugins_wireguard_la_OBJECTS)
 vpn_plugins_wireguard_la_SOURCES = src/shared/mnlg.h src/shared/mnlg.c \
+					vpn/plugins/wireguard.h \
+					vpn/plugins/libwireguard.c \
 					vpn/plugins/wireguard.c
 vpn_plugins_wireguard_la_CFLAGS = $(plugin_cflags) @LIBMNL_CFLAGS@ \
 					-DWIREGUARD=\"@WIREGUARD@\" \
