@@ -89,7 +89,7 @@ static int stop_vpn(struct vpn_provider *provider)
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
 
 	if (vpn_driver_data && vpn_driver_data->vpn_driver &&
-			vpn_driver_data->vpn_driver->flags == VPN_FLAG_NO_TUN)
+			vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_TUN)
 		return 0;
 
 	memset(&ifr, 0, sizeof(ifr));
@@ -528,6 +528,27 @@ static void vpn_task_setup(gpointer user_data)
 		connman_error("error setting uid %d %s", uid, strerror(errno));
 }
 
+
+static gboolean update_provider_state(gpointer data)
+{
+	struct vpn_provider *provider = data;
+	struct vpn_data *vpn_data;
+	int index;
+
+	DBG("");
+
+	vpn_data = vpn_provider_get_data(provider);
+
+	index = vpn_provider_get_index(provider);
+	DBG("index to watch %d", index);
+	vpn_provider_ref(provider);
+	vpn_data->watch = vpn_rtnl_add_newlink_watch(index,
+						vpn_newlink, provider);
+	connman_inet_ifup(index);
+
+	return FALSE;
+}
+
 static int vpn_connect(struct vpn_provider *provider,
 			vpn_provider_connect_cb_t cb,
 			const char *dbus_sender, void *user_data)
@@ -584,13 +605,33 @@ static int vpn_connect(struct vpn_provider *provider,
 		goto exist_err;
 	}
 
-	if (vpn_driver_data->vpn_driver->flags != VPN_FLAG_NO_TUN) {
+	if (!(vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_TUN)) {
 		if (vpn_driver_data->vpn_driver->device_flags) {
 			tun_flags = vpn_driver_data->vpn_driver->device_flags(provider);
 		}
 		ret = vpn_create_tun(provider, tun_flags);
 		if (ret < 0)
 			goto exist_err;
+	}
+
+
+	if (vpn_driver_data && vpn_driver_data->vpn_driver &&
+			vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_DAEMON) {
+
+		ret = vpn_driver_data->vpn_driver->connect(provider,
+						NULL, NULL, NULL, NULL, NULL);
+		if (ret) {
+			stop_vpn(provider);
+			goto exist_err;
+		}
+
+		DBG("%s started with dev %s",
+			vpn_driver_data->provider_driver.name, data->if_name);
+
+		data->state = VPN_STATE_CONNECT;
+
+		g_timeout_add(1, update_provider_state, provider);
+		return -EINPROGRESS;
 	}
 
 	vpn_plugin_data =
@@ -678,7 +719,8 @@ static int vpn_disconnect(struct vpn_provider *provider)
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_DISCONNECT);
 	}
 
-	connman_task_stop(data->task);
+	if (data->task)
+		connman_task_stop(data->task);
 
 	return 0;
 }
@@ -702,7 +744,8 @@ static int vpn_remove(struct vpn_provider *provider)
 		data->watch = 0;
 	}
 
-	connman_task_stop(data->task);
+	if (data->task)
+		connman_task_stop(data->task);
 
 	g_usleep(G_USEC_PER_SEC);
 	stop_vpn(provider);
