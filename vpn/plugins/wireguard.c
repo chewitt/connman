@@ -30,6 +30,7 @@
 #include <connman/vpn-dbus.h>
 
 #include "vpn.h"
+#include "wireguard.h"
 
 static int wg_init(void)
 {
