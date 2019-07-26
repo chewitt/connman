@@ -62,8 +62,12 @@
 #define PROP_PASSPHRASE                 "Passphrase"
 #define PROP_IDENTITY                   "Identity"
 #define PROP_EAP                        "EAP"
+#define PROP_PHASE2                     "Phase2"
 #define PROP_NAME                       "Name"
 #define PROP_SSID                       "SSID"
+#define PROP_CA_CERT                    "CACert"
+#define PROP_CA_CERT_FILE               "CACertFile"
+#define PROP_DOMAIN_SUFFIX_MATCH        "DomainSuffixMatch"
 
 /* Get/set properties */
 #define GET_ACCESS_ACCESS               CONNMAN_ACCESS_ALLOW
@@ -76,6 +80,14 @@
 #define SET_IDENTITY_ACCESS             CONNMAN_ACCESS_DENY
 #define GET_EAP_ACCESS                  CONNMAN_ACCESS_ALLOW
 #define SET_EAP_ACCESS                  CONNMAN_ACCESS_DENY
+#define GET_PHASE2_ACCESS               CONNMAN_ACCESS_ALLOW
+#define SET_PHASE2_ACCESS               CONNMAN_ACCESS_DENY
+#define GET_CA_CERT_ACCESS              CONNMAN_ACCESS_ALLOW
+#define SET_CA_CERT_ACCESS              CONNMAN_ACCESS_DENY
+#define GET_CA_CERT_FILE_ACCESS         CONNMAN_ACCESS_ALLOW
+#define SET_CA_CERT_FILE_ACCESS         CONNMAN_ACCESS_DENY
+#define GET_DOMAIN_SUFFIX_MATCH_ACCESS  CONNMAN_ACCESS_ALLOW
+#define SET_DOMAIN_SUFFIX_MATCH_ACCESS  CONNMAN_ACCESS_DENY
 
 /* Set properties (Get is always ACCESS_ALLOW for these) */
 #define SET_PROXYCONFIG_ACCESS          CONNMAN_ACCESS_DENY
@@ -93,6 +105,10 @@
 #define ACCESS_PROP_PASSPHRASE          0x00000004
 #define ACCESS_PROP_IDENTITY            0x00000008
 #define ACCESS_PROP_EAP                 0x00000010
+#define ACCESS_PROP_PHASE2              0x00000020
+#define ACCESS_PROP_CA_CERT             0x00000040
+#define ACCESS_PROP_CA_CERT_FILE        0x00000080
+#define ACCESS_PROP_DOMAIN_SUFFIX_MATCH 0x00000100
 
 #define ACCESS_METHOD_CLEAR_PROPERTY    0x00000001
 #define ACCESS_METHOD_CONNECT           0x00000002
@@ -141,6 +157,26 @@ static const struct connman_service_property_access {
 		PROP_EAP,
 		GET_EAP_ACCESS,
 		SET_EAP_ACCESS
+	},{
+		ACCESS_PROP_PHASE2,
+		PROP_PHASE2,
+		GET_PHASE2_ACCESS,
+		SET_PHASE2_ACCESS
+	},{
+		ACCESS_PROP_CA_CERT,
+		PROP_CA_CERT,
+		GET_CA_CERT_ACCESS,
+		SET_CA_CERT_ACCESS
+	},{
+		ACCESS_PROP_CA_CERT_FILE,
+		PROP_CA_CERT_FILE,
+		GET_CA_CERT_FILE_ACCESS,
+		SET_CA_CERT_FILE_ACCESS
+	},{
+		ACCESS_PROP_DOMAIN_SUFFIX_MATCH,
+		PROP_DOMAIN_SUFFIX_MATCH,
+		GET_DOMAIN_SUFFIX_MATCH_ACCESS,
+		SET_DOMAIN_SUFFIX_MATCH_ACCESS
 	}
 };
 
@@ -856,15 +892,15 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 					&service->identity);
 	get_config_string(keyfile, service->identifier, "AnonymousIdentity",
 					&service->anonymous_identity);
-	get_config_string(keyfile, service->identifier, "CACertFile",
+	get_config_string(keyfile, service->identifier, PROP_CA_CERT_FILE,
 					&service->ca_cert_file);
-	get_config_string(keyfile, service->identifier, "CACert",
+	get_config_string(keyfile, service->identifier, PROP_CA_CERT,
 					&service->ca_cert);
 	get_config_string(keyfile, service->identifier, "SubjectMatch",
 					&service->subject_match);
 	get_config_string(keyfile, service->identifier, "AltSubjectMatch",
 					&service->altsubject_match);
-	get_config_string(keyfile, service->identifier, "DomainSuffixMatch",
+	get_config_string(keyfile, service->identifier, PROP_DOMAIN_SUFFIX_MATCH,
 					&service->domain_suffix_match);
 	get_config_string(keyfile, service->identifier, "DomainMatch",
 					&service->domain_match);
@@ -878,7 +914,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 					&service->private_key);
 	get_config_string(keyfile, service->identifier, "PrivateKeyPassphrase",
 					&service->private_key_passphrase);
-	get_config_string(keyfile, service->identifier, "Phase2",
+	get_config_string(keyfile, service->identifier, PROP_PHASE2,
 					&service->phase2);
 
 	str = g_key_file_get_string(keyfile,
@@ -1070,7 +1106,7 @@ static int service_save(struct connman_service *service)
 		set_config_string(keyfile, service->identifier,
 			"PrivateKeyPassphrase", service->private_key_passphrase);
 		set_config_string(keyfile, service->identifier,
-			"Phase2", service->phase2);
+			PROP_PHASE2, service->phase2);
 		/* fall through */
 
 	case CONNMAN_SERVICE_TYPE_GADGET:
@@ -3064,6 +3100,20 @@ static DBusMessage *get_property(DBusConnection *conn,
 	} else if (!g_strcmp0(name, PROP_EAP)) {
 		return check_and_reply_string(msg, service, name,
 				service->eap, GET_EAP_ACCESS);
+	} else if (!g_strcmp0(name, PROP_PHASE2)) {
+		return check_and_reply_string(msg, service, name,
+				service->phase2, GET_PHASE2_ACCESS);
+	} else if (!g_strcmp0(name, PROP_CA_CERT)) {
+		return check_and_reply_string(msg, service, name,
+				service->ca_cert, GET_CA_CERT_ACCESS);
+	} else if (!g_strcmp0(name, PROP_CA_CERT_FILE)) {
+		return check_and_reply_string(msg, service, name,
+					service->ca_cert_file,
+					GET_CA_CERT_FILE_ACCESS);
+	} else if (!g_strcmp0(name, PROP_DOMAIN_SUFFIX_MATCH)) {
+		return check_and_reply_string(msg, service, name,
+					service->domain_suffix_match,
+					GET_DOMAIN_SUFFIX_MATCH_ACCESS);
 	}
 
 	DBG("%s requested %s - why?", dbus_message_get_sender(msg), name);
@@ -3146,7 +3196,18 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		append_restricted_string(dict, service, PROP_IDENTITY,
 				service->identity, GET_IDENTITY_ACCESS);
 		append_restricted_string(dict, service, PROP_EAP,
-				service->eap, GET_IDENTITY_ACCESS);
+				service->eap, GET_EAP_ACCESS);
+		append_restricted_string(dict, service, PROP_PHASE2,
+				service->phase2, GET_PHASE2_ACCESS);
+		append_restricted_string(dict, service, PROP_CA_CERT,
+				service->ca_cert, GET_CA_CERT_ACCESS);
+		append_restricted_string(dict, service, PROP_CA_CERT_FILE,
+						service->ca_cert_file,
+						GET_CA_CERT_FILE_ACCESS);
+		append_restricted_string(dict, service,
+					PROP_DOMAIN_SUFFIX_MATCH,
+					service->domain_suffix_match,
+					GET_DOMAIN_SUFFIX_MATCH_ACCESS);
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -3921,9 +3982,11 @@ static gboolean set_eap_method(struct connman_service *service,
 	if (method && method[0]) {
 		if (!g_strcmp0(service->eap, method)) {
 			return FALSE;
-		} else if (!g_strcmp0(method, "peap") ||
-				!g_strcmp0(method, "tls") ||
-				!g_strcmp0(method, "ttls")) {
+		} else if (!g_ascii_strcasecmp(method, "peap") ||
+				!g_ascii_strcasecmp(method, "peapv0") ||
+				!g_ascii_strcasecmp(method, "peapv1") ||
+				!g_ascii_strcasecmp(method, "tls") ||
+				!g_ascii_strcasecmp(method, "ttls")) {
 			g_free(service->eap);
 			service->eap = g_strdup(method);
 			restricted_string_changed(service, PROP_EAP,
@@ -3940,6 +4003,53 @@ static gboolean set_eap_method(struct connman_service *service,
 		return TRUE;
 	}
 	return FALSE;
+}
+
+static gboolean set_prop_string(struct connman_service *service,
+					const char *name,
+					char **stored,
+					const char *value,
+					enum connman_access get_access)
+{
+	if (value && !value[0])
+		value = NULL;
+	if (!g_strcmp0(*stored, value))
+		return FALSE;
+
+	g_free(*stored);
+	*stored = g_strdup(value);
+	restricted_string_changed(service, name, *stored, get_access);
+
+	return TRUE;
+}
+
+static gboolean set_phase2(struct connman_service *service,
+							const char *phase2)
+{
+	return set_prop_string(service, PROP_PHASE2, &service->phase2, phase2,
+							GET_PHASE2_ACCESS);
+}
+
+static gboolean set_ca_cert(struct connman_service *service,
+							const char *ca_cert)
+{
+	return set_prop_string(service, PROP_CA_CERT, &service->ca_cert,
+						ca_cert, GET_CA_CERT_ACCESS);
+}
+
+static gboolean set_ca_cert_file(struct connman_service *service,
+						const char *ca_cert_file)
+{
+	return set_prop_string(service, PROP_CA_CERT_FILE, &service->ca_cert_file,
+				ca_cert_file, GET_CA_CERT_FILE_ACCESS);
+}
+
+static gboolean set_domain_suffix_match(struct connman_service *service,
+						const char *suffix)
+{
+	return set_prop_string(service, PROP_DOMAIN_SUFFIX_MATCH,
+				&service->domain_suffix_match,
+				suffix, GET_DOMAIN_SUFFIX_MATCH_ACCESS);
 }
 
 static DBusMessage *set_restricted_string(struct connman_service *service,
@@ -4670,6 +4780,20 @@ static DBusMessage *set_property(DBusConnection *conn,
 	} else if (g_str_equal(name, PROP_EAP)) {
 		return set_restricted_string(service, name, &value, msg,
 					set_eap_method, SET_EAP_ACCESS);
+	} else if (g_str_equal(name, PROP_PHASE2)) {
+		return set_restricted_string(service, name, &value, msg,
+					set_phase2, SET_PHASE2_ACCESS);
+	} else if (g_str_equal(name, PROP_CA_CERT)) {
+		return set_restricted_string(service, name, &value, msg,
+					set_ca_cert, SET_CA_CERT_ACCESS);
+	} else if (g_str_equal(name, PROP_CA_CERT_FILE)) {
+		return set_restricted_string(service, name, &value, msg,
+						set_ca_cert_file,
+						SET_CA_CERT_FILE_ACCESS);
+	} else if (g_str_equal(name, PROP_DOMAIN_SUFFIX_MATCH)) {
+		return set_restricted_string(service, name, &value, msg,
+					set_domain_suffix_match,
+					SET_DOMAIN_SUFFIX_MATCH_ACCESS);
 	} else
 		return __connman_error_invalid_property(msg);
 
@@ -6718,7 +6842,7 @@ void __connman_service_set_string(struct connman_service *service,
 	} else if (g_str_equal(key, "PrivateKeyPassphrase")) {
 		g_free(service->private_key_passphrase);
 		service->private_key_passphrase = g_strdup(value);
-	} else if (g_str_equal(key, "Phase2")) {
+	} else if (g_str_equal(key, PROP_PHASE2)) {
 		g_free(service->phase2);
 		service->phase2 = g_strdup(value);
 	} else if (g_str_equal(key, PROP_PASSPHRASE))
