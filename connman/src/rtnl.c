@@ -47,9 +47,9 @@
 #define ARPHDR_PHONET_PIPE (821)
 #endif
 
-#ifndef ARPHRD_RAWIP
-#define ARPHRD_RAWIP (530)
-#endif
+/* Different kernels use different values for ARPHRD_RAWIP */
+#define ARPHRD_RAWIP_1 (519) /* Vanilla kernel */
+#define ARPHRD_RAWIP_2 (530) /* Some android kernels */
 
 #define print(arg...) do { if (0) DBG(arg); } while (0)
 //#define print(arg...) DBG(arg)
@@ -450,7 +450,8 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 	case ARPHRD_LOOPBACK:
 	case ARPHDR_PHONET_PIPE:
 	case ARPHRD_PPP:
-	case ARPHRD_RAWIP:
+	case ARPHRD_RAWIP_1:
+	case ARPHRD_RAWIP_2:
 	case ARPHRD_NONE:
 		__connman_ipconfig_newlink(index, type, flags,
 							str, mtu, &stats);
