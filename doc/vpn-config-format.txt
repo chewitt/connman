@@ -92,6 +92,11 @@ OpenVPN VPN supports following options (see openvpn(8) for details):
                                          OpenVPN 2.3+.
  OpenVPN.TLSAuth        sub-option of --tls-remote (O)
  OpenVPN.TLSAuthDir     sub-option of --tls-remote (O)
+ OpenVPN.TLSCipher      --tls-cipher     Add an additional layer of HMAC
+                                         authentication on top of the TLS
+                                         control channel to mitigate DoS attacks
+                                         and attacks on the TLS stack. Static
+                                         key file given as parameter (0)
  OpenVPN.Cipher         --cipher         Encrypt packets with cipher algorithm
                                          given as parameter (O)
  OpenVPN.Auth           --auth           Authenticate  packets with HMAC using
