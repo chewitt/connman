@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2016-2018 Jolla Ltd. All rights reserved.
- *  Copyright (C) 2016-2018 Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2016-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2016-2019 Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -167,7 +167,7 @@ struct datacounter *datacounter_ref(struct datacounter *counter);
 void datacounter_unref(struct datacounter *counter);
 void datacounter_rebase(struct datacounter *counter,
 			const struct connman_stats_data *data);
-void datacounter_update(struct datacounter *counter,
+gboolean datacounter_update(struct datacounter *counter,
 			const struct connman_stats_data *data);
 void datacounter_reset(struct datacounter *counter);
 void datacounter_reset_baseline(struct datacounter *counter);

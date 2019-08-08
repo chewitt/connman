@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2016-2018 Jolla Ltd. All rights reserved.
- *  Copyright (C) 2016-2018 Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2016-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2016-2019 Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1090,7 +1090,7 @@ void datacounter_rebase(struct datacounter *self,
 	}
 }
 
-void datacounter_update(struct datacounter *self,
+gboolean datacounter_update(struct datacounter *self,
 			const struct connman_stats_data *data)
 {
 	if (G_LIKELY(self)) {
@@ -1103,9 +1103,11 @@ void datacounter_update(struct datacounter *self,
 			data = datacounter_fix(data, last, &fixed);
 			if (data) {
 				datacounter_changed(self, data);
+				return TRUE;
 			}
 		}
 	}
+	return FALSE;
 }
 
 GDateTime *datacounter_last_update_time(struct datacounter *self)

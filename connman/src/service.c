@@ -2699,11 +2699,12 @@ void __connman_service_notify(struct connman_service *service,
 	if (!is_connected(service))
 		return;
 
-	DBG("service %p", service);
-
 	stats = stats_get(service);
 	service->stats_update_time = g_timer_elapsed(service->stats_timer, 0);
-	__connman_stats_update(stats, data);
+	if (!__connman_stats_update(stats, data))
+		return;
+
+	DBG("service %p", service);
 
 	g_hash_table_iter_init(&iter, service->counter_table);
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
