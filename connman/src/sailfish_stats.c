@@ -205,12 +205,10 @@ void __connman_stats_rebase(struct connman_stats *stats,
 	}
 }
 
-void __connman_stats_update(struct connman_stats *stats,
+gboolean __connman_stats_update(struct connman_stats *stats,
 				const struct connman_stats_data *data)
 {
-	if (G_LIKELY(stats)) {
-		datacounter_update(stats->counter, data);
-	}
+	return G_LIKELY(stats) && datacounter_update(stats->counter, data);
 }
 
 void __connman_stats_get(struct connman_stats *stats,

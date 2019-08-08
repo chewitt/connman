@@ -341,21 +341,21 @@ static inline void stats_fix32(uint64_t *newval, uint64_t oldval)
 	}
 }
 
-void __connman_stats_update(struct connman_stats *stats,
+gboolean __connman_stats_update(struct connman_stats *stats,
 				const struct connman_stats_data *data)
 {
 	struct connman_stats_data *last, *total;
 	struct connman_stats_data fixed;
 
 	if (!stats)
-		return;
+		return FALSE;
 
 	last = &stats->last;
 	total = &stats->contents.total;
 
 	/* If nothing has changed, don't do anything */
 	if (!memcmp(last, data, sizeof(*last)))
-		return;
+		return FALSE;
 
 	if ((data->rx_packets < last->rx_packets) ||
 	    (data->tx_packets < last->tx_packets) ||
@@ -384,7 +384,7 @@ void __connman_stats_update(struct connman_stats *stats,
 		    G_UNLIKELY(!stats_32bit(data->rx_dropped)) ||
 		    G_UNLIKELY(!stats_32bit(data->tx_dropped))) {
 			DBG("%s screwed up", stats->name);
-			return;
+			return FALSE;
 		}
 
 		fixed = *data;
@@ -434,6 +434,7 @@ void __connman_stats_update(struct connman_stats *stats,
 		if (!stats->long_write_timeout_id)
 			stats_save(stats);
 	}
+	return TRUE;
 }
 
 void __connman_stats_reset(struct connman_stats *stats)
