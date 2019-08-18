@@ -494,14 +494,15 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 		__connman_technology_add_interface(interface->service_type,
 			interface->index, interface->ident);
 
-	for (list = watch_list; list; list = list->next) {
+	list = watch_list;
+	while (list) {
+		GSList *next = list->next;
 		struct watch_data *watch = list->data;
 
-		if (watch->index != index)
-			continue;
-
-		if (watch->newlink)
+		if (watch->index == index && watch->newlink)
 			watch->newlink(flags, change, watch->user_data);
+
+		list = next;
 	}
 }
 
