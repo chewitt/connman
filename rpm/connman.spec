@@ -20,6 +20,7 @@ Requires:   libgofono >= 2.0.0
 Requires:   libglibutil >= 1.0.21
 Requires:   libdbusaccess >= 1.0.2
 Requires:   libgsupplicant >= 1.0.12
+Requires:   glib2 >= 2.44
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
@@ -27,7 +28,7 @@ Requires(postun): systemd
 BuildRequires:  rpm >= 4.11
 BuildRequires:  pkgconfig(xtables) >= 1.6.1
 BuildRequires:	pkgconfig(libiptc)
-BuildRequires:  pkgconfig(glib-2.0) >= 2.28
+BuildRequires:  pkgconfig(glib-2.0) >= 2.44
 BuildRequires:  pkgconfig(gthread-2.0) >= 2.16
 BuildRequires:  pkgconfig(dbus-1) >= 1.4
 BuildRequires:  pkgconfig(gnutls)
