@@ -1711,8 +1711,8 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 						chain_name, &len, &error);
 
 			if (rules && len) {
-				DBG("found %d rules in group %s chain %s", len,
-							group, chain_name);
+				DBG("found %d rules in group %s chain %s",
+						(int) len, group, chain_name);
 
 				count = cb(afs[i], filename, group, chain,
 							rules);
@@ -1723,7 +1723,7 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 				} else if (count < len) {
 					DBG("%d invalid rules were detected, "
 						"%d rules were added",
-						len - count, count);
+						(int) (len - count), count);
 				} else {
 					DBG("all %d rules were added", count);
 				}
