@@ -3,7 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
- *  Copyright (C) 2014-2016  Jolla Ltd.
+ *  Copyright (C) 2014-2019  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -8412,11 +8412,15 @@ static void service_lower_up(struct connman_ipconfig *ipconfig,
 			const char *ifname)
 {
 	struct connman_service *service = __connman_ipconfig_get_data(ipconfig);
+	struct connman_stats *stats = stats_get(service);
 	struct connman_stats_data data;
 
 	DBG("%s lower up", ifname);
 	if (__connman_ipconfig_get_stats(ipconfig, &data))
-		__connman_stats_rebase(stats_get(service), &data);
+		__connman_stats_rebase(stats, &data);
+
+	__connman_stats_set_index(stats,
+				 __connman_ipconfig_get_index(ipconfig));
 }
 
 static void service_lower_down(struct connman_ipconfig *ipconfig,

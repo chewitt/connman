@@ -2,7 +2,7 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2014 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2012-2019 Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -435,6 +435,10 @@ gboolean __connman_stats_update(struct connman_stats *stats,
 			stats_save(stats);
 	}
 	return TRUE;
+}
+
+void __connman_stats_set_index(struct connman_stats *stats, int index)
+{
 }
 
 void __connman_stats_reset(struct connman_stats *stats)

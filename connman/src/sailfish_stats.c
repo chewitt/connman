@@ -25,12 +25,17 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <linux/if.h>
 
 struct connman_stats {
 	struct connman_service *service;
 	struct datacounter *counter;
 	struct datacounter_dbus *counter_dbus;
 	struct datacounters_dbus *counters_dbus;
+	gboolean active;
+	int index;
+	guint link_watch_id;
+	GSList *history_list;
 	GSList *history_dbus_list;
 	gulong cutoff_id;
 };
@@ -85,6 +90,50 @@ static void stats_delete_obsolete_files(const char *dir)
 	}
 }
 
+static void stats_update_interval_add(void *list_data, void *user_data)
+{
+	struct datahistory *history = list_data;
+
+	/* Zero interval is ignored */
+	__connman_rtnl_update_interval_add(history->update_interval);
+}
+
+static void stats_update_interval_remove(void *list_data, void *user_data)
+{
+	struct datahistory *history = list_data;
+
+	/* Zero interval is ignored */
+	__connman_rtnl_update_interval_remove(history->update_interval);
+}
+
+static void stats_set_active(struct connman_stats *stats, gboolean active)
+{
+	if (stats->active != active) {
+		if (stats->active) {
+			g_slist_foreach(stats->history_list,
+					stats_update_interval_remove, NULL);
+		}
+		stats->active = active;
+		if (stats->active) {
+			g_slist_foreach(stats->history_list,
+					stats_update_interval_add, NULL);
+		} else {
+			/* Carrier went off */
+			__connman_stats_set_index(stats, -1);
+		}
+	}
+}
+
+static void stats_newlink(unsigned int flags, unsigned int change, void *data)
+{
+	stats_set_active(data, (flags & IFF_LOWER_UP) != 0);
+}
+
+static void stats_free_history(gpointer data)
+{
+	datahistory_unref(data);
+}
+
 static void stats_free_history_dbus(gpointer data)
 {
 	datahistory_dbus_free(data);
@@ -131,12 +180,11 @@ static struct connman_stats *stats_new(struct connman_service *service,
 	for (i = 0; i < G_N_ELEMENTS(datahistory_types); i++) {
 		struct datahistory *h = datahistory_new(stats->counter,
 						datahistory_types + i);
+
+		stats->history_list = g_slist_append(stats->history_list, h);
 		stats->history_dbus_list =
 			g_slist_append(stats->history_dbus_list,
 					datahistory_dbus_new(h));
-
-		gutil_idle_pool_add_object_ref(stats_idle_pool, h);
-		datahistory_unref(h);
 	}
 
 	/* Update the service state and watch for changes */
@@ -180,6 +228,14 @@ struct connman_stats *__connman_stats_new_existing(
 void __connman_stats_free(struct connman_stats *stats)
 {
 	if (G_LIKELY(stats)) {
+		if (stats->link_watch_id) {
+			connman_rtnl_remove_watch(stats->link_watch_id);
+		}
+		if (stats->active) {
+			g_slist_foreach(stats->history_list,
+					stats_update_interval_remove, NULL);
+		}
+		g_slist_free_full(stats->history_list, stats_free_history);
 		g_slist_free_full(stats->history_dbus_list,
 						stats_free_history_dbus);
 		datacounters_dbus_free(stats->counters_dbus);
@@ -194,6 +250,37 @@ void __connman_stats_reset(struct connman_stats *stats)
 {
 	if (G_LIKELY(stats)) {
 		datacounter_reset(stats->counter);
+	}
+}
+
+void __connman_stats_set_index(struct connman_stats *stats, int index)
+{
+	if (G_LIKELY(stats) && stats->index != index) {
+		if (stats->link_watch_id) {
+			connman_rtnl_remove_watch(stats->link_watch_id);
+		}
+		stats->index = index;
+		if (index >= 0) {
+			/*
+			 * connman_rtnl_add_newlink_watch() calls
+			 * stats_newlink() right away but only if
+			 * interface flags are not all zeros. They
+			 * should be non-zero because this function
+			 * is called from service_lower_up(), meaning
+			 * that at least IFF_LOWER_UP flag must be set.
+			 *
+			 * In other words, this call not only starts
+			 * watching interface flags but also updates
+			 * the current state, turning on interface
+			 * update notifications if necessary.
+			 */
+			stats->link_watch_id =
+				connman_rtnl_add_newlink_watch(index,
+							stats_newlink, stats);
+		} else {
+			stats->link_watch_id = 0;
+			stats_set_active(stats, FALSE);
+		}
 	}
 }
 
