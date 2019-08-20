@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2016-2018 Jolla Ltd. All rights reserved.
- *  Copyright (C) 2016-2018 Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2016-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2016-2019 Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -31,7 +31,6 @@ struct datahistory_priv {
 	GUtilIdlePool* pool;
 	GDateTime* start_time;
 	GDateTime* next_period;
-	guint update_interval;
 	gulong event_id[EVENT_COUNT];
 };
 
@@ -192,9 +191,7 @@ struct datahistory *datahistory_new(struct datacounter *dc,
 		interval = datahistory_time_interval[type->period.unit];
 		interval *= type->period.value;
 		if (interval < G_MAXUINT) {
-			priv->update_interval = (guint)interval;
-			__connman_rtnl_update_interval_add(
-						priv->update_interval);
+			self->update_interval = (guint)interval;
 		}
 		klass->finish_init(self);
 		return self;
@@ -399,8 +396,6 @@ static void datahistory_finalize(GObject *object)
 	gutil_idle_pool_unref(priv->pool);
 	g_date_time_unref(priv->start_time);
 	g_date_time_unref(priv->next_period);
-	/* Zero interval is ignored */
-	__connman_rtnl_update_interval_remove(priv->update_interval);
 	G_OBJECT_CLASS(PARENT_CLASS)->finalize(object);
 }
 

@@ -239,6 +239,7 @@ struct datahistory {
 	const struct datahistory_type *type;
 	struct datahistory_sample last_sample;
 	gint64 start_time;
+	guint update_interval;
 };
 
 typedef void (*datahistory_cb_t)(struct datahistory *history, void *arg);

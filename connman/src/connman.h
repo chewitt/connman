@@ -948,6 +948,7 @@ struct connman_stats *__connman_stats_new_existing(
 			struct connman_service *service, gboolean roaming);
 void __connman_stats_free(struct connman_stats *stats);
 void __connman_stats_reset(struct connman_stats *stats);
+void __connman_stats_set_index(struct connman_stats *stats, int index);
 gboolean __connman_stats_update(struct connman_stats *stats,
 				const struct connman_stats_data *data);
 void __connman_stats_rebase(struct connman_stats *stats,
