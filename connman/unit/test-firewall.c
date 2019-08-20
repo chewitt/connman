@@ -1311,7 +1311,7 @@ static const char *general_input[] = {
 		"-p tcp -m multiport --dports 35,33:44,40 -j ACCEPT",
 		"-p tcp -m multiport --dports 35,33:44,40:60 -j ACCEPT",
 		"-p tcp -m multiport --dports 23,http:https,100 -j ACCEPT",
-		"-p tcp -m multiport --dports ssh,telnet:http,9000 -j ACCEPT",
+		"-p tcp -m multiport --dports ssh,echo:http,9000 -j ACCEPT",
 		/* Conntrack */
 		"-p all -m conntrack --ctstate RELATED -j ACCEPT",
 		"-m conntrack --ctstate NEW,ESTABLISHED,RELATED -j LOG",
@@ -1321,7 +1321,7 @@ static const char *general_input[] = {
 		/* Protocols with number and text match are allowed */
 		"-p 6 -m tcp --dport 9898 -j ACCEPT",
 		"-p 132 --dport 6789 -j LOG",
-		"-p udp -m udp --sport telnet -j QUEUE",
+		"-p udp -m udp --sport echo -j QUEUE",
 		/* Negations */
 		"! -p tcp -m multiport --dports 67,68,69 -j ACCEPT",
 		"-p tcp ! -m multiport --dports 70,71 -j ACCEPT",
@@ -1550,7 +1550,7 @@ static const char *general_options[] = {
 	"-p 6 -m ecn --ecn-ip-ect 3 -j ACCEPT",
 	/* helper options */
 	"-p tcp -m helper --helper irc -j ACCEPT",
-	"-p udp -m helper --helper telnet -j ACCEPT",
+	"-p udp -m helper --helper echo -j ACCEPT",
 	/* limit options */
 	"-p tcp -m limit --limit 10/sec -j ACCEPT",
 	"-p udp -m limit --limit 5/minute -j ACCEPT",
@@ -1814,7 +1814,7 @@ static const char *invalid_general_options[] = {
 	/* Port ranges not valid for single port switches */
 	"-p tcp -m tcp --dport 34,35 -j ACCEPT",
 	"-p tcp -m tcp --sport 34:35 -j ACCEPT",
-	"-p tcp -m tcp --sport telnet:35 -j ACCEPT",
+	"-p tcp -m tcp --sport echo:35 -j ACCEPT",
 	"-p tcp -m tcp --sport ssh,http -j ACCEPT",
 	/* Port ranges */
 	"-p tcp -m multiport --dports 44:44 -j ACCEPT",
@@ -1829,8 +1829,8 @@ static const char *invalid_general_options[] = {
 	"-p tcp -m multiport --dports https:http -j ACCEPT",
 	"-p tcp -m multiport --dports https:50 -j ACCEPT",
 	"-p tcp -m multiport --dports 8000:http -j ACCEPT",
-	"-p tcp -m multiport --dports ssh,http:telnet,9000 -j ACCEPT",
-	"-p tcp -m multiport --dports ssh,http:telnet:http,9000 -j ACCEPT",
+	"-p tcp -m multiport --dports ssh,http:echo,9000 -j ACCEPT",
+	"-p tcp -m multiport --dports ssh,http:echo:http,9000 -j ACCEPT",
 	/* Invalid protocol for service name */
 	"-p tcp -m tcp --dport s1-control -j DROP", // SCTP service
 	"-p udp -m udp --sport rxapi -j ACCEPT",  // TCP service
