@@ -638,8 +638,8 @@ void __connman_tethering_client_register(const char *addr)
 
 void __connman_tethering_client_unregister(const char *addr)
 {
-	g_hash_table_remove(clients_table, addr);
 	client_removed(addr);
+	g_hash_table_remove(clients_table, addr);
 }
 
 int __connman_tethering_init(void)
