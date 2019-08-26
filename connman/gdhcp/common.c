@@ -615,7 +615,8 @@ int dhcp_send_raw_packet(struct dhcp_packet *dhcp_pkt,
 
 int dhcp_send_kernel_packet(struct dhcp_packet *dhcp_pkt,
 				uint32_t source_ip, int source_port,
-				uint32_t dest_ip, int dest_port)
+				uint32_t dest_ip, int dest_port,
+				const char *interface)
 {
 	struct sockaddr_in client;
 	int fd, n, opt = 1;
@@ -628,6 +629,13 @@ int dhcp_send_kernel_packet(struct dhcp_packet *dhcp_pkt,
 	fd = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
 	if (fd < 0)
 		return -errno;
+
+	if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE,
+				interface, strlen(interface) + 1) < 0) {
+		int err = errno;
+		close(fd);
+		return -err;
+	}
 
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
 		int err = errno;

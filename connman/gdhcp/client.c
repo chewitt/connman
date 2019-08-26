@@ -554,7 +554,8 @@ static int send_request(GDHCPClient *dhcp_client)
 	if (dhcp_client->state == RENEWING)
 		return dhcp_send_kernel_packet(&packet,
 				dhcp_client->requested_ip, CLIENT_PORT,
-				dhcp_client->server_ip, SERVER_PORT);
+				dhcp_client->server_ip, SERVER_PORT,
+				dhcp_client->interface);
 
 	return dhcp_send_raw_packet(&packet, INADDR_ANY, CLIENT_PORT,
 				INADDR_BROADCAST, SERVER_PORT,
@@ -578,7 +579,8 @@ static int send_release(GDHCPClient *dhcp_client,
 	dhcp_add_option_uint32(&packet, DHCP_SERVER_ID, server);
 
 	return dhcp_send_kernel_packet(&packet, ciaddr, CLIENT_PORT,
-						server, SERVER_PORT);
+						server, SERVER_PORT,
+						dhcp_client->interface);
 }
 
 static gboolean ipv4ll_probe_timeout(gpointer dhcp_data);
