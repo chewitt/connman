@@ -3,7 +3,8 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2010-2014  BMW Car IT GmbH.
- *  Copyright (C) 2016-2018  Jolla Ltd.
+ *  Copyright (C) 2016-2019  Jolla Ltd.
+ *  Copyright (C) 2019       Open Mobile Platform LLC
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -549,6 +550,25 @@ static void ov_return_credentials(struct ov_private_data *data,
 	g_free(reply);
 }
 
+static void ov_return_private_key_password(struct ov_private_data *data,
+				const char *privatekeypass)
+{
+	char fmt[] = "password \"Private Key\" ";
+	char *reply, *pos;
+
+	pos = reply = g_malloc0(strlen(privatekeypass) * 2 + strlen(fmt) + 4);
+	pos += sprintf(pos, fmt, NULL);
+	pos = ov_quote_credential(pos, privatekeypass);
+	pos += sprintf(pos, "\n");
+
+	g_io_channel_write_chars(data->mgmt_channel, reply, strlen(reply),
+								NULL, NULL);
+	g_io_channel_flush(data->mgmt_channel, NULL);
+
+	memset(reply, 0, strlen(reply));
+	g_free(reply);
+}
+
 static void request_input_append_informational(DBusMessageIter *iter,
 		void *user_data)
 {
@@ -592,7 +612,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *key;
 	DBusMessageIter iter, dict;
 	DBusError error;
-	int err_int;
+	int err;
 
 	DBG("provider %p", data->provider);
 
@@ -601,9 +621,9 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 
 	dbus_error_init(&error);
 
-	err_int = vpn_agent_check_and_process_reply_error(reply, data->provider,
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
 				data->task, data->cb, data->user_data);
-	if (err_int) {
+	if (err) {
 		/* Ensure cb is called only once */
 		data->cb = NULL;
 		data->user_data = NULL;
@@ -676,6 +696,8 @@ static int request_credentials_input(struct ov_private_data *data)
 	int err;
 	void *agent;
 
+	DBG("");
+
 	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
 							&agent_path);
 	if (!agent || !agent_path)
@@ -727,6 +749,136 @@ static int request_credentials_input(struct ov_private_data *data)
 	return -EINPROGRESS;
 }
 
+static void request_input_private_key_reply(DBusMessage *reply, void *user_data)
+{
+	struct ov_private_data *data = user_data;
+	const char *privatekeypass = NULL;
+	const char *key;
+	DBusMessageIter iter, dict;
+	DBusError error;
+	int err;
+
+	DBG("provider %p", data->provider);
+
+	if (!reply)
+		goto err;
+
+	dbus_error_init(&error);
+
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
+				data->task, data->cb, data->user_data);
+	if (err) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		return;
+	}
+
+	if (!vpn_agent_check_reply_has_dict(reply))
+		goto err;
+
+	dbus_message_iter_init(reply, &iter);
+	dbus_message_iter_recurse(&iter, &dict);
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			break;
+
+		dbus_message_iter_get_basic(&entry, &key);
+
+		if (g_str_equal(key, "OpenVPN.PrivateKey")) {
+			dbus_message_iter_next(&entry);
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
+				break;
+			dbus_message_iter_recurse(&entry, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_STRING)
+				break;
+			dbus_message_iter_get_basic(&value, &privatekeypass);
+			vpn_provider_set_string_hide_value(data->provider,
+					key, privatekeypass);
+
+		}
+
+		dbus_message_iter_next(&dict);
+	}
+
+	if (!privatekeypass)
+		goto err;
+
+	ov_return_private_key_password(data, privatekeypass);
+
+	return;
+
+err:
+	ov_connect_done(data, EACCES);
+	vpn_provider_indicate_error(data->provider,
+			VPN_PROVIDER_ERROR_AUTH_FAILED);
+}
+
+static int request_private_key_input(struct ov_private_data *data)
+{
+	DBusMessage *message;
+	const char *path, *agent_sender, *agent_path;
+	DBusMessageIter iter;
+	DBusMessageIter dict;
+	int err;
+	void *agent;
+
+	DBG("");
+
+	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
+							&agent_path);
+	if (!agent || !agent_path)
+		return -ESRCH;
+
+	message = dbus_message_new_method_call(agent_sender, agent_path,
+					VPN_AGENT_INTERFACE,
+					"RequestInput");
+	if (!message)
+		return -ENOMEM;
+
+	dbus_message_iter_init_append(message, &iter);
+
+	path = vpn_provider_get_path(data->provider);
+	dbus_message_iter_append_basic(&iter,
+				DBUS_TYPE_OBJECT_PATH, &path);
+
+	connman_dbus_dict_open(&iter, &dict);
+
+	if (data->failed_attempts > 0) {
+		connman_dbus_dict_append_dict(&dict, "VpnAgent.AuthFailure",
+			request_input_append_informational, NULL);
+	}
+
+	connman_dbus_dict_append_dict(&dict, "OpenVPN.PrivateKey",
+			request_input_append_password, NULL);
+
+	vpn_agent_append_host_and_name(&dict, data->provider);
+	connman_dbus_dict_append_dict(&dict, "Enter Private Key password",
+			request_input_append_informational, NULL);
+
+	connman_dbus_dict_close(&iter, &dict);
+
+	err = connman_agent_queue_message(data->provider, message,
+			connman_timeout_input_request(),
+			request_input_private_key_reply, data, agent);
+
+	if (err < 0 && err != -EBUSY) {
+		DBG("error %d sending agent request", err);
+		dbus_message_unref(message);
+
+		return err;
+	}
+
+	dbus_message_unref(message);
+
+	return -EINPROGRESS;
+}
+
 
 static gboolean ov_management_handle_input(GIOChannel *source,
 				GIOCondition condition, gpointer user_data)
@@ -747,6 +899,14 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 			 * Request credentials from the user
 			 */
 			err = request_credentials_input(data);
+			if (err != -EINPROGRESS) {
+				vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_LOGIN_FAILED);
+				close = TRUE;
+			}
+		} else if (g_str_has_prefix(str,
+				">PASSWORD:Need 'Private Key'")) {
+			err = request_private_key_input(data);
 			if (err != -EINPROGRESS) {
 				vpn_provider_indicate_error(data->provider,
 					VPN_PROVIDER_ERROR_LOGIN_FAILED);
