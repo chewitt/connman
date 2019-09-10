@@ -1031,24 +1031,21 @@ static int ov_connect(struct vpn_provider *provider,
 	data->cb = cb;
 	data->user_data = user_data;
 
-	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
-	if (option && !strcmp(option, "-")) {
-		/*
-		 * We need to use the management interface to provide
-		 * the user credentials
-		 */
+	/*
+	 * We need to use the management interface to provide
+	 * the user credentials and password for decrypting private key.
+	 */
 
-		/* Set up the path for the management interface */
-		data->mgmt_path = g_strconcat("/tmp/connman-vpn-management-",
-			vpn_provider_get_ident(provider), NULL);
-		if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
-			connman_warn("Unable to unlink management socket %s: %d",
-						data->mgmt_path, errno);
-		}
-
-		data->mgmt_timer_id = g_timeout_add(200,
-					ov_management_connect_timer_cb, data);
+	/* Set up the path for the management interface */
+	data->mgmt_path = g_strconcat("/tmp/connman-vpn-management-",
+		vpn_provider_get_ident(provider), NULL);
+	if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
+		connman_warn("Unable to unlink management socket %s: %d",
+					data->mgmt_path, errno);
 	}
+
+	data->mgmt_timer_id = g_timeout_add(200, ov_management_connect_timer_cb,
+				data);
 
 	task_append_config_data(provider, task);
 
