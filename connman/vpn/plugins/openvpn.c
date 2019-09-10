@@ -99,6 +99,7 @@ struct ov_private_data {
 	GIOChannel *mgmt_channel;
 	int connect_attempts;
 	int failed_attempts;
+	int privatekeypass_attempts;
 };
 
 static void ov_connect_done(struct ov_private_data *data, int err)
@@ -788,7 +789,7 @@ static void request_input_private_key_reply(DBusMessage *reply, void *user_data)
 
 		dbus_message_iter_get_basic(&entry, &key);
 
-		if (g_str_equal(key, "OpenVPN.PrivateKey")) {
+		if (g_str_equal(key, "OpenVPN.PrivateKeyPassword")) {
 			dbus_message_iter_next(&entry);
 			if (dbus_message_iter_get_arg_type(&entry)
 							!= DBUS_TYPE_VARIANT)
@@ -823,12 +824,37 @@ static int request_private_key_input(struct ov_private_data *data)
 {
 	DBusMessage *message;
 	const char *path, *agent_sender, *agent_path;
+	const char *privatekeypass;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
 	int err;
 	void *agent;
 
-	DBG("");
+	/*
+	 * First check if this is the second attempt to get the key within
+	 * this connection. In such case there has been invalid Private Key
+	 * Password and it must be reset, and queried from user.
+	 */
+	if (data->privatekeypass_attempts) {
+		DBG("(%d) unset OpenVPN.PrivateKeyPassword and counter",
+					data->privatekeypass_attempts);
+		vpn_provider_set_string_hide_value(data->provider,
+					"OpenVPN.PrivateKeyPassword", NULL);
+		data->privatekeypass_attempts = 0;
+	} else {
+		/* If the encrypted Private key password is kept in memory and
+		 * use it first. If authentication fails this is cleared,
+		 * likewise it is when connman-vpnd is restarted.
+		 */
+		privatekeypass = vpn_provider_get_string(data->provider,
+					"OpenVPN.PrivateKeyPassword");
+		if (privatekeypass) {
+			DBG("using OpenVPN.PrivateKeyPassword from memory");
+			data->privatekeypass_attempts++;
+			ov_return_private_key_password(data, privatekeypass);
+			goto out;
+		}
+	}
 
 	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
 							&agent_path);
@@ -854,10 +880,15 @@ static int request_private_key_input(struct ov_private_data *data)
 			request_input_append_informational, NULL);
 	}
 
-	connman_dbus_dict_append_dict(&dict, "OpenVPN.PrivateKey",
+	connman_dbus_dict_append_dict(&dict, "OpenVPN.PrivateKeyPassword",
 			request_input_append_password, NULL);
 
 	vpn_agent_append_host_and_name(&dict, data->provider);
+
+	/* Do not allow to store or retrieve the encrypted Private Key pass */
+	vpn_agent_append_allow_credential_storage(&dict, false);
+	vpn_agent_append_allow_credential_retrieval(&dict, false);
+
 	connman_dbus_dict_append_dict(&dict, "Enter Private Key password",
 			request_input_append_informational, NULL);
 
@@ -876,6 +907,7 @@ static int request_private_key_input(struct ov_private_data *data)
 
 	dbus_message_unref(message);
 
+out:
 	return -EINPROGRESS;
 }
 
