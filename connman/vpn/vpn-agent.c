@@ -183,6 +183,14 @@ void vpn_agent_append_allow_credential_retrieval(DBusMessageIter *iter,
 				GINT_TO_POINTER(allow));
 }
 
+void vpn_agent_append_keep_credentials(DBusMessageIter *iter,
+				bool allow)
+{
+	connman_dbus_dict_append_dict(iter, "KeepCredentials",
+				request_input_append_flag,
+				GINT_TO_POINTER(allow));
+}
+
 int vpn_agent_check_and_process_reply_error(DBusMessage *reply,
 				struct vpn_provider *provider,
 				struct connman_task *task,
