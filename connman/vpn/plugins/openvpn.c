@@ -99,7 +99,7 @@ struct ov_private_data {
 	GIOChannel *mgmt_channel;
 	int connect_attempts;
 	int failed_attempts;
-	int privatekeypass_attempts;
+	int failed_attempts_privatekey;
 };
 
 static void ov_connect_done(struct ov_private_data *data, int err)
@@ -112,6 +112,11 @@ static void ov_connect_done(struct ov_private_data *data, int err)
 		data->cb = NULL;
 		data->user_data = NULL;
 		cb(data->provider, user_data, err);
+	}
+
+	if (!err) {
+		data->failed_attempts = 0;
+		data->failed_attempts_privatekey = 0;
 	}
 }
 
@@ -857,12 +862,9 @@ static int request_private_key_input(struct ov_private_data *data)
 	 * this connection. In such case there has been invalid Private Key
 	 * Password and it must be reset, and queried from user.
 	 */
-	if (data->privatekeypass_attempts) {
-		DBG("(%d) unset OpenVPN.PrivateKeyPassword and counter",
-					data->privatekeypass_attempts);
+	if (data->failed_attempts_privatekey) {
 		vpn_provider_set_string_hide_value(data->provider,
 					"OpenVPN.PrivateKeyPassword", NULL);
-		data->privatekeypass_attempts = 0;
 	} else {
 		/* If the encrypted Private key password is kept in memory and
 		 * use it first. If authentication fails this is cleared,
@@ -871,8 +873,16 @@ static int request_private_key_input(struct ov_private_data *data)
 		privatekeypass = vpn_provider_get_string(data->provider,
 					"OpenVPN.PrivateKeyPassword");
 		if (privatekeypass) {
-			DBG("using OpenVPN.PrivateKeyPassword from memory");
-			data->privatekeypass_attempts++;
+			/*
+			 * TODO remove this after OpenVPN does report that
+			 * Private Key decryption has failed via management
+			 * interface. Currently this is the only way of keeping
+			 * track of that if private key should be removed from
+			 * memory or not. Without this, the same invalid key
+			 * would be used ad infinitum.
+			 */
+			data->failed_attempts_privatekey++;
+
 			ov_return_private_key_password(data, privatekeypass);
 			goto out;
 		}
@@ -896,11 +906,6 @@ static int request_private_key_input(struct ov_private_data *data)
 				DBUS_TYPE_OBJECT_PATH, &path);
 
 	connman_dbus_dict_open(&iter, &dict);
-
-	if (data->failed_attempts > 0) {
-		connman_dbus_dict_append_dict(&dict, "VpnAgent.AuthFailure",
-			request_input_append_informational, NULL);
-	}
 
 	connman_dbus_dict_append_dict(&dict, "OpenVPN.PrivateKeyPassword",
 			request_input_append_password, NULL);
@@ -969,6 +974,15 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 		} else if (g_str_has_prefix(str,
 				">PASSWORD:Verification Failed: 'Auth'")) {
 			++data->failed_attempts;
+		/*
+		 * According to the OpenVPN manual about management interface
+		 * https://openvpn.net/community-resources/management-interface/
+		 * this should be received but it does not seem to be reported
+		 * when decrypting private key fails.
+		 */
+		} else if (g_str_has_prefix(str, ">PASSWORD:Verification "
+				"Failed: 'Private Key'")) {
+			++data->failed_attempts_privatekey;
 		}
 
 		g_free(str);
