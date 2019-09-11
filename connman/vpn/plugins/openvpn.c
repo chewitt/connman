@@ -915,6 +915,11 @@ static int request_private_key_input(struct ov_private_data *data)
 	/* Do not allow to store or retrieve the encrypted Private Key pass */
 	vpn_agent_append_allow_credential_storage(&dict, false);
 	vpn_agent_append_allow_credential_retrieval(&dict, false);
+	/*
+	 * Indicate to keep credentials, the enc Private Key password should not
+	 * affect the credential storing.
+	 */
+	vpn_agent_append_keep_credentials(&dict, true);
 
 	connman_dbus_dict_append_dict(&dict, "Enter Private Key password",
 			request_input_append_informational, NULL);
