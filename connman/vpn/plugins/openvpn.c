@@ -515,58 +515,80 @@ static int run_connect(struct ov_private_data *data,
 	}
 }
 
-static char *ov_quote_credential(char *pos, const char *cred)
+static void ov_quote_credential(GString *line, const char *cred)
 {
-	*pos++ = '\"';
+	if (!line)
+		return;
+
+	g_string_append_c(line, '"');
+
 	while (*cred != '\0') {
-		if (*cred == ' ' || *cred == '"' || *cred == '\\') {
-			*pos++ = '\\';
+
+		switch (*cred) {
+		case ' ':
+		case '"':
+		case '\\':
+			g_string_append_c(line, '\\');
+			break;
+		default:
+			break;
 		}
-		*pos++ = *cred++;
+
+		g_string_append_c(line, *cred++);
 	}
-	*pos++ = '\"';
-	return pos;
+
+	g_string_append_c(line, '"');
+
+	return;
 }
 
 static void ov_return_credentials(struct ov_private_data *data,
 				const char *username, const char *password)
 {
-	char *fmt[2] = { "username \"Auth\" ", "password \"Auth\" " };
-	char *reply, *pos;
+	GString *reply_string;
+	gchar *reply;
+	gsize len;
 
-	pos = reply = g_malloc0((strlen(username) + strlen(password)) * 2
-				+ strlen(fmt[0]) + strlen(fmt[1]) + 7);
-	pos += sprintf(pos, fmt[0], NULL);
-	pos = ov_quote_credential(pos, username);
-	pos += sprintf(pos, "\n");
-	pos += sprintf(pos, fmt[1], NULL);
-	pos = ov_quote_credential(pos, password);
-	pos += sprintf(pos, "\n");
+	reply_string = g_string_new(NULL);
 
-	g_io_channel_write_chars(data->mgmt_channel, reply, strlen(reply),
-								NULL, NULL);
+	g_string_append(reply_string, "username \"Auth\" ");
+	ov_quote_credential(reply_string, username);
+	g_string_append_c(reply_string, '\n');
+
+	g_string_append(reply_string, "password \"Auth\" ");
+	ov_quote_credential(reply_string, password);
+	g_string_append_c(reply_string, '\n');
+
+	len = reply_string->len;
+	reply = g_string_free(reply_string, FALSE);
+
+	g_io_channel_write_chars(data->mgmt_channel, reply, len, NULL, NULL);
 	g_io_channel_flush(data->mgmt_channel, NULL);
 
-	memset(reply, 0, strlen(reply));
+	memset(reply, 0, len);
 	g_free(reply);
 }
 
 static void ov_return_private_key_password(struct ov_private_data *data,
 				const char *privatekeypass)
 {
-	char fmt[] = "password \"Private Key\" ";
-	char *reply, *pos;
+	GString *reply_string;
+	gchar *reply;
+	gsize len;
 
-	pos = reply = g_malloc0(strlen(privatekeypass) * 2 + strlen(fmt) + 4);
-	pos += sprintf(pos, fmt, NULL);
-	pos = ov_quote_credential(pos, privatekeypass);
-	pos += sprintf(pos, "\n");
+	reply_string = g_string_new(NULL);
 
-	g_io_channel_write_chars(data->mgmt_channel, reply, strlen(reply),
-								NULL, NULL);
+	g_string_append(reply_string, "password \"Private Key\" ");
+	ov_quote_credential(reply_string, privatekeypass);
+	g_string_append_c(reply_string, '\n');
+
+	len = reply_string->len;
+	reply = g_string_free(reply_string, FALSE);
+
+	g_io_channel_write_chars(data->mgmt_channel, reply, len, NULL, NULL);
 	g_io_channel_flush(data->mgmt_channel, NULL);
 
-	memset(reply, 0, strlen(reply));
+	memset(reply, 0, len);
 	g_free(reply);
 }
 
