@@ -1270,9 +1270,9 @@ bool connman_device_has_status_changed_to(struct connman_device *device,
 // End of dummies
 
 #define CHAINS_GEN4 3
-#define RULES_GEN4 (CHAINS_GEN4 + 60)
+#define RULES_GEN4 (CHAINS_GEN4 + 66)
 #define CHAINS_GEN6 3
-#define RULES_GEN6 (CHAINS_GEN6 + 62)
+#define RULES_GEN6 (CHAINS_GEN6 + 68)
 #define RULES_ETH 17
 #define RULES_CEL 4
 #define RULES_TETH 7
@@ -1334,6 +1334,9 @@ static const char *general_input[] = {
 		"--in-interface eth0 --out-interface eth1 -j LOG",
 		 /* Treated as whitespace */
 		"#-p sctp --dport 69 -j REJECT",
+		/* owner match - should work in INPUT with NETFILTER_XT_MATCH_QTAGUID */
+		"-m owner --uid-owner 0 -j LOG",
+		"-m owner --gid-owner 0-499 -j LOG",
 		NULL
 };
 static const char *general_output[] = {
@@ -1355,6 +1358,11 @@ static const char *general_output[] = {
 		"-o eth1 -j ACCEPT",
 		"-o usb0 -j DROP",
 		"--out-interface eth1 -j ACCEPT",
+		/* owner match */
+		"-m owner --uid-owner 0-499 -j ACCEPT",
+		"-m owner --uid-owner 100-100 -j ACCEPT",
+		"-m owner --gid-owner 0 -j DROP",
+		"-m owner --socket-exists -j LOG",
 		NULL
 };
 static const char *general_forward[] = {
@@ -1929,7 +1937,6 @@ static const char *invalid_general_output[] = {
 		"DROP",
 		/* Disabled matches */
 		"-m recent --name example --check --seconds 60",
-		"-m owner --uid-owner 0",
 		"-m iprange --src-range 192.168.10.1-192.168.10.5 -j DROP",
 		/* Multiport cannot be used in conjunction of -m protocol */
 		/* TODO this is iptables.c limitation, fix it */
@@ -1948,6 +1955,12 @@ static const char *invalid_general_output[] = {
 		"-p tcp -m multiport --destination-port -j LOG",
 		"-p tcp -m multiport --source-port -j QUEUE",
 		"-p tcp -m multiport --dport --sport  -j REJECT",
+		/* Incorrect users for owner match */
+		"-m owner --uid-owner 100-0 -j LOG",
+		"-m owner --uid-owner 4294967295 -j LOG", /* UINT32_MAX-1 */
+		"-m owner --uid-owner 17179869184 -j LOG", /* 2^34 */
+		"-m owner --uid-owner user-absent -j LOG",
+		"-m owner --uid-owner nonexistent -j LOG",
 		NULL
 };
 static const char *invalid_general_forward[] = {

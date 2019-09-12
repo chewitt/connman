@@ -26,6 +26,8 @@
 
 #include <errno.h>
 #include <netdb.h>
+#include <pwd.h>
+#include <grp.h>
 
 #include "connman.h"
 
@@ -103,6 +105,7 @@ enum iptables_match_options_type {
 	IPTABLES_OPTION_ICMP,
 	IPTABLES_OPTION_ICMPv6,
 	IPTABLES_OPTION_DCCP,
+	IPTABLES_OPTION_OWNER,
 	IPTABLES_OPTION_NOT_SUPPORTED
 };
 
@@ -320,6 +323,17 @@ static const int icmpv6_options_count[] = {1, -1};
 static const char *dccp_options[] = {"--dccp-types", "--dccp-option", NULL};
 static const int dccp_options_count[] = {1, 1, -1};
 
+/*
+ * owner match options
+ * [!] --uid-owner userid[-userid]      Match local UID
+ * [!] --gid-owner groupid[-groupid]    Match local GID
+ * [!] --socket-exists                  Match if socket exists
+ */
+
+static const char *owner_options[] = {"--uid-owner", "--gid-owner",
+                                      "--socket-exists", NULL};
+static const int owner_options_count[] = {1, 1, 0, -1};
+
 struct iptables_type_options {
 	enum iptables_match_options_type type;
 	const char **options;
@@ -344,12 +358,13 @@ static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_ICMP, icmp_options, icmp_options_count},
 	{IPTABLES_OPTION_ICMPv6, icmpv6_options, icmpv6_options_count},
 	{IPTABLES_OPTION_DCCP, dccp_options, dccp_options_count},
+	{IPTABLES_OPTION_OWNER, owner_options, owner_options_count},
 };
 
 static const char *opt_names[] = {"port", "multiport", "tcp", "mark",
 				"conntrack", "ttl", "pkttype", "limit",
 				"helper", "ecn", "ah", "esp", "mh", "sctp",
-				"icmp", "ipv6-icmp", "dccp", NULL};
+				"icmp", "ipv6-icmp", "dccp", "owner", NULL};
 
 static GHashTable *iptables_options = NULL;
 
@@ -841,13 +856,25 @@ static bool is_icmp_int_type_valid(const char *icmp_type)
 	return false;
 }
 
+static bool is_correct_id(const char *id)
+{
+	guint64 value = g_ascii_strtoull(id, NULL, 10);
+	if (errno != 0)
+		return false;
+
+	if (value > UINT32_MAX - 1)
+		return false;
+
+	return true;
+}
+
 typedef bool (*range_validation_cb_t)(const char *param);
 enum range_callback_operation {
-	RANGE_CALLBACK_AND = 0,
-	RANGE_CALLBACK_OR,
+	RANGE_CALLBACK_OR = 0,
+	RANGE_CALLBACK_AND,
 };
 
-static bool is_valid_range(const char *range, const char *separator,
+static bool is_valid_pair(const char *range, const char *separator,
 			range_validation_cb_t cb,
 			enum range_callback_operation operation)
 {
@@ -893,6 +920,87 @@ static bool is_valid_range(const char *range, const char *separator,
 	g_strfreev(tokens);
 
 	return value;
+}
+
+static bool is_valid_elem(const char *elem, range_validation_cb_t cb,
+			enum range_callback_operation operation)
+{
+	bool numeric = false;
+	bool result = false;
+
+	if (!elem)
+		return false;
+
+	if (is_string_digits(elem)) {
+		numeric = true;
+	}
+
+	/* We could skip the callback if numeric is enough */
+	if (numeric && operation == RANGE_CALLBACK_OR)
+		result = true;
+	else if (numeric || operation == RANGE_CALLBACK_OR)
+		if (cb && cb(elem))
+			result = true;
+	/* The other scenario - numeric false, operation AND - result in false */
+
+	return result;
+}
+
+static bool is_valid_range(const char *range, const char *separator,
+			range_validation_cb_t cb,
+			enum range_callback_operation operation)
+{
+	if (is_valid_elem(range, cb, operation))
+		return true;
+
+	gchar **tokens = NULL;
+	bool numeric = false;
+	bool result = false;
+	guint64 value1, value2;
+
+	if (!range || !separator)
+		return false;
+
+	tokens = g_strsplit(range, separator, 3);
+
+	if (!tokens)
+		return false;
+
+	if (g_strv_length(tokens) != 2) {
+		DBG("invalid amount of separators in the string %s", range);
+		goto range_free_tokens;
+	}
+
+	/* Check if the numerical conditions are met */
+	if (is_string_digits(tokens[0]) && is_string_digits(tokens[1])) {
+		value1 = g_ascii_strtoull(tokens[0], NULL, 10);
+		if (errno != 0)
+			goto range_check_string;
+
+		value2 = g_ascii_strtoull(tokens[1], NULL, 10);
+		if (errno != 0)
+			goto range_check_string;
+
+		/* Essential condition - values come in ascending order */
+		if (value1 <= value2)
+			numeric = true;
+	} /* else numeric = false, set on startup */
+
+range_check_string:
+
+	/* We could skip the callback if numeric is enough */
+	if (numeric && operation == RANGE_CALLBACK_OR)
+		result = true;
+	else if (numeric || operation == RANGE_CALLBACK_OR)
+		if (cb && cb(tokens[0]) && cb(tokens[1]))
+			result = true;
+	/* The other scenario - numeric false, operation AND - result in false */
+
+range_free_tokens:
+
+	g_strfreev(tokens);
+
+	return result;
 }
 
 static bool is_valid_param_sequence(const char **haystack, const char *needles,
@@ -1122,6 +1230,30 @@ static bool is_valid_option_type_params(int family,
 			return is_string_digits(params[0]);
 
 		break;
+	case IPTABLES_OPTION_OWNER:
+
+		/* --uid-owner */
+		if (option_position == 0) {
+			if (getpwnam(params[0]))
+				/* a user named as the string exists */
+				return true;
+
+			return is_valid_range(params[0], "-", is_correct_id, RANGE_CALLBACK_AND);
+		}
+
+		/* --gid-owner */
+		if (option_position == 1) {
+			if (getgrnam(params[0]))
+				/* a group named as the string exists */
+				return true;
+
+			return is_valid_range(params[0], "-", NULL, 0);
+		}
+		/* --socket-exists has no parameters */
+		if (option_position == 2)
+			return true;
+
+		break;
 	case IPTABLES_OPTION_ICMPv6:
 		icmp_types = icmp_types_ipv6;
 	/* Fallthrough */
@@ -1130,7 +1262,7 @@ static bool is_valid_option_type_params(int family,
 			icmp_types = icmp_types_ipv4;
 
 		/* ICMP types are separated with '/' and type must be checked */
-		if (is_valid_range(params[0], "/", is_icmp_int_type_valid,
+		if (is_valid_pair(params[0], "/", is_icmp_int_type_valid,
 					RANGE_CALLBACK_AND))
 			return true;
 
@@ -1176,7 +1308,7 @@ static bool is_valid_option_type_params(int family,
 		 * --mark has value/mask syntax and supports decimal,
 		 * hexadecimal and TODO: octal.
 		 */
-		return is_valid_range(params[0], "/", is_string_hexadecimal,
+		return is_valid_pair(params[0], "/", is_string_hexadecimal,
 					RANGE_CALLBACK_OR);
 	/*
 	 * TODO: MH protocol support is not working, protocol specific options
@@ -1331,6 +1463,8 @@ static bool is_valid_option_for_protocol_match(const char* protocol,
 		return !g_strcmp0(match, "mark");
 	case IPTABLES_OPTION_MH:
 		return false; /* MH options not supported */
+	case IPTABLES_OPTION_OWNER:
+		return !g_strcmp0(match, "owner");
 	case IPTABLES_OPTION_MULTIPORT:
 		/* Match must be -m multiport for multiport options */
 		if (g_strcmp0(match, "multiport"))
@@ -1440,7 +1574,6 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 						"state",
 						"iprange",
 						"recent",
-						"owner",
 						"sctp",
 						"mh",
 						"hashlimit",
@@ -1453,7 +1586,6 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 						"state",
 						"iprange",
 						"recent",
-						"owner",
 						"ttl",
 						"sctp",
 						"mh",
