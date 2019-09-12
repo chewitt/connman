@@ -3,7 +3,8 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2010-2014  BMW Car IT GmbH.
- *  Copyright (C) 2016-2018  Jolla Ltd.
+ *  Copyright (C) 2016-2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -98,6 +99,7 @@ struct ov_private_data {
 	GIOChannel *mgmt_channel;
 	int connect_attempts;
 	int failed_attempts;
+	int failed_attempts_privatekey;
 };
 
 static void ov_connect_done(struct ov_private_data *data, int err)
@@ -110,6 +112,11 @@ static void ov_connect_done(struct ov_private_data *data, int err)
 		data->cb = NULL;
 		data->user_data = NULL;
 		cb(data->provider, user_data, err);
+	}
+
+	if (!err) {
+		data->failed_attempts = 0;
+		data->failed_attempts_privatekey = 0;
 	}
 }
 
@@ -513,39 +520,80 @@ static int run_connect(struct ov_private_data *data,
 	}
 }
 
-static char *ov_quote_credential(char *pos, const char *cred)
+static void ov_quote_credential(GString *line, const char *cred)
 {
-	*pos++ = '\"';
+	if (!line)
+		return;
+
+	g_string_append_c(line, '"');
+
 	while (*cred != '\0') {
-		if (*cred == ' ' || *cred == '"' || *cred == '\\') {
-			*pos++ = '\\';
+
+		switch (*cred) {
+		case ' ':
+		case '"':
+		case '\\':
+			g_string_append_c(line, '\\');
+			break;
+		default:
+			break;
 		}
-		*pos++ = *cred++;
+
+		g_string_append_c(line, *cred++);
 	}
-	*pos++ = '\"';
-	return pos;
+
+	g_string_append_c(line, '"');
+
+	return;
 }
 
 static void ov_return_credentials(struct ov_private_data *data,
 				const char *username, const char *password)
 {
-	char *fmt[2] = { "username \"Auth\" ", "password \"Auth\" " };
-	char *reply, *pos;
+	GString *reply_string;
+	gchar *reply;
+	gsize len;
 
-	pos = reply = g_malloc0((strlen(username) + strlen(password)) * 2
-				+ strlen(fmt[0]) + strlen(fmt[1]) + 7);
-	pos += sprintf(pos, fmt[0], NULL);
-	pos = ov_quote_credential(pos, username);
-	pos += sprintf(pos, "\n");
-	pos += sprintf(pos, fmt[1], NULL);
-	pos = ov_quote_credential(pos, password);
-	pos += sprintf(pos, "\n");
+	reply_string = g_string_new(NULL);
 
-	g_io_channel_write_chars(data->mgmt_channel, reply, strlen(reply),
-								NULL, NULL);
+	g_string_append(reply_string, "username \"Auth\" ");
+	ov_quote_credential(reply_string, username);
+	g_string_append_c(reply_string, '\n');
+
+	g_string_append(reply_string, "password \"Auth\" ");
+	ov_quote_credential(reply_string, password);
+	g_string_append_c(reply_string, '\n');
+
+	len = reply_string->len;
+	reply = g_string_free(reply_string, FALSE);
+
+	g_io_channel_write_chars(data->mgmt_channel, reply, len, NULL, NULL);
 	g_io_channel_flush(data->mgmt_channel, NULL);
 
-	memset(reply, 0, strlen(reply));
+	memset(reply, 0, len);
+	g_free(reply);
+}
+
+static void ov_return_private_key_password(struct ov_private_data *data,
+				const char *privatekeypass)
+{
+	GString *reply_string;
+	gchar *reply;
+	gsize len;
+
+	reply_string = g_string_new(NULL);
+
+	g_string_append(reply_string, "password \"Private Key\" ");
+	ov_quote_credential(reply_string, privatekeypass);
+	g_string_append_c(reply_string, '\n');
+
+	len = reply_string->len;
+	reply = g_string_free(reply_string, FALSE);
+
+	g_io_channel_write_chars(data->mgmt_channel, reply, len, NULL, NULL);
+	g_io_channel_flush(data->mgmt_channel, NULL);
+
+	memset(reply, 0, len);
 	g_free(reply);
 }
 
@@ -592,7 +640,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	char *key;
 	DBusMessageIter iter, dict;
 	DBusError error;
-	int err_int;
+	int err;
 
 	DBG("provider %p", data->provider);
 
@@ -601,9 +649,9 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 
 	dbus_error_init(&error);
 
-	err_int = vpn_agent_check_and_process_reply_error(reply, data->provider,
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
 				data->task, data->cb, data->user_data);
-	if (err_int) {
+	if (err) {
 		/* Ensure cb is called only once */
 		data->cb = NULL;
 		data->user_data = NULL;
@@ -676,6 +724,8 @@ static int request_credentials_input(struct ov_private_data *data)
 	int err;
 	void *agent;
 
+	DBG("");
+
 	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
 							&agent_path);
 	if (!agent || !agent_path)
@@ -727,6 +777,172 @@ static int request_credentials_input(struct ov_private_data *data)
 	return -EINPROGRESS;
 }
 
+static void request_input_private_key_reply(DBusMessage *reply, void *user_data)
+{
+	struct ov_private_data *data = user_data;
+	const char *privatekeypass = NULL;
+	const char *key;
+	DBusMessageIter iter, dict;
+	DBusError error;
+	int err;
+
+	DBG("provider %p", data->provider);
+
+	if (!reply)
+		goto err;
+
+	dbus_error_init(&error);
+
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
+				data->task, data->cb, data->user_data);
+	if (err) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		return;
+	}
+
+	if (!vpn_agent_check_reply_has_dict(reply))
+		goto err;
+
+	dbus_message_iter_init(reply, &iter);
+	dbus_message_iter_recurse(&iter, &dict);
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			break;
+
+		dbus_message_iter_get_basic(&entry, &key);
+
+		if (g_str_equal(key, "OpenVPN.PrivateKeyPassword")) {
+			dbus_message_iter_next(&entry);
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
+				break;
+			dbus_message_iter_recurse(&entry, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_STRING)
+				break;
+			dbus_message_iter_get_basic(&value, &privatekeypass);
+			vpn_provider_set_string_hide_value(data->provider,
+					key, privatekeypass);
+
+		}
+
+		dbus_message_iter_next(&dict);
+	}
+
+	if (!privatekeypass)
+		goto err;
+
+	ov_return_private_key_password(data, privatekeypass);
+
+	return;
+
+err:
+	ov_connect_done(data, EACCES);
+	vpn_provider_indicate_error(data->provider,
+			VPN_PROVIDER_ERROR_AUTH_FAILED);
+}
+
+static int request_private_key_input(struct ov_private_data *data)
+{
+	DBusMessage *message;
+	const char *path, *agent_sender, *agent_path;
+	const char *privatekeypass;
+	DBusMessageIter iter;
+	DBusMessageIter dict;
+	int err;
+	void *agent;
+
+	/*
+	 * First check if this is the second attempt to get the key within
+	 * this connection. In such case there has been invalid Private Key
+	 * Password and it must be reset, and queried from user.
+	 */
+	if (data->failed_attempts_privatekey) {
+		vpn_provider_set_string_hide_value(data->provider,
+					"OpenVPN.PrivateKeyPassword", NULL);
+	} else {
+		/* If the encrypted Private key password is kept in memory and
+		 * use it first. If authentication fails this is cleared,
+		 * likewise it is when connman-vpnd is restarted.
+		 */
+		privatekeypass = vpn_provider_get_string(data->provider,
+					"OpenVPN.PrivateKeyPassword");
+		if (privatekeypass) {
+			/*
+			 * TODO remove this after OpenVPN does report that
+			 * Private Key decryption has failed via management
+			 * interface. Currently this is the only way of keeping
+			 * track of that if private key should be removed from
+			 * memory or not. Without this, the same invalid key
+			 * would be used ad infinitum.
+			 */
+			data->failed_attempts_privatekey++;
+
+			ov_return_private_key_password(data, privatekeypass);
+			goto out;
+		}
+	}
+
+	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
+							&agent_path);
+	if (!agent || !agent_path)
+		return -ESRCH;
+
+	message = dbus_message_new_method_call(agent_sender, agent_path,
+					VPN_AGENT_INTERFACE,
+					"RequestInput");
+	if (!message)
+		return -ENOMEM;
+
+	dbus_message_iter_init_append(message, &iter);
+
+	path = vpn_provider_get_path(data->provider);
+	dbus_message_iter_append_basic(&iter,
+				DBUS_TYPE_OBJECT_PATH, &path);
+
+	connman_dbus_dict_open(&iter, &dict);
+
+	connman_dbus_dict_append_dict(&dict, "OpenVPN.PrivateKeyPassword",
+			request_input_append_password, NULL);
+
+	vpn_agent_append_host_and_name(&dict, data->provider);
+
+	/* Do not allow to store or retrieve the encrypted Private Key pass */
+	vpn_agent_append_allow_credential_storage(&dict, false);
+	vpn_agent_append_allow_credential_retrieval(&dict, false);
+	/*
+	 * Indicate to keep credentials, the enc Private Key password should not
+	 * affect the credential storing.
+	 */
+	vpn_agent_append_keep_credentials(&dict, true);
+
+	connman_dbus_dict_append_dict(&dict, "Enter Private Key password",
+			request_input_append_informational, NULL);
+
+	connman_dbus_dict_close(&iter, &dict);
+
+	err = connman_agent_queue_message(data->provider, message,
+			connman_timeout_input_request(),
+			request_input_private_key_reply, data, agent);
+
+	if (err < 0 && err != -EBUSY) {
+		DBG("error %d sending agent request", err);
+		dbus_message_unref(message);
+
+		return err;
+	}
+
+	dbus_message_unref(message);
+
+out:
+	return -EINPROGRESS;
+}
+
 
 static gboolean ov_management_handle_input(GIOChannel *source,
 				GIOCondition condition, gpointer user_data)
@@ -753,8 +969,25 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 				close = TRUE;
 			}
 		} else if (g_str_has_prefix(str,
+				">PASSWORD:Need 'Private Key'")) {
+			err = request_private_key_input(data);
+			if (err != -EINPROGRESS) {
+				vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_LOGIN_FAILED);
+				close = TRUE;
+			}
+		} else if (g_str_has_prefix(str,
 				">PASSWORD:Verification Failed: 'Auth'")) {
 			++data->failed_attempts;
+		/*
+		 * According to the OpenVPN manual about management interface
+		 * https://openvpn.net/community-resources/management-interface/
+		 * this should be received but it does not seem to be reported
+		 * when decrypting private key fails.
+		 */
+		} else if (g_str_has_prefix(str, ">PASSWORD:Verification "
+				"Failed: 'Private Key'")) {
+			++data->failed_attempts_privatekey;
 		}
 
 		g_free(str);
@@ -839,24 +1072,21 @@ static int ov_connect(struct vpn_provider *provider,
 	data->cb = cb;
 	data->user_data = user_data;
 
-	option = vpn_provider_get_string(provider, "OpenVPN.AuthUserPass");
-	if (option && !strcmp(option, "-")) {
-		/*
-		 * We need to use the management interface to provide
-		 * the user credentials
-		 */
+	/*
+	 * We need to use the management interface to provide
+	 * the user credentials and password for decrypting private key.
+	 */
 
-		/* Set up the path for the management interface */
-		data->mgmt_path = g_strconcat("/tmp/connman-vpn-management-",
-			vpn_provider_get_ident(provider), NULL);
-		if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
-			connman_warn("Unable to unlink management socket %s: %d",
-						data->mgmt_path, errno);
-		}
-
-		data->mgmt_timer_id = g_timeout_add(200,
-					ov_management_connect_timer_cb, data);
+	/* Set up the path for the management interface */
+	data->mgmt_path = g_strconcat("/tmp/connman-vpn-management-",
+		vpn_provider_get_ident(provider), NULL);
+	if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
+		connman_warn("Unable to unlink management socket %s: %d",
+					data->mgmt_path, errno);
 	}
+
+	data->mgmt_timer_id = g_timeout_add(200, ov_management_connect_timer_cb,
+				data);
 
 	task_append_config_data(provider, task);
 

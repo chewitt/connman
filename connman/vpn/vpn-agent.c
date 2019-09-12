@@ -3,6 +3,8 @@
  *  Connection Manager
  *
  *  Copyright (C) 2012  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2012 - 2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -179,6 +181,14 @@ void vpn_agent_append_allow_credential_retrieval(DBusMessageIter *iter,
 				bool allow)
 {
 	connman_dbus_dict_append_dict(iter, "AllowRetrieveCredentials",
+				request_input_append_flag,
+				GINT_TO_POINTER(allow));
+}
+
+void vpn_agent_append_keep_credentials(DBusMessageIter *iter,
+				bool allow)
+{
+	connman_dbus_dict_append_dict(iter, "KeepCredentials",
 				request_input_append_flag,
 				GINT_TO_POINTER(allow));
 }
