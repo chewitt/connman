@@ -1116,6 +1116,67 @@ bool connman_inet_compare_subnet(int index, const char *host)
 	return ((if_addr & netmask_addr) == (host_addr & netmask_addr));
 }
 
+static bool mem_mask_equal(const void *a, const void *b,
+					const void *mask, size_t n)
+{
+	const unsigned char *addr1 = a;
+	const unsigned char *addr2 = b;
+	const unsigned char *bitmask = mask;
+	size_t i;
+
+	for (i = 0; i < n; i++) {
+		if ((addr1[i] ^ addr2[i]) & bitmask[i])
+			return false;
+	}
+
+	return true;
+}
+
+bool connman_inet_compare_ipv6_subnet(int index, const char *host)
+{
+	struct ifaddrs *ifaddr, *ifa;
+	bool rv = false;
+	char name[IF_NAMESIZE];
+	struct in6_addr haddr;
+
+	if (inet_pton(AF_INET6, host, &haddr) <= 0)
+		return false;
+
+	if (!if_indextoname(index, name))
+		return false;
+
+	DBG("index %d interface %s", index, name);
+
+	if (getifaddrs(&ifaddr) < 0) {
+		DBG("Cannot get addresses err %d/%s", errno, strerror(errno));
+		return false;
+	}
+
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		struct sockaddr_in6 *iaddr;
+		struct sockaddr_in6 *imask;
+
+		if (!ifa->ifa_addr)
+			continue;
+
+		if (strncmp(ifa->ifa_name, name, IF_NAMESIZE) != 0 ||
+					ifa->ifa_addr->sa_family != AF_INET6)
+			continue;
+
+		iaddr = (struct sockaddr_in6 *)ifa->ifa_addr;
+		imask = (struct sockaddr_in6 *)ifa->ifa_netmask;
+
+		rv = mem_mask_equal(&iaddr->sin6_addr, &haddr,
+					&imask->sin6_addr,
+					sizeof(haddr));
+		goto out;
+	}
+
+out:
+	freeifaddrs(ifaddr);
+	return rv;
+}
+
 int connman_inet_remove_from_bridge(int index, const char *bridge)
 {
 	struct ifreq ifr;
