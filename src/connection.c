@@ -234,6 +234,15 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 		if (!active_gateway->ipv4_gateway)
 			return;
 
+
+		/*
+		 * If VPN server is on same subnet as we are, skip adding
+		 * route.
+		 */
+		if (connman_inet_compare_subnet(active_gateway->index,
+								gateway))
+			return;
+
 		DBG("active gw %s", active_gateway->ipv4_gateway->gateway);
 
 		if (g_strcmp0(active_gateway->ipv4_gateway->gateway,
@@ -248,6 +257,10 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
 
 		if (!active_gateway->ipv6_gateway)
+			return;
+
+		if (connman_inet_compare_ipv6_subnet(active_gateway->index,
+								gateway))
 			return;
 
 		DBG("active gw %s", active_gateway->ipv6_gateway->gateway);
