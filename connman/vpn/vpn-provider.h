@@ -87,6 +87,8 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 							const char *key);
 bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 							const char *key);
+bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
+							bool default_value);
 
 int vpn_provider_set_state(struct vpn_provider *provider,
 					enum vpn_provider_state state);
