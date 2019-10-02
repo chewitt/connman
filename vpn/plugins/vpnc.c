@@ -815,6 +815,14 @@ static int vc_connect(struct vpn_provider *provider,
 	return run_connect(data);
 }
 
+static void vc_disconnect(struct vpn_provider *provider)
+{
+	if (!provider)
+		return;
+
+	connman_agent_cancel(provider);
+}
+
 static int vc_error_code(struct vpn_provider *provider, int exit_code)
 {
 	switch (exit_code) {
@@ -850,6 +858,7 @@ static int vc_device_flags(struct vpn_provider *provider)
 static struct vpn_driver vpn_driver = {
 	.notify		= vc_notify,
 	.connect	= vc_connect,
+	.disconnect	= vc_disconnect,
 	.error_code	= vc_error_code,
 	.save		= vc_save,
 	.device_flags	= vc_device_flags,
