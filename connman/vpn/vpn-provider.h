@@ -87,6 +87,8 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 							const char *key);
 bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 							const char *key);
+bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
+							bool default_value);
 
 int vpn_provider_set_state(struct vpn_provider *provider,
 					enum vpn_provider_state state);
@@ -118,6 +120,12 @@ const char *vpn_provider_get_save_group(struct vpn_provider *provider);
 const char *vpn_provider_get_name(struct vpn_provider *provider);
 const char *vpn_provider_get_host(struct vpn_provider *provider);
 const char *vpn_provider_get_path(struct vpn_provider *provider);
+
+const unsigned int vpn_provider_get_authentication_errors(
+					struct vpn_provider *provider);
+const unsigned int vpn_provider_get_connection_errors(
+					struct vpn_provider *provider);
+
 void vpn_provider_change_address(struct vpn_provider *provider);
 void vpn_provider_clear_address(struct vpn_provider *provider, int family);
 

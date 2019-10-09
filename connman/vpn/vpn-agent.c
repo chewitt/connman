@@ -151,6 +151,59 @@ void vpn_agent_append_user_info(DBusMessageIter *iter,
 				&data);
 }
 
+struct auth_failure_data {
+	struct vpn_provider *provider;
+	const char* type_str;
+	const char *key;
+	const char* str;
+};
+
+static void request_input_append_failure(DBusMessageIter *iter,
+						void *user_data)
+{
+	struct auth_failure_data *data;
+	const char *str;
+
+	data = user_data;
+
+	connman_dbus_dict_append_basic(iter, "Type",
+				DBUS_TYPE_STRING, &data->type_str);
+	str = "informational";
+	connman_dbus_dict_append_basic(iter, "Requirement",
+				DBUS_TYPE_STRING, &str);
+
+	str = data->str;
+
+	/* Try to get information from provider about error */
+	if (!str)
+		str = vpn_provider_get_string(data->provider, data->key);
+
+	if (str)
+		connman_dbus_dict_append_basic(iter, "Value",
+						DBUS_TYPE_STRING, &str);
+}
+
+void vpn_agent_append_auth_failure(DBusMessageIter *iter,
+				struct vpn_provider *provider,
+				const char* information)
+{
+	struct auth_failure_data data;
+	unsigned int value;
+
+	/* Skip if there are no auth errors */
+	value = vpn_provider_get_authentication_errors(provider);
+	if (!value)
+		return;
+
+	data.provider = provider;
+	data.type_str = "string";
+	data.key = "VpnAgent.AuthFailure";
+	data.str = information;
+
+	connman_dbus_dict_append_dict(iter, data.key,
+				request_input_append_failure, &data);
+}
+
 static void request_input_append_flag(DBusMessageIter *iter,
 						void *user_data)
 {
