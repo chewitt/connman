@@ -194,6 +194,41 @@ VPN
    ids and passphrases.
 
 
+- Change OpenConnect plugin to use libopenconnect
+
+   Priority: Medium
+   Complexity: C4
+
+   Current implementation of OpenConnect uses screenscraping and interactive
+   mode for accepting self signed certificates and reacting to PKCS pass
+   phrase requests. This should be replaced with libopenconnect use. It may be
+   worthwhile to attempt to replace the whole authentication with the use of
+   openconnect_obtain_cookie() whatever authentication type is used. This
+   would lead to using only the cookie when connecting (--cookie-on-stdin)
+   and would cleanup the code at run_connect().
+
+   The usage of stdout can be removed as unnecessary. Cookie should be
+   retrieved with openconnect_obtain_cookie(). Remove this also from
+   connman_task_run().
+
+   Function is_valid_protocol() must use openconnect_get_supported_protocols.
+   Also the static const char *protocols[] would be unnecessary.
+
+   Reading the stderr with byte-by-byte approach is to be removed, as well as
+   are the PKCS failures and requests in stderr IO channel processing.
+
+   The use of interactive mode toggle is to be removed. Non-interactive mode
+   must be used, which leads to using --syslog with each authentication type
+   as task arg.
+
+   If the peer certificate cannot be verified with normal means it is because
+   the peer certificate is self signed and the user setting
+   "AllowSelfSignedCert" has to be used for the verify certificate callback
+   reply. The callback for certificate validation must return zero if user has
+   allowed self signed certificates. In such case save the SHA1 fingerprint of
+   server certificate as it is done now, otherwise indicate error to
+   libopenconnect.
+
 Tools
 =====
 
