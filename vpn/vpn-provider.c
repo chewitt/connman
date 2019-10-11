@@ -2368,6 +2368,26 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 	return setting->value;
 }
 
+bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
+							bool default_value)
+{
+	struct vpn_setting *setting;
+
+	connman_info("provider %p key %s", provider, key);
+
+	setting = g_hash_table_lookup(provider->setting_strings, key);
+	if (!setting || !setting->value)
+		return default_value;
+
+	if (!g_strcmp0(setting->value, "true"))
+		return true;
+
+	if (!g_strcmp0(setting->value, "false"))
+		return false;
+
+	return default_value;
+}
+
 bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 							const char *key)
 {
