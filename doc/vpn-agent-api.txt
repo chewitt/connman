@@ -96,6 +96,13 @@ Fields		string Username
 			Return the final VPN server to use after possible
 			web authentication logins, selections and redirections.
 
+		string VpnAgent.AuthFailure
+
+			Informational field that can be used to indicate VPN
+			agent that previous authentication has failed and new
+			credentials should be requested from user. Additional
+			information about the failure can be added as "Value".
+
 Arguments	string Type
 
 			Contains the type of a field. For example "password",
