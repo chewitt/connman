@@ -3,6 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2019  Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -88,6 +89,8 @@ struct vpn_provider {
 	struct connman_ipaddress *prev_ipv4_addr;
 	struct connman_ipaddress *prev_ipv6_addr;
 	void *plugin_data;
+	unsigned int auth_error_counter;
+	unsigned int conn_error_counter;
 };
 
 static void append_properties(DBusMessageIter *iter,
@@ -859,12 +862,22 @@ static gchar **create_network_list(GSList *networks, gsize *count)
 	return result;
 }
 
+void reset_error_counters(struct vpn_provider *provider)
+{
+	if (!provider)
+		return;
+
+	provider->auth_error_counter = provider->conn_error_counter = 0;
+}
+
 static int vpn_provider_save(struct vpn_provider *provider)
 {
 	GKeyFile *keyfile;
 
 	DBG("provider %p immutable %s", provider,
 					provider->immutable ? "yes" : "no");
+
+	reset_error_counters(provider);
 
 	if (provider->immutable) {
 		/*
@@ -1134,8 +1147,10 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 			vpn_provider_set_state(provider,
 					VPN_PROVIDER_STATE_FAILURE);
 		}
-	} else
+	} else {
+		reset_error_counters(provider);
 		g_dbus_send_reply(connection, pending, DBUS_TYPE_INVALID);
+	}
 
 	dbus_message_unref(pending);
 }
@@ -1656,12 +1671,14 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 
 	switch (error) {
 	case VPN_PROVIDER_ERROR_UNKNOWN:
+		break;
 	case VPN_PROVIDER_ERROR_CONNECT_FAILED:
+		++provider->conn_error_counter;
 		break;
 
-        case VPN_PROVIDER_ERROR_LOGIN_FAILED:
-        case VPN_PROVIDER_ERROR_AUTH_FAILED:
-		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
+	case VPN_PROVIDER_ERROR_LOGIN_FAILED:
+	case VPN_PROVIDER_ERROR_AUTH_FAILED:
+		++provider->auth_error_counter;
 		break;
 	}
 
@@ -2681,6 +2698,18 @@ const char *vpn_provider_get_host(struct vpn_provider *provider)
 const char *vpn_provider_get_path(struct vpn_provider *provider)
 {
 	return provider->path;
+}
+
+unsigned int vpn_provider_get_authentication_errors(
+						struct vpn_provider *provider)
+{
+	return provider->auth_error_counter;
+}
+
+unsigned int vpn_provider_get_connection_errors(
+						struct vpn_provider *provider)
+{
+	return provider->conn_error_counter;
 }
 
 void vpn_provider_change_address(struct vpn_provider *provider)
