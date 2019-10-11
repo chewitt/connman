@@ -606,7 +606,12 @@ static int pptp_error_code(struct vpn_provider *provider, int exit_code)
 
 static void pptp_disconnect(struct vpn_provider *provider)
 {
+	if (!provider)
+		return;
+
 	vpn_provider_set_string(provider, "PPTP.Password", NULL);
+
+	connman_agent_cancel(provider);
 }
 
 static struct vpn_driver vpn_driver = {
