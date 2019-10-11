@@ -48,6 +48,7 @@
 #include "vpn.h"
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
+#define OC_MAX_READBUF_LEN 128
 
 enum opt_type {
 	OPT_STRING	= 0,
@@ -103,6 +104,7 @@ struct oc_private_data {
 	GIOChannel *out_ch;
 	GIOChannel *err_ch;
 	enum oc_connect_type connect_type;
+	bool interactive;
 };
 
 static bool is_valid_protocol(const char* protocol)
@@ -489,6 +491,82 @@ static void clear_provider_credentials(struct vpn_provider *provider)
 	}
 }
 
+typedef void (* request_input_reply_cb_t) (DBusMessage *reply,
+					void *user_data);
+
+static int request_input_credentials(struct oc_private_data *data,
+			request_input_reply_cb_t cb);
+
+
+static void request_input_pkcs_reply(DBusMessage *reply, void *user_data)
+{
+	struct oc_private_data *data = user_data;
+	const char *password = NULL;
+	const char *key;
+	DBusMessageIter iter, dict;
+	int err;
+
+	connman_info("provider %p", data->provider);
+
+	if (!reply)
+		goto err;
+
+	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
+				data->task, data->cb, data->user_data);
+	if (err) {
+		/* Ensure cb is called only once */
+		data->cb = NULL;
+		data->user_data = NULL;
+		goto err;
+	}
+
+	if (!vpn_agent_check_reply_has_dict(reply))
+		goto err;
+
+	dbus_message_iter_init(reply, &iter);
+	dbus_message_iter_recurse(&iter, &dict);
+	while (dbus_message_iter_get_arg_type(&dict) == DBUS_TYPE_DICT_ENTRY) {
+		DBusMessageIter entry, value;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			break;
+
+		dbus_message_iter_get_basic(&entry, &key);
+
+		if (g_str_equal(key, "OpenConnect.PKCSPassword")) {
+			dbus_message_iter_next(&entry);
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
+				break;
+			dbus_message_iter_recurse(&entry, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_STRING)
+				break;
+			dbus_message_iter_get_basic(&value, &password);
+			vpn_provider_set_string_hide_value(data->provider, key,
+						password);
+		}
+
+		dbus_message_iter_next(&dict);
+	}
+
+	if (data->connect_type != OC_CONNECT_PKCS || !password)
+		goto err;
+
+	if (write_data(data->fd_in, password) != 0) {
+		connman_error("openconnect failed to take PKCS pass phrase on"
+					" stdin");
+		goto err;
+	}
+
+	clear_provider_credentials(data->provider);
+
+	return;
+err:
+	oc_connect_done(data, EACCES);
+}
+
 static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 			gpointer user_data)
 {
@@ -513,7 +591,18 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 				"Failed to open HTTPS connection to",
 				NULL
 	};
-	const char *pkcs_failure = "Failed to decrypt PKCS";
+	/* Handle both PKCS#12 and PKCS#8 failures */
+	const char *pkcs_failures[] = {
+				"Failed to decrypt PKCS#12 certificate file",
+				"Failed to decrypt PKCS#8 certificate file",
+				NULL
+	};
+	/* Handle both PKCS#12 and PKCS#8 requests */
+	const char *pkcs_requests[] = {
+				"Enter PKCS#12 pass phrase",
+				"Enter PKCS#8 pass phrase",
+				NULL
+	};
 	const char *server_key_hash = "    --servercert";
 	char *str;
 	bool close = false;
@@ -527,14 +616,60 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 	if (source && data->err_ch != source)
 		return G_SOURCE_REMOVE;
 
-	if ((condition & G_IO_IN) &&
-		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
-							G_IO_STATUS_NORMAL) {
-		str[strlen(str) - 1] = '\0';
+	if ((condition & G_IO_IN)) {
+		gsize len;
+		int pos;
+
+		if (!data->interactive) {
+			if (g_io_channel_read_line(source, &str, &len, NULL,
+						NULL) != G_IO_STATUS_NORMAL)
+				err = EIO;
+			else
+				str[len - 1] = '\0';
+		} else {
+			GIOStatus status;
+			str = g_try_new0(char, OC_MAX_READBUF_LEN);
+			if (!str)
+				return G_SOURCE_REMOVE;
+
+			for (pos = 0; pos < OC_MAX_READBUF_LEN - 1 ; ++pos) {
+				status = g_io_channel_read_chars(source,
+						str+pos, 1, &len, NULL);
+
+				if (status == G_IO_STATUS_EOF) {
+					break;
+				} else if (status != G_IO_STATUS_NORMAL) {
+					err = EIO;
+					break;
+				}
+
+				/* Ignore control chars and digits at start */
+				if (!pos && (g_ascii_iscntrl(str[pos]) ||
+						g_ascii_isdigit(str[pos])))
+					--pos;
+
+				/* Read zero length or no more to read */
+				if (!len || g_io_channel_get_buffer_condition(
+							source) != G_IO_IN ||
+							str[pos] == '\n')
+					break;
+			}
+
+			/*
+			 * When self signed certificates are allowed and server
+			 * SHA1 fingerprint is printed to stderr there is a
+			 * newline char at the end of SHA1 fingerprint.
+			 */
+			if (str[pos] == '\n')
+				str[pos] = '\0';
+		}
 
 		connman_info("openconnect: %s", str);
 
-		if (g_str_has_prefix(str, server_key_hash)) {
+		if (err || !str || !*str) {
+			connman_info("error reading from openconnect");
+		} else if (g_str_has_prefix(str, server_key_hash)) {
+			const char *fingerprint;
 			int position;
 			bool allow_self_signed;
 
@@ -545,21 +680,23 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 
 			if (allow_self_signed) {
 				position = strlen(server_key_hash) + 1;
+				fingerprint = g_strstrip(str + position);
 
 				connman_info("Set server key hash: \"%s\"",
-							str + position);
+							fingerprint);
 
 				vpn_provider_set_string(data->provider,
 						"OpenConnect.ServerCert",
-						str + position);
+						fingerprint);
 
 				/*
 				 * OpenConnect waits for "yes" or "no" as
 				 * response to certificate acceptance request.
 				 */
 				if (write_data(data->fd_in, "yes") != 0)
-					connman_error("cannot write answer to "
-						"certificate accept request");
+					connman_error("openconnect: cannot "
+						"write answer to certificate "
+						"accept request");
 
 			} else {
 				connman_warn("Self signed certificate is not "
@@ -573,17 +710,21 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 				close = true;
 				err = ECONNREFUSED;
 			}
-		} else if (g_str_has_prefix(str, pkcs_failure)) {
-			connman_warn("invalid PKCS password: %s", str);
-			/*
-			 * Close IO channel to avoid deadlock. This is because
-			 * after PKCS file decryption fails OpenConnect will
-			 * wait for a new pass phrase to be written to stdin,
-			 * blocking vpnd as well. Instead of waiting for a
-			 * timeout it is better to close the IO channel here.
-			 */
+		} else if (strv_contains_prefix(pkcs_failures, str)) {
+			connman_warn("PKCS failure: %s", str);
 			close = true;
 			err = EACCES;
+		} else if (strv_contains_prefix(pkcs_requests, str)) {
+			connman_info("PKCS file pass phrase request: %s", str);
+			err = request_input_credentials(data,
+						request_input_pkcs_reply);
+
+			if (err != -EINPROGRESS) {
+				err = EACCES;
+				close = true;
+			} else {
+				err = 0;
+			}
 		} else if (strv_contains_prefix(auth_failures, str)) {
 			connman_warn("authentication failed: %s", str);
 			err = EACCES;
@@ -633,8 +774,10 @@ static int run_connect(struct oc_private_data *data)
 	const char *password = NULL;
 	const char *certificate = NULL;
 	const char *private_key;
+	const char *setting_str;
+	bool setting;
 	bool use_stdout = false;
-	int fd_out;
+	int fd_out = -1;
 	int fd_err;
 	int err = 0;
 
@@ -717,14 +860,19 @@ static int run_connect(struct oc_private_data *data)
 	case OC_CONNECT_PKCS:
 		certificate = vpn_provider_get_string(provider,
 					"OpenConnect.PKCSClientCert");
-		password = vpn_provider_get_string(data->provider,
-					"OpenConnect.PKCSPassword");
-		if (!certificate || !password) {
+		if (!certificate) {
 			err = -EACCES;
 			goto done;
 		}
 
 		connman_task_add_argument(task, "--certificate", certificate);
+
+		password = vpn_provider_get_string(data->provider,
+					"OpenConnect.PKCSPassword");
+		/* Add password only if it is has been set */
+		if (!password || !g_strcmp0(password, "-"))
+			break;
+
 		connman_task_add_argument(task, "--passwd-on-stdin", NULL);
 		break;
 	}
@@ -735,10 +883,41 @@ static int run_connect(struct oc_private_data *data)
 
 	task_append_config_data(provider, task);
 
-	connman_task_add_argument(task, "--non-inter", NULL);
+	/*
+	 * To clarify complex situation, if cookie is expected to be printed
+	 * to stdout all other output must go to syslog. But with PKCS all
+	 * output must be catched in order to get message about file decryption
+	 * error. For this reason, the mode has to be interactive as well.
+	 */
+	switch (data->connect_type) {
+	case OC_CONNECT_COOKIE:
+		/* fall through */
+	case OC_CONNECT_COOKIE_WITH_USERPASS:
+		/* fall through */
+	case OC_CONNECT_USERPASS:
+		/* fall through */
+	case OC_CONNECT_PUBLICKEY:
+		connman_task_add_argument(task, "--syslog", NULL);
 
-	/* Output all to syslog to output cookie only to stdout */
-	connman_task_add_argument(task, "--syslog", NULL);
+		setting = vpn_provider_get_boolean(provider,
+					"OpenConnect.AllowSelfSignedCert",
+					false);
+		setting_str = vpn_provider_get_string(provider,
+					"OpenConnect.ServerCert");
+
+		/*
+		 * Run in interactive mode if self signed certificates are
+		 * allowed and there is no set server SHA1 fingerprint.
+		 */
+		if (setting_str || !setting)
+			connman_task_add_argument(task, "--non-inter", NULL);
+		else
+			data->interactive = true;
+		break;
+	case OC_CONNECT_PKCS:
+		data->interactive = true;
+		break;
+	}
 
 	connman_task_add_argument(task, "--script", SCRIPTDIR "/vpn-script");
 
@@ -789,9 +968,12 @@ static int run_connect(struct oc_private_data *data)
 	case OC_CONNECT_PUBLICKEY:
 		break;
 	case OC_CONNECT_PKCS:
+		if (!password || !g_strcmp0(password, "-"))
+			break;
+
 		if (write_data(data->fd_in, password) != 0) {
 			connman_error("openconnect failed to take PKCS "
-						"password on stdin");
+						"pass phrase on stdin");
 			err = -EIO;
 		}
 
@@ -812,15 +994,32 @@ static int run_connect(struct oc_private_data *data)
 
 	if (use_stdout) {
 		data->out_ch = g_io_channel_unix_new(fd_out);
-		data->out_ch_id = g_io_add_watch(data->out_ch,
-					G_IO_IN | G_IO_ERR | G_IO_HUP,
-					(GIOFunc)io_channel_out_cb, data);
+
+		/* Use ASCII encoding only */
+		if (g_io_channel_set_encoding(data->out_ch, NULL, NULL) !=
+					G_IO_STATUS_NORMAL) {
+			close_io_channel(data, data->out_ch);
+			err = -EIO;
+		} else {
+			data->out_ch_id = g_io_add_watch(data->out_ch,
+						G_IO_IN | G_IO_ERR | G_IO_HUP,
+						(GIOFunc)io_channel_out_cb,
+						data);
+		}
 	}
 
 	data->err_ch = g_io_channel_unix_new(fd_err);
-	data->err_ch_id = g_io_add_watch(data->err_ch,
-				G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_PRI,
-				(GIOFunc)io_channel_err_cb, data);
+
+	/* Use ASCII encoding only */
+	if (g_io_channel_set_encoding(data->err_ch, NULL, NULL) !=
+				G_IO_STATUS_NORMAL) {
+		close_io_channel(data, data->err_ch);
+		err = -EIO;
+	} else {
+		data->err_ch_id = g_io_add_watch(data->err_ch,
+					G_IO_IN | G_IO_ERR | G_IO_HUP,
+					(GIOFunc)io_channel_err_cb, data);
+	}
 
 done:
 	clear_provider_credentials(data->provider);
@@ -908,8 +1107,12 @@ static void request_input_append_to_dict(struct vpn_provider *provider,
 static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 {
 	struct oc_private_data *data = user_data;
-	char *cookie = NULL, *servercert = NULL, *vpnhost = NULL;
-	const char *username = NULL, *password = NULL, *pkcspassword = NULL;
+	const char *cookie = NULL;
+	const char *servercert = NULL;
+	const char *vpnhost = NULL;
+	const char *username = NULL;
+	const char *password = NULL;
+	const char *pkcspassword = NULL;
 	const char *key;
 	DBusMessageIter iter, dict;
 	int err;
@@ -1054,16 +1257,20 @@ out:
 	free_private_data(data);
 }
 
-static int request_input_credentials(struct oc_private_data *data)
+static int request_input_credentials(struct oc_private_data *data,
+			request_input_reply_cb_t cb)
 {
 	DBusMessage *message;
-	const char *path, *agent_sender, *agent_path, *username;
+	const char *path;
+	const char *agent_sender;
+	const char *agent_path;
+	const char *username;
 	DBusMessageIter iter;
 	DBusMessageIter dict;
 	int err;
 	void *agent;
 
-	if (!data)
+	if (!data || !cb)
 		return -ESRCH;
 
 	connman_info("provider %p", data->provider);
@@ -1147,8 +1354,7 @@ static int request_input_credentials(struct oc_private_data *data)
 	connman_dbus_dict_close(&iter, &dict);
 
 	err = connman_agent_queue_message(data->provider, message,
-			connman_timeout_input_request(),
-			request_input_credentials_reply, data, agent);
+			connman_timeout_input_request(), cb, data, agent);
 
 	dbus_message_unref(message);
 
@@ -1189,7 +1395,11 @@ static int oc_connect(struct vpn_provider *provider,
 			const char *dbus_sender, void *user_data)
 {
 	struct oc_private_data *data;
-	const char *vpnhost, *vpncookie, *certificate, *username, *password;
+	const char *vpnhost;
+	const char *vpncookie;
+	const char *certificate;
+	const char *username;
+	const char *password;
 	const char *private_key;
 	int err;
 
@@ -1267,14 +1477,9 @@ static int oc_connect(struct vpn_provider *provider,
 		break;
 	case OC_CONNECT_PKCS:
 		certificate = vpn_provider_get_string(provider,
-				"OpenConnect.PKCSClientCert");
-		if (certificate) {
-			password = vpn_provider_get_string(provider,
-				"OpenConnect.PKCSPassword");
-			if (!password || !g_strcmp0(password, "-"))
-				goto request_input;
-		} else {
-			DBG("missing PKCS certificate");
+					"OpenConnect.PKCSClientCert");
+		if (!certificate) {
+			connman_warn("missing PKCS certificate");
 			oc_connect_done(data, EACCES);
 			free_private_data(data);
 			return -EACCES;
@@ -1286,7 +1491,7 @@ static int oc_connect(struct vpn_provider *provider,
 	return run_connect(data);
 
 request_input:
-	err = request_input_credentials(data);
+	err = request_input_credentials(data, request_input_credentials_reply);
 	if (err != -EINPROGRESS) {
 		oc_connect_done(data, err);
 		vpn_provider_indicate_error(data->provider,
