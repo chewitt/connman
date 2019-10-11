@@ -54,8 +54,9 @@ OpenConnect VPN supports following options (see openconnect(8) for details):
  OpenConnect.CACert     --cafile           File containing other Certificate
                                            Authorities in addition to the ones
                                            in the system trust database (O)
- OpenConnect.ClientCert --certificate      Client certificate file, if needed
-                                           by web authentication (O)
+ OpenConnect.ClientCert --certificate      Client certificate file, needed
+                                           by web authentication when AuthType
+                                           is set as "publickey" (O)
  VPN.MTU                --mtu              Request MTU from server as the MTU
                                            of the tunnel (O)
  OpenConnect.Cookie     --cookie-on-stdin  Cookie received as a result of the
@@ -68,8 +69,73 @@ OpenConnect VPN supports following options (see openconnect(8) for details):
                                            Only usable for extremely simple VPN
                                            configurations and should normally
                                            be set only via the VPN Agent API.
-If OpenConnect.Cookie or OpenConnect.ServerCert are missing, the VPN Agent will
-be contacted to supply the information.
+ OpenConnect.AllowSelfSignedCert none      Additional option to define if self
+                                           signed server certificates are
+                                           allowed. Boolean string and defaults
+                                           to false, value "true" enables the
+                                           option. Affects to the OpenConnect
+                                           internal function only: --servercert
+                                           is not added to startup parameters
+                                           and receiving self signed cert from
+                                           server terminates the connection if
+                                           set as false (or omitted) (O)
+ OpenConnect.AuthType                      Type of authentication used with
+                                           OpenConnect. Applicable values are
+                                           "cookie", "cookie_with_userpass",
+                                           "userpass", "publickey" and
+                                           "pkcs". Value "cookie" is basic
+                                           cookie based authentication. Value
+                                           "cookie_with_userpass" means that
+                                           credentials are used to retrieve the
+                                           connection cookie, which hides the
+                                           username from commandline. With
+                                           value "userpass" username and
+                                           password are used. Value "publickey"
+                                           requires CACert and UserPrivateKey
+                                           to be set. Value "pkcs" uses the
+                                           PKCSClientCert and requests password
+                                           input. Defaults to "cookie" (O)
+    cookie              --cookie-on-stdin  Default cookie based authentication
+    cookie_with_userpass                   Two phased connection, first
+        authentication: --cookieonly       authenticate with credentials then
+                        --passwd-on-stdin  use cookie for connection. Username
+                        --user             is hidden from commandline during
+        connection:     --cookie-on-stdin  connection.
+    userpass            --passwd-on-stdin  Credential based authentication,
+                        --user             username is visible on commandline.
+    publickey           --clientcert       Non-encrypted client certificate and
+                        --sslkey           private key file is used for auth.
+    pkcs                --cliencert        Authenticate with PKCS#1/PKCS#8/
+                                           PKCS#12 client certificate.
+ OpenConnect.DisableIPv6 --disable-ipv6    Do not ask for IPv6 connectivity.
+                                           Boolean string and defaults to
+                                           false, value "true" enables the
+                                           option (O)
+ OpenConnect.NoDTLS      --no-dtls         Disable DTLS and ESP (O)
+ OpenConnect.NoHTTPKeepalive --no-http-keepalive    Disable HTTP connection
+                                           re-use to workaround issues with
+                                           some servers. Boolean string and
+                                           defaults to false, value "true"
+                                           enables the option (O)
+ OpenConnect.PKCSClientCert --certificate  Certificate and private key in
+                                           a PKCS#1/PKCS#8/PKCS#12 structure.
+                                           Needed when AuthType is "pkcs" (O)
+ OpenConnect.Usergroup  --usergroup        Set login usergroup on remote server
+                                           (O)
+ OpenConnect.UserPrivateKey --sslkey       SSL private key file needed by web
+                                           authentication when AuthType is set
+                                           as "publickey" (O)
+
+The VPN agent will be contacted to supply the information based on the
+authentication type as follows:
+ Authentication type    Information requested       Saved with name
+ cookie                 OpenConnect.Cookie          OpenConnect.Cookie
+ cookie_with_userpass   Username                    OpenConnect.Username
+                        Password                    OpenConnect.Password
+ userpass               Username                    OpenConnect.Username
+                        Password                    OpenConnect.Password
+ publickey              <none>
+ pkcs                   OpenConnect.PKCSPassword    OpenConnect.PKCSPassword
 
 OpenVPN VPN supports following options (see openvpn(8) for details):
  Option name            OpenVPN option   Description
@@ -235,6 +301,7 @@ L2TP.User = username
 
 [provider_openconnect]
 Type = OpenConnect
+AuthType = pkcs
 Name = Connection to corporate network using Cisco VPN
 Host = 7.6.5.4
 Domain = corporate.com
