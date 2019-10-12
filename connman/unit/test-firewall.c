@@ -1626,8 +1626,8 @@ static const char *general_options[] = {
 	NULL
 };
 
-#define RULES_OPTIONS_ADDR4 18 // +1 chain
-#define RULES_OPTIONS_ADDR6 10 // +1 chain
+#define RULES_OPTIONS_ADDR4 23 // +1 chain
+#define RULES_OPTIONS_ADDR6 15 // +1 chain
 
 static const char *general_options_address4[] = {
 	/* Address options IPv4 */
@@ -1648,6 +1648,12 @@ static const char *general_options_address4[] = {
 	"-m conntrack --ctreplsrc connman.org -j ACCEPT",
 	"-m conntrack --ctrepldst 10.0.0.1 -j ACCEPT",
 	"-m conntrack --ctrepldst connman.org -j ACCEPT",
+	/* iprange match */
+	"-m iprange --src-range 1.1.1.1 -j LOG",
+	"-m iprange --src-range 1.1.1.2-1.1.1.2 -j LOG",
+	"-m iprange --src-range 1.2.3.5-1.2.4.4 -j ACCEPT",
+	"-m iprange --src-range 2.2.2.2-3.3.3.3 -j ACCEPT",
+	"-m iprange --dst-range 4.4.4.4-5.5.5.5 -j ACCEPT",
 	NULL
 };
 
@@ -1662,6 +1668,12 @@ static const char *general_options_address6[] = {
 	"-d 2001:db8:3333:4444:5555:6666:1.2.3.4 -j DROP",
 	"--source 2001:db8:: --destination ::1234:5678/64 -j DROP",
 	"-s 2001:db8::,::1234:5678/64,2001:db8::1234:5678/128 -j DROP",
+	/* iprange match */
+	"-m iprange --src-range fe80::1 -j LOG",
+	"-m iprange --src-range fe80::2-fe80::2 -j LOG",
+	"-m iprange --src-range fe80::3:2-fe80::4:1 -j LOG",
+	"-m iprange --src-range fe80::2-fe80::10:ff -j ACCEPT",
+	"-m iprange --dst-range fe80::11:00-fe80::12:ff -j ACCEPT",
 	NULL
 };
 
@@ -1848,6 +1860,7 @@ static const char *invalid_general_options[] = {
 	"-p tcp -m multiport -j ACCEPT",
 	"-p tcp -m tcp -m multiport -j DROP",
 	"-m tcp -j LOG",
+	"-m iprange -j LOG",
 	/* Interfaces */
 	"-i eth0 -i eth1 -j DROP",
 	"-i eth0 -o eth1 -i rndis0 -j DROP",
@@ -1858,6 +1871,15 @@ static const char *invalid_general_options[] = {
 	"--out-interface eth0 -o eth1 -j DROP",
 	"-i ! eth1 -j DROP",
 	"-i ! eth1 -o ! eth0 -j ACCEPT",
+	/* iprange match */
+	"-m iprange --src-range '' -j ACCEPT",
+	"-m iprange --src-range 1.1.1.1- -j ACCEPT",
+	"-m iprange --src-range 3.3.3.3-2.2.2.2 -j ACCEPT",
+	"-m iprange --src-range 1.2.4.4-1.2.3.5 -j ACCEPT",
+	"-m iprange --src-range 3.3.3.3-2.2.2.2-1.1.1.1 -j ACCEPT",
+	"-m iprange --dst-range fe80::12:ff-fe80::11:00 -j ACCEPT",
+	"-m iprange --dst-range 1.1.1.1-fe80::11:00 -j ACCEPT",
+	"-m iprange --dst-range fe80::12:ff-2.2.2.2 -j ACCEPT",
 	NULL
 };
 
@@ -1937,7 +1959,6 @@ static const char *invalid_general_output[] = {
 		"DROP",
 		/* Disabled matches */
 		"-m recent --name example --check --seconds 60",
-		"-m iprange --src-range 192.168.10.1-192.168.10.5 -j DROP",
 		/* Multiport cannot be used in conjunction of -m protocol */
 		/* TODO this is iptables.c limitation, fix it */
 		"-p tcp -m tcp -m multiport 45:8000 -j ACCEPT",

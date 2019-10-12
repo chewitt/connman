@@ -1489,6 +1489,116 @@ static void test_iptables_match_owner(void)
 
 }
 
+/* Test if the iprange module works */
+static void test_iptables_match_iprange(void)
+{
+	int err;
+
+	/* IPv4, single ip and range, --src-range and --dst-range */
+
+	err = __connman_iptables_append(AF_INET, "filter", "INPUT",
+				"-m iprange --src-range 1.1.1.1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "INPUT",
+			"-m iprange --src-range 1.1.1.2-1.1.1.2 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "INPUT",
+			"-m iprange --src-range 1.2.3.5-1.2.4.4 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "INPUT",
+			"-m iprange --src-range 2.2.2.2-3.3.3.3 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET, "filter", "INPUT",
+			"-m iprange --dst-range 4.4.4.4-5.5.5.5 -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	assert_rule_exists(AF_INET, "filter",
+			"-A INPUT -m iprange --src-range 1.1.1.1 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+		"-A INPUT -m iprange --src-range 1.1.1.2-1.1.1.2 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+		"-A INPUT -m iprange --src-range 1.2.3.4-1.2.4.4 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+		"-A INPUT -m iprange --src-range 2.2.2.2-3.3.3.3 -j LOG");
+	assert_rule_exists(AF_INET, "filter",
+		"-A INPUT -m iprange --dst-range 4.4.4.4-5.5.5.5 -j LOG");
+
+	err = __connman_iptables_delete(AF_INET, "filter", "INPUT",
+				"-m iprange --src-range 1.1.1.1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "INPUT",
+			"-m iprange --src-range 1.1.1.2-1.1.1.2 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "INPUT",
+			"-m iprange --src-range 1.2.3.4-1.2.4.4 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "INPUT",
+			"-m iprange --src-range 2.2.2.2-3.3.3.3 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET, "filter", "INPUT",
+			"-m iprange --dst-range 4.4.4.4-5.5.5.5 -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET, "filter");
+	g_assert(err == 0);
+
+	/* IPv6 test, parameters same as above */
+
+	err = __connman_iptables_append(AF_INET6, "filter", "INPUT",
+				"-m iprange --src-range fe80::1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET6, "filter", "INPUT",
+			"-m iprange --src-range fe80:1:1-fe80:1:1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET6, "filter", "INPUT",
+			"-m iprange --src-range fe80:3:2-fe80:4:1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET6, "filter", "INPUT",
+			"-m iprange --src-range fe80::2-fe80::10:ff -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_append(AF_INET6, "filter", "INPUT",
+		"-m iprange --dst-range fe80::11:00-fe80::12:ff -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET6, "filter");
+	g_assert(err == 0);
+
+	assert_rule_exists(AF_INET6, "filter",
+			"-A INPUT -m iprange --src-range fe80::1 -j LOG");
+	assert_rule_exists(AF_INET6, "filter",
+		"-A INPUT -m iprange --src-range fe80::1:1-fe80::1:1 -j LOG");
+	assert_rule_exists(AF_INET6, "filter",
+		"-A INPUT -m iprange --src-range fe80::3:2-fe80::4:1 -j LOG");
+	assert_rule_exists(AF_INET6, "filter",
+		"-A INPUT -m iprange --src-range fe80::2-fe80::10:ff -j LOG");
+	assert_rule_exists(AF_INET6, "filter",
+		"-A INPUT -m iprange --dst-range fe80::11:00-fe80::12:ff"
+		" -j LOG");
+
+	err = __connman_iptables_delete(AF_INET6, "filter", "INPUT",
+				"-m iprange --src-range fe80::1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET6, "filter", "INPUT",
+			"-m iprange --src-range fe80::1:1-fe80::1:1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET6, "filter", "INPUT",
+			"-m iprange --src-range fe80::3:2-fe80::4:1 -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET6, "filter", "INPUT",
+			"-m iprange --src-range fe80::2-fe80::10:ff -j LOG");
+	g_assert(err == 0);
+	err = __connman_iptables_delete(AF_INET6, "filter", "INPUT",
+		"-m iprange --dst-range fe80::11:00-fe80::12:ff -j LOG");
+	g_assert(err == 0);
+
+	err = __connman_iptables_commit(AF_INET6, "filter");
+	g_assert(err == 0);
+
+}
+
 static const char *general_input[] = {
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --dport 81 -j DROP",
@@ -2134,6 +2244,7 @@ int main(int argc, char *argv[])
 	g_test_add_func("/firewall6/basic3", test_firewall6_basic3);
 	g_test_add_func("/firewall4and6/basic4", test_firewall_4and6_basic0);
 	g_test_add_func("/iptables/owner", test_iptables_match_owner);
+	g_test_add_func("/iptables/iprange", test_iptables_match_iprange);
 	g_test_add_func("/firewallmanaged/prep", test_firewall_managed_prep);
 	g_test_add_func("/firewallmanaged/rule0", test_firewall_managed_rules0);
 	g_test_add_func("/firewallmanaged/rule1", test_firewall_managed_rules1);
