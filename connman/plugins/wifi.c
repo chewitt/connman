@@ -3343,15 +3343,15 @@ static void sta_remove_callback(int result,
 		info->wifi->tethering = false;
 		connman_technology_tethering_notify(info->technology, false);
 
-		g_free(info->ifname);
-		g_free(info->ssid);
-		g_free(info);
-
 		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
 			g_free(info->wifi->tethering_param->ssid);
 			g_free(info->wifi->tethering_param);
 			info->wifi->tethering_param = NULL;
 		}
+
+		g_free(info->ifname);
+		g_free(info->ssid);
+		g_free(info);
 		return;
 	}
 
