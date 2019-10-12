@@ -106,6 +106,7 @@ enum iptables_match_options_type {
 	IPTABLES_OPTION_ICMPv6,
 	IPTABLES_OPTION_DCCP,
 	IPTABLES_OPTION_OWNER,
+	IPTABLES_OPTION_IPRANGE,
 	IPTABLES_OPTION_NOT_SUPPORTED
 };
 
@@ -334,6 +335,15 @@ static const char *owner_options[] = {"--uid-owner", "--gid-owner",
                                       "--socket-exists", NULL};
 static const int owner_options_count[] = {1, 1, 0, -1};
 
+/*
+ * iprange match options
+ * [!] --src-range ip[-ip]    Match source IP in the specified range
+ * [!] --dst-range ip[-ip]    Match destination IP in the specified range
+ */
+
+static const char *iprange_options[] = {"--src-range", "--dst-range", NULL};
+static const int iprange_options_count[] = {1, 1, -1};
+
 struct iptables_type_options {
 	enum iptables_match_options_type type;
 	const char **options;
@@ -359,12 +369,14 @@ static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_ICMPv6, icmpv6_options, icmpv6_options_count},
 	{IPTABLES_OPTION_DCCP, dccp_options, dccp_options_count},
 	{IPTABLES_OPTION_OWNER, owner_options, owner_options_count},
+	{IPTABLES_OPTION_IPRANGE, iprange_options, iprange_options_count},
 };
 
 static const char *opt_names[] = {"port", "multiport", "tcp", "mark",
 				"conntrack", "ttl", "pkttype", "limit",
 				"helper", "ecn", "ah", "esp", "mh", "sctp",
-				"icmp", "ipv6-icmp", "dccp", "owner", NULL};
+				"icmp", "ipv6-icmp", "dccp", "owner",
+				"iprange", NULL};
 
 static GHashTable *iptables_options = NULL;
 
@@ -868,6 +880,60 @@ static bool is_correct_id(const char *id)
 	return true;
 }
 
+static bool is_valid_iprange(int family, const char *iprange)
+{
+	char **tokens;
+	unsigned int token_count;
+	bool value = false;
+	union {
+		struct in_addr ia;
+		struct in6_addr ia6;
+	} addr1, addr2;
+
+	if (!iprange)
+		return false;
+
+	tokens = g_strsplit(iprange, "-", 2);
+
+	if (!tokens)
+		return false;
+
+	token_count = g_strv_length(tokens);
+
+	if (token_count < 1) {
+		DBG("Incorrect number of IP addresses in iprange");
+		goto out;
+	}
+
+	if (!inet_pton(family, tokens[0], &addr1)) {
+		DBG("Error parsing %s address or address in wrong family"
+					" (ipv4/ipv6)",	tokens[0]);
+		goto out;
+	}
+
+	if (token_count == 1) {
+		value = true;
+		goto out;
+	}
+
+	if (!inet_pton(family, tokens[1], &addr2)) {
+		DBG("Error parsing %s address or address in wrong family"
+					" (ipv4/ipv6)", tokens[1]);
+		goto out;
+	}
+
+	if (memcmp(&addr1, &addr2, family == AF_INET ? sizeof(struct in_addr) :
+						sizeof(struct in6_addr)) > 0)
+		DBG("%s address is reverted with %s, would not match anything",
+					tokens[0], tokens[1]);
+	else
+		value = true;
+
+out:
+	g_strfreev(tokens);
+	return value;
+}
+
 typedef bool (*range_validation_cb_t)(const char *param);
 enum range_callback_operation {
 	RANGE_CALLBACK_OR = 0,
@@ -1254,6 +1320,12 @@ static bool is_valid_option_type_params(int family,
 			return true;
 
 		break;
+	case IPTABLES_OPTION_IPRANGE:
+		/* --src-range or --dst-range, same verification.
+		 * Currently the iprange module offers no other options,
+		 * so we can check both options the same way.
+		 */
+                return is_valid_iprange(family, params[0]);
 	case IPTABLES_OPTION_ICMPv6:
 		icmp_types = icmp_types_ipv6;
 	/* Fallthrough */
@@ -1465,6 +1537,8 @@ static bool is_valid_option_for_protocol_match(const char* protocol,
 		return false; /* MH options not supported */
 	case IPTABLES_OPTION_OWNER:
 		return !g_strcmp0(match, "owner");
+	case IPTABLES_OPTION_IPRANGE:
+		return !g_strcmp0(match, "iprange");
 	case IPTABLES_OPTION_MULTIPORT:
 		/* Match must be -m multiport for multiport options */
 		if (g_strcmp0(match, "multiport"))
@@ -1572,7 +1646,6 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 
 	const char *not_supported_matches_ipv4[] = { "comment",
 						"state",
-						"iprange",
 						"recent",
 						"sctp",
 						"mh",
@@ -1584,7 +1657,6 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 	};
 	const char *not_supported_matches_ipv6[] = { "comment",
 						"state",
-						"iprange",
 						"recent",
 						"ttl",
 						"sctp",
