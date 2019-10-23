@@ -605,6 +605,9 @@ static int request_input(struct vpn_provider *provider,
 
 	connman_dbus_dict_open(&iter, &dict);
 
+	if (vpn_provider_get_authentication_errors(provider))
+		vpn_agent_append_auth_failure(&dict, provider, NULL);
+
 	vpn_agent_append_user_info(&dict, provider, "L2TP.User");
 
 	vpn_agent_append_host_and_name(&dict, provider);
