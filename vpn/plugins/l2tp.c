@@ -795,7 +795,12 @@ static int l2tp_error_code(struct vpn_provider *provider, int exit_code)
 
 static void l2tp_disconnect(struct vpn_provider *provider)
 {
+	if (!provider)
+		return;
+
 	vpn_provider_set_string(provider, "L2TP.Password", NULL);
+
+	connman_agent_cancel(provider);
 }
 
 static struct vpn_driver vpn_driver = {
