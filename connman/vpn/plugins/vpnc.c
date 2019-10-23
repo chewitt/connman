@@ -450,6 +450,15 @@ static int run_connect(struct vc_private_data *data)
 	DBG("provider %p task %p interface %s user_data %p", provider, task,
 				if_name, data->user_data);
 
+	/*
+	 * Change to use C locale, options should be in ASCII according to
+	 * documentation. To be on the safe side, set both LANG and LC_ALL.
+	 * This is required especially when the VPNC processe is ran using an
+	 * user other than root.
+	 */
+	connman_task_add_variable(task,"LANG", "C");
+	connman_task_add_variable(task,"LC_ALL", "C");
+
 	connman_task_add_argument(task, "--non-inter", NULL);
 	connman_task_add_argument(task, "--no-detach", NULL);
 
