@@ -723,6 +723,9 @@ static int request_input_credentials(struct vc_private_data *data,
 
 	connman_dbus_dict_open(&iter, &dict);
 
+	if (vpn_provider_get_authentication_errors(data->provider))
+		vpn_agent_append_auth_failure(&dict, data->provider, NULL);
+
 	request_input_append_to_dict(data->provider, &dict,
 				request_input_append_password,
 				"VPNC.IPSec.Secret");
