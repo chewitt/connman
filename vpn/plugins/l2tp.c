@@ -96,7 +96,7 @@ struct {
 	{ "L2TP.ForceUserSpace", "force userspace", OPT_L2G, NULL, OPT_STRING },
 	{ "L2TP.ListenAddr", "listen-addr", OPT_L2G, NULL, OPT_STRING },
 	{ "L2TP.Rand Source", "rand source", OPT_L2G, NULL, OPT_STRING },
-	{ "L2TP.IPsecSaref", "ipsec saref", OPT_L2G, NULL, OPT_STRING },
+	{ "L2TP.IPsecSaref", "ipsec saref", OPT_L2G, "no", OPT_STRING },
 	{ "L2TP.Port", "port", OPT_L2G, NULL, OPT_STRING },
 	{ "PPPD.EchoFailure", "lcp-echo-failure", OPT_PPPD, "0", OPT_STRING },
 	{ "PPPD.EchoInterval", "lcp-echo-interval", OPT_PPPD, "0", OPT_STRING },
