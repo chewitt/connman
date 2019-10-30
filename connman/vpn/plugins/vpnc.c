@@ -4,6 +4,8 @@
  *
  *  Copyright (C) 2010,2013  BMW Car IT GmbH.
  *  Copyright (C) 2010,2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -450,6 +452,15 @@ static int run_connect(struct vc_private_data *data)
 	DBG("provider %p task %p interface %s user_data %p", provider, task,
 				if_name, data->user_data);
 
+	/*
+	 * Change to use C locale, options should be in ASCII according to
+	 * documentation. To be on the safe side, set both LANG and LC_ALL.
+	 * This is required especially when the VPNC processe is ran using an
+	 * user other than root.
+	 */
+	connman_task_add_variable(task,"LANG", "C");
+	connman_task_add_variable(task,"LC_ALL", "C");
+
 	connman_task_add_argument(task, "--non-inter", NULL);
 	connman_task_add_argument(task, "--no-detach", NULL);
 
@@ -723,6 +734,9 @@ static int request_input_credentials(struct vc_private_data *data,
 
 	connman_dbus_dict_open(&iter, &dict);
 
+	if (vpn_provider_get_authentication_errors(data->provider))
+		vpn_agent_append_auth_failure(&dict, data->provider, NULL);
+
 	request_input_append_to_dict(data->provider, &dict,
 				request_input_append_password,
 				"VPNC.IPSec.Secret");
@@ -815,6 +829,14 @@ static int vc_connect(struct vpn_provider *provider,
 	return run_connect(data);
 }
 
+static void vc_disconnect(struct vpn_provider *provider)
+{
+	if (!provider)
+		return;
+
+	connman_agent_cancel(provider);
+}
+
 static int vc_error_code(struct vpn_provider *provider, int exit_code)
 {
 	switch (exit_code) {
@@ -850,6 +872,7 @@ static int vc_device_flags(struct vpn_provider *provider)
 static struct vpn_driver vpn_driver = {
 	.notify		= vc_notify,
 	.connect	= vc_connect,
+	.disconnect	= vc_disconnect,
 	.error_code	= vc_error_code,
 	.save		= vc_save,
 	.device_flags	= vc_device_flags,

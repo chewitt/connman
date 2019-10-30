@@ -4,6 +4,8 @@
  *
  *  Copyright (C) 2010,2013  BMW Car IT GmbH.
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -610,6 +612,9 @@ static int request_input(struct vpn_provider *provider,
 
 	connman_dbus_dict_open(&iter, &dict);
 
+	if (vpn_provider_get_authentication_errors(provider))
+		vpn_agent_append_auth_failure(&dict, provider, NULL);
+
 	vpn_agent_append_user_info(&dict, provider, "L2TP.User");
 
 	vpn_agent_append_host_and_name(&dict, provider);
@@ -814,7 +819,12 @@ static int l2tp_error_code(struct vpn_provider *provider, int exit_code)
 
 static void l2tp_disconnect(struct vpn_provider *provider)
 {
+	if (!provider)
+		return;
+
 	vpn_provider_set_string(provider, "L2TP.Password", NULL);
+
+	connman_agent_cancel(provider);
 }
 
 static struct vpn_driver vpn_driver = {
