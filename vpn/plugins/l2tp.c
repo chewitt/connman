@@ -65,6 +65,7 @@ enum {
 	OPT_L2G = 2,
 	OPT_L2	= 3,
 	OPT_PPPD = 4,
+	OPT_L2LNS = 5,
 };
 
 struct {
@@ -83,7 +84,7 @@ struct {
 	{ "L2TP.DefaultRoute", "defaultroute", OPT_L2, NULL, OPT_STRING },
 	{ "L2TP.FlowBit", "flow bit", OPT_L2, NULL, OPT_STRING },
 	{ "L2TP.TunnelRWS", "tunnel rws", OPT_L2, NULL, OPT_STRING },
-	{ "L2TP.Exclusive", "exclusive", OPT_L2, NULL, OPT_STRING },
+	{ "L2TP.Exclusive", "exclusive", OPT_L2LNS, NULL, OPT_STRING },
 	{ "L2TP.Autodial", "autodial", OPT_L2, "yes", OPT_STRING },
 	{ "L2TP.Redial", "redial", OPT_L2, "yes", OPT_STRING },
 	{ "L2TP.RedialTimeout", "redial timeout", OPT_L2, "10", OPT_STRING },
@@ -453,6 +454,9 @@ static int l2tp_write_config(struct vpn_provider *provider,
 
 	l2tp_write_option(fd, "[global]", NULL);
 	l2tp_write_fields(provider, fd, OPT_L2G);
+
+	l2tp_write_option(fd, "[lns default]", NULL);
+	l2tp_write_fields(provider, fd, OPT_L2LNS);
 
 	l2tp_write_option(fd, "[lac l2tp]", NULL);
 
