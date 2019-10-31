@@ -1074,6 +1074,9 @@ static int vpn_provider_save(struct vpn_provider *provider)
 
 	reset_error_counters(provider);
 
+	if (provider->state == VPN_PROVIDER_STATE_FAILURE)
+		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
+
 	if (provider->immutable) {
 		/*
 		 * Do not save providers that are provisioned via .config
