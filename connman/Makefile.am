@@ -444,7 +444,8 @@ unit_test_sailfish_datacounter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_unref=test_time_notify_unref \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
-unit_test_sailfish_datacounter_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ -ldl
+unit_test_sailfish_datacounter_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ \
+	@DBUS_LIBS@ -ldl
 unit_test_sailfish_datacounter_SOURCES = unit/test-sailfish_datacounter.c \
 	unit/test_timenotify.c src/sailfish_datacounter.c \
 	src/sailfish_datacounters_util.c src/inotify.c src/storage.c \
@@ -461,7 +462,8 @@ unit_test_sailfish_datacounters_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_unref=test_time_notify_unref \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
-unit_test_sailfish_datacounters_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ -ldl
+unit_test_sailfish_datacounters_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ \
+	@DBUS_LIBS@ -ldl
 unit_test_sailfish_datacounters_SOURCES = unit/test-sailfish_datacounters.c \
 	unit/test_timenotify.c src/sailfish_datacounters.c \
 	src/sailfish_datacounter.c src/sailfish_datacounters_util.c \
@@ -481,7 +483,8 @@ unit_test_sailfish_datahistory_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_unref=test_time_notify_unref \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
-unit_test_sailfish_datahistory_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ -ldl
+unit_test_sailfish_datahistory_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ \
+	@DBUS_LIBS@ -ldl
 unit_test_sailfish_datahistory_SOURCES = unit/test-sailfish_datahistory.c \
 	unit/test_timenotify.c src/sailfish_datacounter.c \
 	src/sailfish_datacounters_util.c src/sailfish_datahistory.c \
@@ -498,7 +501,7 @@ unit_test_sailfish_developer_mode_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 unit_test_sailfish_developer_mode_SOURCES = $(backtrace_sources) src/connman.h \
 				src/log.c plugins/sailfish_developer_mode.c \
 				unit/test-sailfish_developer_mode.c
-unit_test_sailfish_developer_mode_LDADD = @GLIB_LIBS@ -ldl
+unit_test_sailfish_developer_mode_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 noinst_PROGRAMS += unit/test-sailfish_developer_mode
 TESTS += unit/test-sailfish_developer_mode
 endif
