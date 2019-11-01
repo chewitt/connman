@@ -73,12 +73,14 @@ unit/test-access
 unit/test-sailfish_access
 unit/test-sailfish_wakeup_timer
 unit/test-service
+unit/test-vpn_access
 unit/test-vpn-settings
 unit/test-sailfish_iptables_ext
 unit/test-sailfish_datacounter
 unit/test-sailfish_datacounters
 unit/test-sailfish_datahistory
 unit/test-sailfish_developer_mode
+unit/test-sailfish_vpn_access
 unit/test-firewall
 unit/test-globalproxy
 unit/test-iptables
