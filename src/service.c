@@ -84,7 +84,7 @@ struct connman_service {
 	bool hidden;
 	bool ignore;
 	bool autoconnect;
-	GTimeVal modified;
+	GDateTime *modified;
 	unsigned int order;
 	char *name;
 	char *passphrase;
@@ -378,6 +378,31 @@ static void set_split_routing(struct connman_service *service, bool value)
 		service->order = 10;
 }
 
+static void update_modified(struct connman_service *service)
+{
+	GTimeZone *tz;
+
+	if (service->modified)
+		g_date_time_unref(service->modified);
+
+	tz = g_time_zone_new_local();
+	service->modified = g_date_time_new_now(tz);
+	g_time_zone_unref(tz);
+}
+
+static void update_modified_from_iso8601(struct connman_service *service,
+					char *str)
+{
+	GTimeZone *tz;
+
+	if (service->modified)
+		g_date_time_unref(service->modified);
+
+	tz = g_time_zone_new_local();
+	service->modified = g_date_time_new_from_iso8601(str, tz);
+	g_time_zone_unref(tz);
+}
+
 int __connman_service_load_modifiable(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -419,7 +444,7 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Modified", NULL);
 	if (str) {
-		g_time_val_from_iso8601(str, &service->modified);
+		update_modified_from_iso8601(service, str);
 		g_free(str);
 	}
 
@@ -536,7 +561,7 @@ static int service_load(struct connman_service *service)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Modified", NULL);
 	if (str) {
-		g_time_val_from_iso8601(str, &service->modified);
+		update_modified_from_iso8601(service, str);
 		g_free(str);
 	}
 
@@ -703,7 +728,7 @@ static int service_save(struct connman_service *service)
 		break;
 	}
 
-	str = g_time_val_to_iso8601(&service->modified);
+	str = g_date_time_format_iso8601(service->modified);
 	if (str) {
 		g_key_file_set_string(keyfile, service->identifier,
 							"Modified", str);
@@ -3933,7 +3958,7 @@ static void service_complete(struct connman_service *service)
 	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
 		do_auto_connect(service, service->connect_reason);
 
-	g_get_current_time(&service->modified);
+	update_modified(service);
 	service_save(service);
 }
 
@@ -4861,7 +4886,7 @@ static DBusMessage *move_service(DBusConnection *conn,
 		}
 	}
 
-	g_get_current_time(&service->modified);
+	update_modified(service);
 	service_save(service);
 	service_save(target);
 
@@ -5056,6 +5081,9 @@ static void service_free(gpointer user_data)
 	g_free(service->phase2);
 	g_free(service->config_file);
 	g_free(service->config_entry);
+
+	if (service->modified)
+		g_date_time_unref(service->modified);
 
 	if (service->stats.timer)
 		g_timer_destroy(service->stats.timer);
@@ -5943,7 +5971,7 @@ static int service_indicate_state(struct connman_service *service)
 							"WiFi.UseWPS", false);
 		}
 
-		g_get_current_time(&service->modified);
+		update_modified(service);
 		service_save(service);
 
 		domain_changed(service);
