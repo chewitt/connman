@@ -1395,7 +1395,6 @@ static int oc_connect(struct vpn_provider *provider,
 			const char *dbus_sender, void *user_data)
 {
 	struct oc_private_data *data;
-	const char *vpnhost;
 	const char *vpncookie;
 	const char *certificate;
 	const char *username;
@@ -1404,12 +1403,6 @@ static int oc_connect(struct vpn_provider *provider,
 	int err;
 
 	connman_info("provider %p task %p", provider, task);
-
-	vpnhost = vpn_provider_get_string(provider, "Host");
-	if (!vpnhost) {
-		connman_error("Host not set; cannot enable VPN");
-		return -EINVAL;
-	}
 
 	data = g_try_new0(struct oc_private_data, 1);
 	if (!data)

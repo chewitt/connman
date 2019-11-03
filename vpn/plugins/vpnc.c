@@ -777,12 +777,6 @@ static int vc_connect(struct vpn_provider *provider,
 
 	DBG("provider %p if_name %s user_data %p", provider, if_name, user_data);
 
-	option = vpn_provider_get_string(provider, "Host");
-	if (!option) {
-		connman_error("Host not set; cannot enable VPN");
-		return -EINVAL;
-	}
-
 	option = vpn_provider_get_string(provider, "VPNC.IPSec.ID");
 	if (!option) {
 		connman_error("Group not set; cannot enable VPN");

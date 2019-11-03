@@ -436,13 +436,6 @@ static int run_connect(struct vpn_provider *provider,
 	char *str;
 	int err, i;
 
-	host = vpn_provider_get_string(provider, "Host");
-	if (!host) {
-		connman_error("Host not set; cannot enable VPN");
-		err = -EINVAL;
-		goto done;
-	}
-
 	if (!username || !password) {
 		DBG("Cannot connect username %s password %p",
 						username, password);
@@ -452,6 +445,7 @@ static int run_connect(struct vpn_provider *provider,
 
 	DBG("username %s password %p", username, password);
 
+	host = vpn_provider_get_string(provider, "Host");
 	str = g_strdup_printf("%s %s --nolaunchpppd --loglevel 2",
 				PPTP, host);
 	if (!str) {

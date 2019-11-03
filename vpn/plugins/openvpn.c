@@ -364,12 +364,6 @@ static int ov_connect(struct vpn_provider *provider,
 	int stdout_fd, stderr_fd;
 	int err = 0;
 
-	option = vpn_provider_get_string(provider, "Host");
-	if (!option) {
-		connman_error("Host not set; cannot enable VPN");
-		return -EINVAL;
-	}
-
 	task_append_config_data(provider, task);
 
 	option = vpn_provider_get_string(provider, "OpenVPN.ConfigFile");
