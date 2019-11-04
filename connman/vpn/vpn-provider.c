@@ -1056,7 +1056,7 @@ static gchar **create_network_list(GSList *networks, gsize *count)
 	return result;
 }
 
-void reset_error_counters(struct vpn_provider *provider)
+static void reset_error_counters(struct vpn_provider *provider)
 {
 	if (!provider)
 		return;
