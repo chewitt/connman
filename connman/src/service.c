@@ -1453,8 +1453,12 @@ static int nameservers_changed_cb(void *user_data)
 
 	service->nameservers_timeout = 0;
 	if ((is_idle(service->state) && !service->nameservers) ||
-			is_connected(service->state))
+			is_connected(service->state)) {
 		dns_changed(service);
+		if (service == connman_service_get_default())
+			__connman_timeserver_sync(service);
+	}
+
 
 	return FALSE;
 }
