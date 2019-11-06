@@ -98,7 +98,6 @@ struct ov_private_data {
 	guint mgmt_event_id;
 	GIOChannel *mgmt_channel;
 	int connect_attempts;
-	int failed_attempts;
 	int failed_attempts_privatekey;
 };
 
@@ -114,10 +113,8 @@ static void ov_connect_done(struct ov_private_data *data, int err)
 		cb(data->provider, user_data, err);
 	}
 
-	if (!err) {
-		data->failed_attempts = 0;
+	if (!err)
 		data->failed_attempts_privatekey = 0;
-	}
 }
 
 static void free_private_data(struct ov_private_data *data)
@@ -390,8 +387,8 @@ static void close_management_interface(struct ov_private_data *data)
 {
 	if (data->mgmt_path) {
 		if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
-			connman_warn("Unable to unlink management socket %s: %d",
-						data->mgmt_path, errno);
+			connman_warn("Unable to unlink management socket %s: "
+						"%d", data->mgmt_path, errno);
 		}
 		g_free(data->mgmt_path);
 		data->mgmt_path = NULL;
@@ -633,10 +630,12 @@ static void request_input_append_password(DBusMessageIter *iter,
 				DBUS_TYPE_STRING, &str);
 }
 
-static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
+static void request_input_credentials_reply(DBusMessage *reply,
+							void *user_data)
 {
 	struct ov_private_data *data = user_data;
-	char *password = NULL, *username = NULL;
+	char *username = NULL;
+	char *password = NULL;
 	char *key;
 	DBusMessageIter iter, dict;
 	DBusError error;
@@ -745,10 +744,8 @@ static int request_credentials_input(struct ov_private_data *data)
 
 	connman_dbus_dict_open(&iter, &dict);
 
-	if (data->failed_attempts > 0) {
-		connman_dbus_dict_append_dict(&dict, "VpnAgent.AuthFailure",
-			request_input_append_informational, NULL);
-	}
+	if (vpn_provider_get_authentication_errors(data->provider))
+		vpn_agent_append_auth_failure(&dict, data->provider, NULL);
 
 	/* Request temporary properties to pass on to openvpn */
 	connman_dbus_dict_append_dict(&dict, "OpenVPN.Username",
@@ -777,7 +774,8 @@ static int request_credentials_input(struct ov_private_data *data)
 	return -EINPROGRESS;
 }
 
-static void request_input_private_key_reply(DBusMessage *reply, void *user_data)
+static void request_input_private_key_reply(DBusMessage *reply,
+							void *user_data)
 {
 	struct ov_private_data *data = user_data;
 	const char *privatekeypass = NULL;
@@ -873,16 +871,6 @@ static int request_private_key_input(struct ov_private_data *data)
 		privatekeypass = vpn_provider_get_string(data->provider,
 					"OpenVPN.PrivateKeyPassword");
 		if (privatekeypass) {
-			/*
-			 * TODO remove this after OpenVPN does report that
-			 * Private Key decryption has failed via management
-			 * interface. Currently this is the only way of keeping
-			 * track of that if private key should be removed from
-			 * memory or not. Without this, the same invalid key
-			 * would be used ad infinitum.
-			 */
-			data->failed_attempts_privatekey++;
-
 			ov_return_private_key_password(data, privatekeypass);
 			goto out;
 		}
@@ -915,9 +903,10 @@ static int request_private_key_input(struct ov_private_data *data)
 	/* Do not allow to store or retrieve the encrypted Private Key pass */
 	vpn_agent_append_allow_credential_storage(&dict, false);
 	vpn_agent_append_allow_credential_retrieval(&dict, false);
+
 	/*
-	 * Indicate to keep credentials, the enc Private Key password should not
-	 * affect the credential storing.
+	 * Indicate to keep credentials, the enc Private Key password should
+	 * not affect the credential storing.
 	 */
 	vpn_agent_append_keep_credentials(&dict, true);
 
@@ -956,34 +945,36 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
 							G_IO_STATUS_NORMAL) {
 		str[strlen(str) - 1] = '\0';
-		connman_warn("openvpn request '%s'", str);
+		connman_warn("openvpn request %s", str);
 
 		if (g_str_has_prefix(str, ">PASSWORD:Need 'Auth'")) {
 			/*
 			 * Request credentials from the user
 			 */
 			err = request_credentials_input(data);
-			if (err != -EINPROGRESS) {
-				vpn_provider_indicate_error(data->provider,
-					VPN_PROVIDER_ERROR_LOGIN_FAILED);
+			if (err != -EINPROGRESS)
 				close = TRUE;
-			}
 		} else if (g_str_has_prefix(str,
 				">PASSWORD:Need 'Private Key'")) {
 			err = request_private_key_input(data);
-			if (err != -EINPROGRESS) {
-				vpn_provider_indicate_error(data->provider,
-					VPN_PROVIDER_ERROR_LOGIN_FAILED);
+			if (err != -EINPROGRESS)
 				close = TRUE;
-			}
 		} else if (g_str_has_prefix(str,
 				">PASSWORD:Verification Failed: 'Auth'")) {
-			++data->failed_attempts;
+			/*
+			 * Add error only, state change indication causes
+			 * signal to be sent, which is not desired when
+			 * OpenVPN is in interactive mode.
+			 */
+			vpn_provider_add_error(data->provider,
+					VPN_PROVIDER_ERROR_AUTH_FAILED);
 		/*
 		 * According to the OpenVPN manual about management interface
 		 * https://openvpn.net/community-resources/management-interface/
 		 * this should be received but it does not seem to be reported
-		 * when decrypting private key fails.
+		 * when decrypting private key fails. This requires a patch
+		 * sent to upstream in order to work:
+		 * https://sourceforge.net/p/openvpn/mailman/message/36789543/
 		 */
 		} else if (g_str_has_prefix(str, ">PASSWORD:Verification "
 				"Failed: 'Private Key'")) {
@@ -1085,12 +1076,20 @@ static int ov_connect(struct vpn_provider *provider,
 					data->mgmt_path, errno);
 	}
 
-	data->mgmt_timer_id = g_timeout_add(200, ov_management_connect_timer_cb,
-				data);
+	data->mgmt_timer_id = g_timeout_add(200,
+				ov_management_connect_timer_cb, data);
 
 	task_append_config_data(provider, task);
 
 	return run_connect(data, cb, user_data);
+}
+
+static void ov_disconnect(struct vpn_provider *provider)
+{
+	if (!provider)
+		return;
+
+	connman_agent_cancel(provider);
 }
 
 static int ov_device_flags(struct vpn_provider *provider)
@@ -1107,14 +1106,16 @@ static int ov_device_flags(struct vpn_provider *provider)
 	}
 
 	if (!g_str_equal(option, "tun")) {
-		connman_warn("bad OpenVPN.DeviceType value, falling back to tun");
+		connman_warn("bad OpenVPN.DeviceType value "
+					"falling back to tun");
 	}
 
 	return IFF_TUN;
 }
 
 static int ov_route_env_parse(struct vpn_provider *provider, const char *key,
-		int *family, unsigned long *idx, enum vpn_provider_route_type *type)
+					int *family, unsigned long *idx,
+					enum vpn_provider_route_type *type)
 {
 	char *end;
 	const char *start;
@@ -1140,6 +1141,7 @@ static int ov_route_env_parse(struct vpn_provider *provider, const char *key,
 static struct vpn_driver vpn_driver = {
 	.notify	= ov_notify,
 	.connect	= ov_connect,
+	.disconnect	= ov_disconnect,
 	.save		= ov_save,
 	.device_flags = ov_device_flags,
 	.route_env_parse = ov_route_env_parse,
