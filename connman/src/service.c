@@ -4410,6 +4410,9 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 	}
 }
 
+static void set_error(struct connman_service *service,
+					enum connman_service_error error);
+
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -4444,6 +4447,27 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		dbus_message_iter_get_basic(&value, &autoconnect);
 
+		if (autoconnect && service->type == CONNMAN_SERVICE_TYPE_VPN) {
+			/*
+			 * Changing the autoconnect flag on VPN to "on" should
+			 * have the same effect as user connecting the VPN =
+			 * clear previous error and change state to idle.
+			 */
+			set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+
+			if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
+				service->state = CONNMAN_SERVICE_STATE_IDLE;
+				state_changed(service);
+			}
+
+			/* Disable autoconnect for all other VPN providers
+			 * if autoconnect is set true. Only one VPN can have
+			 * autoconnect enabled.
+			 */
+			disable_autoconnect_for_services(service,
+							service->type);
+		}
+
 		if (connman_service_set_autoconnect(service, autoconnect)) {
 			/* AutoConnect explicitly set, ensure service is
 			 * saved by clearing the new-service flag.
@@ -4455,16 +4479,6 @@ static DBusMessage *set_property(DBusConnection *conn,
 				do_auto_connect(service,
 					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 		}
-
-		/* Disable autoconnect for all other VPN providers
-		 * if autoconnect is set true. Only one VPN can have
-		 * autoconnect enabled.
-		 */
-		if (autoconnect && service->type == CONNMAN_SERVICE_TYPE_VPN) {
-			disable_autoconnect_for_services(service,
-							service->type);
-		}
-
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
 		DBusMessageIter entry;
 		GString *str;
