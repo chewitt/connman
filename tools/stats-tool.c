@@ -108,18 +108,11 @@ static char *option_last_file_name = NULL;
 static bool parse_start_ts(const char *key, const char *value,
 					gpointer user_data, GError **error)
 {
-	GTimeZone *tz;
-	GDateTime *dt;
+	struct tm tm;
 
-	tz = g_time_zone_new_local();
-	dt = g_date_time_new_from_iso8601(value, tz);
-	g_time_zone_unref(tz);
-	if (!dt)
-		return false;
+	strptime(value, "%FT%TZ", &tm);
+	option_start_ts = mktime(&tm);
 
-	option_start_ts = g_date_time_get_second(dt);
-
-	g_date_time_unref(dt);
 	return true;
 }
 
