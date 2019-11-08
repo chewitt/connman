@@ -41,6 +41,8 @@
 #include <connman/provision.h>
 #include <connman/wakeup_timer.h>
 
+#include "src/shared/util.h"
+
 #include "connman.h"
 
 #define CONNECT_TIMEOUT		120
@@ -313,7 +315,7 @@ struct connman_service {
 	bool hidden;
 	bool ignore;
 	bool autoconnect;
-	GDateTime *modified;
+	struct timeval modified;
 	unsigned int order;
 	char *name;
 	char *passphrase;
@@ -783,31 +785,6 @@ void __connman_service_set_split_routing(struct connman_service *service,
 	__connman_service_split_routing_changed(service);
 }
 
-static void update_modified(struct connman_service *service)
-{
-	GTimeZone *tz;
-
-	if (service->modified)
-		g_date_time_unref(service->modified);
-
-	tz = g_time_zone_new_local();
-	service->modified = g_date_time_new_now(tz);
-	g_time_zone_unref(tz);
-}
-
-static void update_modified_from_iso8601(struct connman_service *service,
-					char *str)
-{
-	GTimeZone *tz;
-
-	if (service->modified)
-		g_date_time_unref(service->modified);
-
-	tz = g_time_zone_new_local();
-	service->modified = g_date_time_new_from_iso8601(str, tz);
-	g_time_zone_unref(tz);
-}
-
 int __connman_service_load_modifiable(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -850,7 +827,7 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Modified", NULL);
 	if (str) {
-		update_modified_from_iso8601(service, str);
+		util_iso8601_to_timeval(str, &service->modified);
 		g_free(str);
 	}
 
@@ -948,7 +925,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Modified", NULL);
 	if (str) {
-		update_modified_from_iso8601(service, str);
+		util_iso8601_to_timeval(str, &service->modified);
 		g_free(str);
 	}
 
@@ -1199,13 +1176,11 @@ static int service_save(struct connman_service *service)
 	set_config_string(keyfile, service->identifier, PROP_ACCESS,
 					service_get_access(service));
 
-	if (service->modified) {
-		str = g_date_time_format_iso8601(service->modified);
-		if (str) {
-			g_key_file_set_string(keyfile, service->identifier,
-							"Modified", str);
-			g_free(str);
-		}
+	str = util_timeval_to_iso8601(&service->modified);
+	if (str) {
+		g_key_file_set_string(keyfile, service->identifier, "Modified",
+					str);
+		g_free(str);
 	}
 
 	if (service->passphrase && strlen(service->passphrase) > 0)
@@ -5516,7 +5491,7 @@ static void service_complete(struct connman_service *service)
 {
 	reply_pending(service, EIO);
 
-	update_modified(service);
+	gettimeofday(&service->modified, NULL);
 	service_save(service);
 }
 
@@ -6682,7 +6657,7 @@ int __connman_service_move(struct connman_service *service,
 		}
 	}
 
-	update_modified(service);
+	gettimeofday(&service->modified, NULL);
 	service_save(service);
 	service_save(target);
 
@@ -7023,9 +6998,6 @@ static void service_free(gpointer user_data)
 
 	if (service->ssid)
 		g_bytes_unref(service->ssid);
-
-	if (service->modified)
-		g_date_time_unref(service->modified);
 
 	if (current_default == service)
 		current_default = NULL;
@@ -8110,7 +8082,7 @@ static int service_indicate_state(struct connman_service *service)
 							"WiFi.UseWPS", false);
 		}
 
-		update_modified(service);
+		gettimeofday(&service->modified, NULL);
 		service_save(service);
 
 		domain_changed(service);
@@ -10282,7 +10254,7 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	 * exist set current time as modify time if service is saved as is.
 	 */
 	if (__connman_service_load_modifiable(service) != 0)
-		update_modified(service);
+		gettimeofday(&service->modified, NULL);
 
 	service->order = service->do_split_routing ? 0 : 10;
 	service->favorite = true;
