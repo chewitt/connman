@@ -369,15 +369,14 @@ static int task_append_config_data(struct vpn_provider *provider,
 		 * via management interface
 		 */
 		if (!strcmp(ov_options[i].cm_opt, "OpenVPN.AuthUserPass") &&
-						!strcmp(option, "-")) {
+						!strcmp(option, "-"))
 			option = NULL;
-		}
 
 		if (connman_task_add_argument(task,
 				ov_options[i].ov_opt,
-				ov_options[i].has_value ? option : NULL) < 0) {
+				ov_options[i].has_value ? option : NULL) < 0)
 			return -EIO;
-		}
+
 	}
 
 	return 0;
@@ -386,21 +385,24 @@ static int task_append_config_data(struct vpn_provider *provider,
 static void close_management_interface(struct ov_private_data *data)
 {
 	if (data->mgmt_path) {
-		if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
+		if (unlink(data->mgmt_path) && errno != ENOENT)
 			connman_warn("Unable to unlink management socket %s: "
 						"%d", data->mgmt_path, errno);
-		}
+
 		g_free(data->mgmt_path);
 		data->mgmt_path = NULL;
 	}
+
 	if (data->mgmt_timer_id != 0) {
 		g_source_remove(data->mgmt_timer_id);
 		data->mgmt_timer_id = 0;
 	}
+
 	if (data->mgmt_event_id) {
 		g_source_remove(data->mgmt_event_id);
 		data->mgmt_event_id = 0;
 	}
+
 	if (data->mgmt_channel) {
 		g_io_channel_shutdown(data->mgmt_channel, FALSE, NULL);
 		g_io_channel_unref(data->mgmt_channel);
@@ -639,12 +641,18 @@ static void request_input_credentials_reply(DBusMessage *reply,
 	char *key;
 	DBusMessageIter iter, dict;
 	DBusError error;
-	int err;
+	int err = 0;
 
 	DBG("provider %p", data->provider);
 
-	if (!reply)
+	/*
+	 * When connmand calls disconnect because of connection timeout no
+	 * reply is received.
+	 */
+	if (!reply) {
+		err = ENOENT;
 		goto err;
+	}
 
 	dbus_error_init(&error);
 
@@ -657,8 +665,10 @@ static void request_input_credentials_reply(DBusMessage *reply,
 		return;
 	}
 
-	if (!vpn_agent_check_reply_has_dict(reply))
+	if (!vpn_agent_check_reply_has_dict(reply)) {
+		err = ENOENT;
 		goto err;
+	}
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -701,8 +711,12 @@ static void request_input_credentials_reply(DBusMessage *reply,
 		dbus_message_iter_next(&dict);
 	}
 
-	if (!password || !username)
+	if (!password || !username) {
+		vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_AUTH_FAILED);
+		err = EACCES;
 		goto err;
+	}
 
 	ov_return_credentials(data, username, password);
 
@@ -710,8 +724,6 @@ static void request_input_credentials_reply(DBusMessage *reply,
 
 err:
 	ov_connect_done(data, EACCES);
-	vpn_provider_indicate_error(data->provider,
-			VPN_PROVIDER_ERROR_AUTH_FAILED);
 }
 
 static int request_credentials_input(struct ov_private_data *data)
@@ -782,12 +794,18 @@ static void request_input_private_key_reply(DBusMessage *reply,
 	const char *key;
 	DBusMessageIter iter, dict;
 	DBusError error;
-	int err;
+	int err = 0;
 
 	DBG("provider %p", data->provider);
 
-	if (!reply)
+	/*
+	 * When connmand calls disconnect because of connection timeout no
+	 * reply is received.
+	 */
+	if (!reply) {
+		err = ENOENT;
 		goto err;
+	}
 
 	dbus_error_init(&error);
 
@@ -800,8 +818,10 @@ static void request_input_private_key_reply(DBusMessage *reply,
 		return;
 	}
 
-	if (!vpn_agent_check_reply_has_dict(reply))
+	if (!vpn_agent_check_reply_has_dict(reply)) {
+		err = ENOENT;
 		goto err;
+	}
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -832,17 +852,20 @@ static void request_input_private_key_reply(DBusMessage *reply,
 		dbus_message_iter_next(&dict);
 	}
 
-	if (!privatekeypass)
+	if (!privatekeypass) {
+		vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_AUTH_FAILED);
+
+		err = EACCES;
 		goto err;
+	}
 
 	ov_return_private_key_password(data, privatekeypass);
 
 	return;
 
 err:
-	ov_connect_done(data, EACCES);
-	vpn_provider_indicate_error(data->provider,
-			VPN_PROVIDER_ERROR_AUTH_FAILED);
+	ov_connect_done(data, err);
 }
 
 static int request_private_key_input(struct ov_private_data *data)
