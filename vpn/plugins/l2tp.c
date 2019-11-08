@@ -179,7 +179,8 @@ static int l2tp_notify(DBusMessage *msg, struct vpn_provider *provider)
 		DBG("authentication failure");
 
 		vpn_provider_set_string(provider, "L2TP.User", NULL);
-		vpn_provider_set_string(provider, "L2TP.Password", NULL);
+		vpn_provider_set_string_hide_value(provider, "L2TP.Password",
+					NULL);
 
 		return VPN_STATE_AUTH_FAILURE;
 	}
@@ -652,7 +653,7 @@ static int run_connect(struct vpn_provider *provider,
 	int l2tp_fd, pppd_fd;
 	int err;
 
-	if (!username || !password) {
+	if (!username || !*username || !password || !*password) {
 		DBG("Cannot connect username %s password %p",
 						username, password);
 		err = -EINVAL;
@@ -723,7 +724,7 @@ static void request_input_cb(struct vpn_provider *provider,
 {
 	struct l2tp_private_data *data = user_data;
 
-	if (!username || !password)
+	if (!username || !*username || !password || !*password)
 		DBG("Requesting username %s or password failed, error %s",
 			username, error);
 	else if (error)
@@ -758,7 +759,7 @@ static int l2tp_connect(struct vpn_provider *provider,
 
 	DBG("user %s password %p", username, password);
 
-	if (!username || !password) {
+	if (!username || !*username || !password || !*password) {
 		struct l2tp_private_data *data;
 
 		data = g_try_new0(struct l2tp_private_data, 1);
@@ -805,7 +806,7 @@ static void l2tp_disconnect(struct vpn_provider *provider)
 	if (!provider)
 		return;
 
-	vpn_provider_set_string(provider, "L2TP.Password", NULL);
+	vpn_provider_set_string_hide_value(provider, "L2TP.Password", NULL);
 
 	connman_agent_cancel(provider);
 }
