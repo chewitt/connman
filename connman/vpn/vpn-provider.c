@@ -1950,6 +1950,22 @@ int vpn_provider_set_state(struct vpn_provider *provider,
 	return -EINVAL;
 }
 
+void vpn_provider_add_error(struct vpn_provider *provider,
+			enum vpn_provider_error error)
+{
+	switch (error) {
+	case VPN_PROVIDER_ERROR_UNKNOWN:
+		break;
+	case VPN_PROVIDER_ERROR_CONNECT_FAILED:
+		++provider->conn_error_counter;
+		break;
+	case VPN_PROVIDER_ERROR_LOGIN_FAILED:
+	case VPN_PROVIDER_ERROR_AUTH_FAILED:
+		++provider->auth_error_counter;
+		break;
+	}
+}
+
 int vpn_provider_indicate_error(struct vpn_provider *provider,
 					enum vpn_provider_error error)
 {
@@ -1958,18 +1974,7 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 
 	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
 
-	switch (error) {
-	case VPN_PROVIDER_ERROR_UNKNOWN:
-		break;
-	case VPN_PROVIDER_ERROR_CONNECT_FAILED:
-		++provider->conn_error_counter;
-		break;
-
-	case VPN_PROVIDER_ERROR_LOGIN_FAILED:
-	case VPN_PROVIDER_ERROR_AUTH_FAILED:
-		++provider->auth_error_counter;
-		break;
-	}
+	vpn_provider_add_error(provider, error);
 
 	if (provider->driver && provider->driver->set_state)
 		provider->driver->set_state(provider, provider->state);
@@ -3003,13 +3008,13 @@ const char *vpn_provider_get_path(struct vpn_provider *provider)
 	return provider->path;
 }
 
-const unsigned int vpn_provider_get_authentication_errors(
+unsigned int vpn_provider_get_authentication_errors(
 						struct vpn_provider *provider)
 {
 	return provider->auth_error_counter;
 }
 
-const unsigned int vpn_provider_get_connection_errors(
+unsigned int vpn_provider_get_connection_errors(
 						struct vpn_provider *provider)
 {
 	return provider->conn_error_counter;
