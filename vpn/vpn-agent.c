@@ -150,6 +150,40 @@ void vpn_agent_append_user_info(DBusMessageIter *iter,
 				&data);
 }
 
+static void request_input_append_flag(DBusMessageIter *iter,
+						void *user_data)
+{
+	dbus_bool_t data = (dbus_bool_t)GPOINTER_TO_INT(user_data);
+	const char *str = NULL;
+
+	str = "boolean";
+	connman_dbus_dict_append_basic(iter, "Type",
+				DBUS_TYPE_STRING, &str);
+
+	str = "control";
+	connman_dbus_dict_append_basic(iter, "Requirement",
+				DBUS_TYPE_STRING, &str);
+
+	connman_dbus_dict_append_basic(iter, "Value",
+				DBUS_TYPE_BOOLEAN, &data);
+}
+
+void vpn_agent_append_allow_credential_storage(DBusMessageIter *iter,
+				bool allow)
+{
+	connman_dbus_dict_append_dict(iter, "AllowStoreCredentials",
+				request_input_append_flag,
+				GINT_TO_POINTER(allow));
+}
+
+void vpn_agent_append_allow_credential_retrieval(DBusMessageIter *iter,
+				bool allow)
+{
+	connman_dbus_dict_append_dict(iter, "AllowRetrieveCredentials",
+				request_input_append_flag,
+				GINT_TO_POINTER(allow));
+}
+
 struct failure_data {
 	struct vpn_provider *provider;
 	const char* type_str;
