@@ -94,6 +94,8 @@ bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
 int vpn_provider_set_state(struct vpn_provider *provider,
 					enum vpn_provider_state state);
 
+void vpn_provider_add_error(struct vpn_provider *provider,
+					enum vpn_provider_error error);
 int vpn_provider_indicate_error(struct vpn_provider *provider,
 					enum vpn_provider_error error);
 
