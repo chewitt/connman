@@ -107,6 +107,11 @@ Fields		string Username
 			Return the final VPN server to use after possible
 			web authentication logins, selections and redirections.
 
+		string OpenVPN.PrivateKeyPassword
+
+			Return the private key password used to decrypt the
+			encrypted OpenVPN private key file.
+
 		boolean AllowStoreCredentials
 
 			Indicates to the receiving UI whether the values
