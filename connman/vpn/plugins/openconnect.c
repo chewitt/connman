@@ -880,6 +880,16 @@ static int run_connect(struct oc_private_data *data)
 	if (!vpnhost || !*vpnhost)
 		vpnhost = vpn_provider_get_string(provider, "Host");
 
+	/*
+	 * Change to use C locale because of screen scraping is used. To be on
+	 * the safe side, set both LANG and LC_ALL. This is required
+	 * especially when the VPNC process is ran using a user other than
+	 * root. Note that this is a temporary solution.
+	 * TODO: remove this when screen scraping is replaced with library use.
+	 */
+	connman_task_add_variable(task,"LANG", "C");
+	connman_task_add_variable(task,"LC_ALL", "C");
+
 	task_append_config_data(provider, task);
 
 	/*
