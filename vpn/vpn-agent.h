@@ -42,6 +42,7 @@ void vpn_agent_append_allow_credential_storage(DBusMessageIter *iter,
 				bool allow);
 void vpn_agent_append_allow_credential_retrieval(DBusMessageIter *iter,
 				bool allow);
+void vpn_agent_append_keep_credentials(DBusMessageIter *iter, bool allow);
 void vpn_agent_append_auth_failure(DBusMessageIter *iter,
 				struct vpn_provider *provider,
 				const char *information);
