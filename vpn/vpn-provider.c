@@ -503,7 +503,7 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 	DBG("conn %p provider %p", conn, provider);
 
 	err = __vpn_provider_connect(provider, msg);
-	if (err < 0)
+	if (err < 0 && err != -EINPROGRESS)
 		return __connman_error_failed(msg, -err);
 
 	return NULL;
@@ -1160,6 +1160,7 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 
 int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 {
+	DBusMessage *reply;
 	int err;
 
 	DBG("provider %p state %d", provider, provider->state);
@@ -1172,6 +1173,10 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 	 * attempt will continue as normal.
 	 */
 	case VPN_PROVIDER_STATE_FAILURE:
+		if (provider->driver && provider->driver->set_state)
+			provider->driver->set_state(provider,
+						VPN_PROVIDER_STATE_IDLE);
+
 		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_IDLE);
 		/* fall through */
 	/*
@@ -1183,6 +1188,15 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 	 * -EINPROGRESS to indicate that transition is in progress.
 	 */
 	case VPN_PROVIDER_STATE_DISCONNECT:
+		/*
+		 * Failure transition or disconnecting does not yield a
+		 * message to be sent. Send in progress message to avoid
+		 * D-Bus LimitsExceeded error message.
+		 */
+		reply = __connman_error_in_progress(msg);
+		if (reply)
+			g_dbus_send_message(connection, reply);
+
 		return -EINPROGRESS;
 	case VPN_PROVIDER_STATE_UNKNOWN:
 	case VPN_PROVIDER_STATE_IDLE:
