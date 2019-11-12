@@ -107,13 +107,6 @@ Fields		string Username
 			Return the final VPN server to use after possible
 			web authentication logins, selections and redirections.
 
-		string VpnAgent.AuthFailure
-
-			Informational field that can be used to indicate VPN
-			agent that previous authentication has failed and new
-			credentials should be requested from user. Additional
-			information about the failure can be added as "Value".
-
 		boolean AllowStoreCredentials
 
 			Indicates to the receiving UI whether the values
@@ -143,6 +136,13 @@ Fields		string Username
 			required. In such case the value can be explicitly set
 			to "true". An example case is when the password for
 			encrypted Private Key is requested.
+
+		string VpnAgent.AuthFailure
+
+			Informational field that can be used to indicate VPN
+			agent that previous authentication has failed and new
+			credentials should be requested from user. Additional
+			information about the failure can be added as "Value".
 
 Arguments	string Type
 
@@ -213,16 +213,15 @@ Examples	Requesting a username and password for L2TP network
 		Requesting a username and password but without allowing
 		the values entered by the user to be stored.
 
-			RequestInput("/vpn2",
-				{ "Username" : { "Type"        : "string",
+			RequestInput("/vpn3",
+				{ "Username" : { "Type" : "string",
 						"Requirement" : "mandatory"
 							} }
-				{ "Password" : { "Type"        : "password",
+				{ "Password" : { "Type" : "password",
 						"Requirement" : "mandatory"
 							} }
 				{ "AllowStoreCredentials" : { "Type" : "boolean",
 						"Requirement" : "control",
-							"Value": false
-						} }
+						"Value" : false
+							} }
 		==> { "Username" : "foo", "Password" : "secret123" }
-

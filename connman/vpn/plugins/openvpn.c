@@ -542,8 +542,6 @@ static void ov_quote_credential(GString *line, const char *cred)
 	}
 
 	g_string_append_c(line, '"');
-
-	return;
 }
 
 static void ov_return_credentials(struct ov_private_data *data,
@@ -734,8 +732,6 @@ static int request_credentials_input(struct ov_private_data *data)
 	DBusMessageIter dict;
 	int err;
 	void *agent;
-
-	DBG("");
 
 	agent = connman_agent_get_info(data->dbus_sender, &agent_sender,
 							&agent_path);
@@ -955,18 +951,23 @@ out:
 	return -EINPROGRESS;
 }
 
-
 static gboolean ov_management_handle_input(GIOChannel *source,
 				GIOCondition condition, gpointer user_data)
 {
 	struct ov_private_data *data = user_data;
 	char *str = NULL;
 	int err = 0;
-	gboolean close = FALSE;
+	bool close = false;
 
-	if ((condition & G_IO_IN) &&
-		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
-							G_IO_STATUS_NORMAL) {
+	if (condition & G_IO_IN) {
+		/*
+		 * Just return if line is not read and str is not allocated.
+		 * Condition check handles closing of the channel later.
+		 */
+		if (g_io_channel_read_line(source, &str, NULL, NULL, NULL) !=
+							G_IO_STATUS_NORMAL)
+			return true;
+
 		str[strlen(str) - 1] = '\0';
 		connman_warn("openvpn request %s", str);
 
@@ -976,12 +977,12 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 			 */
 			err = request_credentials_input(data);
 			if (err != -EINPROGRESS)
-				close = TRUE;
+				close = true;
 		} else if (g_str_has_prefix(str,
 				">PASSWORD:Need 'Private Key'")) {
 			err = request_private_key_input(data);
 			if (err != -EINPROGRESS)
-				close = TRUE;
+				close = true;
 		} else if (g_str_has_prefix(str,
 				">PASSWORD:Verification Failed: 'Auth'")) {
 			/*
@@ -995,26 +996,27 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 		 * According to the OpenVPN manual about management interface
 		 * https://openvpn.net/community-resources/management-interface/
 		 * this should be received but it does not seem to be reported
-		 * when decrypting private key fails. This requires a patch
-		 * sent to upstream in order to work:
-		 * https://sourceforge.net/p/openvpn/mailman/message/36789543/
+		 * when decrypting private key fails. This requires following
+		 * patch for OpenVPN (at least <= 2.4.5) in order to work:
+		 * https://git.sailfishos.org/mer-core/openvpn/blob/
+		 * 4f4b4af116292a207416c8a990392e35a6fc41af/rpm/privatekey-
+		 * passphrase-handling.diff
 		 */
 		} else if (g_str_has_prefix(str, ">PASSWORD:Verification "
 				"Failed: 'Private Key'")) {
-			++data->failed_attempts_privatekey;
+			data->failed_attempts_privatekey++;
 		}
 
 		g_free(str);
 	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
 		connman_warn("Management channel termination");
-		close = TRUE;
+		close = true;
 	}
 
-	if (close) {
+	if (close)
 		close_management_interface(data);
-	}
 
-	return TRUE;
+	return true;
 }
 
 static int ov_management_connect_timer_cb(gpointer user_data)
@@ -1050,7 +1052,7 @@ static int ov_management_connect_timer_cb(gpointer user_data)
 		}
 	}
 
-	++data->connect_attempts;
+	data->connect_attempts++;
 	if (data->connect_attempts > 30) {
 		connman_warn("Unable to connect management socket");
 		data->mgmt_timer_id = 0;
@@ -1065,14 +1067,8 @@ static int ov_connect(struct vpn_provider *provider,
 			vpn_provider_connect_cb_t cb, const char *dbus_sender,
 			void *user_data)
 {
-	const char *option;
+	const char *tmpdir;
 	struct ov_private_data *data;
-
-	option = vpn_provider_get_string(provider, "Host");
-	if (!option) {
-		connman_error("Host not set; cannot enable VPN");
-		return -EINVAL;
-	}
 
 	data = g_try_new0(struct ov_private_data, 1);
 	if (!data)
@@ -1091,8 +1087,13 @@ static int ov_connect(struct vpn_provider *provider,
 	 * the user credentials and password for decrypting private key.
 	 */
 
+	/* Use env TMPDIR for creating management socket, fall back to /tmp */
+	tmpdir = getenv("TMPDIR");
+	if (!tmpdir || !*tmpdir)
+		tmpdir = "/tmp";
+
 	/* Set up the path for the management interface */
-	data->mgmt_path = g_strconcat("/tmp/connman-vpn-management-",
+	data->mgmt_path = g_strconcat(tmpdir, "/connman-vpn-management-",
 		vpn_provider_get_ident(provider), NULL);
 	if (unlink(data->mgmt_path) != 0 && errno != ENOENT) {
 		connman_warn("Unable to unlink management socket %s: %d",
