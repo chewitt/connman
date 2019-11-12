@@ -21,6 +21,8 @@
  *
  */
 
+#include <sys/time.h>
+
 #include <glib.h>
 
 typedef void (*util_debug_func_t)(const char *str, void *user_data);
@@ -48,3 +50,6 @@ static inline struct cb_data *cb_data_new(void *cb, void *user_data)
 
 	return ret;
 }
+
+void util_iso8601_to_timeval(char *str, struct timeval *time);
+char *util_timeval_to_iso8601(struct timeval *time);
