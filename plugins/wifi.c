@@ -59,6 +59,8 @@
 
 #include <gsupplicant/gsupplicant.h>
 
+#include "src/shared/util.h"
+
 #define CLEANUP_TIMEOUT   8	/* in seconds */
 #define INACTIVE_TIMEOUT  12	/* in seconds */
 #define FAVORITE_MAXIMUM_RETRIES 2
@@ -1611,15 +1613,15 @@ static int wifi_disable(struct connman_device *device)
 }
 
 struct last_connected {
-	GTimeVal modified;
+	struct timeval modified;
 	gchar *ssid;
 	int freq;
 };
 
 static gint sort_entry(gconstpointer a, gconstpointer b, gpointer user_data)
 {
-	GTimeVal *aval = (GTimeVal *)a;
-	GTimeVal *bval = (GTimeVal *)b;
+	struct timeval *aval = (struct timeval *)a;
+	struct timeval *bval = (struct timeval *)b;
 
 	/* Note that the sort order is descending */
 	if (aval->tv_sec < bval->tv_sec)
@@ -1646,7 +1648,7 @@ static int get_latest_connections(int max_ssids,
 	GSequence *latest_list;
 	struct last_connected *entry;
 	GKeyFile *keyfile;
-	GTimeVal modified;
+	struct timeval modified;
 	gchar **services;
 	gchar *str;
 	char *ssid;
@@ -1690,7 +1692,7 @@ static int get_latest_connections(int max_ssids,
 			g_key_file_free(keyfile);
 			continue;
 		}
-		g_time_val_from_iso8601(str, &modified);
+		util_iso8601_to_timeval(str, &modified);
 		g_free(str);
 
 		ssid = g_key_file_get_string(keyfile,
