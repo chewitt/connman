@@ -58,3 +58,42 @@ After successfull connection, the relevant connection properties are sent
 by PropertyChanged signal; like IPv[4|6] information, the index of the
 VPN tunneling interface (if there is any), nameserver information,
 server specified routes etc.
+
+VPN agent interface
+===================
+
+VPN agent interface described in vpn-agent-api.txt is used for
+interaction between the connectivity UI and ConnMan. A VPN agent
+registered via Management interface gets requests from the VPN plugins
+to input credentials or other authentication information for the VPN
+connection and offers information about the VPN to be connected.
+
+In addition to basic credentials, there are additional types of optional
+and control parameters. The user can dictate whether to store the
+credentials with the optional SaveCredentials value. The VPN plugins can
+also define with the control values AllowStoreCredentials,
+AllowRetrieveCredentials and KeepCredentials how the VPN agent must
+handle the credentials. AllowStoreCredentials as false indicates that
+client cannot use SaveCredentials option. AllowRetrieveCredentials set
+as false, without AllowStoreCredentials set as false should not have
+that same effect and in that case user is allowed to save credentials.
+
+These three control values become useful when a VPN has two or more
+sets of authentication credentials, second of which can be requested
+when the VPN detects a need for them. The first, main credentials,
+would be requested without these control values, so user is able to
+select whether the credentials are saved or not with SaveCredentials
+value. After the VPN initializes the connection and, e.g., needs to
+decrypt a private key file, a new request is sent to VPN agent. In this
+new request both AllowStoreCredentials and AllowRetrieveCredentials are
+set as false indicating that in no circumstances existing credentials
+stored are to be used and neither there should be option visible for
+the user to select saving of the credentials. Depending on VPN agent
+implementation these values can be interpreted as clearing of all the
+existing credentials related to the VPN connection from the credential
+storage. By including the KeepCredentials as true value the VPN can,
+however, tell the VPN agent not to clear the credentials for this VPN
+connection. The KeepCredentials is used to inform the VPN agent that
+these new, second/third/etc. credentials are only to be queried from
+the user and forgotten after that, when used in conjunction with the
+AllowStoreCredentials and AllowRetrieveCredentials set as false.

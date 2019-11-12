@@ -123,6 +123,20 @@ Fields		string Username
 			to "control". "Value" should be set to true if
 			previously stored values can be used, false otherwise.
 
+		boolean KeepCredentials
+
+			Indicates to the receiving UI whether to keep ("Value"
+			is set "true") or clear ("Value" is set "false") the
+			credentials or not. "Requirement" should be set to
+			"control". By default this is not required to be set
+			and is handled only when explicitely defined as "true".
+			This is useful in case of having both the
+			AllowStoreCredentials and the AllowRetrieveCredentials
+			set as "false", but clearing credentials is not
+			required. In such case the value can be explicitly set
+			to "true". An example case is when the password for
+			encrypted Private Key is requested.
+
 		string VpnAgent.AuthFailure
 
 			Informational field that can be used to indicate VPN
