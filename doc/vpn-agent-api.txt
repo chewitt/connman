@@ -78,7 +78,7 @@ Fields		string Username
 		string OpenConnect.ClientCert
 
 			Informational field containing a pkcs11 URL or a path
-                        name for the client certificate.
+			name for the client certificate.
 
 		string OpenConnect.Cookie
 
@@ -107,6 +107,22 @@ Fields		string Username
 			Return the final VPN server to use after possible
 			web authentication logins, selections and redirections.
 
+		boolean AllowStoreCredentials
+
+			Indicates to the receiving UI whether the values
+			entered by the user can be stored for future use.
+			"Requirement" should be set to "control". A "Value"
+			of true indicates that the option to store the
+			credentials can be offered to the user, false
+			indicates that no such option should be presented.
+
+		boolean AllowRetrieveCredentials
+
+			Tells the receiving UI whether to attempt to retrieve
+			previously stored values. "Requirement" should be set
+			to "control". "Value" should be set to true if
+			previously stored values can be used, false otherwise.
+
 		string VpnAgent.AuthFailure
 
 			Informational field that can be used to indicate VPN
@@ -122,8 +138,8 @@ Arguments	string Type
 		string Requirement
 
 			Contains the requirement option. Valid values are
-			"mandatory", "optional", "alternate" or
-			"informational".
+			"mandatory", "optional", "alternate", "informational"
+			and "control".
 
 			The "alternate" value specifies that this field can be
 			returned as an alternative to another one.
@@ -134,6 +150,11 @@ Arguments	string Type
 			Nothing needs to be returned for "informational", as it
 			is here only to provide an information so a value is
 			attached to it.
+
+			A "control" argument is used to specify behaviour. The
+			effect will depend on the field name and value, but
+			control fields will not usually be presented directly
+			to the user, and are not expected to be returned.
 
 		array{string} Alternates
 
@@ -174,3 +195,19 @@ Examples	Requesting a username and password for L2TP network
 					 "Requirement" : "informational"
 							} }
 			==> { "OpenConnect.Cookie" : "0123456@adfsf@asasdf" }
+
+		Requesting a username and password but without allowing
+		the values entered by the user to be stored.
+
+			RequestInput("/vpn3",
+				{ "Username" : { "Type" : "string",
+						"Requirement" : "mandatory"
+							} }
+				{ "Password" : { "Type" : "password",
+						"Requirement" : "mandatory"
+							} }
+				{ "AllowStoreCredentials" : { "Type" : "boolean",
+						"Requirement" : "control",
+						"Value" : false
+							} }
+		==> { "Username" : "foo", "Password" : "secret123" }
