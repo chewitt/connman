@@ -88,3 +88,42 @@ void util_hexdump(const char dir, const unsigned char *buf, size_t len,
 		function(str, user_data);
 	}
 }
+
+void util_iso8601_to_timeval(char *str, struct timeval *time)
+{
+	struct tm tm;
+	time_t t;
+	char *p;
+
+	p = strptime(str, "%FT%T", &tm);
+	if (!p)
+		return;
+
+	if (*p != 'Z') {
+		/* backwards compatibility */
+		if (*p != '.' || p[strlen(p) - 1] != 'Z')
+			return;
+	}
+
+	t = mktime(&tm);
+	if (t < 0)
+		return;
+
+	time->tv_sec = t;
+	time->tv_usec = 0;
+}
+
+char *util_timeval_to_iso8601(struct timeval *time)
+{
+	char buf[255];
+	struct tm tm;
+	time_t t;
+
+	t = time->tv_sec;
+	if (!localtime_r(&t, &tm))
+		return NULL;
+	if (!strftime(buf, sizeof(buf), "%FT%TZ", &tm))
+		return NULL;
+
+	return g_strdup(buf);
+}
