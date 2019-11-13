@@ -12,6 +12,15 @@ CapabilityBoundingSet=CAP_KILL CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW CA
 ProtectSystem=full
 Restart=on-abort
 RestartSec=1
+# Jolla Sandboxing
+PrivateTmp=true
+ProtectHome=false
+PrivateUsers=true
+ProtectControlGroups=true
+DevicePolicy=closed
+DeviceAllow=/dev/net/tun rw
+DeviceAllow=/dev/ppp rw
+DeviceAllow=/dev/ptmx rw
 
 [Install]
 WantedBy=multi-user.target
