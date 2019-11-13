@@ -368,6 +368,15 @@ routes will not be set by ConnMan if the uplink is a cellular
 network. While the same setup works well for a WiFi or ethernet
 uplink.
 
+Up to (at least) version 2.4.5 of OpenVPN getting information about
+private key decryption failures via management channel is missing. This
+will result in attempting with the invalid key over and over as the
+information about failed decryprion is not delivered to OpenVPN plugin.
+The following patch to OpenVPN is required for the private key
+decryption failures to be sent:
+https://git.sailfishos.org/mer-core/openvpn/blob/
+4f4b4af116292a207416c8a990392e35a6fc41af/rpm/privatekey-passphrase-
+handling.diff
 
 GnuTLS
 ======
