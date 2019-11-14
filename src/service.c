@@ -3565,6 +3565,9 @@ void __connman_service_wispr_start(struct connman_service *service,
 	__connman_wispr_start(service, type);
 }
 
+static void set_error(struct connman_service *service,
+					enum connman_service_error error);
+
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -3602,18 +3605,26 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		dbus_message_iter_get_basic(&value, &autoconnect);
 
-		if (service->autoconnect == autoconnect)
-			return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+		if (autoconnect && service->type == CONNMAN_SERVICE_TYPE_VPN) {
+			/*
+			 * Changing the autoconnect flag on VPN to "on" should
+			 * have the same effect as user connecting the VPN =
+			 * clear previous error and change state to idle.
+			 */
+			set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
-		service->autoconnect = autoconnect;
+			if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
+				service->state = CONNMAN_SERVICE_STATE_IDLE;
+				state_changed(service);
+			}
+		}
 
-		autoconnect_changed(service);
-
-		if (autoconnect)
-			do_auto_connect(service,
+		if (connman_service_set_autoconnect(service, autoconnect)) {
+			service_save(service);
+			if (autoconnect)
+				do_auto_connect(service,
 					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-
-		service_save(service);
+		}
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
 		DBusMessageIter entry;
 		GString *str;
