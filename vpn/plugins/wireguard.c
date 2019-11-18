@@ -145,12 +145,14 @@ static int parse_endpoint(const char *host, const char *port, wg_peer *peer)
 
 		close(sk);
 	}
-	freeaddrinfo(result);
 
-	if (!rp)
+	if (!rp) {
+		freeaddrinfo(result);
 		return -EINVAL;
+	}
 
 	memcpy(&peer->endpoint.addr, rp->ai_addr, rp->ai_addrlen);
+	freeaddrinfo(result);
 
 	return 0;
 }
