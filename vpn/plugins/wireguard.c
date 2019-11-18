@@ -252,7 +252,7 @@ static int wg_connect(struct vpn_provider *provider,
 	char *ifname;
 	int err = -EINVAL;
 
-	info = g_malloc(sizeof(struct wireguard_info));
+	info = g_malloc0(sizeof(struct wireguard_info));
 	info->peer.flags = WGPEER_HAS_PUBLIC_KEY | WGPEER_REPLACE_ALLOWEDIPS;
 	info->device.flags = WGDEVICE_HAS_PRIVATE_KEY | WGDEVICE_HAS_LISTEN_PORT;
 	info->device.first_peer = &info->peer;
