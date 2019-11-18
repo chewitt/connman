@@ -293,7 +293,7 @@ static int wg_connect(struct vpn_provider *provider,
 	if (err)
 		goto done;
 
-	option = vpn_provider_get_string(provider, "Wireguard.EndpointPort");
+	option = vpn_provider_get_string(provider, "WireGuard.EndpointPort");
 	if (!option)
 		option = "51820";
 
