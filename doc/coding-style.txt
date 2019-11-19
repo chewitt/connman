@@ -155,10 +155,19 @@ for (i = 0; i < 3; i++) {
 }
 
 
-M8: Use g_try_malloc instead of g_malloc
-========================================
-When g_malloc fails, the whole program would exit. Most of time, this is not
-the expected behavior, and you may want to use g_try_malloc instead.
+M8: Abort if small allocation fail
+==================================
+When g_malloc fails, the whole program would exit. Small allocations
+are very unlikely to fail and if an allocations is not possible, it is
+very likely the error code can't recover from this
+situation. Furthermore, many of the error paths are not tested at
+all. Instead use g_malloc() when the allocation fails and rely on an
+external watchdog to restart the program.
+
+Furthermore, Glib's functions such as g_strdup use g_malloc which
+obviously terminates the program anyway.
+
+For large allocation using g_try_malloc is still the right choice.
 
 Example:
 additional = g_try_malloc(len - 1);  // correct
