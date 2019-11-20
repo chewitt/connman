@@ -1056,7 +1056,7 @@ static gchar **create_network_list(GSList *networks, gsize *count)
 	return result;
 }
 
-void reset_error_counters(struct vpn_provider *provider)
+static void reset_error_counters(struct vpn_provider *provider)
 {
 	if (!provider)
 		return;
@@ -2104,6 +2104,13 @@ static struct vpn_provider *vpn_provider_get(const char *identifier)
 	return provider;
 }
 
+static void vpn_provider_put(const char *identifier)
+{
+	configuration_count_del();
+
+	g_hash_table_remove(provider_hash, identifier);
+}
+
 static void provider_dbus_ident(char *ident)
 {
 	int i, len = strlen(ident);
@@ -2468,8 +2475,6 @@ int __vpn_provider_create_from_config(GHashTable *settings,
 		provider->config_file = g_strdup(config_ident);
 		provider->config_entry = g_strdup(config_entry);
 
-		provider_register(provider);
-
 		provider_resolv_host_addr(provider);
 	}
 
@@ -2504,6 +2509,7 @@ int __vpn_provider_create_from_config(GHashTable *settings,
 	return 0;
 
 fail:
+	vpn_provider_put(ident);
 	g_free(ident);
 	g_slist_free_full(networks, free_route);
 

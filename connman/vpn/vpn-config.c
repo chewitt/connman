@@ -261,9 +261,6 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 	config_provider->config_entry = g_strdup_printf("provider_%s",
 						config_provider->ident);
 
-	g_hash_table_insert(config->provider_table,
-				config_provider->ident,	config_provider);
-
 	err = __vpn_provider_create_from_config(
 					config_provider->setting_strings,
 					config_provider->config_ident,
@@ -274,8 +271,12 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 		goto err;
 	}
 
+	g_hash_table_insert(config->provider_table, config_provider->ident,
+				config_provider);
+
 	DBG("Added provider configuration %s",
 						config_provider->ident);
+
 	return 0;
 
 err:
