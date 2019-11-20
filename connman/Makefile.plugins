@@ -103,15 +103,19 @@ builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if OPENCONNECT_BUILTIN
 builtin_vpn_modules += openconnect
 builtin_vpn_sources += vpn/plugins/openconnect.c
-builtin_vpn_cflags += -DOPENCONNECT=\"@OPENCONNECT@\"
+builtin_vpn_cflags += -DOPENCONNECT=\"@OPENCONNECT@\" \
+                                        @LIBOPENCONNECT_CFLAGS@
+builtin_vpn_libadd += @LIBOPENCONNECT_LIBS@
 else
 vpn_plugin_LTLIBRARIES += vpn/plugins/openconnect.la
 vpn_plugin_objects += $(plugins_openconnect_la_OBJECTS)
 vpn_plugins_openconnect_la_SOURCES = vpn/plugins/openconnect.c
 vpn_plugins_openconnect_la_CFLAGS = $(plugin_cflags) \
 					-DOPENCONNECT=\"@OPENCONNECT@\" \
-					-DSCRIPTDIR=\""$(build_scriptdir)"\"
+					-DSCRIPTDIR=\""$(build_scriptdir)"\" \
+                                        @LIBOPENCONNECT_CFLAGS@
 vpn_plugins_openconnect_la_LDFLAGS = $(plugin_ldflags)
+vpn_plugins_openconnect_la_LIBADD = @LIBOPENCONNECT_LIBS@
 endif
 endif
 

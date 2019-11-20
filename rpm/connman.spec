@@ -33,6 +33,7 @@ BuildRequires:  pkgconfig(gthread-2.0) >= 2.16
 BuildRequires:  pkgconfig(dbus-1) >= 1.4
 BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  openconnect
+BuildRequires:  pkgconfig(openconnect) > 4
 BuildRequires:  openvpn
 BuildRequires:  readline-devel
 BuildRequires:  pkgconfig(libsystemd)
