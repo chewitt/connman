@@ -721,7 +721,7 @@ static void request_input_credentials_reply(DBusMessage *reply,
 	return;
 
 err:
-	ov_connect_done(data, EACCES);
+	ov_connect_done(data, err);
 }
 
 static int request_credentials_input(struct ov_private_data *data)
