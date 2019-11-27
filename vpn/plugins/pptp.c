@@ -137,7 +137,8 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 		DBG("authentication failure");
 
 		vpn_provider_set_string(provider, "PPTP.User", NULL);
-		vpn_provider_set_string(provider, "PPTP.Password", NULL);
+		vpn_provider_set_string_hide_value(provider, "PPTP.Password",
+					NULL);
 
 		return VPN_STATE_AUTH_FAILURE;
 	}
@@ -396,6 +397,9 @@ static int request_input(struct vpn_provider *provider,
 
 	connman_dbus_dict_open(&iter, &dict);
 
+	if (vpn_provider_get_authentication_errors(provider))
+		vpn_agent_append_auth_failure(&dict, provider, NULL);
+
 	vpn_agent_append_user_info(&dict, provider, "PPTP.User");
 
 	vpn_agent_append_host_and_name(&dict, provider);
@@ -603,7 +607,7 @@ static void pptp_disconnect(struct vpn_provider *provider)
 	if (!provider)
 		return;
 
-	vpn_provider_set_string(provider, "PPTP.Password", NULL);
+	vpn_provider_set_string_hide_value(provider, "PPTP.Password", NULL);
 
 	connman_agent_cancel(provider);
 }
