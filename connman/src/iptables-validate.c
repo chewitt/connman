@@ -107,6 +107,7 @@ enum iptables_match_options_type {
 	IPTABLES_OPTION_DCCP,
 	IPTABLES_OPTION_OWNER,
 	IPTABLES_OPTION_IPRANGE,
+	IPTABLES_OPTION_GRE,
 	IPTABLES_OPTION_NOT_SUPPORTED
 };
 
@@ -344,6 +345,10 @@ static const int owner_options_count[] = {1, 1, 0, -1};
 static const char *iprange_options[] = {"--src-range", "--dst-range", NULL};
 static const int iprange_options_count[] = {1, 1, -1};
 
+/* Protocol gre has no options, just a dummy placeholder. */
+static const char *gre_options[] = {NULL};
+static const int gre_options_count[] = {-1};
+
 struct iptables_type_options {
 	enum iptables_match_options_type type;
 	const char **options;
@@ -370,13 +375,14 @@ static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_DCCP, dccp_options, dccp_options_count},
 	{IPTABLES_OPTION_OWNER, owner_options, owner_options_count},
 	{IPTABLES_OPTION_IPRANGE, iprange_options, iprange_options_count},
+	{IPTABLES_OPTION_GRE, gre_options, gre_options_count},
 };
 
 static const char *opt_names[] = {"port", "multiport", "tcp", "mark",
 				"conntrack", "ttl", "pkttype", "limit",
 				"helper", "ecn", "ah", "esp", "mh", "sctp",
 				"icmp", "ipv6-icmp", "dccp", "owner",
-				"iprange", NULL};
+				"iprange", "gre", NULL};
 
 static GHashTable *iptables_options = NULL;
 
@@ -1325,7 +1331,7 @@ static bool is_valid_option_type_params(int family,
 		 * Currently the iprange module offers no other options,
 		 * so we can check both options the same way.
 		 */
-                return is_valid_iprange(family, params[0]);
+		return is_valid_iprange(family, params[0]);
 	case IPTABLES_OPTION_ICMPv6:
 		icmp_types = icmp_types_ipv6;
 	/* Fallthrough */
@@ -1433,6 +1439,8 @@ static bool is_valid_option_type_params(int family,
 	case IPTABLES_OPTION_TTL:
 		/* Each option requires a single value */
 		return is_string_digits(params[0]);
+	case IPTABLES_OPTION_GRE: /* Protocol GRE has no parameters */
+		/* fall through */
 	case IPTABLES_OPTION_NOT_SUPPORTED:
 		break;
 	}
@@ -1601,6 +1609,8 @@ static bool is_valid_option_for_protocol_match(const char* protocol,
 		return false; /* SCTP options not supported */
 	case IPTABLES_OPTION_TTL:
 		return !g_strcmp0(match, "ttl");
+	case IPTABLES_OPTION_GRE: /* GRE protocol has no options */
+		/* fall through */
 	case IPTABLES_OPTION_NOT_SUPPORTED:
 		return false;
 	}
@@ -1678,6 +1688,7 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 						"ah",
 						"sctp",
 						"dccp",
+						"gre",
 						"all",
 						NULL
 	};
@@ -1693,6 +1704,7 @@ static bool is_supported(int family, enum iptables_switch_type switch_type,
 						"sctp",
 						"mh",
 						"dccp",
+						"gre",
 						"all",
 						NULL
 	};

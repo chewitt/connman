@@ -1270,9 +1270,9 @@ bool connman_device_has_status_changed_to(struct connman_device *device,
 // End of dummies
 
 #define CHAINS_GEN4 3
-#define RULES_GEN4 (CHAINS_GEN4 + 66)
+#define RULES_GEN4 (CHAINS_GEN4 + 68)
 #define CHAINS_GEN6 3
-#define RULES_GEN6 (CHAINS_GEN6 + 68)
+#define RULES_GEN6 (CHAINS_GEN6 + 70)
 #define RULES_ETH 17
 #define RULES_CEL 4
 #define RULES_TETH 7
@@ -1292,6 +1292,7 @@ static const char *general_input[] = {
 		"-p dccp -j REJECT",
 		"-p all -j ACCEPT",
 		"-p udplite -j DROP",
+		"-p gre -j ACCEPT",
 		/* Port switches with protocols */
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --sport 81 -j DROP",
@@ -1322,6 +1323,7 @@ static const char *general_input[] = {
 		"-p 6 -m tcp --dport 9898 -j ACCEPT",
 		"-p 132 --dport 6789 -j LOG",
 		"-p udp -m udp --sport echo -j QUEUE",
+		"-p 47 -j ACCEPT", /* gre */
 		/* Negations */
 		"! -p tcp -m multiport --dports 67,68,69 -j ACCEPT",
 		"-p tcp ! -m multiport --dports 70,71 -j ACCEPT",
@@ -1540,8 +1542,8 @@ static const char *general_icmpv6[] = {
 	NULL
 };
 
-#define RULES_OPTIONS4 64 // +1 for chain
-#define RULES_OPTIONS6 61 // +1 for chain
+#define RULES_OPTIONS4 65 // +1 for chain
+#define RULES_OPTIONS6 62 // +1 for chain
 
 static const char *general_options[] = {
 	/* AH and ESP options */
@@ -1620,6 +1622,7 @@ static const char *general_options[] = {
 	"-p tcp --match tcp --dport 56 -j LOG",
 	"-p tcp -m tcp --dport 66 --jump QUEUE",
 	"--protocol tcp --match tcp --dport 5555 --jump DROP",
+	"--protocol gre --jump REJECT",
 	/* Hostnames */
 	"-d host.name.com -j DROP",
 	"-s host.name.com,host2.name2.com,host3.name3.com -j DROP",
@@ -1908,6 +1911,11 @@ static const char *invalid_general_input[] = {
 		"-p tcp -m state --state NEW -j ACCEPT",
 		/* Comment is disabled, TODO lone --comment must be disabled */
 		"-p tcp -m tcp --dport 22 -j ACCEPT -m comment --comment test",
+		/* Protocol gre has no options or match support*/
+		"-p gre --dport 55 -j ACCEPT",
+		"-p gre -m gre -j ACCEPT",
+		"-p gre -m gre --dport 56 -j DROP",
+		"-p 47 -m gre -j DROP",
 		/* ICMP v4*/
 		"-p icmp -m icmpv6 --icmp-type 8 -j ACCEPT",
 		"-p icmp -m icmp --icmp-type 8/ -j ACCEPT",
