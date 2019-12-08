@@ -293,6 +293,15 @@ static int wg_connect(struct vpn_provider *provider,
 	if (err)
 		goto done;
 
+	option = vpn_provider_get_string(provider,
+					"WireGuard.PersistentKeepalive");
+	if (option) {
+		char *end;
+		info->peer.persistent_keepalive_interval =
+			g_ascii_strtoull(option, &end, 10);
+		info->peer.flags |= WGPEER_HAS_PERSISTENT_KEEPALIVE_INTERVAL;
+	}
+
 	option = vpn_provider_get_string(provider, "WireGuard.EndpointPort");
 	if (!option)
 		option = "51820";
