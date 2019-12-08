@@ -523,7 +523,7 @@ static void vpn_task_setup(gpointer user_data)
 	gid = get_gid(group);
 	gid_list_size = get_supplementary_gids(suppl_groups, &gid_list);
 
-	DBG("vpn_task_setup uid:%d gid:%d supplementary group list size:%lu",
+	DBG("vpn_task_setup uid:%d gid:%d supplementary group list size:%zu",
 					uid, gid, gid_list_size);
 
 
