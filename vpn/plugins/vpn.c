@@ -89,8 +89,10 @@ static int stop_vpn(struct vpn_provider *provider)
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
 
 	if (vpn_driver_data && vpn_driver_data->vpn_driver &&
-			vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_TUN)
+			vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_TUN) {
+		vpn_driver_data->vpn_driver->disconnect(data->provider);
 		return 0;
+	}
 
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_flags = data->tun_flags | IFF_NO_PI;
