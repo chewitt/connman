@@ -72,7 +72,7 @@ static void print_connection(char *path, DBusMessageIter *iter)
 	else
 		str = path;
 
-	fprintf(stdout, "  %c %-20s %s", state, name, str);
+	fprintf(stdout, "  %c %-20s vpn_%s", state, name, str);
 }
 
 void __connmanctl_vpnconnections_list(DBusMessageIter *iter)
