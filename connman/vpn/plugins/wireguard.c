@@ -254,7 +254,7 @@ static int wg_connect(struct vpn_provider *provider,
 
 	info = g_malloc0(sizeof(struct wireguard_info));
 	info->peer.flags = WGPEER_HAS_PUBLIC_KEY | WGPEER_REPLACE_ALLOWEDIPS;
-	info->device.flags = WGDEVICE_HAS_PRIVATE_KEY | WGDEVICE_HAS_LISTEN_PORT;
+	info->device.flags = WGDEVICE_HAS_PRIVATE_KEY;
 	info->device.first_peer = &info->peer;
 	info->device.last_peer = &info->peer;
 
@@ -264,6 +264,7 @@ static int wg_connect(struct vpn_provider *provider,
 	if (option) {
 		char *end;
 		info->device.listen_port = g_ascii_strtoull(option, &end, 10);
+		info->peer.flags |= WGDEVICE_HAS_LISTEN_PORT;
 	}
 
 	option = vpn_provider_get_string(provider, "WireGuard.PrivateKey");
