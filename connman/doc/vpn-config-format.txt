@@ -311,6 +311,7 @@ WireGuard VPN supports following options
  WireGuard.PublicKey                      Public key of peer
  WireGuard.AllowedIPs                     See Cryptokey Routing
  WireGuard.EndpointPort                   Endpoint listen port (optional)
+ WireGuard.PersistentKeepalive            Keep alive in seconds (optional)
 
 
 Example
