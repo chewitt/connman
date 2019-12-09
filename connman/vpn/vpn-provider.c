@@ -550,6 +550,185 @@ static bool compare_network_lists(GSList *a, GSList *b)
 	return true;
 }
 
+static int set_provider_property(struct vpn_provider *provider,
+			const char *name, DBusMessageIter *value, int type,
+			bool clear_if_empty)
+{
+	int err = 0;
+
+	DBG("provider %p", provider);
+
+	if (!provider || !name || !value)
+		return -EINVAL;
+
+	if (g_str_equal(name, "UserRoutes")) {
+		GSList *networks;
+
+		if (type != DBUS_TYPE_ARRAY)
+			return -EINVAL;
+
+		networks = get_user_networks(value);
+		if (!networks && !clear_if_empty)
+			return -EINVAL;
+
+		if (compare_network_lists(provider->user_networks, networks)) {
+			g_slist_free_full(networks, free_route);
+			return -EALREADY;
+		}
+
+		del_routes(provider);
+		provider->user_networks = networks;
+		set_user_networks(provider, provider->user_networks);
+
+		if (!handle_routes)
+			send_routes(provider, provider->user_routes,
+						"UserRoutes");
+	} else {
+		const char *str;
+
+		if (type != DBUS_TYPE_STRING)
+			return -EINVAL;
+
+		dbus_message_iter_get_basic(value, &str);
+
+		DBG("property %s value %s", name, str);
+
+		/*
+		 * Empty strings must not be allowed unless explicitely set to
+		 * be cleared if the string is empty. If the value is to be
+		 * cleared ClearProperty D-Bus method must be used.
+		 */
+		if (!*str && !clear_if_empty)
+			return -EINVAL;
+
+		err = vpn_provider_set_string(provider, name,
+					*str ? str : NULL);
+	}
+
+	return err;
+}
+
+static GString *append_to_gstring(GString *str, const char *value)
+{
+	if (!str)
+		return g_string_new(value);
+
+	g_string_append_printf(str, ",%s", value);
+
+	return str;
+}
+
+static DBusMessage *set_properties(DBusConnection *conn, DBusMessage *msg,
+								void *data)
+{
+	struct vpn_provider *provider = data;
+	DBusMessageIter iter, dict;
+	const char *key;
+	bool change = false;
+	GString *invalid = NULL;
+	GString *denied = NULL;
+	int type;
+	int err;
+
+	DBG("conn %p", conn);
+
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+					VPN_ACCESS_CONNECTION_SET_PROPERTY,
+					"", TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
+
+	if (provider->immutable)
+		return __connman_error_not_supported(msg);
+
+	if (!dbus_message_iter_init(msg, &iter))
+		return __connman_error_invalid_arguments(msg);
+
+	for (dbus_message_iter_recurse(&iter, &dict);
+				dbus_message_iter_get_arg_type(&dict) ==
+				DBUS_TYPE_DICT_ENTRY;
+				dbus_message_iter_next(&dict)) {
+		DBusMessageIter entry, value;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		/*
+		 * Ignore invalid types in order to process all values in the
+		 * dict. If there is an invalid type in between the dict there
+		 * may already be changes on some values and breaking out here
+		 *  would have the provider in an inconsistent state, leaving
+		 * the rest, potentially correct property values untouched.
+		 */
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			continue;
+
+		dbus_message_iter_get_basic(&entry, &key);
+
+		DBG("key %s", key);
+
+		dbus_message_iter_next(&entry);
+		/* Ignore and report back all non variant types. */
+		if (dbus_message_iter_get_arg_type(&entry)
+					!= DBUS_TYPE_VARIANT) {
+			invalid = append_to_gstring(invalid, key);
+			continue;
+		}
+
+		dbus_message_iter_recurse(&entry, &value);
+
+		type = dbus_message_iter_get_arg_type(&value);
+		/* Ignore and report back all invalid property types */
+		if (type != DBUS_TYPE_STRING && type != DBUS_TYPE_ARRAY) {
+			invalid = append_to_gstring(invalid, key);
+			continue;
+		}
+
+		err = set_provider_property(provider, key, &value, type, true);
+		switch (err) {
+		case 0:
+			change = true;
+			break;
+		case -EINVAL:
+			invalid = append_to_gstring(invalid, key);
+			break;
+		case -EPERM:
+			denied = append_to_gstring(denied, key);
+			break;
+		}
+	}
+
+	if (change)
+		vpn_provider_save(provider);
+
+	if (invalid || denied) {
+		DBusMessage *error;
+		char *invalid_str = g_string_free(invalid, FALSE);
+		char *denied_str = g_string_free(denied, FALSE);
+
+		/*
+		 * If there are both invalid and denied properties report
+		 * back invalid arguments. Add also the failed properties to
+		 * the error message.
+		 */
+		error = g_dbus_create_error(msg, (invalid ?
+				CONNMAN_ERROR_INTERFACE ".InvalidProperty" :
+				CONNMAN_ERROR_INTERFACE ".PermissionDenied"),
+				"%s %s%s%s", (invalid ? "Invalid properties" :
+				"Permission denied"),
+				(invalid ? invalid_str : ""),
+				(invalid && denied ? "," : ""),
+				(denied ? denied_str : ""));
+
+		g_free(invalid_str);
+		g_free(denied_str);
+
+		return error;
+	}
+
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
 static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
@@ -557,7 +736,7 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	DBusMessageIter iter, value;
 	const char *name;
 	int type;
-	int err = 0;
+	int err;
 
 	DBG("conn %p", conn);
 
@@ -588,37 +767,7 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 
 	type = dbus_message_iter_get_arg_type(&value);
 
-	if (g_str_equal(name, "UserRoutes")) {
-		GSList *networks;
-
-		if (type != DBUS_TYPE_ARRAY)
-			return __connman_error_invalid_arguments(msg);
-
-		networks = get_user_networks(&value);
-		if (!networks)
-			return __connman_error_invalid_arguments(msg);
-
-		if (compare_network_lists(provider->user_networks, networks))
-			return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
-
-		del_routes(provider);
-		provider->user_networks = networks;
-		set_user_networks(provider, provider->user_networks);
-
-		if (!handle_routes)
-			send_routes(provider, provider->user_routes,
-						"UserRoutes");
-	} else {
-		const char *str;
-
-		if (type != DBUS_TYPE_STRING)
-			return __connman_error_invalid_arguments(msg);
-
-		dbus_message_iter_get_basic(&value, &str);
-
-		err = vpn_provider_set_string(provider, name, str);
-	}
-
+	err = set_provider_property(provider, name, &value, type, false);
 	switch (err) {
 	case 0:
 		vpn_provider_save(provider);
@@ -830,6 +979,9 @@ static const GDBusMethodTable connection_methods[] = {
 	{ GDBUS_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			get_properties) },
+	{ GDBUS_METHOD("SetProperties",
+			GDBUS_ARGS({ "properties", "a{sv}" }),
+			NULL, set_properties) },
 	{ GDBUS_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
