@@ -12,6 +12,31 @@ Methods		dict GetProperties()  [experimental]
 
 			Possible Errors: [connection].Error.InvalidArguments
 
+		void SetProperties(dict) [experimental]
+
+			Change values of all properties defined in the dict.
+			Only properties that are listed as read-write are
+			changeable. See the properties section for available
+			properties. On every successful property value change
+			a PropertyChanged signal will be emitted. Clearing a
+			property can be done by supplying an empty property
+			value: an empty array for UserRoutes property or an
+			empty string for any other property. In case there
+			are errors with the properties, InvalidProperty or
+			PermissionDenied error is sent. InvalidProperty is
+			sent when there is at least one invalid property, in
+			this case there can be also properties that cannot be
+			changed (immutable properties). In case there are
+			only immutable properties PermissionDenied error is
+			returned. The properties that are invalid or
+			immutable are reported back at the end of the error
+			message as a comma separated property name list.
+
+			Possible Errors: [connection].Error.InvalidArguments
+					 [connection].Error.InvalidProperty
+					 [connection].Error.PermissionDenied
+					 [connection].Error.NotSupported
+
 		void SetProperty(string name, variant value) [experimental]
 
 			Changes the value of the specified property. Only
@@ -21,6 +46,8 @@ Methods		dict GetProperties()  [experimental]
 
 			Possible Errors: [connection].Error.InvalidArguments
 					 [connection].Error.InvalidProperty
+					 [connection].Error.PermissionDenied
+					 [connection].Error.NotSupported
 
 		void ClearProperty(string name) [experimental]
 
@@ -28,6 +55,7 @@ Methods		dict GetProperties()  [experimental]
 
 			Possible Errors: [connection].Error.InvalidArguments
 					 [connection].Error.InvalidProperty
+					 [connection].Error.PermissionDenied
 
 		void Connect() [experimental]
 

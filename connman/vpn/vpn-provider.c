@@ -3,6 +3,8 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -264,6 +266,39 @@ static int provider_routes_changed(struct vpn_provider *provider)
 	return 0;
 }
 
+/*
+ * Sort vpn_route struct based on (similarly to the route key in hash table):
+ * 1) IP protocol number
+ * 2) Network addresses
+ * 3) Netmask addresses
+ * 4) Gateway addresses
+ */
+static gint compare_route(gconstpointer a, gconstpointer b)
+{
+	const struct vpn_route *route_a = a;
+	const struct vpn_route *route_b = b;
+	int difference;
+
+	/* If IP families differ, prefer IPv6 over IPv4 */
+	if (route_a->family != route_b->family) {
+		if (route_a->family < route_b->family)
+			return -1;
+
+		if (route_a->family > route_b->family)
+			return 1;
+	}
+
+	/* If networks differ, return  */
+	if ((difference = g_strcmp0(route_a->network, route_b->network)))
+		return difference;
+
+	/* If netmasks differ, return. */
+	if ((difference = g_strcmp0(route_a->netmask, route_b->netmask)))
+		return difference;
+
+	return g_strcmp0(route_a->gateway, route_b->gateway);
+}
+
 static GSList *read_route_dict(GSList *routes, DBusMessageIter *dicts)
 {
 	DBusMessageIter dict, value, entry;
@@ -348,7 +383,7 @@ static GSList *read_route_dict(GSList *routes, DBusMessageIter *dicts)
 	route->netmask = g_strdup(netmask);
 	route->gateway = g_strdup(gateway);
 
-	routes = g_slist_prepend(routes, route);
+	routes = g_slist_insert_sorted(routes, route, compare_route);
 	return routes;
 }
 
@@ -486,6 +521,215 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	return reply;
 }
 
+/* True when lists are equal, false otherwise */
+static bool compare_network_lists(GSList *a, GSList *b)
+{
+	struct vpn_route *route_a, *route_b;
+	GSList *iter_a, *iter_b;
+
+	if (!a && !b)
+		return true;
+
+	/*
+	 * If either of lists is NULL or the lists are of different size, the
+	 * lists are not equal.
+	 */
+	if ((!a || !b) || (g_slist_length(a) != g_slist_length(b)))
+		return false;
+
+	/* Routes are in sorted list so items can be compared in order. */
+	for (iter_a = a, iter_b = b; iter_a && iter_b;
+				iter_a = iter_a->next, iter_b = iter_b->next) {
+
+		route_a = iter_a->data;
+		route_b = iter_b->data;
+
+		if (compare_route(route_a, route_b))
+			return false;
+	}
+
+	return true;
+}
+
+static int set_provider_property(struct vpn_provider *provider,
+			const char *name, DBusMessageIter *value, int type,
+			bool clear_if_empty)
+{
+	int err = 0;
+
+	DBG("provider %p", provider);
+
+	if (!provider || !name || !value)
+		return -EINVAL;
+
+	if (g_str_equal(name, "UserRoutes")) {
+		GSList *networks;
+
+		if (type != DBUS_TYPE_ARRAY)
+			return -EINVAL;
+
+		networks = get_user_networks(value);
+		if (!networks && !clear_if_empty)
+			return -EINVAL;
+
+		if (compare_network_lists(provider->user_networks, networks)) {
+			g_slist_free_full(networks, free_route);
+			return -EALREADY;
+		}
+
+		del_routes(provider);
+		provider->user_networks = networks;
+		set_user_networks(provider, provider->user_networks);
+
+		if (!handle_routes)
+			send_routes(provider, provider->user_routes,
+						"UserRoutes");
+	} else {
+		const char *str;
+
+		if (type != DBUS_TYPE_STRING)
+			return -EINVAL;
+
+		dbus_message_iter_get_basic(value, &str);
+
+		DBG("property %s value %s", name, str);
+
+		/*
+		 * Empty strings must not be allowed unless explicitely set to
+		 * be cleared if the string is empty. If the value is to be
+		 * cleared ClearProperty D-Bus method must be used.
+		 */
+		if (!*str && !clear_if_empty)
+			return -EINVAL;
+
+		err = vpn_provider_set_string(provider, name,
+					*str ? str : NULL);
+	}
+
+	return err;
+}
+
+static GString *append_to_gstring(GString *str, const char *value)
+{
+	if (!str)
+		return g_string_new(value);
+
+	g_string_append_printf(str, ",%s", value);
+
+	return str;
+}
+
+static DBusMessage *set_properties(DBusConnection *conn, DBusMessage *msg,
+								void *data)
+{
+	struct vpn_provider *provider = data;
+	DBusMessageIter iter, dict;
+	const char *key;
+	bool change = false;
+	GString *invalid = NULL;
+	GString *denied = NULL;
+	int type;
+	int err;
+
+	DBG("conn %p", conn);
+
+	const char *sender = dbus_message_get_sender(msg);
+	if (!__vpn_access_policy_check(sender,
+					VPN_ACCESS_CONNECTION_SET_PROPERTY,
+					"", TRUE)) {
+		DBG("access denied for %s", sender);
+		return __connman_error_permission_denied(msg);
+	}
+
+	if (provider->immutable)
+		return __connman_error_not_supported(msg);
+
+	if (!dbus_message_iter_init(msg, &iter))
+		return __connman_error_invalid_arguments(msg);
+
+	for (dbus_message_iter_recurse(&iter, &dict);
+				dbus_message_iter_get_arg_type(&dict) ==
+				DBUS_TYPE_DICT_ENTRY;
+				dbus_message_iter_next(&dict)) {
+		DBusMessageIter entry, value;
+
+		dbus_message_iter_recurse(&dict, &entry);
+		/*
+		 * Ignore invalid types in order to process all values in the
+		 * dict. If there is an invalid type in between the dict there
+		 * may already be changes on some values and breaking out here
+		 *  would have the provider in an inconsistent state, leaving
+		 * the rest, potentially correct property values untouched.
+		 */
+		if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+			continue;
+
+		dbus_message_iter_get_basic(&entry, &key);
+
+		DBG("key %s", key);
+
+		dbus_message_iter_next(&entry);
+		/* Ignore and report back all non variant types. */
+		if (dbus_message_iter_get_arg_type(&entry)
+					!= DBUS_TYPE_VARIANT) {
+			invalid = append_to_gstring(invalid, key);
+			continue;
+		}
+
+		dbus_message_iter_recurse(&entry, &value);
+
+		type = dbus_message_iter_get_arg_type(&value);
+		/* Ignore and report back all invalid property types */
+		if (type != DBUS_TYPE_STRING && type != DBUS_TYPE_ARRAY) {
+			invalid = append_to_gstring(invalid, key);
+			continue;
+		}
+
+		err = set_provider_property(provider, key, &value, type, true);
+		switch (err) {
+		case 0:
+			change = true;
+			break;
+		case -EINVAL:
+			invalid = append_to_gstring(invalid, key);
+			break;
+		case -EPERM:
+			denied = append_to_gstring(denied, key);
+			break;
+		}
+	}
+
+	if (change)
+		vpn_provider_save(provider);
+
+	if (invalid || denied) {
+		DBusMessage *error;
+		char *invalid_str = g_string_free(invalid, FALSE);
+		char *denied_str = g_string_free(denied, FALSE);
+
+		/*
+		 * If there are both invalid and denied properties report
+		 * back invalid arguments. Add also the failed properties to
+		 * the error message.
+		 */
+		error = g_dbus_create_error(msg, (invalid ?
+				CONNMAN_ERROR_INTERFACE ".InvalidProperty" :
+				CONNMAN_ERROR_INTERFACE ".PermissionDenied"),
+				"%s %s%s%s", (invalid ? "Invalid properties" :
+				"Permission denied"),
+				(invalid ? invalid_str : ""),
+				(invalid && denied ? "," : ""),
+				(denied ? denied_str : ""));
+
+		g_free(invalid_str);
+		g_free(denied_str);
+
+		return error;
+	}
+
+	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
 static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
@@ -493,6 +737,7 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	DBusMessageIter iter, value;
 	const char *name;
 	int type;
+	int err;
 
 	DBG("conn %p", conn);
 
@@ -523,33 +768,18 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 
 	type = dbus_message_iter_get_arg_type(&value);
 
-	if (g_str_equal(name, "UserRoutes")) {
-		GSList *networks;
-
-		if (type != DBUS_TYPE_ARRAY)
-			return __connman_error_invalid_arguments(msg);
-
-		networks = get_user_networks(&value);
-		if (networks) {
-			del_routes(provider);
-			provider->user_networks = networks;
-			set_user_networks(provider, provider->user_networks);
-
-			if (!handle_routes)
-				send_routes(provider, provider->user_routes,
-								"UserRoutes");
-		}
-	} else {
-		const char *str;
-
-		if (type != DBUS_TYPE_STRING)
-			return __connman_error_invalid_arguments(msg);
-
-		dbus_message_iter_get_basic(&value, &str);
-		vpn_provider_set_string(provider, name, str);
+	err = set_provider_property(provider, name, &value, type, false);
+	switch (err) {
+	case 0:
+		vpn_provider_save(provider);
+		break;
+	case -EALREADY:
+		break;
+	case -EINVAL:
+		return __connman_error_invalid_property(msg);
+	default:
+		return __connman_error_failed(msg, -err);
 	}
-
-	vpn_provider_save(provider);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
@@ -559,6 +789,8 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 {
 	struct vpn_provider *provider = data;
 	const char *name;
+	bool change = false;
+	int err;
 
 	DBG("conn %p", conn);
 
@@ -577,17 +809,37 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 	}
 
 	if (g_str_equal(name, "UserRoutes")) {
+		/*
+		 * If either user_routes or user_networks has any entries
+		 * there is a change that is to be written to settings file.
+		 */
+		if (g_hash_table_size(provider->user_routes) ||
+				provider->user_networks)
+			change = true;
+
 		del_routes(provider);
 
 		if (!handle_routes)
 			send_routes(provider, provider->user_routes, name);
 	} else if (vpn_provider_get_string(provider, name)) {
-		vpn_provider_set_string(provider, name, NULL);
+		err = vpn_provider_set_string(provider, name, NULL);
+		switch (err) {
+		case 0:
+			change = true;
+			/* fall through */
+		case -EALREADY:
+			break;
+		case -EINVAL:
+			return __connman_error_invalid_property(msg);
+		default:
+			return __connman_error_failed(msg, -err);
+		}
 	} else {
 		return __connman_error_invalid_property(msg);
 	}
 
-	vpn_provider_save(provider);
+	if (change)
+		vpn_provider_save(provider);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
@@ -728,6 +980,9 @@ static const GDBusMethodTable connection_methods[] = {
 	{ GDBUS_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			get_properties) },
+	{ GDBUS_METHOD("SetProperties",
+			GDBUS_ARGS({ "properties", "a{sv}" }),
+			NULL, set_properties) },
 	{ GDBUS_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
@@ -2574,35 +2829,54 @@ static int set_string(struct vpn_provider *provider,
 		hide_value ? "<not printed>" : value);
 
 	if (g_str_equal(key, "Type")) {
+		if (!g_strcmp0(provider->type, value))
+			return -EALREADY;
+
 		g_free(provider->type);
 		provider->type = g_ascii_strdown(value, -1);
 		send_value(provider->path, "Type", provider->type);
 	} else if (g_str_equal(key, "Name")) {
+		if (!g_strcmp0(provider->name, value))
+			return -EALREADY;
+
 		g_free(provider->name);
 		provider->name = g_strdup(value);
 		send_value(provider->path, "Name", provider->name);
 	} else if (g_str_equal(key, "Host")) {
+		if (!g_strcmp0(provider->host, value))
+			return -EALREADY;
+
 		g_free(provider->host);
 		provider->host = g_strdup(value);
 		send_value(provider->path, "Host", provider->host);
 	} else if (g_str_equal(key, "VPN.Domain") ||
 			g_str_equal(key, "Domain")) {
+		if (!g_strcmp0(provider->domain, value))
+			return -EALREADY;
+
 		g_free(provider->domain);
 		provider->domain = g_strdup(value);
 		send_value(provider->path, "Domain", provider->domain);
 	} else {
 		struct vpn_setting *setting;
+		bool replace = true;
 
 		setting = g_hash_table_lookup(provider->setting_strings, key);
-		if (setting && !immutable &&
-						setting->immutable) {
-			DBG("Trying to set immutable variable %s", key);
-			return -EPERM;
-		}
+		if (setting) {
+			if (!immutable && setting->immutable) {
+				DBG("Trying to set immutable variable %s", key);
+				return -EPERM;
+			} else if (!g_strcmp0(setting->value, value)) {
+				return -EALREADY;
+			}
 
-		setting = g_try_new0(struct vpn_setting, 1);
-		if (!setting)
-			return -ENOMEM;
+			g_free(setting->value);
+			replace = false;
+		} else {
+			setting = g_try_new0(struct vpn_setting, 1);
+			if (!setting)
+				return -ENOMEM;
+		}
 
 		setting->value = g_strdup(value);
 		setting->hide_value = hide_value;
@@ -2613,8 +2887,9 @@ static int set_string(struct vpn_provider *provider,
 		if (!hide_value)
 			send_value(provider->path, key, setting->value);
 
-		g_hash_table_replace(provider->setting_strings,
-				g_strdup(key), setting);
+		if (replace)
+			g_hash_table_replace(provider->setting_strings,
+						g_strdup(key), setting);
 	}
 
 	return 0;
