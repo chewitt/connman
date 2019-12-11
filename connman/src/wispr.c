@@ -614,6 +614,8 @@ static void wispr_portal_request_wispr_login(struct connman_service *service,
 	connman_wispr_message_init(&wp_context->wispr_msg);
 }
 
+/* Disable, this is not used because of commit
+ * 7fad371bdc8ac397812e73d0f5baef25029b1419
 static bool wispr_manage_message(GWebResult *result,
 			struct connman_wispr_portal_context *wp_context)
 {
@@ -655,7 +657,7 @@ static bool wispr_manage_message(GWebResult *result,
 			return true;
 
 		break;
-	case 120: /* Falling down */
+	case 120: *//* Falling down *//*
 	case 140:
 		if (wp_context->wispr_msg.response_code == 50) {
 			wp_context->wispr_result = CONNMAN_WISPR_RESULT_ONLINE;
@@ -682,6 +684,7 @@ static bool wispr_manage_message(GWebResult *result,
 
 	return false;
 }
+*/
 
 static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 {
