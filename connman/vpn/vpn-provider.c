@@ -552,8 +552,7 @@ static bool compare_network_lists(GSList *a, GSList *b)
 }
 
 static int set_provider_property(struct vpn_provider *provider,
-			const char *name, DBusMessageIter *value, int type,
-			bool clear_if_empty)
+			const char *name, DBusMessageIter *value, int type)
 {
 	int err = 0;
 
@@ -569,8 +568,6 @@ static int set_provider_property(struct vpn_provider *provider,
 			return -EINVAL;
 
 		networks = get_user_networks(value);
-		if (!networks && !clear_if_empty)
-			return -EINVAL;
 
 		if (compare_network_lists(provider->user_networks, networks)) {
 			g_slist_free_full(networks, free_route);
@@ -594,14 +591,7 @@ static int set_provider_property(struct vpn_provider *provider,
 
 		DBG("property %s value %s", name, str);
 
-		/*
-		 * Empty strings must not be allowed unless explicitely set to
-		 * be cleared if the string is empty. If the value is to be
-		 * cleared ClearProperty D-Bus method must be used.
-		 */
-		if (!*str && !clear_if_empty)
-			return -EINVAL;
-
+		/* Empty string clears the value, similar to ClearProperty. */
 		err = vpn_provider_set_string(provider, name,
 					*str ? str : NULL);
 	}
@@ -619,11 +609,11 @@ static GString *append_to_gstring(GString *str, const char *value)
 	return str;
 }
 
-static DBusMessage *set_properties(DBusConnection *conn, DBusMessage *msg,
+static DBusMessage *set_properties(DBusMessageIter *iter, DBusMessage *msg,
 								void *data)
 {
 	struct vpn_provider *provider = data;
-	DBusMessageIter iter, dict;
+	DBusMessageIter dict;
 	const char *key;
 	bool change = false;
 	GString *invalid = NULL;
@@ -631,23 +621,9 @@ static DBusMessage *set_properties(DBusConnection *conn, DBusMessage *msg,
 	int type;
 	int err;
 
-	DBG("conn %p", conn);
+	DBG("");
 
-	const char *sender = dbus_message_get_sender(msg);
-	if (!__vpn_access_policy_check(sender,
-					VPN_ACCESS_CONNECTION_SET_PROPERTY,
-					"", TRUE)) {
-		DBG("access denied for %s", sender);
-		return __connman_error_permission_denied(msg);
-	}
-
-	if (provider->immutable)
-		return __connman_error_not_supported(msg);
-
-	if (!dbus_message_iter_init(msg, &iter))
-		return __connman_error_invalid_arguments(msg);
-
-	for (dbus_message_iter_recurse(&iter, &dict);
+	for (dbus_message_iter_recurse(iter, &dict);
 				dbus_message_iter_get_arg_type(&dict) ==
 				DBUS_TYPE_DICT_ENTRY;
 				dbus_message_iter_next(&dict)) {
@@ -685,7 +661,7 @@ static DBusMessage *set_properties(DBusConnection *conn, DBusMessage *msg,
 			continue;
 		}
 
-		err = set_provider_property(provider, key, &value, type, true);
+		err = set_provider_property(provider, key, &value, type);
 		switch (err) {
 		case 0:
 			change = true;
@@ -767,8 +743,10 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	dbus_message_iter_recurse(&iter, &value);
 
 	type = dbus_message_iter_get_arg_type(&value);
+	if (type == DBUS_TYPE_ARRAY && !g_str_equal(name, "UserRoutes"))
+		return set_properties(&value, msg, data);
 
-	err = set_provider_property(provider, name, &value, type, false);
+	err = set_provider_property(provider, name, &value, type);
 	switch (err) {
 	case 0:
 		vpn_provider_save(provider);
@@ -980,9 +958,6 @@ static const GDBusMethodTable connection_methods[] = {
 	{ GDBUS_METHOD("GetProperties",
 			NULL, GDBUS_ARGS({ "properties", "a{sv}" }),
 			get_properties) },
-	{ GDBUS_METHOD("SetProperties",
-			GDBUS_ARGS({ "properties", "a{sv}" }),
-			NULL, set_properties) },
 	{ GDBUS_METHOD("SetProperty",
 			GDBUS_ARGS({ "name", "s" }, { "value", "v" }),
 			NULL, set_property) },
