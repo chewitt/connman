@@ -1,8 +1,9 @@
 .\" connman-firewall.config(5) manual page
 .\"
-.\" Copyright (C) 2018 Jolla Ltd.
+.\" Copyright (C) 2018-2019  Jolla Ltd.
+.\" Copyright (C) 2019  Open Mobile Platform LLC.
 .\"
-.TH "connman-firewall.config" "5" "2018-12-04" ""
+.TH "connman-firewall.config" "5" "2019-12-16" ""
 .SH NAME
 firewall.conf \- ConnMan firewall configuration file
 .SH DESCRIPTION
@@ -20,26 +21,30 @@ chains INPUT, FORWARD and OUTPUT.
 .P
 In general the firewall configuration in connman works as follows:
 .IP
-Rules are loaded as general, tethering and service type specific rules
+Rules are loaded as general, mangle, tethering and service type specific rules.
 .IP
-Rules are applied only for the iptables filter table
+Rules are applied only for iptables filter or for mangle tables.
 .IP
 Rules are added using managed chains only, no chain management with configs.
 Rules are applied to connman-INPUT|FORWARD|OUTPUT chains.
+For mangle table rules are applied also to connman-PREROUTING|POSTROUTING
+chains.
 .IP
-Rules in General section are applied at start and removed at shutdown
+Rules in General section are applied at start and removed at shutdown.
 .IP
-Rules in tethering section are enabled/disabled when tethering is on/off
+Rules in tethering section are enabled/disabled when tethering is on/off.
 .IP
-Rules for service types are enabled/disabled when service goes online/offline
+Rules for service types are enabled/disabled when service goes online/offline.
 .SH CONFIGURATION LOADING
 .P
 Connman supports firewall configurations for both general (permanent) settings
-and for each connected service type. The main configuration is always as
-@configdir@/connman/firewall.conf and rest of the configurations provided by
-packages or installed by user are searched from @configdir@/connman/firewall.d/.
-The configuration files must have \fB*firewall.conf\fP suffix and the file names
-must not include other characters than letters or numbers.
+and for each connected service type. The rules in Mangle section are added
+to mangle table only, all the rest are added to filter table. The main
+configuration is always as @configdir@/connman/firewall.conf and rest of the
+configurations provided by packages or installed by user are searched from
+@configdir@/connman/firewall.d/. The configuration files must have
+\fB*firewall.conf\fP suffix and the file names must not include other
+characters than letters or numbers.
 .P
 The configuration files from @configdir@/connman/firewall.d/ are read in
 alphabetical order after the main @configdir@/connman/firewall.conf is read. If
@@ -70,8 +75,8 @@ not detected as of now (TODO). To make ConnMan detect the changes restart is
 required. Adding new or removing old configuration is supported with systemctl
 reload command. In case a new config is added the rules are loaded in order to
 the internal lists but are not set in correct order into iptables. In such case
-service must be re-connected (e.g., WiFi) or ConnMan restarted (General rules)
-to get the order correct.
+service must be re-connected (e.g., WiFi) or ConnMan restarted (General and
+Mangle rules) to get the order correct.
 .SH USED KEYS
 .P
 The following keys are supported and the generic format is PROTOCOL.CHAIN.TYPE,
@@ -84,33 +89,44 @@ CHAIN = iptables chain name, one of: INPUT, FORWARD, OUTPUT
 TYPE = the key type, RULES for setting rules and POLICY for setting policy
 .P
 Content for each key must be defined on one line and only the first key in a
-group is processed.
+group is processed. If the group is any other than Mangle, the rules are added
+to filter table, policies can affect only filter table policies.
 .P
 The keys are:
 .IP
-IPv4.INPUT = #Rules set into IPv4 filter table INPUT chain.
+IPv4.INPUT.RULES = #Rules set into IPv4 INPUT chain.
 .IP
-IPv4.OUTPUT = #Rules set into IPv4 filter table OUTPUT chain.
+IPv4.OUTPUT.RULES = #Rules set into IPv4 OUTPUT chain.
 .IP
-IPv4.FORWARD = #Rules set into IPv4 filter table FORWARD chain.
+IPv4.FORWARD.RULES = #Rules set into IPv4 FORWARD chain.
 .IP
-IPv4.INPUT.POLICY = #Default policy for filter table INPUT chain.
+IPv4.INPUT.POLICY = #Default policy for INPUT chain.
 .IP
-IPv4.OUTPUT.POLICY = #Default policy for filter table OUTPUT chain.
+IPv4.OUTPUT.POLICY = #Default policy for OUTPUT chain.
 .IP
-IPv4.FORWARD.POLICY = #Default policy for filter table FORWARD chain.
+IPv4.FORWARD.POLICY = #Default policy for FORWARD chain.
 .IP
-IPv6.INPUT = #Rules set into IPv6 filter table INPUT chain.
+IPv6.INPUT.RULES = #Rules set into IPv6 INPUT chain.
 .IP
-IPv6.OUTPUT = #Rules set into IPv6 filter table OUTPUT chain.
+IPv6.OUTPUT.RULES = #Rules set into IPv6 OUTPUT chain.
 .IP
-IPv6.FORWARD = #Rules set into IPv6 filter table FORWARD chain.
+IPv6.FORWARD.RULES = #Rules set into IPv6 FORWARD chain.
 .IP
-IPv6.INPUT.POLICY_IPv6 = #Default policy for IPv6 filter table INPUT chain.
+IPv6.INPUT.POLICY_IPv6 = #Default policy for IPv6 INPUT chain.
 .IP
-IPv6.OUTPUT.POLICY_IPv6 = #Default policy for IPv6 filter table OUTPUT chain.
+IPv6.OUTPUT.POLICY_IPv6 = #Default policy for IPv6 OUTPUT chain.
 .IP
-IPv6.FORWARD.POLICY_IPv6 = #Default policy for IPv6 filter table FORWARD chain.
+IPv6.FORWARD.POLICY_IPv6 = #Default policy for IPv6 FORWARD chain.
+.P
+In addition to the above, in the group Mangle the following keys can be used:
+.IP
+IPv4.PREROUTING.RULES = #Rules set into IPv4 PREROUTING chain.
+.IP
+IPv4.POSTROUTING.RULES = #Rules set into IPv4 POSTROUTING chain.
+.IP
+IPv6.PREROUTING.RULES = #Rules set into IPv6 PREROUTING chain.
+.IP
+IPv6.POSTROUTING.RULES = #Rules set into IPv6 POSTROUTING chain.
 .P
 RULES and POLICY processing differ from each other. RULES are appended to the
 rule list of the section in reading order. But the last POLICY in configuration
@@ -168,7 +184,7 @@ All chain modifiers, since rules are added to managed chains, following modifier
 .IP
 Destination speficiers for DNAT are disabled : --to-destination, --from-destination
 .IP
-Some matches (with -m) are disabled (cause crash or commit errors). IPv4: comment, state, iprange, recent, owner, sctp, dccp, mh, hashlimit, icmpv6, ipv6-icmp. IPv6: comment, state, iprange, recent, owner, ttl, sctp, dccp, mh, hashlimit, frag, icmp
+Some matches (with -m) are disabled (cause crash or commit errors). IPv4: comment, state, recent, sctp, dccp, mh, hashlimit, icmpv6, ipv6-icmp. IPv6: comment, state, recent, ttl, sctp, dccp, mh, hashlimit, frag, icmp
 .P
 Interface specifiers (--in-interface, -i, --out-interface, -o) are not allowed in tethering or service type sections: 
 .SH CONFIGURATION: GENERAL SECTION
@@ -181,7 +197,14 @@ that is defined for a CHAIN with given PROTOCOL overrules the previous
 definitions.
 .P
 Being static rules the interface specifiers (--in-interface, -i,
---out-interface, -o) are allowed in the General section. 
+--out-interface, -o) are allowed in the General section.
+.SH CONFIGURATION: MANGLE SECTION
+.P
+Mangle section contains rules to be added into mangle table. In this section
+only RULES are allowed.
+.P
+RULES are read from each Mangle section and added in sequence. Changing
+Policies is not supported.
 .SH CONFIGURATION: TETHERING SECTION
 .P
 The tethering mode configuration is included as builtin feature. When tethering
