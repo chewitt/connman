@@ -2236,6 +2236,19 @@ static int init_all_dynamic_firewall_rules(void)
 
 	err = init_dynamic_firewall_rules(FIREWALLCONFIGFILE);
 
+	/*
+	 * TODO: remove this when support for other tables than filter table
+	 * is added to configs.
+	 *
+	 * When the support exists add rule "-t mangle -I PREROUTING -m
+	 * rpfilter --invert -j DROP" to config file.
+	 */
+	if (__connman_firewall_add_ipv6_rule(general_firewall->ctx,
+				__connman_iptables_insert, NULL, "mangle",
+				"PREROUTING", "-m rpfilter --invert -j DROP")
+				< 0)
+		connman_error("CVE-2019-14899 IPv6 protection failed.");
+
 	if (g_file_test(FIREWALLCONFIGDIR, G_FILE_TEST_IS_DIR)) {
 		dir = g_dir_open(FIREWALLCONFIGDIR, 0, &error);
 
