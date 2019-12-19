@@ -1092,17 +1092,17 @@ static bool is_valid_param_sequence(const char **haystack, const char *needles,
 			const char *needle_separator, int max_tokens)
 {
 	char **tokens;
-	bool value;
+	bool value = false;
 	int token_count;
 	int i;
 
 	if (!haystack || !needles || !needle_separator)
-		return false;
+		return value;
 
 	tokens = g_strsplit(needles, needle_separator, max_tokens);
 
 	if (!tokens)
-		return false;
+		return value;
 
 	token_count = g_strv_length(tokens);
 

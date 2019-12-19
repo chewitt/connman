@@ -73,7 +73,7 @@ static int get_vlan_vid(const char *ifname)
 		return -errno;
 
 	vifr.cmd = GET_VLAN_VID_CMD;
-	strncpy(vifr.device1, ifname, sizeof(vifr.device1));
+	stpncpy(vifr.device1, ifname, sizeof(vifr.device1));
 
 	if(ioctl(sk, SIOCSIFVLAN, &vifr) >= 0)
 		vid = vifr.u.VID;
@@ -99,14 +99,14 @@ static int get_dsa_port(const char *ifname)
 		return -errno;
 
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	stpncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 
 	/* check if it is a vlan and get physical interface name*/
 	vifr.cmd = GET_VLAN_REALDEV_NAME_CMD;
-	strncpy(vifr.device1, ifname, sizeof(vifr.device1));
+	stpncpy(vifr.device1, ifname, sizeof(vifr.device1));
 
 	if(ioctl(sk, SIOCSIFVLAN, &vifr) >= 0)
-		strncpy(ifr.ifr_name, vifr.u.device2, sizeof(ifr.ifr_name));
+		stpncpy(ifr.ifr_name, vifr.u.device2, sizeof(ifr.ifr_name));
 
 	/* get driver info */
 	drvinfocmd.cmd =  ETHTOOL_GDRVINFO;
@@ -188,11 +188,12 @@ static void add_network(struct connman_device *device,
 
 	if (connman_device_add_network(device, network) < 0) {
 		connman_network_unref(network);
+		g_free(ifname);
 		return;
 	}
 
 	if (!eth_tethering) {
-		char group[16] = "cable";
+		char group[25] = "cable";
 		int vid, dsaport;
 
 		vid = get_vlan_vid(ifname);

@@ -208,8 +208,7 @@ static void test_vpn_settings_plugin_default_config()
 	};
 	
 	gchar **groups = NULL;
-	const gchar const *group_verify[] = {"inet", "net_admin", "net_raw",
-									NULL};
+	const gchar *group_verify[] = {"inet", "net_admin", "net_raw", NULL};
 	gint i = 0;
 	struct vpn_plugin_data *test_data = NULL;
 
@@ -261,8 +260,7 @@ static void test_vpn_settings_min_config()
 	};
 	
 	gchar **groups = NULL;
-	const gchar const * group_verify[] = {"inet", "net_admin", "net_raw",
-									NULL};
+	const gchar *group_verify[] = {"inet", "net_admin", "net_raw", NULL};
 	mode_t dir_p = 0700, file_p = 0600, umask = 0077;
 	gint i = 0;
 	guint timeout = 200 * 1000;
@@ -325,7 +323,7 @@ static void test_vpn_settings_full_config()
 	};
 
 	gchar **groups = NULL;
-	const gchar const * group_verify[] = {"inet", "net_admin", NULL};
+	const gchar *group_verify[] = {"inet", "net_admin", NULL};
 	mode_t dir_p = 0754, file_p = 0645, umask = 0067;
 	gint i = 0;
 	guint timeout = 100 * 1000;
