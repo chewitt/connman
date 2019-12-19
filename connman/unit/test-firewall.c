@@ -1,7 +1,9 @@
 /*
  *  ConnMan firewall unit tests
  *
- *  Copyright (C) 2018-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2018-2019 Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
+ *
  *  Contact: jussi.laakkonen@jolla.com
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -558,12 +560,14 @@ struct iptables_rule {
 
 static GSList *rules_ipv4 = NULL;
 static GSList *chains_ipv4 = NULL;
+static GSList *chains_mangle_ipv4 = NULL;
 static gchar *policies_ipv4[3] = { 0 };
 static const gchar *tables_ipv4[] = { "nat", "mangle", "filter", "raw",
 						"security", NULL};
 
 static GSList *rules_ipv6 = NULL;
 static GSList *chains_ipv6 = NULL;
+static GSList *chains_mangle_ipv6 = NULL;
 static gchar *policies_ipv6[3] = { 0 };
 static const gchar *tables_ipv6[] = { "raw", "mangle", "filter", NULL};
 
@@ -665,36 +669,61 @@ static gboolean table_exists(int type, const char *table_name)
 	return false;
 }
 
-static gboolean is_builtin(const char *chain)
+static gboolean is_builtin(const char *table, const char *chain)
 {
 	int i;
 	const char *builtin[] = {"INPUT", "FORWARD", "OUTPUT", NULL};
+	const char *builtin_mangle[] = {"PREROUTING", "INPUT", "FORWARD",
+				"OUTPUT", "POSTROUTING", NULL};
 
-	for (i = 0; builtin[i]; i++) {
-		if (!g_strcmp0(chain, builtin[i]))
-			return TRUE;
+	if (!g_strcmp0(table, "filter")) {
+		for (i = 0; builtin[i]; i++) {
+			if (!g_strcmp0(chain, builtin[i]))
+				return TRUE;
+		}
 	}
+
+	if (!g_strcmp0(table, "mangle")) {
+		for (i = 0; builtin_mangle[i]; i++) {
+			if (!g_strcmp0(chain, builtin_mangle[i]))
+				return TRUE;
+		}
+	}
+
 	return FALSE;
 }
 
-static gboolean chain_exists(int type, const char *chain)
+static gboolean chain_exists(int type, const char *table, const char *chain)
 {
 	GSList *list = NULL;
 	switch (type) {
 	case AF_INET:
-		list = chains_ipv4;
+		if (!g_strcmp0(table, "filter"))
+			list = chains_ipv4;
+		else if (!g_strcmp0(table, "mangle"))
+			list = chains_mangle_ipv4;
+		else
+			return FALSE;
+
 		break;
 	case AF_INET6:
-		list = chains_ipv6;
+		if (!g_strcmp0(table, "filter"))
+			list = chains_ipv6;
+		else if (!g_strcmp0(table, "mangle"))
+			list = chains_mangle_ipv6;
+		else
+			return FALSE;
 	}
 	
-	if (is_builtin(chain))
-		return true;
+	if (is_builtin(table, chain))
+		return TRUE;
 
-	if (g_slist_find_custom(list, chain, (GCompareFunc)g_strcmp0))
-		return true;
+	if (g_slist_find_custom(list, chain, (GCompareFunc)g_strcmp0)) {
+		DBG("table %s chain %s exists", table, chain);
+		return TRUE;
+	}
 
-	return false;
+	return FALSE;
 }
 
 int __connman_iptables_new_chain(int type, 
@@ -709,7 +738,7 @@ int __connman_iptables_new_chain(int type,
 	if (!table_exists(type, table_name))
 		return -EINVAL;
 
-	if (chain_exists(type, chain))
+	if (chain_exists(type, table_name, chain))
 		return -EINVAL;
 	
 	if (global_iptables_type & IPTABLES_CHAIN_FAIL)
@@ -717,10 +746,27 @@ int __connman_iptables_new_chain(int type,
 
 	switch (type) {
 	case AF_INET:
-		chains_ipv4 = g_slist_prepend(chains_ipv4, g_strdup(chain));
+		if (!g_strcmp0(table_name, "filter"))
+			chains_ipv4 = g_slist_prepend(chains_ipv4,
+						g_strdup(chain));
+		else if (!g_strcmp0(table_name, "mangle"))
+			chains_mangle_ipv4 = g_slist_prepend(
+						chains_mangle_ipv4,
+						g_strdup(chain));
+		else
+			return -EINVAL;
+
 		break;
 	case AF_INET6:
-		chains_ipv6 = g_slist_prepend(chains_ipv6, g_strdup(chain));
+		if (!g_strcmp0(table_name, "filter"))
+			chains_ipv6 = g_slist_prepend(chains_ipv6,
+						g_strdup(chain));
+		else if (!g_strcmp0(table_name, "mangle"))
+			chains_mangle_ipv6 = g_slist_prepend(
+						chains_mangle_ipv6,
+						g_strdup(chain));
+		else
+			return -EINVAL;
 	}
 
 	return 0;
@@ -738,10 +784,10 @@ int __connman_iptables_delete_chain(int type,
 	if (!table_exists(type, table_name))
 		return -EINVAL;
 
-	if (is_builtin(chain)) // Builtin chains are not to be deleted
+	if (is_builtin(table_name, chain)) // Builtin chains are not to be deleted
 		return -EINVAL;
 
-	if (!chain_exists(type, chain))
+	if (!chain_exists(type, table_name, chain))
 		return -EINVAL;
 
 	if (global_iptables_type & IPTABLES_CHAIN_FAIL)
@@ -749,10 +795,23 @@ int __connman_iptables_delete_chain(int type,
 
 	switch (type) {
 	case AF_INET:
-		chains_ipv4 = g_slist_remove(chains_ipv4, chain);
+		if (!g_strcmp0(table_name, "filter"))
+			chains_ipv4 = g_slist_remove(chains_ipv4, chain);
+		else if (!g_strcmp0(table_name, "mangle"))
+			chains_mangle_ipv4 = g_slist_remove(
+						chains_mangle_ipv4, chain);
+		else
+			return -EINVAL;
+
 		break;
 	case AF_INET6:
-		chains_ipv6 = g_slist_remove(chains_ipv6, chain);
+		if (!g_strcmp0(table_name, "filter"))
+			chains_ipv6 = g_slist_remove(chains_ipv6, chain);
+		else if (!g_strcmp0(table_name, "mangle"))
+			chains_mangle_ipv6 = g_slist_remove(
+						chains_mangle_ipv6, chain);
+		else
+			return -EINVAL;
 	}
 
 	return 0;
@@ -773,7 +832,7 @@ int __connman_iptables_flush_chain(int type,
 	if (!table_exists(type, table_name))
 		return -EINVAL;
 
-	if (!chain_exists(type, chain))
+	if (!chain_exists(type, table_name, chain))
 		return -EINVAL;
 	
 	if (global_iptables_type & IPTABLES_CHAIN_FAIL)
@@ -820,6 +879,12 @@ static int chain_to_index(const char *chain)
 
 	if (g_str_equal("OUTPUT", chain))
 		return 2;
+
+	if (g_str_equal("PREROUTING", chain))
+		return 3;
+
+	if (g_str_equal("POSTROUTING", chain))
+		return 4;
 
 	return -EINVAL;
 }
@@ -1043,9 +1108,12 @@ int __connman_iptables_commit(int type, const char *table_name)
 	return 0;
 }
 
+/* This is wrong to have pre/post as last but too big changes otherwise */
 static const char *connman_chains[] = { "connman-INPUT",
 					"connman-FORWARD",
-					"connman-OUTPUT"
+					"connman-OUTPUT",
+					"connman-PREROUTING",
+					"connman-POSTROUTING"
 };
 
 int __connman_iptables_iterate_chains(int type, const char *table_name,
@@ -1056,20 +1124,30 @@ int __connman_iptables_iterate_chains(int type, const char *table_name,
 				"INPUT",
 				"OUTPUT",
 				"FORWARD",
+				"PREROUTING",
+				"POSTROUTING",
 				connman_chains[0],
 				connman_chains[1],
 				connman_chains[2],
+				connman_chains[3],
+				connman_chains[4],
 				NULL
 	};
-	int i, limit = 3;
+	int i;
+	int limit = 3;
 
 	DBG("");
-	
-	if (global_iptables_type & IPTABLES_ALL_CHAINS)
-		limit = 6;
-	
+
+	if (!g_strcmp0(table_name, "mangle"))
+		limit = 5;
+
 	for (i = 0; i < limit; i++)
 		cb(chains[i], user_data);
+
+	if (global_iptables_type & IPTABLES_ALL_CHAINS) {
+		for (i = 5; i < limit + 5; i++)
+			cb(chains[i], user_data);
+	}
 
 	return 0;
 }
@@ -1083,7 +1161,9 @@ int __connman_iptables_init(void)
 	rules_ipv4 = NULL;
 	rules_ipv6 = NULL;
 	chains_ipv4 = NULL;
+	chains_mangle_ipv4 = NULL;
 	chains_ipv6 = NULL;
+	chains_mangle_ipv6 = NULL;
 
 	for (i = 0; i < 3; i++)
 		policies_ipv4[i] = policies_ipv6[i] = NULL;
@@ -1104,10 +1184,24 @@ void __connman_iptables_cleanup(void)
 
 	DBG("");
 
-	g_slist_free_full(rules_ipv4, rule_cleanup);
-	g_slist_free_full(rules_ipv6, rule_cleanup);
-	g_slist_free_full(chains_ipv4, g_free);
-	g_slist_free_full(chains_ipv6, g_free);
+	if (rules_ipv4)
+		g_slist_free_full(rules_ipv4, rule_cleanup);
+
+	if (rules_ipv6)
+		g_slist_free_full(rules_ipv6, rule_cleanup);
+
+	if (chains_ipv4)
+		g_slist_free_full(chains_ipv4, g_free);
+
+	if (chains_mangle_ipv4)
+		g_slist_free_full(chains_mangle_ipv4, g_free);
+
+	if (chains_ipv6)
+		g_slist_free_full(chains_ipv6, g_free);
+
+	if (chains_mangle_ipv6)
+		g_slist_free_full(chains_mangle_ipv6, g_free);
+
 
 	for (i = 0; i < 3; i++) {
 		g_free(policies_ipv4[i]);
@@ -1270,9 +1364,11 @@ bool connman_device_has_status_changed_to(struct connman_device *device,
 // End of dummies
 
 #define CHAINS_GEN4 3
-#define RULES_GEN4 (CHAINS_GEN4 + 68)
+#define CHAINS_MANGLE_GEN4 5
+#define RULES_GEN4 (CHAINS_GEN4 + 74 + CHAINS_MANGLE_GEN4 + 5)
 #define CHAINS_GEN6 3
-#define RULES_GEN6 (CHAINS_GEN6 + 70)
+#define CHAINS_MANGLE_GEN6 5
+#define RULES_GEN6 (CHAINS_GEN6 + 76 + CHAINS_MANGLE_GEN6 + 5)
 #define RULES_ETH 17
 #define RULES_CEL 4
 #define RULES_TETH 7
@@ -1339,6 +1435,13 @@ static const char *general_input[] = {
 		/* owner match - should work in INPUT with NETFILTER_XT_MATCH_QTAGUID */
 		"-m owner --uid-owner 0 -j LOG",
 		"-m owner --gid-owner 0-499 -j LOG",
+		/* rpfilter */
+		"-m rpfilter --loose -j LOG",
+		"-m rpfilter --validmark -j LOG",
+		"-m rpfilter --accept-local -j DROP",
+		"-m rpfilter --invert -j DROP",
+		"-p udp -m rpfilter --invert -j DROP",
+		"-m rpfilter --loose --validmark --accept-local -j LOG",
 		NULL
 };
 static const char *general_output[] = {
@@ -1376,6 +1479,26 @@ static const char *general_forward[] = {
 		"-j QUEUE",
 		"-j LOG",
 		"-j REJECT",
+		NULL
+};
+static const char *mangle_pre[] = {
+		"-m rpfilter --invert -j DROP",
+		NULL
+};
+static const char *mangle_input[] = {
+		"-m rpfilter --loose -j LOG",
+		NULL
+};
+static const char *mangle_output[] = {
+		"-m rpfilter --accept-local -j ACCEPT",
+		NULL
+};
+static const char *mangle_forward[] = {
+		"-m rpfilter --validmark -j ACCEPT",
+		NULL
+};
+static const char *mangle_post[] = {
+		"-p tcp -m rpfilter --invert -j DROP",
 		NULL
 };
 static const char *policies_default[] = {"ACCEPT", "ACCEPT", "ACCEPT"};
@@ -1542,8 +1665,8 @@ static const char *general_icmpv6[] = {
 	NULL
 };
 
-#define RULES_OPTIONS4 65 // +1 for chain
-#define RULES_OPTIONS6 62 // +1 for chain
+#define RULES_OPTIONS4 73 // +1 for chain
+#define RULES_OPTIONS6 70 // +1 for chain
 
 static const char *general_options[] = {
 	/* AH and ESP options */
@@ -1626,6 +1749,15 @@ static const char *general_options[] = {
 	/* Hostnames */
 	"-d host.name.com -j DROP",
 	"-s host.name.com,host2.name2.com,host3.name3.com -j DROP",
+	/* rpfilter options */
+	"-m rpfilter --loose -j DROP",
+	"-m rpfilter --validmark -j ACCEPT",
+	"-m rpfilter --accept-local -j DROP",
+	"-m rpfilter --invert -j DROP",
+	"-m rpfilter --loose --validmark --accept-local --invert -j ACCEPT",
+	"-p tcp -m rpfilter --invert -j DROP",
+	"-p udp -m rpfilter --invert -j DROP",
+	"-p udplite -m rpfilter --invert -j DROP",
 	NULL
 };
 
@@ -1916,6 +2048,13 @@ static const char *invalid_general_input[] = {
 		"-p gre -m gre -j ACCEPT",
 		"-p gre -m gre --dport 56 -j DROP",
 		"-p 47 -m gre -j DROP",
+		/* match rpfilter options have no parameters */
+		"-m rpfilter --loose 55 -j DROP",
+		"-m rpfilter --validmark 2 --state NEW -j DROP",
+		"-m rpfilter --accept-local --option 1 -j DROP",
+		"-m rpfilter --invert 1 -j DROP",
+		"-m rpfilter --accept-loose -j ACCEPT",
+		"-m rpfilter --loose --validmark --accept-local --inv -j DROP"
 		/* ICMP v4*/
 		"-p icmp -m icmpv6 --icmp-type 8 -j ACCEPT",
 		"-p icmp -m icmp --icmp-type 8/ -j ACCEPT",
@@ -2054,6 +2193,25 @@ static gboolean setup_main_config(GKeyFile *config)
 		g_key_file_set_string_list(config, "General",
 					"IPv6.OUTGOING.RULES", general_output,
 					g_strv_length((char**)general_output));
+
+		g_key_file_set_string_list(config, "General",
+					"IPv4.PREROUTING.RULES", general_input,
+					g_strv_length((char**)general_input));
+
+		g_key_file_set_string_list(config, "General",
+					"IPv4.POSTROUTING.RULES",
+					general_output,
+					g_strv_length((char**)general_output));
+
+		g_key_file_set_string_list(config, "General",
+					"IPv6.PREROUTING.RULES", general_input,
+					g_strv_length((char**)general_input));
+
+		g_key_file_set_string_list(config, "General",
+					"IPv6.POSTROUTING.RULES",
+					general_output,
+					g_strv_length((char**)general_output));
+
 		return TRUE;
 	}
 
@@ -2071,6 +2229,36 @@ static gboolean setup_main_config(GKeyFile *config)
 		g_key_file_set_string_list(config, "General",
 					"IPv4.FORWARD.RULES", general_forward,
 					g_strv_length((char**)general_forward));
+
+		/* This is invalid and is not counted/added */
+		g_key_file_set_string_list(config, "General",
+					"IPv4.PREROUTING.RULES", mangle_pre,
+					g_strv_length((char**)mangle_pre));
+
+		/* This is invalid and is not counted/added */
+		g_key_file_set_string_list(config, "General",
+					"IPv4.POSTROUTING.RULES", mangle_post,
+					g_strv_length((char**)mangle_post));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv4.INPUT.RULES", mangle_input,
+					g_strv_length((char**)mangle_input));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv4.OUTPUT.RULES", mangle_output,
+					g_strv_length((char**)mangle_output));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv4.FORWARD.RULES", mangle_forward,
+					g_strv_length((char**)mangle_forward));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv4.PREROUTING.RULES", mangle_pre,
+					g_strv_length((char**)mangle_pre));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv4.POSTROUTING.RULES", mangle_post,
+					g_strv_length((char**)mangle_post));
 
 		g_key_file_set_string_list(config, "ethernet",
 					"IPv4.INPUT.RULES", eth_input,
@@ -2100,6 +2288,36 @@ static gboolean setup_main_config(GKeyFile *config)
 		g_key_file_set_string_list(config, "General",
 					"IPv6.FORWARD.RULES", general_forward,
 					g_strv_length((char**)general_forward));
+
+		/* This is invalid and is not counted/added */
+		g_key_file_set_string_list(config, "General",
+					"IPv6.PREROUTING.RULES", mangle_pre,
+					g_strv_length((char**)mangle_pre));
+
+		/* This is invalid and is not counted/added */
+		g_key_file_set_string_list(config, "General",
+					"IPv6.POSTROUTING.RULES", mangle_post,
+					g_strv_length((char**)mangle_post));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv6.INPUT.RULES", mangle_input,
+					g_strv_length((char**)mangle_input));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv6.OUTPUT.RULES", mangle_output,
+					g_strv_length((char**)mangle_output));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv6.FORWARD.RULES", mangle_forward,
+					g_strv_length((char**)mangle_forward));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv6.PREROUTING.RULES", mangle_pre,
+					g_strv_length((char**)mangle_pre));
+
+		g_key_file_set_string_list(config, "Mangle",
+					"IPv6.POSTROUTING.RULES", mangle_post,
+					g_strv_length((char**)mangle_post));
 
 		g_key_file_set_string_list(config, "ethernet",
 					"IPv6.INPUT.RULES", eth_input,
@@ -2647,6 +2865,9 @@ static void assert_rule_exists(int type, const char *table, const char *chain,
 		iter = iter->next;
 	}
 
+	connman_error("NOT FOUND type %d table %s chain %s rule %s device %s",
+				type, table, chain, rule_spec, device);
+
 	g_assert(FALSE);
 
 out:
@@ -2709,23 +2930,29 @@ static void assert_rule_not_exists(int type, const char *table,
 typedef  void (*assert_cb_t)(int type, const char *table, const char *chain,
 			const char *rule_spec, const char *device);
 
-static void check_rules(assert_cb_t cb, int type, const char **rules[],
-			const char *ifname)
+static void check_rules(assert_cb_t cb, int type, const char *table,
+			const char **rules[], const char *ifname)
 {
 	int i, j;
+	int max = 3;
 
-	for (j = 0; j < 3; j++) {
+	if (!g_strcmp0(table, "mangle"))
+		max = 5;
+
+	for (j = 0; j < max; j++) {
 		if (!rules[j])
 			continue;
 
 		for (i = 0; rules[j][i]; i++) {
 			if (!type || type == AF_INET)
-				cb(AF_INET, "filter", connman_chains[j],
-						rules[j][i], ifname);
+				cb(AF_INET, table ? table : "filter",
+							connman_chains[j],
+							rules[j][i], ifname);
 
 			if (!type || type == AF_INET6)
-				cb(AF_INET6, "filter", connman_chains[j],
-						rules[j][i], ifname);
+				cb(AF_INET6, table ? table : "filter",
+							connman_chains[j],
+							rules[j][i], ifname);
 		}
 	}
 }
@@ -2737,12 +2964,20 @@ static void check_main_config_rules()
 				general_forward,
 				general_output
 	};
+	const char **mangle_rules_all[] = {
+				mangle_input,
+				mangle_forward,
+				mangle_output,
+				mangle_pre,
+				mangle_post
+	};
 	const char **eth_rules_all[] = {eth_input, NULL, eth_output};
 	const char **cel_rules_all[] = {cellular_input, NULL, cellular_output};
 
-	check_rules(assert_rule_exists, 0, general_rules_all, NULL);
-	check_rules(assert_rule_not_exists, 0, eth_rules_all, NULL);
-	check_rules(assert_rule_not_exists, 0, cel_rules_all, NULL);
+	check_rules(assert_rule_exists, 0, "filter", general_rules_all, NULL);
+	check_rules(assert_rule_exists, 0, "mangle", mangle_rules_all, NULL);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules_all, NULL);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_rules_all, NULL);
 }
 
 static void check_default_policies(const char *policies[])
@@ -3120,8 +3355,8 @@ static void firewall_test_icmp_config_ok0()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_ICMP4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_ICMP6);
 
-	check_rules(assert_rule_exists, AF_INET, icmpv4_rules, NULL);
-	check_rules(assert_rule_exists, AF_INET6, icmpv6_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET, "filter", icmpv4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET6, "filter", icmpv6_rules, NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3145,8 +3380,8 @@ static void firewall_test_options_config_ok0()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_OPTIONS4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_OPTIONS6);
 
-	check_rules(assert_rule_exists, AF_INET, opt4_rules, NULL);
-	check_rules(assert_rule_exists, AF_INET6, opt6_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET, "filter", opt4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET6, "filter", opt6_rules, NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3170,10 +3405,10 @@ static void firewall_test_options_config_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_OPTIONS_ADDR4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_OPTIONS_ADDR6);
 
-	check_rules(assert_rule_exists, AF_INET, opt4_rules, NULL);
-	check_rules(assert_rule_exists, AF_INET6, opt6_rules, NULL);
-	check_rules(assert_rule_not_exists, AF_INET, opt6_rules, NULL);
-	check_rules(assert_rule_not_exists, AF_INET6, opt4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET, "filter", opt4_rules, NULL);
+	check_rules(assert_rule_exists, AF_INET6, "filter", opt6_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET, "filter", opt6_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET6, "filter", opt4_rules, NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3287,8 +3522,8 @@ static void firewall_test_options_config_fail0()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
-	check_rules(assert_rule_not_exists, AF_INET, opt4_rules, NULL);
-	check_rules(assert_rule_not_exists, AF_INET6, opt6_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET, "filter", opt4_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET6, "filter", opt6_rules, NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3323,21 +3558,21 @@ static void firewall_test_dynamic_ok0()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_ONLINE);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_ETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	g_free(ifname);
 
@@ -3380,7 +3615,7 @@ static void firewall_test_dynamic_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -3393,7 +3628,7 @@ static void firewall_test_dynamic_ok1()
 				RULES_GEN6 + RULES_ETH + RULES_CEL);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_rules, ifname2);
 
 	// Disable ethernet test service
 	test_service.state = test_service2.state =
@@ -3404,7 +3639,7 @@ static void firewall_test_dynamic_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_CEL);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_CEL);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -3412,7 +3647,7 @@ static void firewall_test_dynamic_ok1()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_rules, ifname2);
 
 	g_free(ifname);
 	g_free(ifname2);
@@ -3458,7 +3693,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 1 );
 
 	ifname = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -3466,7 +3701,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	// Re-enable
 	test_technology.enabled = true;
@@ -3476,7 +3711,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 1 );
 
 	ifname = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -3484,7 +3719,7 @@ static void firewall_test_dynamic_ok2()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	__connman_firewall_pre_cleanup();
 
@@ -3528,8 +3763,8 @@ static void firewall_test_dynamic_ok3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_TETH);
 
 	ifname = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, 0, tethering_rules, ifname);
-	check_rules(assert_rule_not_exists, 0, not_exist_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", tethering_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", not_exist_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -3537,7 +3772,7 @@ static void firewall_test_dynamic_ok3()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, tethering_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", tethering_rules, ifname);
 
 	__connman_firewall_pre_cleanup();
 
@@ -3593,9 +3828,9 @@ static void firewall_test_dynamic_ok4()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_exists, 0, eth_add_rules1, ifname);
-	check_rules(assert_rule_exists, 0, eth_add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_add_rules3, ifname);
 
 	// Tethering on
 	test_technology.default_rules = false;
@@ -3608,8 +3843,8 @@ static void firewall_test_dynamic_ok4()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3 + RULES_TETH);
 
 	iftether = __connman_tethering_get_bridge();
-	check_rules(assert_rule_exists, 0, tethering_rules, iftether);
-	check_rules(assert_rule_not_exists, 0, not_exist_rules, iftether);
+	check_rules(assert_rule_exists, 0, "filter", tethering_rules, iftether);
+	check_rules(assert_rule_not_exists, 0, "filter", not_exist_rules, iftether);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -3624,9 +3859,9 @@ static void firewall_test_dynamic_ok4()
 				RULES_CEL + RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
-	check_rules(assert_rule_exists, 0, cel_add_rules0, ifname2);
-	check_rules(assert_rule_exists, 0, cel_add_rules2, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_add_rules0, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_add_rules2, ifname2);
 
 	// Disable ethernet test service
 	test_service.state = test_service2.state = CONNMAN_SERVICE_STATE_ONLINE;
@@ -3638,9 +3873,9 @@ static void firewall_test_dynamic_ok4()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_TETH +
 				RULES_CEL + RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, 0, eth_add_rules1, ifname);
-	check_rules(assert_rule_not_exists, 0, eth_add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_add_rules3, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -3648,9 +3883,9 @@ static void firewall_test_dynamic_ok4()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_TETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_TETH);
 
-	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
-	check_rules(assert_rule_not_exists, 0, eth_add_rules1, ifname2);
-	check_rules(assert_rule_not_exists, 0, eth_add_rules3, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_add_rules1, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_add_rules3, ifname2);
 
 	// Disable tethering
 	firewall_notifier->tethering_changed(&test_technology, false);
@@ -3659,7 +3894,7 @@ static void firewall_test_dynamic_ok4()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, tethering_rules, iftether);
+	check_rules(assert_rule_not_exists, 0, "filter", tethering_rules, iftether);
 
 	g_free(ifname);
 	g_free(ifname2);
@@ -3701,7 +3936,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service3);
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	test_service3.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -3710,7 +3945,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	g_free(ifname);
 
@@ -3724,7 +3959,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service3);
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	test_service.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -3733,7 +3968,7 @@ static void firewall_test_dynamic_ok5()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	g_free(ifname);
 	g_free(test_service3.ifname);
@@ -3786,9 +4021,9 @@ static void firewall_test_dynamic_ok6()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_exists, 0, eth_add_rules1, ifname);
-	check_rules(assert_rule_exists, 0, eth_add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_add_rules3, ifname);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -3803,9 +4038,9 @@ static void firewall_test_dynamic_ok6()
 				RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
-	check_rules(assert_rule_exists, 0, cel_add_rules0, ifname2);
-	check_rules(assert_rule_exists, 0, cel_add_rules2, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_add_rules0, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_add_rules2, ifname2);
 
 	// Disable ethernet test service
 	test_service.state = test_service2.state = CONNMAN_SERVICE_STATE_ONLINE;
@@ -3817,9 +4052,9 @@ static void firewall_test_dynamic_ok6()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_CEL +
 				RULES_CEL_ADD0 + RULES_CEL_ADD2);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, 0, eth_add_rules1, ifname);
-	check_rules(assert_rule_not_exists, 0, eth_add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_add_rules3, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -3827,9 +4062,9 @@ static void firewall_test_dynamic_ok6()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
-	check_rules(assert_rule_not_exists, 0, cel_add_rules0, ifname2);
-	check_rules(assert_rule_not_exists, 0, cel_add_rules2, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_add_rules0, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_add_rules2, ifname2);
 
 	g_free(ifname);
 	g_free(ifname2);
@@ -3873,7 +4108,7 @@ static void firewall_test_dynamic_ok7()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
 
 	// Enable cellular test service
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
@@ -3886,7 +4121,7 @@ static void firewall_test_dynamic_ok7()
 				RULES_GEN6 + RULES_ETH + RULES_CEL);
 
 	ifname2 = connman_service_get_interface(&test_service2);
-	check_rules(assert_rule_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_exists, 0, "filter", cel_rules, ifname2);
 
 	test_service2.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -3897,7 +4132,7 @@ static void firewall_test_dynamic_ok7()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_CEL);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_CEL);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
 
 	// Disable cellular test service
 	service_state_change(&test_service2, CONNMAN_SERVICE_STATE_DISCONNECT);
@@ -3905,7 +4140,7 @@ static void firewall_test_dynamic_ok7()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, cel_rules, ifname2);
+	check_rules(assert_rule_not_exists, 0, "filter", cel_rules, ifname2);
 
 	// Remove disconnected
 	service_remove(&test_service2);
@@ -3955,7 +4190,7 @@ static void firewall_test_dynamic_ok8()
 	 * Check only valid rules, the tethering_input_invalid contains a
 	 * duplicate rule found in tethering_input.
 	 */
-	check_rules(assert_rule_exists, 0, tethering_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", tethering_rules, ifname);
 
 	firewall_notifier->tethering_changed(&test_technology, false);
 	test_technology.enabled = false;
@@ -3986,13 +4221,14 @@ static void firewall_test_device_status0()
 	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
-	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules,
+				test_device1.ifname);
 
 	/* off */
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	__connman_firewall_pre_cleanup();
@@ -4021,39 +4257,42 @@ static void firewall_test_device_status1()
 	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
-	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules,
+				test_device1.ifname);
 
 	/* device 1 off */
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	/* device 1 on */
 	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
-	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules,
+				test_device1.ifname);
 
 	/* device 2 on */
 	firewall_notifier->device_status_changed(&test_device2, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 4);
-	check_rules(assert_rule_exists, 0, device_rules, test_device2.ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules,
+				test_device2.ifname);
 
 	/* device 1 off */
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	/* device 2 off */
 	firewall_notifier->device_status_changed(&test_device2, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device2.ifname);
 
 	__connman_firewall_pre_cleanup();
@@ -4082,26 +4321,28 @@ static void firewall_test_device_status2()
 	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
-	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules,
+				test_device1.ifname);
 
 	/* on double */
 	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + 2);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + 2);
-	check_rules(assert_rule_exists, 0, device_rules, test_device1.ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules,
+				test_device1.ifname);
 
 	/* off */
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	/* off double */
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
@@ -4134,14 +4375,14 @@ static void firewall_test_device_status3()
 	firewall_notifier->device_status_changed(&test_device1, true);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	/* off */
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	__connman_firewall_pre_cleanup();
@@ -4172,7 +4413,7 @@ static void firewall_test_device_status4()
 	firewall_notifier->device_status_changed(&test_device1, false);
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
-	check_rules(assert_rule_not_exists, 0, device_rules,
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules,
 				test_device1.ifname);
 
 	__connman_firewall_pre_cleanup();
@@ -4326,11 +4567,11 @@ static void firewall_test_config_reload2()
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
 
 	g_free(ifname);
 
@@ -4376,7 +4617,7 @@ static void firewall_test_config_reload3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
 
 	test_service.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -4404,15 +4645,15 @@ static void firewall_test_config_reload3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH +
 				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_exists, 0, add_rules1, ifname);
-	check_rules(assert_rule_exists, 0, add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, "filter", add_rules3, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, 0, add_rules1, ifname);
-	check_rules(assert_rule_not_exists, 0, add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", add_rules3, ifname);
 
 	g_free(ifname);
 
@@ -4479,9 +4720,9 @@ static void firewall_test_config_reload4()
 				RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_exists, 0, add_rules3, ifname);
-	check_rules(assert_rule_not_exists, 0, add_rules1, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", add_rules3, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", add_rules1, ifname);
 
 	test_service.state = CONNMAN_SERVICE_STATE_ONLINE;
 
@@ -4503,13 +4744,13 @@ static void firewall_test_config_reload4()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4 + RULES_ETH);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6 + RULES_ETH);
 
-	check_rules(assert_rule_exists, 0, eth_rules, ifname);
-	check_rules(assert_rule_not_exists, 0, add_rules1, ifname);
-	check_rules(assert_rule_not_exists, 0, add_rules3, ifname);
+	check_rules(assert_rule_exists, 0, "filter", eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", add_rules1, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", add_rules3, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	check_rules(assert_rule_not_exists, 0, eth_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", eth_rules, ifname);
 
 	g_free(ifname);
 	dbus_message_unref(msg);
@@ -4693,21 +4934,21 @@ static void firewall_test_notifier_fail0()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_ONLINE);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	g_free(ifname);
 
@@ -4783,27 +5024,33 @@ static void firewall_test_iptables_fail2()
 	__connman_iptables_init();
 	__connman_firewall_init();
 
-	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4 +
+				CHAINS_MANGLE_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6 +
+				CHAINS_MANGLE_GEN6);
 
 	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_READY);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4 +
-				RULES_ETH + RULES_ETH_ADD1 + RULES_ETH_ADD3);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN4 +
-				RULES_ETH + RULES_ETH_ADD1 + RULES_ETH_ADD3);
+				CHAINS_MANGLE_GEN4 + RULES_ETH +
+				RULES_ETH_ADD1 + RULES_ETH_ADD3);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6 +
+				CHAINS_MANGLE_GEN6 + RULES_ETH +
+				RULES_ETH_ADD1 + RULES_ETH_ADD3);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_exists, 0, "filter", device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
-	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6);
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, CHAINS_GEN4 +
+				CHAINS_MANGLE_GEN4);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, CHAINS_GEN6 +
+				CHAINS_MANGLE_GEN6);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	g_free(ifname);
 
@@ -4845,14 +5092,14 @@ static void firewall_test_iptables_fail3()
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
 	ifname = connman_service_get_interface(&test_service);
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	service_state_change(&test_service, CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
-	check_rules(assert_rule_not_exists, 0, device_rules, ifname);
+	check_rules(assert_rule_not_exists, 0, "filter", device_rules, ifname);
 
 	g_free(ifname);
 

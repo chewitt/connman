@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2013,2015  BMW Car IT GmbH.
  *  Copyright (C) 2018,2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -108,6 +109,7 @@ enum iptables_match_options_type {
 	IPTABLES_OPTION_OWNER,
 	IPTABLES_OPTION_IPRANGE,
 	IPTABLES_OPTION_GRE,
+	IPTABLES_OPTION_RPFILTER,
 	IPTABLES_OPTION_NOT_SUPPORTED
 };
 
@@ -333,7 +335,7 @@ static const int dccp_options_count[] = {1, 1, -1};
  */
 
 static const char *owner_options[] = {"--uid-owner", "--gid-owner",
-                                      "--socket-exists", NULL};
+			"--socket-exists", NULL};
 static const int owner_options_count[] = {1, 1, 0, -1};
 
 /*
@@ -348,6 +350,16 @@ static const int iprange_options_count[] = {1, 1, -1};
 /* Protocol gre has no options, just a dummy placeholder. */
 static const char *gre_options[] = {NULL};
 static const int gre_options_count[] = {-1};
+
+/* rpfilter match options
+ * --loose          permit reverse path via any interface
+ * --validmark      use skb nfmark when performing route lookup
+ * --accept-local   do not reject packets with a local source address
+ * --invert         match packets that failed the reverse path test
+ */
+static const char *rpfilter_options[] = {"--loose", "--validmark",
+			"--accept-local", "--invert", NULL};
+static const int rpfilter_options_count[] = {0, 0, 0, 0, -1};
 
 struct iptables_type_options {
 	enum iptables_match_options_type type;
@@ -376,13 +388,14 @@ static const struct iptables_type_options iptables_opts[] = {
 	{IPTABLES_OPTION_OWNER, owner_options, owner_options_count},
 	{IPTABLES_OPTION_IPRANGE, iprange_options, iprange_options_count},
 	{IPTABLES_OPTION_GRE, gre_options, gre_options_count},
+	{IPTABLES_OPTION_RPFILTER, rpfilter_options, rpfilter_options_count},
 };
 
 static const char *opt_names[] = {"port", "multiport", "tcp", "mark",
 				"conntrack", "ttl", "pkttype", "limit",
 				"helper", "ecn", "ah", "esp", "mh", "sctp",
 				"icmp", "ipv6-icmp", "dccp", "owner",
-				"iprange", "gre", NULL};
+				"iprange", "gre", "rpfilter", NULL};
 
 static GHashTable *iptables_options = NULL;
 
@@ -1439,6 +1452,12 @@ static bool is_valid_option_type_params(int family,
 	case IPTABLES_OPTION_TTL:
 		/* Each option requires a single value */
 		return is_string_digits(params[0]);
+	case IPTABLES_OPTION_RPFILTER:
+		/* None of rpfilter options have parameters */
+		if (option_position >= 0 && option_position < 4)
+			return true;
+
+		break;
 	case IPTABLES_OPTION_GRE: /* Protocol GRE has no parameters */
 		/* fall through */
 	case IPTABLES_OPTION_NOT_SUPPORTED:
@@ -1610,7 +1629,9 @@ static bool is_valid_option_for_protocol_match(const char* protocol,
 	case IPTABLES_OPTION_TTL:
 		return !g_strcmp0(match, "ttl");
 	case IPTABLES_OPTION_GRE: /* GRE protocol has no options */
-		/* fall through */
+		return false;
+	case IPTABLES_OPTION_RPFILTER:
+		return !g_strcmp0(match, "rpfilter");
 	case IPTABLES_OPTION_NOT_SUPPORTED:
 		return false;
 	}

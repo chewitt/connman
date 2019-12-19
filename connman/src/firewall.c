@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2013,2015  BMW Car IT GmbH.
  *  Copyright (C) 2018,2019  Jolla Ltd.
+ *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -82,6 +83,7 @@ static unsigned int firewall_rule_id;
 #define FIREWALLCONFIGFILE CONFIGDIR "/" FIREWALLFILE
 #define FIREWALLCONFIGDIR CONFIGDIR "/firewall.d/"
 #define GROUP_GENERAL "General"
+#define GROUP_MANGLE "Mangle"
 #define GROUP_TETHERING "tethering"
 #define GENERAL_FIREWALL_POLICIES 3
 
@@ -106,19 +108,19 @@ static struct firewall_context *tethering_firewall = NULL;
 static GList *configuration_files = NULL;
 
 static const char *supported_chains[] = {
-	[NF_IP_PRE_ROUTING]	= NULL,
+	[NF_IP_PRE_ROUTING]	= "IPv4.PREROUTING.RULES",
 	[NF_IP_LOCAL_IN]	= "IPv4.INPUT.RULES",
 	[NF_IP_FORWARD]		= "IPv4.FORWARD.RULES",
 	[NF_IP_LOCAL_OUT]	= "IPv4.OUTPUT.RULES",
-	[NF_IP_POST_ROUTING]	= NULL,
+	[NF_IP_POST_ROUTING]	= "IPv4.POSTROUTING.RULES",
 };
 
 static const char *supported_chainsv6[] = {
-	[NF_IP_PRE_ROUTING]	= NULL,
+	[NF_IP_PRE_ROUTING]	= "IPv6.PREROUTING.RULES",
 	[NF_IP_LOCAL_IN]	= "IPv6.INPUT.RULES",
 	[NF_IP_FORWARD]		= "IPv6.FORWARD.RULES",
 	[NF_IP_LOCAL_OUT]	= "IPv6.OUTPUT.RULES",
-	[NF_IP_POST_ROUTING]	= NULL,
+	[NF_IP_POST_ROUTING]	= "IPv6.POSTROUTING.RULES",
 };
 
 static const char *supported_policies[] = {
@@ -1514,7 +1516,7 @@ static int add_general_rules_cb(int family, const char *filename,
 				const char *group, int chain_id, char** rules)
 {
 	connman_iptables_manage_cb_t cb = __connman_iptables_append;
-	char table[] = "filter";
+	const char *table = "filter";
 	int count = 0;
 	int err = 0;
 	int id;
@@ -1532,6 +1534,9 @@ static int add_general_rules_cb(int family, const char *filename,
 	if (!rules)
 		return 0;
 
+	if (!g_strcmp0(group, GROUP_MANGLE))
+		table = "mangle";
+
 	for (i = 0; rules[i]; i++) {
 
 		if (!g_utf8_validate(rules[i], -1, NULL)) {
@@ -1540,7 +1545,7 @@ static int add_general_rules_cb(int family, const char *filename,
 		}
 
 		DBG("processing IP family %d group %s rule chain %s rule %s",
-					family, GROUP_GENERAL,
+					family, group,
 					builtin_chains[chain_id], rules[i]);
 
 		if (!validate_iptables_rule(family, group, rules[i])) {
@@ -1578,7 +1583,7 @@ static int add_general_rules_cb(int family, const char *filename,
 
 		if (id < 0) {
 			DBG("failed to add group %s chain_id %d rule %s",
-					GROUP_GENERAL, chain_id, rules[i]);
+					group, chain_id, rules[i]);
 			err = -EINVAL;
 		} else {
 			DBG("added with id %d", id);
@@ -1678,7 +1683,8 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 	char** rules;
 	const char *chain_name = NULL;
 	int afs[3] = { AF_INET, AF_INET6, 0 };
-	int chain;
+	int chain = NF_IP_LOCAL_IN;
+	int max_chain = NF_IP_LOCAL_OUT;
 	int count;
 	int err = 0;
 	int i;
@@ -1689,7 +1695,12 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 	if (!group || !*group || !cb || !filename || !*filename)
 		return 0;
 
-	for (chain = NF_IP_LOCAL_IN; chain < NF_IP_NUMHOOKS - 1; chain++) {
+	if (!g_strcmp0(group, GROUP_MANGLE)) {
+		chain = NF_IP_PRE_ROUTING;
+		max_chain = NF_IP_POST_ROUTING;
+	}
+
+	for (; chain <= max_chain; chain++) {
 		for (i = 0; afs[i]; i++) {
 
 			/* Setup chain name based on IP family */
@@ -1746,10 +1757,16 @@ static int add_rules_from_group(const char *filename, GKeyFile *config,
 static bool check_config_key(const char* group, const char* key)
 {
 	bool is_general = false;
-	int i;
+	int i = NF_IP_LOCAL_IN;
+	int max_chain = NF_IP_LOCAL_OUT;
 
 	if (group && !g_strcmp0(group, GROUP_GENERAL))
 		is_general = true;
+
+	if (group && !g_strcmp0(group, GROUP_MANGLE)) {
+		i = NF_IP_PRE_ROUTING;
+		max_chain = NF_IP_POST_ROUTING;
+	}
 
 	/*
 	 * Allow only NF_IP_LOCAL_IN...NF_IP_LOCAL_OUT chains since filter
@@ -1763,7 +1780,7 @@ static bool check_config_key(const char* group, const char* key)
 	 * NF_IP_POST_ROUTING	4
 	 * NF_IP_NUMHOOKS	5
 	 */
-	for (i = NF_IP_LOCAL_IN; i < NF_IP_NUMHOOKS - 1; i++) {
+	for (; i <= max_chain; i++) {
 		if (!g_strcmp0(key, supported_chains[i]))  {
 			DBG("match key %s chain %s", key, supported_chains[i]);
 			return true;
@@ -1801,7 +1818,9 @@ static bool check_config_group(const char *group)
 	const char *type_str;
 	enum connman_service_type type;
 	
-	if (!g_strcmp0(group, GROUP_GENERAL)) {
+	if (!g_strcmp0(group, GROUP_GENERAL) ||
+				!g_strcmp0(group, GROUP_MANGLE) ||
+				!g_strcmp0(group, GROUP_TETHERING)) {
 		DBG("match group %s", group);
 		return true;
 	}
@@ -1817,11 +1836,6 @@ static bool check_config_group(const char *group)
 				DBG("match group %s type %s", group, type_str);
 				return true;
 			}
-	}
-
-	if (!g_strcmp0(group, GROUP_TETHERING)) {
-		DBG("match group %s", group);
-		return true;
 	}
 
 	DBG("no match for group %s", group);
@@ -2138,15 +2152,18 @@ static int init_general_firewall(const char *config_file, GKeyFile *config)
 		return -ENOMEM;
 
 	err = init_general_firewall_policies(config);
-
 	if (err)
 		DBG("cannot initialize general policies"); // TODO react to this
 
 	err = add_rules_from_group(config_file, config, GROUP_GENERAL,
 				add_general_rules_cb);
-
 	if (err)
 		DBG("cannot setup general firewall rules");
+
+	/* Report back only the general group error */
+	if (add_rules_from_group(config_file, config, GROUP_MANGLE,
+				add_general_rules_cb))
+		DBG("cannot setup general firewall rules for mangle table");
 
 	return err;
 }
@@ -2235,19 +2252,6 @@ static int init_all_dynamic_firewall_rules(void)
 	int err;
 
 	err = init_dynamic_firewall_rules(FIREWALLCONFIGFILE);
-
-	/*
-	 * TODO: remove this when support for other tables than filter table
-	 * is added to configs.
-	 *
-	 * When the support exists add rule "-t mangle -I PREROUTING -m
-	 * rpfilter --invert -j DROP" to config file.
-	 */
-	if (__connman_firewall_add_ipv6_rule(general_firewall->ctx,
-				__connman_iptables_insert, NULL, "mangle",
-				"PREROUTING", "-m rpfilter --invert -j DROP")
-				< 0)
-		connman_error("CVE-2019-14899 IPv6 protection failed.");
 
 	if (g_file_test(FIREWALLCONFIGDIR, G_FILE_TEST_IS_DIR)) {
 		dir = g_dir_open(FIREWALLCONFIGDIR, 0, &error);
