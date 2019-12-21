@@ -507,8 +507,8 @@ static int rule_delete(struct firewall_handle *handle)
 	if (!rule)
 		return -ENOMEM;
 
-	nftnl_rule_set(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
-	nftnl_rule_set(rule, NFTNL_RULE_CHAIN, handle->chain);
+	nftnl_rule_set_str(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
+	nftnl_rule_set_str(rule, NFTNL_RULE_CHAIN, handle->chain);
 	nftnl_rule_set_u64(rule, NFTNL_RULE_HANDLE, handle->handle);
 
 	err = socket_open_and_bind(&nl);
@@ -568,8 +568,8 @@ static int build_rule_nat(const char *address, unsigned char prefixlen,
 	if (!rule)
 		return -ENOMEM;
 
-	nftnl_rule_set(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
-	nftnl_rule_set(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_NAT_POST);
+	nftnl_rule_set_str(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
+	nftnl_rule_set_str(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_NAT_POST);
 
 	/* family ipv4 */
 	nftnl_rule_set_u32(rule, NFTNL_RULE_FAMILY, NFPROTO_IPV4);
@@ -673,8 +673,8 @@ static int build_rule_snat(int index, const char *address,
 	if (!rule)
 		return -ENOMEM;
 
-	nftnl_rule_set(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
-	nftnl_rule_set(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_NAT_POST);
+	nftnl_rule_set_str(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
+	nftnl_rule_set_str(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_NAT_POST);
 
 	/* OIF */
 	expr = nftnl_expr_alloc("meta");
@@ -770,8 +770,8 @@ static int build_rule_marking(uid_t uid, uint32_t mark, struct nftnl_rule **res)
 	if (!rule)
 		return -ENOMEM;
 
-	nftnl_rule_set(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
-	nftnl_rule_set(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_ROUTE_OUTPUT);
+	nftnl_rule_set_str(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
+	nftnl_rule_set_str(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_ROUTE_OUTPUT);
 
 	expr = nftnl_expr_alloc("meta");
 	if (!expr)
@@ -826,8 +826,8 @@ static int build_rule_src_ip(const char *src_ip, uint32_t mark, struct nftnl_rul
 	if (!rule)
 		return -ENOMEM;
 
-	nftnl_rule_set(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
-	nftnl_rule_set(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_ROUTE_OUTPUT);
+	nftnl_rule_set_str(rule, NFTNL_RULE_TABLE, CONNMAN_TABLE);
+	nftnl_rule_set_str(rule, NFTNL_RULE_CHAIN, CONNMAN_CHAIN_ROUTE_OUTPUT);
 
 	/* family ipv4 */
 	nftnl_rule_set_u32(rule, NFTNL_RULE_FAMILY, NFPROTO_IPV4);
@@ -954,8 +954,8 @@ static struct nftnl_chain *build_chain(const char *name, const char *table,
         if (!chain)
                 return NULL;
 
-        nftnl_chain_set(chain, NFTNL_CHAIN_TABLE, table);
-        nftnl_chain_set(chain, NFTNL_CHAIN_NAME, name);
+        nftnl_chain_set_str(chain, NFTNL_CHAIN_TABLE, table);
+        nftnl_chain_set_str(chain, NFTNL_CHAIN_NAME, name);
 
 	if (type)
 		nftnl_chain_set_str(chain, NFTNL_CHAIN_TYPE, type);
