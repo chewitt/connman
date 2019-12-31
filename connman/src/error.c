@@ -39,6 +39,7 @@ DBusMessage *__connman_error_failed(DBusMessage *msg, int errnum)
 		return __connman_error_not_registered(msg);
 	case ENXIO:
 		return __connman_error_not_found(msg);
+	case EPERM:
 	case EACCES:
 		return __connman_error_permission_denied(msg);
 	case EEXIST:
