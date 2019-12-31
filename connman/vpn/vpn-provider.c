@@ -743,7 +743,7 @@ static DBusMessage *set_property(DBusConnection *conn, DBusMessage *msg,
 	dbus_message_iter_recurse(&iter, &value);
 
 	type = dbus_message_iter_get_arg_type(&value);
-	if (type == DBUS_TYPE_ARRAY && !g_str_equal(name, "UserRoutes"))
+	if (type == DBUS_TYPE_ARRAY && g_str_equal(name, "Properties"))
 		return set_properties(&value, msg, data);
 
 	err = set_provider_property(provider, name, &value, type);
