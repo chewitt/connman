@@ -18,7 +18,8 @@ Methods		dict GetProperties()  [experimental]
 			properties defined as a dict passed as variant, where
 			the format is equal to the dict returned by
 			GetProperties(). Only properties that are listed as
-			read-write are changeable. On success a
+			read-write are changeable. Property name "Properties"
+			indicates a dict of properties. On success a
 			PropertyChanged signal will be emitted for the
 			specified property or for all changed properties
 			individually. If there is no change in property value
