@@ -161,28 +161,6 @@ GKeyFile *__connman_storage_load_provider_config(const char *ident)
 	return keyfile;
 }
 
-GKeyFile *__connman_storage_open_service(const char *service_id)
-{
-	gchar *pathname;
-	GKeyFile *keyfile = NULL;
-
-	pathname = g_strdup_printf("%s/%s/%s", STORAGEDIR, service_id, SETTINGS);
-	if (!pathname)
-		return NULL;
-
-	keyfile =  storage_load(pathname);
-	if (keyfile) {
-		g_free(pathname);
-		return keyfile;
-	}
-
-	g_free(pathname);
-
-	keyfile = g_key_file_new();
-
-	return keyfile;
-}
-
 gchar **connman_storage_get_services(void)
 {
 	struct dirent *d;
