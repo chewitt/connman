@@ -43,6 +43,7 @@ static GHashTable *adapters;
 static GHashTable *devices;
 static GHashTable *networks;
 static GHashTable *known_networks;
+static GHashTable *stations;
 static bool agent_registered;
 
 #define IWD_SERVICE			"net.connman.iwd"
@@ -52,6 +53,7 @@ static bool agent_registered;
 #define IWD_DEVICE_INTERFACE		"net.connman.iwd.Device"
 #define IWD_NETWORK_INTERFACE		"net.connman.iwd.Network"
 #define IWD_KNOWN_NETWORK_INTERFACE	"net.connman.iwd.KnownNetwork"
+#define IWD_STATION_INTERFACE		"net.connman.iwd.Station"
 
 #define IWD_AGENT_INTERFACE		"net.connman.iwd.Agent"
 #define IWD_AGENT_ERROR_INTERFACE	"net.connman.iwd.Agent.Error"
@@ -101,6 +103,14 @@ struct iwd_known_network {
 	bool hidden;
 	char *last_connected_time;
 	bool auto_connect;
+};
+
+struct iwd_station {
+	GDBusProxy *proxy;
+	char *path;
+	char *state;
+	char *connected_network;
+	bool scanning;
 };
 
 static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
@@ -625,6 +635,47 @@ static void network_property_change(GDBusProxy *proxy, const char *name,
 	}
 }
 
+static void station_property_change(GDBusProxy *proxy, const char *name,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct iwd_station *iwds;
+	const char *path;
+
+	path = g_dbus_proxy_get_path(proxy);
+	iwds = g_hash_table_lookup(stations, path);
+	if (!iwds)
+		return;
+
+	if (!strcmp(name, "State")) {
+		const char *state;
+
+		dbus_message_iter_get_basic(iter, &state);
+		g_free(iwds->state);
+		iwds->state = g_strdup(state);
+
+		DBG("%s state %s", path, iwds->state);
+	} else if (!strcmp(name, "ConnectedNetwork")) {
+		const char *connected_network;
+
+		g_free(iwds->connected_network);
+		if (!g_strcmp0(iwds->state, "disconnecting")) {
+			iwds->connected_network = NULL;
+		} else {
+			dbus_message_iter_get_basic(iter, &connected_network);
+			iwds->connected_network = g_strdup(connected_network);
+		}
+
+		DBG("%s connected_network %s", path, iwds->connected_network);
+	} else if (!strcmp(name, "Scanning")) {
+		dbus_bool_t scanning;
+
+		dbus_message_iter_get_basic(iter, &scanning);
+		iwds->scanning = scanning;
+
+		DBG("%s scanning %d", path, iwds->scanning);
+	}
+}
+
 static void adapter_free(gpointer data)
 {
 	struct iwd_adapter *iwda = data;
@@ -691,6 +742,19 @@ static void known_network_free(gpointer data)
 	g_free(iwdkn->type);
 	g_free(iwdkn->last_connected_time);
 	g_free(iwdkn);
+}
+
+static void station_free(gpointer data)
+{
+	struct iwd_station *iwds = data;
+
+	if (iwds->proxy) {
+		g_dbus_proxy_unref(iwds->proxy);
+		iwds->proxy = NULL;
+	}
+	g_free(iwds->path);
+	g_free(iwds->connected_network);
+	g_free(iwds);
 }
 
 static void create_adapter(GDBusProxy *proxy)
@@ -991,6 +1055,39 @@ static void create_know_network(GDBusProxy *proxy)
 		iwdkn->last_connected_time, iwdkn->auto_connect);
 }
 
+static void create_station(GDBusProxy *proxy)
+{
+	const char *path = g_dbus_proxy_get_path(proxy);
+	struct iwd_station *iwds;
+
+	iwds = g_try_new0(struct iwd_station, 1);
+	if (!iwds) {
+		connman_error("Out of memory creating IWD station");
+		return;
+	}
+
+	iwds->path = g_strdup(path);
+	g_hash_table_replace(stations, iwds->path, iwds);
+
+	iwds->proxy = g_dbus_proxy_ref(proxy);
+
+	if (!iwds->proxy) {
+		connman_error("Cannot create IWD station watcher %s", path);
+		g_hash_table_remove(stations, path);
+		return;
+	}
+
+	iwds->state = g_strdup(proxy_get_string(proxy, "State"));
+	iwds->connected_network = g_strdup(proxy_get_string(proxy, "ConnectedNetwork"));
+	iwds->scanning = proxy_get_bool(proxy, "Scanning");
+
+	DBG("state '%s' connected_network %s scanning %d",
+		iwds->state, iwds->connected_network, iwds->scanning);
+
+	g_dbus_proxy_set_property_watch(iwds->proxy,
+			station_property_change, NULL);
+}
+
 static void object_added(GDBusProxy *proxy, void *user_data)
 {
 	const char *interface;
@@ -1014,6 +1111,8 @@ static void object_added(GDBusProxy *proxy, void *user_data)
 		create_network(proxy);
 	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
 		create_know_network(proxy);
+	else if (!strcmp(interface, IWD_STATION_INTERFACE))
+		create_station(proxy);
 }
 
 static void object_removed(GDBusProxy *proxy, void *user_data)
@@ -1040,6 +1139,8 @@ static void object_removed(GDBusProxy *proxy, void *user_data)
 		g_hash_table_remove(networks, path);
 	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
 		g_hash_table_remove(known_networks, path);
+	else if (!strcmp(interface, IWD_STATION_INTERFACE))
+		g_hash_table_remove(stations, path);
 }
 
 static int iwd_init(void)
@@ -1059,6 +1160,9 @@ static int iwd_init(void)
 
 	known_networks = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			known_network_free);
+
+	stations = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			station_free);
 
 	if (connman_technology_driver_register(&tech_driver) < 0) {
 		connman_warn("Failed to initialize technology for IWD");
@@ -1102,6 +1206,9 @@ out:
 	if (known_networks)
 		g_hash_table_destroy(known_networks);
 
+	if (stations)
+		g_hash_table_destroy(stations);
+
 	if (adapters)
 		g_hash_table_destroy(adapters);
 
@@ -1119,6 +1226,7 @@ static void iwd_exit(void)
 
 	g_dbus_client_unref(client);
 
+	g_hash_table_destroy(stations);
 	g_hash_table_destroy(known_networks);
 	g_hash_table_destroy(networks);
 	g_hash_table_destroy(devices);
