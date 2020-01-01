@@ -643,6 +643,84 @@ static void network_property_change(GDBusProxy *proxy, const char *name,
 	}
 }
 
+static unsigned char calculate_strength(int strength)
+{
+	unsigned char res;
+
+	/*
+	 * Network's maximum signal strength expressed in 100 * dBm.
+	 * The value is the range of 0 (strongest signal) to -10000
+	 * (weakest signal)
+	 *
+	 * ConnMan expects it in the range from 100 (strongest) to 0
+	 * (weakest).
+	 */
+	res = (unsigned char)((strength * -10000) / 100);
+
+	return res;
+}
+
+static void _update_signal_strength(const char *path, int16_t signal_strength)
+{
+	struct iwd_station *iwds;
+	struct iwd_network *iwdn;
+
+	iwds = g_hash_table_lookup(stations, path);
+	if (!iwds)
+		return;
+
+	if (!iwds->connected_network)
+		return;
+
+	iwdn = g_hash_table_lookup(networks, iwds->connected_network);
+	if (!iwdn)
+		return;
+
+	connman_network_set_strength(iwdn->network,
+					calculate_strength(signal_strength));
+}
+
+static void ordered_networks_cb(DBusMessage *message, void *user_data)
+{
+	DBusMessageIter array, entry;
+
+	DBG("");
+
+	if (!dbus_message_iter_init(message, &array))
+		return;
+
+	if (dbus_message_iter_get_arg_type(&array) != DBUS_TYPE_ARRAY)
+		return;
+
+	dbus_message_iter_recurse(&array, &entry);
+	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRUCT) {
+		DBusMessageIter value;
+		const char *path;
+		int16_t signal_strength;
+
+
+		dbus_message_iter_recurse(&entry, &value);
+
+		dbus_message_iter_get_basic(&value, &path);
+
+		dbus_message_iter_next(&value);
+		dbus_message_iter_get_basic(&value, &signal_strength);
+
+		_update_signal_strength(path, signal_strength);
+
+		dbus_message_iter_next(&entry);
+	}
+}
+
+static void update_signal_strength(struct iwd_station *iwds)
+{
+	if (!g_dbus_proxy_method_call(iwds->proxy,
+					"GetOrderedNetworks",
+					NULL, ordered_networks_cb,
+					NULL, NULL))
+		DBG("GetOrderedNetworks() failed");
+}
+
 static void station_property_change(GDBusProxy *proxy, const char *name,
 		DBusMessageIter *iter, void *user_data)
 {
@@ -679,6 +757,9 @@ static void station_property_change(GDBusProxy *proxy, const char *name,
 
 		dbus_message_iter_get_basic(iter, &scanning);
 		iwds->scanning = scanning;
+
+		if (!iwds->scanning)
+			update_signal_strength(iwds);
 
 		DBG("%s scanning %d", path, iwds->scanning);
 	}
