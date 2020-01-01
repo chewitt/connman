@@ -2482,27 +2482,25 @@ int __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
 		g_key_file_set_string(keyfile, identifier, key, privacy);
 		g_free(key);
 
-		key = g_strdup_printf("%sDHCP.LastAddress", prefix);
 		if (ipconfig->last_dhcp_address &&
-				strlen(ipconfig->last_dhcp_address) > 0)
+				strlen(ipconfig->last_dhcp_address) > 0) {
+			key = g_strdup_printf("%sDHCP.LastAddress", prefix);
 			g_key_file_set_string(keyfile, identifier, key,
 					ipconfig->last_dhcp_address);
-		else
-			g_key_file_remove_key(keyfile, identifier, key, NULL);
-		g_free(key);
+			g_free(key);
+		}
 
-		key = g_strdup_printf("%sDHCP.LastPrefixes", prefix);
 		if (ipconfig->last_dhcpv6_prefixes &&
 				ipconfig->last_dhcpv6_prefixes[0]) {
 			guint len =
 				g_strv_length(ipconfig->last_dhcpv6_prefixes);
+			key = g_strdup_printf("%sDHCP.LastPrefixes", prefix);
 
 			g_key_file_set_string_list(keyfile, identifier, key,
 				(const gchar **)ipconfig->last_dhcpv6_prefixes,
 						len);
-		} else
-			g_key_file_remove_key(keyfile, identifier, key, NULL);
-		g_free(key);
+			g_free(key);
+		}
 	}
 
 	switch (ipconfig->method) {
@@ -2510,14 +2508,13 @@ int __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
 		break;
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
-		key = g_strdup_printf("%sDHCP.LastAddress", prefix);
 		if (ipconfig->last_dhcp_address &&
-				strlen(ipconfig->last_dhcp_address) > 0)
+				strlen(ipconfig->last_dhcp_address) > 0) {
+			key = g_strdup_printf("%sDHCP.LastAddress", prefix);
 			g_key_file_set_string(keyfile, identifier, key,
 					ipconfig->last_dhcp_address);
-		else
-			g_key_file_remove_key(keyfile, identifier, key, NULL);
-		g_free(key);
+			g_free(key);
+		}
 		/* fall through */
 	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
 	case CONNMAN_IPCONFIG_METHOD_OFF:
@@ -2525,35 +2522,40 @@ int __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
 		return 0;
 	}
 
-	key = g_strdup_printf("%snetmask_prefixlen", prefix);
-	if (ipconfig->address->prefixlen != 0)
+	if (ipconfig->address->prefixlen != 0) {
+		key = g_strdup_printf("%snetmask_prefixlen", prefix);
 		g_key_file_set_integer(keyfile, identifier,
 				key, ipconfig->address->prefixlen);
-	g_free(key);
+		g_free(key);
+	}
 
-	key = g_strdup_printf("%slocal_address", prefix);
-	if (ipconfig->address->local)
+	if (ipconfig->address->local) {
+		key = g_strdup_printf("%slocal_address", prefix);
 		g_key_file_set_string(keyfile, identifier,
 				key, ipconfig->address->local);
-	g_free(key);
+		g_free(key);
+	}
 
-	key = g_strdup_printf("%speer_address", prefix);
-	if (ipconfig->address->peer)
+	if (ipconfig->address->peer) {
+		key = g_strdup_printf("%speer_address", prefix);
 		g_key_file_set_string(keyfile, identifier,
 				key, ipconfig->address->peer);
-	g_free(key);
+		g_free(key);
+	}
 
-	key = g_strdup_printf("%sbroadcast_address", prefix);
-	if (ipconfig->address->broadcast)
+	if (ipconfig->address->broadcast) {
+		key = g_strdup_printf("%sbroadcast_address", prefix);
 		g_key_file_set_string(keyfile, identifier,
 			key, ipconfig->address->broadcast);
-	g_free(key);
+		g_free(key);
+	}
 
-	key = g_strdup_printf("%sgateway", prefix);
-	if (ipconfig->address->gateway)
+	if (ipconfig->address->gateway) {
+		key = g_strdup_printf("%sgateway", prefix);
 		g_key_file_set_string(keyfile, identifier,
 			key, ipconfig->address->gateway);
-	g_free(key);
+		g_free(key);
+	}
 
 	return 0;
 }
