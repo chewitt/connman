@@ -42,6 +42,7 @@ static GDBusProxy *agent_proxy;
 static GHashTable *adapters;
 static GHashTable *devices;
 static GHashTable *networks;
+static GHashTable *known_networks;
 static bool agent_registered;
 
 #define IWD_SERVICE			"net.connman.iwd"
@@ -50,6 +51,7 @@ static bool agent_registered;
 #define IWD_ADAPTER_INTERFACE		"net.connman.iwd.Adapter"
 #define IWD_DEVICE_INTERFACE		"net.connman.iwd.Device"
 #define IWD_NETWORK_INTERFACE		"net.connman.iwd.Network"
+#define IWD_KNOWN_NETWORK_INTERFACE	"net.connman.iwd.KnownNetwork"
 
 #define IWD_AGENT_INTERFACE		"net.connman.iwd.Agent"
 #define IWD_AGENT_ERROR_INTERFACE	"net.connman.iwd.Agent.Error"
@@ -88,6 +90,16 @@ struct iwd_network {
 
 	struct iwd_device *iwdd;
 	struct connman_network *network;
+};
+
+struct iwd_known_network {
+	GDBusProxy *proxy;
+	char *path;
+	char *name;
+	char *type;
+	bool hidden;
+	char *last_connected_time;
+	bool auto_connect;
 };
 
 static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
@@ -663,6 +675,22 @@ static void network_free(gpointer data)
 	g_free(iwdn);
 }
 
+static void known_network_free(gpointer data)
+{
+	struct iwd_known_network *iwdkn = data;
+
+	if (iwdkn->proxy) {
+		g_dbus_proxy_unref(iwdkn->proxy);
+		iwdkn->proxy = NULL;
+	}
+
+	g_free(iwdkn->path);
+	g_free(iwdkn->name);
+	g_free(iwdkn->type);
+	g_free(iwdkn->last_connected_time);
+	g_free(iwdkn);
+}
+
 static void create_adapter(GDBusProxy *proxy)
 {
 	const char *path = g_dbus_proxy_get_path(proxy);
@@ -928,6 +956,40 @@ static void create_network(GDBusProxy *proxy)
 	add_network(path, iwdn);
 }
 
+static void create_know_network(GDBusProxy *proxy)
+{
+	const char *path = g_dbus_proxy_get_path(proxy);
+	struct iwd_known_network *iwdkn;
+
+	iwdkn = g_try_new0(struct iwd_known_network, 1);
+	if (!iwdkn) {
+		connman_error("Out of memory creating IWD known network");
+		return;
+	}
+
+	iwdkn->path = g_strdup(path);
+	g_hash_table_replace(known_networks, iwdkn->path, iwdkn);
+
+	iwdkn->proxy = g_dbus_proxy_ref(proxy);
+
+	if (!iwdkn->proxy) {
+		connman_error("Cannot create IWD known network watcher %s", path);
+		g_hash_table_remove(known_networks, path);
+		return;
+	}
+
+	iwdkn->name = g_strdup(proxy_get_string(proxy, "Name"));
+	iwdkn->type = g_strdup(proxy_get_string(proxy, "Type"));
+	iwdkn->hidden = proxy_get_bool(proxy, "Hidden");
+	iwdkn->last_connected_time =
+		g_strdup(proxy_get_string(proxy, "LastConnectedTime"));
+	iwdkn->auto_connect = proxy_get_bool(proxy, "AutoConnec");
+
+	DBG("name '%s' type %s hidden %d, last_connection_time %s auto_connect %d",
+		iwdkn->name, iwdkn->type, iwdkn->hidden,
+		iwdkn->last_connected_time, iwdkn->auto_connect);
+}
+
 static void object_added(GDBusProxy *proxy, void *user_data)
 {
 	const char *interface;
@@ -949,6 +1011,8 @@ static void object_added(GDBusProxy *proxy, void *user_data)
 		create_device(proxy);
 	else if (!strcmp(interface, IWD_NETWORK_INTERFACE))
 		create_network(proxy);
+	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
+		create_know_network(proxy);
 }
 
 static void object_removed(GDBusProxy *proxy, void *user_data)
@@ -973,6 +1037,8 @@ static void object_removed(GDBusProxy *proxy, void *user_data)
 		g_hash_table_remove(devices, path);
 	else if (!strcmp(interface, IWD_NETWORK_INTERFACE))
 		g_hash_table_remove(networks, path);
+	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
+		g_hash_table_remove(known_networks, path);
 }
 
 static int iwd_init(void)
@@ -989,6 +1055,9 @@ static int iwd_init(void)
 
 	networks = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			network_free);
+
+	known_networks = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			known_network_free);
 
 	if (connman_technology_driver_register(&tech_driver) < 0) {
 		connman_warn("Failed to initialize technology for IWD");
@@ -1029,6 +1098,9 @@ out:
 	if (networks)
 		g_hash_table_destroy(networks);
 
+	if (known_networks)
+		g_hash_table_destroy(known_networks);
+
 	if (adapters)
 		g_hash_table_destroy(adapters);
 
@@ -1046,6 +1118,7 @@ static void iwd_exit(void)
 
 	g_dbus_client_unref(client);
 
+	g_hash_table_destroy(known_networks);
 	g_hash_table_destroy(networks);
 	g_hash_table_destroy(devices);
 	g_hash_table_destroy(adapters);
