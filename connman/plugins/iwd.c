@@ -61,6 +61,9 @@ struct iwd_adapter {
 	char *vendor;
 	char *model;
 	bool powered;
+	bool ad_hoc;
+	bool station;
+	bool ap;
 };
 
 struct iwd_device {
@@ -98,6 +101,27 @@ static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
 	dbus_message_iter_get_basic(&iter, &str);
 
 	return str;
+}
+
+static GSList *proxy_get_strings(GDBusProxy *proxy, const char *property)
+{
+	DBusMessageIter array, entry;
+	GSList *list = NULL;
+
+	if (!g_dbus_proxy_get_property(proxy, property, &array))
+		return NULL;
+
+	dbus_message_iter_recurse(&array, &entry);
+
+	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING){
+		const char *val;
+
+		dbus_message_iter_get_basic(&entry, &val);
+		list = g_slist_prepend(list, g_strdup(val));
+		dbus_message_iter_next(&entry);
+	}
+
+	return list;
 }
 
 static bool proxy_get_bool(GDBusProxy *proxy, const char *property)
@@ -725,6 +749,7 @@ static void create_adapter(GDBusProxy *proxy)
 {
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_adapter *iwda;
+	GSList *modes, *list;
 
 	iwda = g_try_new0(struct iwd_adapter, 1);
 
@@ -748,8 +773,25 @@ static void create_adapter(GDBusProxy *proxy)
 	iwda->model = g_strdup(proxy_get_string(proxy, "Model"));
 	iwda->powered = proxy_get_bool(proxy, "Powered");
 
-	DBG("%s vendor '%s' model '%s' powered %d", path, iwda->vendor,
-		iwda->model, iwda->powered);
+	modes = proxy_get_strings(proxy, "SupportedModes");
+	for (list = modes; list; list = list->next) {
+		char *m = list->data;
+
+		if (!m)
+			continue;
+
+		if (!strcmp(m, "ad-hoc"))
+			iwda->ad_hoc = true;
+		else if (!strcmp(m, "station"))
+			iwda->station = true;
+		else if (!strcmp(m, "ap"))
+			iwda->ap = true;
+	}
+	g_slist_free_full(modes, g_free);
+
+	DBG("%s vendor '%s' model '%s' powered %d ad-hoc %d station %d ap %d",
+		path, iwda->vendor, iwda->model, iwda->powered,
+		iwda->ad_hoc, iwda->station, iwda->ap);
 
 	g_dbus_proxy_set_property_watch(iwda->proxy,
 			adapter_property_change, NULL);
