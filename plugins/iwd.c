@@ -73,7 +73,7 @@ struct iwd_device {
 	char *name;
 	char *address;
 	bool powered;
-	bool scanning;
+	char *mode;
 
 	struct connman_device *device;
 };
@@ -388,85 +388,6 @@ static struct connman_technology_driver tech_driver = {
 	.remove         = cm_tech_remove,
 };
 
-static unsigned char calculate_strength(int strength)
-{
-	unsigned char res;
-
-	/*
-	 * Network's maximum signal strength expressed in 100 * dBm.
-	 * The value is the range of 0 (strongest signal) to -10000
-	 * (weakest signal)
-	 *
-	 * ConnMan expects it in the range from 100 (strongest) to 0
-	 * (weakest).
-	 */
-	res = (unsigned char)((strength * -10000) / 100);
-
-	return res;
-}
-
-static void _update_signal_strength(const char *path, int16_t signal_strength)
-{
-	struct iwd_network *iwdn;
-
-	iwdn = g_hash_table_lookup(networks, path);
-	if (!iwdn)
-		return;
-
-	if (!iwdn->network)
-		return;
-
-	connman_network_set_strength(iwdn->network,
-					calculate_strength(signal_strength));
-}
-
-static void ordered_networks_cb(DBusMessage *message, void *user_data)
-{
-	DBusMessageIter array, entry;
-
-	DBG("");
-
-	if (!dbus_message_iter_init(message, &array))
-		return;
-
-	if (dbus_message_iter_get_arg_type(&array) != DBUS_TYPE_ARRAY)
-		return;
-
-	dbus_message_iter_recurse(&array, &entry);
-	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRUCT) {
-		DBusMessageIter value;
-		const char *path, *name, *type;
-		int16_t signal_strength;
-
-
-		dbus_message_iter_recurse(&entry, &value);
-
-		dbus_message_iter_get_basic(&value, &path);
-
-		dbus_message_iter_next(&value);
-		dbus_message_iter_get_basic(&value, &name);
-
-		dbus_message_iter_next(&value);
-		dbus_message_iter_get_basic(&value, &signal_strength);
-
-		dbus_message_iter_next(&value);
-		dbus_message_iter_get_basic(&value, &type);
-
-		_update_signal_strength(path, signal_strength);
-
-		dbus_message_iter_next(&entry);
-	}
-}
-
-static void update_signal_strength(struct iwd_device *iwdd)
-{
-	if (!g_dbus_proxy_method_call(iwdd->proxy,
-					"GetOrderedNetworks",
-					NULL, ordered_networks_cb,
-					NULL, NULL))
-		DBG("GetOrderedNetworks() failed");
-}
-
 static const char *security_remap(const char *security)
 {
 	if (!g_strcmp0(security, "open"))
@@ -654,17 +575,14 @@ static void device_property_change(GDBusProxy *proxy, const char *name,
 		iwdd->powered = powered;
 
 		DBG("%s powered %d", path, iwdd->powered);
-	} else if (!strcmp(name, "Scanning")) {
-		dbus_bool_t scanning;
+	} else if (!strcmp(name, "Mode")) {
+		const char *mode;
 
-		dbus_message_iter_get_basic(iter, &scanning);
-		iwdd->scanning = scanning;
+		dbus_message_iter_get_basic(iter, &mode);
+		g_free(iwdd->mode);
+		iwdd->mode = g_strdup(mode);
 
-		DBG("%s scanning %d", path, iwdd->scanning);
-
-		if (!iwdd->scanning)
-			update_signal_strength(iwdd);
-
+		DBG("%s mode %s", path, iwdd->mode);
 	}
 }
 
@@ -824,11 +742,11 @@ static void create_device(GDBusProxy *proxy)
 	iwdd->name = g_strdup(proxy_get_string(proxy, "Name"));
 	iwdd->address = g_strdup(proxy_get_string(proxy, "Address"));
 	iwdd->powered = proxy_get_bool(proxy, "Powered");
-	iwdd->scanning = proxy_get_bool(proxy, "Scanning");
+	iwdd->mode = g_strdup(proxy_get_string(proxy, "Mode"));
 
-	DBG("adapter %s name %s address %s powered %d scanning %d",
+	DBG("adapter %s name %s address %s powered %d mode %s",
 		iwdd->adapter, iwdd->name, iwdd->address,
-		iwdd->powered, iwdd->scanning);
+		iwdd->powered, iwdd->mode);
 
 	g_dbus_proxy_set_property_watch(iwdd->proxy,
 			device_property_change, NULL);
