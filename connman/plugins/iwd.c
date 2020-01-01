@@ -87,6 +87,7 @@ struct iwd_network {
 	char *name;
 	char *type;
 	bool connected;
+	char *known_network;
 
 	struct iwd_device *iwdd;
 	struct connman_network *network;
@@ -672,6 +673,7 @@ static void network_free(gpointer data)
 	g_free(iwdn->device);
 	g_free(iwdn->name);
 	g_free(iwdn->type);
+	g_free(iwdn->known_network);
 	g_free(iwdn);
 }
 
@@ -943,12 +945,11 @@ static void create_network(GDBusProxy *proxy)
 	iwdn->name = g_strdup(proxy_get_string(proxy, "Name"));
 	iwdn->type = g_strdup(proxy_get_string(proxy, "Type"));
 	iwdn->connected = proxy_get_bool(proxy, "Connected");
+	iwdn->known_network = g_strdup(proxy_get_string(proxy, "KnownNetwork"));
 
-	DBG("device %s name '%s' type %s connected %d",
-		iwdn->device,
-		iwdn->name,
-		iwdn->type,
-		iwdn->connected);
+	DBG("device %s name '%s' type %s connected %d known_network %s",
+		iwdn->device, iwdn->name, iwdn->type, iwdn->connected,
+		iwdn->known_network);
 
 	g_dbus_proxy_set_property_watch(iwdn->proxy,
 			network_property_change, NULL);
