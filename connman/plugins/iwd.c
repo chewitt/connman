@@ -44,6 +44,7 @@ static GHashTable *devices;
 static GHashTable *networks;
 static GHashTable *known_networks;
 static GHashTable *stations;
+static GHashTable *access_points;
 static bool agent_registered;
 
 #define IWD_SERVICE			"net.connman.iwd"
@@ -54,6 +55,7 @@ static bool agent_registered;
 #define IWD_NETWORK_INTERFACE		"net.connman.iwd.Network"
 #define IWD_KNOWN_NETWORK_INTERFACE	"net.connman.iwd.KnownNetwork"
 #define IWD_STATION_INTERFACE		"net.connman.iwd.Station"
+#define IWD_AP_INTERFACE		"net.connman.iwd.AccessPoint"
 
 #define IWD_AGENT_INTERFACE		"net.connman.iwd.Agent"
 #define IWD_AGENT_ERROR_INTERFACE	"net.connman.iwd.Agent.Error"
@@ -111,6 +113,12 @@ struct iwd_station {
 	char *state;
 	char *connected_network;
 	bool scanning;
+};
+
+struct iwd_ap {
+	GDBusProxy *proxy;
+	char *path;
+	bool started;
 };
 
 static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
@@ -676,6 +684,27 @@ static void station_property_change(GDBusProxy *proxy, const char *name,
 	}
 }
 
+static void ap_property_change(GDBusProxy *proxy, const char *name,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct iwd_ap *iwdap;
+	const char *path;
+
+	path = g_dbus_proxy_get_path(proxy);
+	iwdap = g_hash_table_lookup(access_points, path);
+	if (!iwdap)
+		return;
+
+        if (!strcmp(name, "Started")) {
+		dbus_bool_t started;
+
+		dbus_message_iter_get_basic(iter, &started);
+		iwdap->started = started;
+
+		DBG("%s started %d", path, iwdap->started);
+	}
+}
+
 static void adapter_free(gpointer data)
 {
 	struct iwd_adapter *iwda = data;
@@ -755,6 +784,17 @@ static void station_free(gpointer data)
 	g_free(iwds->path);
 	g_free(iwds->connected_network);
 	g_free(iwds);
+}
+
+static void ap_free(gpointer data)
+{
+	struct iwd_ap *iwdap = data;
+
+	if (iwdap->proxy) {
+		g_dbus_proxy_unref(iwdap->proxy);
+		iwdap->proxy = NULL;
+	}
+	g_free(iwdap);
 }
 
 static void create_adapter(GDBusProxy *proxy)
@@ -1088,6 +1128,36 @@ static void create_station(GDBusProxy *proxy)
 			station_property_change, NULL);
 }
 
+static void create_ap(GDBusProxy *proxy)
+{
+	const char *path = g_dbus_proxy_get_path(proxy);
+	struct iwd_ap *iwdap;
+
+	iwdap = g_try_new0(struct iwd_ap, 1);
+	if (!iwdap) {
+		connman_error("Out of memory creating IWD access point");
+		return;
+	}
+
+	iwdap->path = g_strdup(path);
+	g_hash_table_replace(access_points, iwdap->path, iwdap);
+
+	iwdap->proxy = g_dbus_proxy_ref(proxy);
+
+	if (!iwdap->proxy) {
+		connman_error("Cannot create IWD access point watcher %s", path);
+		g_hash_table_remove(access_points, path);
+		return;
+	}
+
+	iwdap->started = proxy_get_bool(proxy, "Started");
+
+	DBG("started %d", iwdap->started);
+
+	g_dbus_proxy_set_property_watch(iwdap->proxy,
+			ap_property_change, NULL);
+}
+
 static void object_added(GDBusProxy *proxy, void *user_data)
 {
 	const char *interface;
@@ -1113,6 +1183,8 @@ static void object_added(GDBusProxy *proxy, void *user_data)
 		create_know_network(proxy);
 	else if (!strcmp(interface, IWD_STATION_INTERFACE))
 		create_station(proxy);
+	else if (!strcmp(interface, IWD_AP_INTERFACE))
+		create_ap(proxy);
 }
 
 static void object_removed(GDBusProxy *proxy, void *user_data)
@@ -1141,6 +1213,8 @@ static void object_removed(GDBusProxy *proxy, void *user_data)
 		g_hash_table_remove(known_networks, path);
 	else if (!strcmp(interface, IWD_STATION_INTERFACE))
 		g_hash_table_remove(stations, path);
+	else if (!strcmp(interface, IWD_AP_INTERFACE))
+		g_hash_table_remove(access_points, path);
 }
 
 static int iwd_init(void)
@@ -1163,6 +1237,9 @@ static int iwd_init(void)
 
 	stations = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			station_free);
+
+	access_points = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			ap_free);
 
 	if (connman_technology_driver_register(&tech_driver) < 0) {
 		connman_warn("Failed to initialize technology for IWD");
@@ -1209,6 +1286,9 @@ out:
 	if (stations)
 		g_hash_table_destroy(stations);
 
+	if (access_points)
+		g_hash_table_destroy(access_points);
+
 	if (adapters)
 		g_hash_table_destroy(adapters);
 
@@ -1226,6 +1306,7 @@ static void iwd_exit(void)
 
 	g_dbus_client_unref(client);
 
+	g_hash_table_destroy(access_points);
 	g_hash_table_destroy(stations);
 	g_hash_table_destroy(known_networks);
 	g_hash_table_destroy(networks);
