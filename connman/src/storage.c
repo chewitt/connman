@@ -973,36 +973,6 @@ GKeyFile *__connman_storage_load_provider_config(const char *ident)
 	return keyfile;
 }
 
-GKeyFile *__connman_storage_open_service(const char *service_id)
-{
-	gchar *pathname;
-	const char *storagedir;
-	GKeyFile *keyfile = NULL;
-
-	if (!service_id_is_valid(service_id))
-		return NULL;
-
-	storagedir = storagedir_for(service_id);
-	if (!storagedir)
-		return NULL;
-
-	pathname = g_build_filename(storagedir, service_id, SETTINGS, NULL);
-	if (!pathname)
-		return NULL;
-
-	keyfile =  storage_load(pathname);
-	if (keyfile) {
-		g_free(pathname);
-		return keyfile;
-	}
-
-	g_free(pathname);
-
-	keyfile = g_key_file_new();
-
-	return keyfile;
-}
-
 static gchar **__connman_storage_get_system_services(int *len)
 {
 	gchar **result = NULL;
