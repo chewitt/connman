@@ -394,6 +394,42 @@ static int cm_device_disable(struct connman_device *device)
 	return set_device_powered(device, false);
 }
 
+static void cm_device_scan_cb(DBusMessage *message, void *user_data)
+{
+	const char *path = user_data;
+	struct iwd_station *iwds;
+
+	iwds = g_hash_table_lookup(networks, path);
+	if (!iwds)
+		return;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		DBG("%s scan failed: %s", path, dbus_error);
+	}
+}
+
+static int cm_device_scan(struct connman_device *device,
+				struct connman_device_scan_params *params)
+{
+	struct iwd_device *iwdd = connman_device_get_data(device);
+	struct iwd_station *iwds;
+
+	if (strcmp(iwdd->mode, "station"))
+		return -EINVAL;
+
+	iwds = g_hash_table_lookup(stations, iwdd->path);
+	if (!iwds)
+		return -EIO;
+
+	if (!g_dbus_proxy_method_call(iwds->proxy, "Scan",
+			NULL, cm_device_scan_cb, g_strdup(iwds->path), g_free))
+		return -EIO;
+
+	return -EINPROGRESS;
+}
+
 static struct connman_device_driver device_driver = {
 	.name		= "iwd",
 	.type		= CONNMAN_DEVICE_TYPE_WIFI,
@@ -401,6 +437,7 @@ static struct connman_device_driver device_driver = {
 	.remove         = cm_device_remove,
 	.enable         = cm_device_enable,
 	.disable        = cm_device_disable,
+	.scan		= cm_device_scan,
 };
 
 static int cm_tech_probe(struct connman_technology *technology)
