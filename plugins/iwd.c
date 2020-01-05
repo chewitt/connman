@@ -119,6 +119,10 @@ struct iwd_ap {
 	GDBusProxy *proxy;
 	char *path;
 	bool started;
+
+	int index;
+	char *bridge;
+	struct connman_technology *tech;
 };
 
 static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
@@ -449,11 +453,267 @@ static void cm_tech_remove(struct connman_technology *technology)
 {
 }
 
+struct tech_cb_data {
+	struct iwd_device *iwdd;
+	char *path;
+	char *ssid;
+	char *passphrase;
+	char *bridge;
+	int index;
+	struct connman_technology *tech;
+};
+
+static void tech_cb_free(struct tech_cb_data *cbd)
+{
+	g_free(cbd->path);
+	g_free(cbd->ssid);
+	g_free(cbd->passphrase);
+	g_free(cbd->bridge);
+	g_free(cbd);
+}
+
+static int cm_change_tethering(struct iwd_device *iwdd,
+			struct connman_technology *technology,
+			const char *identifier, const char *passphrase,
+			const char *bridge, bool enabled);
+
+static void tech_ap_start_cb(DBusMessage *message, void *user_data)
+{
+
+	struct tech_cb_data *cbd = user_data;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		connman_warn("iwd device %s could not enable AccessPoint mode: %s",
+			cbd->path, dbus_error);
+		goto out;
+	}
+
+	/* wait for 'Started' signal */
+	return;
+out:
+	cm_change_tethering(cbd->iwdd, cbd->tech,
+			cbd->ssid, cbd->passphrase, cbd->bridge, false);
+	tech_cb_free(cbd);
+}
+
+static void tech_ap_stop_cb(DBusMessage *message, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		connman_warn("iwd device %s could not disable AccessPoint mode: %s",
+			cbd->path, dbus_error);
+		goto out;
+	}
+
+	return;
+out:
+	tech_cb_free(cbd);
+}
+
+static void ap_start_append(DBusMessageIter *iter, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+
+	DBG("ssid %s", cbd->ssid);
+	DBG("passphrase %s", cbd->passphrase);
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &cbd->ssid);
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &cbd->passphrase);
+}
+
+static void tech_enable_tethering_cb(const DBusError *error, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+	struct iwd_device *iwdd;
+	struct iwd_ap *iwdap;
+
+	DBG("");
+
+	iwdd = g_hash_table_lookup(devices, cbd->path);
+	if (!iwdd) {
+		DBG("device already removed");
+		goto out;
+	}
+
+	if (dbus_error_is_set(error)) {
+		connman_warn("iwd device %s could not enable AcessPoint mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	iwdap = g_hash_table_lookup(access_points, iwdd->path);
+	if (!iwdap) {
+		DBG("%s no ap object found", iwdd->path);
+		goto out;
+	}
+
+	iwdap->index = cbd->index;
+	iwdap->bridge = g_strdup(cbd->bridge);
+	iwdap->tech = cbd->tech;
+
+	if (!g_dbus_proxy_method_call(iwdap->proxy, "Start",
+				ap_start_append, tech_ap_start_cb, cbd, NULL)) {
+		connman_warn("iwd ap %s could not start AccessPoint mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	return;
+out:
+	if (iwdap) {
+		iwdap->index = -1;
+		g_free(iwdap->bridge);
+		iwdap->bridge = NULL;
+	}
+	tech_cb_free(cbd);
+}
+
+static void tech_disable_tethering_cb(const DBusError *error, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+	struct iwd_device *iwdd;
+	struct iwd_ap *iwdap;
+
+	DBG("");
+
+	iwdd = g_hash_table_lookup(devices, cbd->path);
+	if (!iwdd) {
+		DBG("device already removed");
+		goto out;
+	}
+
+	if (dbus_error_is_set(error)) {
+		connman_warn("iwd device %s could not enable Station mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	iwdap = g_hash_table_lookup(access_points, iwdd->path);
+	if (!iwdap) {
+		DBG("%s no ap object found", iwdd->path);
+		goto out;
+	}
+
+	g_free(iwdap->bridge);
+	iwdap->index = -1;
+	iwdap->bridge = NULL;
+	iwdap->tech = NULL;
+
+	if (!connman_inet_remove_from_bridge(cbd->index, cbd->bridge))
+		goto out;
+
+	connman_technology_tethering_notify(cbd->tech, false);
+
+	if (!g_dbus_proxy_method_call(iwdap->proxy, "Stop",
+					NULL, tech_ap_stop_cb, cbd, NULL)) {
+		connman_warn("iwd ap %s could not start AccessPoint mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	return;
+out:
+	tech_cb_free(cbd);
+}
+
+static int cm_change_tethering(struct iwd_device *iwdd,
+			struct connman_technology *technology,
+			const char *identifier, const char *passphrase,
+			const char *bridge, bool enabled)
+{
+	struct tech_cb_data *cbd;
+	int index;
+	const char *mode;
+	GDBusResultFunction cb;
+
+	index = connman_inet_ifindex(iwdd->name);
+	if (index < 0)
+		return -ENODEV;
+
+	cbd = g_new(struct tech_cb_data, 1);
+	cbd->iwdd = iwdd;
+	cbd->path = g_strdup(iwdd->path);
+	cbd->ssid = g_strdup(identifier);
+	cbd->passphrase = g_strdup(passphrase);
+	cbd->bridge = g_strdup(bridge);
+	cbd->tech = technology;
+	cbd->index = index;
+
+	if (enabled) {
+		mode = "ap";
+		cb = tech_enable_tethering_cb;
+	} else {
+		mode = "station";
+		cb = tech_disable_tethering_cb;
+	}
+
+	if (!g_dbus_proxy_set_property_basic(iwdd->proxy,
+			"Mode", DBUS_TYPE_STRING, &mode,
+			cb, cbd, NULL)) {
+		tech_cb_free(cbd);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int cm_tech_tethering(struct connman_technology *technology,
+			const char *identifier, const char *passphrase,
+			const char *bridge, bool enabled)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+	int err = 0, res;
+
+	g_hash_table_iter_init(&iter, devices);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct iwd_device *iwdd = value;
+		struct iwd_adapter *iwda;
+
+		iwda = g_hash_table_lookup(adapters, iwdd->adapter);
+		if (!iwda)
+			continue;
+
+		if (!iwda->station || !iwda->ap )
+			/* No support for Station and AccessPoint mode */
+			continue;
+
+		if (!enabled && !g_strcmp0("ap", iwdd->mode)) {
+			res = cm_change_tethering(iwdd, technology, identifier,
+						passphrase, bridge, enabled);
+			if (res)
+				connman_warn("%s switching to Station mode failed",
+					iwdd->path);
+			if (!err)
+				err = res;
+			continue;
+		}
+
+		if (enabled && !g_strcmp0("station", iwdd->mode)) {
+			err = cm_change_tethering(iwdd, technology, identifier,
+					passphrase, bridge, enabled);
+			if (err)
+				connman_warn("%s switching to AccessPoint mode failed",
+					iwdd->path);
+			break;
+		}
+	}
+
+	return err;
+}
+
 static struct connman_technology_driver tech_driver = {
 	.name		= "iwd",
 	.type		= CONNMAN_SERVICE_TYPE_WIFI,
 	.probe          = cm_tech_probe,
 	.remove         = cm_tech_remove,
+	.set_tethering	= cm_tech_tethering,
 };
 
 static const char *security_remap(const char *security)
@@ -807,6 +1067,7 @@ static void ap_property_change(GDBusProxy *proxy, const char *name,
 {
 	struct iwd_ap *iwdap;
 	const char *path;
+	int err;
 
 	path = g_dbus_proxy_get_path(proxy);
 	iwdap = g_hash_table_lookup(access_points, path);
@@ -820,6 +1081,16 @@ static void ap_property_change(GDBusProxy *proxy, const char *name,
 		iwdap->started = started;
 
 		DBG("%s started %d", path, iwdap->started);
+
+		if (iwdap->started && iwdap->index != -1) {
+			DBG("index %d bridge %s", iwdap->index, iwdap->bridge);
+			err = connman_technology_tethering_notify(
+						iwdap->tech, true);
+			if (err)
+				return;
+			err = connman_inet_add_to_bridge(
+						iwdap->index, iwdap->bridge);
+		}
 	}
 }
 
@@ -912,6 +1183,7 @@ static void ap_free(gpointer data)
 		g_dbus_proxy_unref(iwdap->proxy);
 		iwdap->proxy = NULL;
 	}
+	g_free(iwdap->bridge);
 	g_free(iwdap);
 }
 
@@ -1256,6 +1528,7 @@ static void create_ap(GDBusProxy *proxy)
 		connman_error("Out of memory creating IWD access point");
 		return;
 	}
+	iwdap->index = -1;
 
 	iwdap->path = g_strdup(path);
 	g_hash_table_replace(access_points, iwdap->path, iwdap);
