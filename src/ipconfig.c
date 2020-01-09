@@ -182,14 +182,6 @@ static int store_get_int(struct ipconfig_store *store, const char *key)
 	return val;
 }
 
-void __connman_ipconfig_clear_address(struct connman_ipconfig *ipconfig)
-{
-	if (!ipconfig)
-		return;
-
-	connman_ipaddress_clear(ipconfig->address);
-}
-
 static void free_address_list(struct connman_ipdevice *ipdevice)
 {
 	GSList *list;
