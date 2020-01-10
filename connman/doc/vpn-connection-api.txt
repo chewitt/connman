@@ -185,7 +185,9 @@ Properties	string State [readonly]
 			int ProtocolFamily
 
 				Protocol family of the route. Set to 4
-				if IPv4 and 6 if IPv6 route.
+				if IPv4 and 6 if IPv6 route. Set to 0
+				(PF_UNSPEC) or omit, to have it assigned
+				automatically.
 
 			string Network
 
