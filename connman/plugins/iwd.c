@@ -297,16 +297,16 @@ static void cm_network_disconnect_cb(DBusMessage *message, void *user_data)
 static int cm_network_disconnect(struct connman_network *network)
 {
 	struct iwd_network *iwdn = connman_network_get_data(network);
-	struct iwd_device *iwdd;
+	struct iwd_station *iwds;
 
-	if (!iwdn)
+	if (!iwdn && !iwdn->iwdd)
 		return -EINVAL;
 
-	iwdd = g_hash_table_lookup(devices, iwdn->device);
-	if (!iwdd)
+	iwds = g_hash_table_lookup(stations, iwdn->iwdd->path);
+	if (!iwds)
 		return -EIO;
 
-	if (!g_dbus_proxy_method_call(iwdd->proxy, "Disconnect",
+	if (!g_dbus_proxy_method_call(iwds->proxy, "Disconnect",
 			NULL, cm_network_disconnect_cb, g_strdup(iwdn->path), g_free))
 		return -EIO;
 
