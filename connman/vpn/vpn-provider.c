@@ -367,9 +367,11 @@ static GSList *read_route_dict(GSList *routes, DBusMessageIter *dicts)
 	} else {
 		switch (family) {
 		case '4':
+		case 4:
 			family = AF_INET;
 			break;
 		case '6':
+		case 6:
 			family = AF_INET6;
 			break;
 		default:
