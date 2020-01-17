@@ -264,7 +264,7 @@ static int wg_connect(struct vpn_provider *provider,
 	if (option) {
 		char *end;
 		info->device.listen_port = g_ascii_strtoull(option, &end, 10);
-		info->peer.flags |= WGDEVICE_HAS_LISTEN_PORT;
+		info->device.flags |= WGDEVICE_HAS_LISTEN_PORT;
 	}
 
 	option = vpn_provider_get_string(provider, "WireGuard.PrivateKey");
