@@ -308,6 +308,7 @@ WireGuard VPN supports following options
  WireGuard.ListPort                       Local listen port (optional)
  WireGuard.PrivateKey                     Private key of interface
  WireGuard.PublicKey                      Public key of peer
+ WireGuard.PresharedKey                   Preshared key of peer (optional)
  WireGuard.AllowedIPs                     See Cryptokey Routing
  WireGuard.EndpointPort                   Endpoint listen port (optional)
  WireGuard.PersistentKeepalive            Keep alive in seconds (optional)
