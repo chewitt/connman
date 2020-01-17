@@ -285,6 +285,14 @@ static int wg_connect(struct vpn_provider *provider,
 	if (err)
 		goto done;
 
+	option = vpn_provider_get_string(provider, "WireGuard.PresharedKey");
+	if (option) {
+		info->peer.flags |= WGPEER_HAS_PRESHARED_KEY;
+		err = parse_key(option, info->peer.preshared_key);
+		if (err)
+			goto done;
+	}
+
 	option = vpn_provider_get_string(provider, "WireGuard.AllowedIPs");
 	if (!option) {
 		DBG("WireGuard.AllowedIPs is missing");
