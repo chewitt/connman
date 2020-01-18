@@ -105,6 +105,7 @@ struct iwd_known_network {
 	bool hidden;
 	char *last_connected_time;
 	bool auto_connect;
+	int auto_connect_id;
 };
 
 struct iwd_station {
@@ -1155,6 +1156,9 @@ static void known_network_free(gpointer data)
 		iwdkn->proxy = NULL;
 	}
 
+	if (iwdkn->auto_connect_id)
+		g_source_remove(iwdkn->auto_connect_id);
+
 	g_free(iwdkn->path);
 	g_free(iwdkn->name);
 	g_free(iwdkn->type);
@@ -1451,6 +1455,110 @@ static void create_network(GDBusProxy *proxy)
 	add_network(path, iwdn);
 }
 
+struct auto_connect_cb_data {
+	char *path;
+	bool auto_connect;
+};
+
+static void auto_connect_cb_free(struct auto_connect_cb_data *cbd)
+{
+	g_free(cbd->path);
+	g_free(cbd);
+}
+
+static void auto_connect_cb(const DBusError *error, void *user_data)
+{
+	struct auto_connect_cb_data *cbd = user_data;
+	struct iwd_known_network *iwdkn;
+
+	iwdkn = g_hash_table_lookup(known_networks, cbd->path);
+	if (!iwdkn)
+		goto out;
+
+	if (dbus_error_is_set(error))
+		connman_warn("WiFi known network %s property auto connect %s",
+			cbd->path, error->message);
+
+	/* property is updated via watch known_network_property_change() */
+out:
+	auto_connect_cb_free(cbd);
+}
+
+static int set_auto_connect(struct iwd_known_network *iwdkn, bool auto_connect)
+{
+	dbus_bool_t dbus_auto_connect = auto_connect;
+	struct auto_connect_cb_data *cbd;
+
+	if (proxy_get_bool(iwdkn->proxy, "AutoConnect") == auto_connect)
+		return -EALREADY;
+
+	cbd = g_new(struct auto_connect_cb_data, 1);
+	cbd->path = g_strdup(iwdkn->path);
+	cbd->auto_connect = auto_connect;
+
+	if (!g_dbus_proxy_set_property_basic(iwdkn->proxy, "AutoConnect",
+						DBUS_TYPE_BOOLEAN,
+						&dbus_auto_connect,
+						auto_connect_cb, cbd, NULL)) {
+		auto_connect_cb_free(cbd);
+		return -EIO;
+	}
+
+	return -EINPROGRESS;
+}
+
+static gboolean disable_auto_connect_cb(gpointer data)
+{
+	char *path = data;
+	struct iwd_known_network *iwdkn;
+
+	iwdkn = g_hash_table_lookup(known_networks, path);
+	if (!iwdkn)
+		return FALSE;
+
+	if (set_auto_connect(iwdkn, false) != -EINPROGRESS)
+		connman_warn("Failed to disable auto connect");
+
+	iwdkn->auto_connect_id = 0;
+	return FALSE;
+}
+
+static void disable_auto_connect(struct iwd_known_network *iwdkn)
+{
+	if (iwdkn->auto_connect_id)
+		return;
+
+	iwdkn->auto_connect_id = g_timeout_add_full(G_PRIORITY_DEFAULT,
+						0,
+						disable_auto_connect_cb,
+						g_strdup(iwdkn->path),
+						g_free);
+}
+
+static void known_network_property_change(GDBusProxy *proxy, const char *name,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct iwd_known_network *iwdkn;
+	const char *path;
+
+	path = g_dbus_proxy_get_path(proxy);
+	iwdkn = g_hash_table_lookup(known_networks, path);
+	if (!iwdkn)
+		return;
+
+	if (!strcmp(name, "AutoConnect")) {
+		dbus_bool_t auto_connect;
+
+		dbus_message_iter_get_basic(iter, &auto_connect);
+		iwdkn->auto_connect = auto_connect;
+
+		DBG("%p auto_connect %d", path, iwdkn->auto_connect);
+
+		if (iwdkn->auto_connect)
+			disable_auto_connect(iwdkn);
+	}
+}
+
 static void create_know_network(GDBusProxy *proxy)
 {
 	const char *path = g_dbus_proxy_get_path(proxy);
@@ -1478,11 +1586,17 @@ static void create_know_network(GDBusProxy *proxy)
 	iwdkn->hidden = proxy_get_bool(proxy, "Hidden");
 	iwdkn->last_connected_time =
 		g_strdup(proxy_get_string(proxy, "LastConnectedTime"));
-	iwdkn->auto_connect = proxy_get_bool(proxy, "AutoConnec");
+	iwdkn->auto_connect = proxy_get_bool(proxy, "AutoConnect");
 
 	DBG("name '%s' type %s hidden %d, last_connection_time %s auto_connect %d",
 		iwdkn->name, iwdkn->type, iwdkn->hidden,
 		iwdkn->last_connected_time, iwdkn->auto_connect);
+
+	g_dbus_proxy_set_property_watch(iwdkn->proxy,
+			known_network_property_change, NULL);
+
+	if (iwdkn->auto_connect)
+		disable_auto_connect(iwdkn);
 }
 
 static void create_station(GDBusProxy *proxy)
