@@ -1042,11 +1042,11 @@ static void station_property_change(GDBusProxy *proxy, const char *name,
 		const char *connected_network;
 
 		g_free(iwds->connected_network);
-		if (!g_strcmp0(iwds->state, "disconnecting")) {
-			iwds->connected_network = NULL;
-		} else {
+		if (iter) {
 			dbus_message_iter_get_basic(iter, &connected_network);
 			iwds->connected_network = g_strdup(connected_network);
+		} else {
+			iwds->connected_network = NULL;
 		}
 
 		DBG("%s connected_network %s", path, iwds->connected_network);
