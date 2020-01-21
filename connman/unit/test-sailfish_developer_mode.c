@@ -318,14 +318,67 @@ static void set_usb_moded_ignore(enum usb_moded_ignore_t ignore)
 }
 
 static void test_dbus_append_mode_details(DBusMessage *msg,
-			struct usb_moded_data *data)
+			const struct usb_moded_data *data)
 {
+	static const char * const modes_without_networking[] = {
+		/*
+		 * Static modes, i.e. modes that are hard coded
+		 * within usb-moded, must not have nw attributes
+		 * set ...
+		 */
+		"undefined", "busy", "dedicated_charger",
+		"charging_only_fallback", "ask", "charging_only",
+
+		/*
+		 * Standard dynamic modes can have nw attributes
+		 * set only if somebody has broken the related
+		 * config files on purpose ...
+		 */
+		"abd_mode", "diag_mode", "host_mode", "mtp_mode",
+		"mass_storage", "pc_suite",
+
+		/* Sentinel */
+		NULL
+	};
 	DBusMessageIter body, dict;
+	struct usb_moded_data sane;
 
 	DBG("");
 
 	g_assert(msg);
 	g_assert(data);
+
+	/*
+	 * Test control logic is feeding data to plugin in
+	 * a manner that will never happen in real life.
+	 *
+	 * Make an attempt to sanitize data passed to plugin
+	 * as dbus messages.
+	 */
+	sane = *data;
+	data = &sane;
+
+	for (size_t i = 0; modes_without_networking[i]; ++i) {
+		if (g_strcmp0(sane.mode_name, modes_without_networking[i]))
+			continue;
+
+		if ((sane.network_interface && *sane.network_interface) ||
+				sane.network) {
+			DBG("cleaning nw attributes from '%s' mode",
+					sane.mode_name);
+		}
+
+		sane.mode_module = "none";
+		sane.appsync = 0;
+		sane.network = 0;
+		sane.mass_storage = 0;
+		sane.network_interface = "";
+		sane.nat = 0;
+		sane.dhcp_server = 0;
+		sane.connman_tethering = "";
+
+		break;
+	}
 
 	dbus_message_iter_init_append(msg, &body);
 
@@ -378,7 +431,6 @@ enum dbus_reply_type_t {
 	DBUS_MESSAGE_INT,
 	DBUS_MESSAGE_DEVMODE_FAIL1,
 	DBUS_MESSAGE_DEVMODE_FAIL2,
-	DBUS_MESSAGE_DEVMODE_FAIL3,
 	DBUS_MESSAGE_FAILED,
 	DBUS_MESSAGE_SERVICE_UNKNOWN,
 	DBUS_MESSAGE_NULL
@@ -389,6 +441,7 @@ static enum dbus_reply_type_t dbus_reply_type = DBUS_MESSAGE;
 static void set_dbus_reply_type(enum dbus_reply_type_t type)
 {
 	dbus_reply_type = type;
+	DBG("dbus_reply_type set to %d", dbus_reply_type);
 }
 
 DBusMessage *dbus_pending_call_steal_reply(DBusPendingCall *pending)
@@ -396,7 +449,7 @@ DBusMessage *dbus_pending_call_steal_reply(DBusPendingCall *pending)
 	DBusMessage *msg = NULL;
 	DBusMessageIter iter;
 	const char *developer_mode = "developer_mode";
-	const char *invalid = "connection_sharing";
+	const char *invalid = "undefined";
 	const char *error = "test error message";
 	int value = 123;
 
@@ -433,13 +486,6 @@ DBusMessage *dbus_pending_call_steal_reply(DBusPendingCall *pending)
 		test_dbus_append_mode_details(msg, &usb_moded_data);
 		break;
 	case DBUS_MESSAGE_DEVMODE_FAIL2:
-		msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_RETURN);
-		usb_moded_data.mode_name = invalid;
-		usb_moded_data.network = 1;
-		usb_moded_data.dhcp_server = 0;
-		test_dbus_append_mode_details(msg, &usb_moded_data);
-		break;
-	case DBUS_MESSAGE_DEVMODE_FAIL3:
 		msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_RETURN);
 		usb_moded_data.mode_name = invalid;
 		usb_moded_data.network = 0;
@@ -790,12 +836,6 @@ void send_dbus_signal(const char *mode)
 		test_dbus_append_mode_details(msg, &usb_moded_data);
 		break;
 	case DBUS_MESSAGE_DEVMODE_FAIL2:
-		usb_moded_data.mode_name = mode;
-		usb_moded_data.network = 1;
-		usb_moded_data.dhcp_server = 0;
-		test_dbus_append_mode_details(msg, &usb_moded_data);
-		break;
-	case DBUS_MESSAGE_DEVMODE_FAIL3:
 		usb_moded_data.mode_name = mode;
 		usb_moded_data.network = 0;
 		usb_moded_data.dhcp_server = 0;
@@ -1318,6 +1358,34 @@ static void developer_mode_plugin_test_rtnl9()
 	__connman_builtin_sailfish_developer_mode.exit();
 }
 
+static void developer_mode_plugin_test_rtnl10()
+{
+	const char *signals[] = {"connection_sharing", "garbage", NULL};
+	int i;
+
+	reset_test();
+	set_test_interface(&test_device1);
+	g_assert(__connman_builtin_sailfish_developer_mode.init() == 0);
+
+	for (i = 0; signals[i]; i++) {
+		send_dbus_signal(signals[i]);
+
+		rtnl_device_on(test_device1.index,
+					IFF_UP|IFF_RUNNING|IFF_LOWER_UP);
+		g_assert(notify_status == NOTIFY_TRUE);
+		g_assert_cmpint(test_device1.refcount, ==, 1);
+
+		/* No query is made */
+		g_assert_null(sent_message);
+		g_assert_null(pending_call);
+
+		rtnl_device_off(test_device1.index, 0);
+		g_assert_cmpint(test_device1.refcount, ==, 0);
+		reset_notify();
+	}
+
+	__connman_builtin_sailfish_developer_mode.exit();
+}
 
 /*
  * Tests devices with invalid type (test_device2) and no device set in device.c
@@ -1350,10 +1418,10 @@ static void developer_mode_plugin_test_rtnl_fail0()
 static void developer_mode_plugin_test_rtnl_fail1()
 {
 	const char *signals[] = {"undefined", "ask", "busy", "abd_mode",
-				"diag_mode", "connection_sharing", "host_mode",
+				"diag_mode", "host_mode",
 				"mtp_mode", "mass_storage", "pc_suite",
 				"charging_only", "charging_only_fallback",
-				"dedicated_charger", "garbage", NULL};
+				"dedicated_charger", NULL};
 	int i = 0;
 
 	reset_test();
@@ -1681,7 +1749,7 @@ static void developer_mode_plugin_test_dbus_error9()
 	set_test_interface(&test_device1);
 
 	for (type = DBUS_MESSAGE_DEVMODE_FAIL1;
-				type <= DBUS_MESSAGE_DEVMODE_FAIL3; type++) {
+				type <= DBUS_MESSAGE_DEVMODE_FAIL2; type++) {
 		set_dbus_reply_type(type);
 		g_assert(__connman_builtin_sailfish_developer_mode.init() == 0);
 
@@ -1890,6 +1958,8 @@ int main (int argc, char *argv[])
 				developer_mode_plugin_test_rtnl8);
 	g_test_add_func("/developer_mode_plugin/test_rtnl9",
 				developer_mode_plugin_test_rtnl9);
+	g_test_add_func("/developer_mode_plugin/test_rtnl10",
+				developer_mode_plugin_test_rtnl10);
 	g_test_add_func("/developer_mode_plugin/test_rtnl_fail0",
 				developer_mode_plugin_test_rtnl_fail0);
 	g_test_add_func("/developer_mode_plugin/test_rtnl_fail1",

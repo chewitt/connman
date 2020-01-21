@@ -163,31 +163,27 @@ static enum usb_moded_status_t set_usb_moded_status(
 		}
 	}
 
-	if (!found) {
-		if (usb_moded_status == USB_MODED_DEVELOPER_MODE)
-			DBG("developer mode not ready yet, network %d "
-						"dhcp server %d", data->network,
-						data->dhcp_server);
-		else
-			DBG("unknown usb-moded status %s", data->mode);
-
+	/*
+	 * No significance should be given to usb mode name. But
+	 * as the already existing plugin logic is built upon mode
+	 * name enumeration, we need to fake a bit to make things
+	 * like "connection_sharing" / 3rd party custom modes work
+	 * as expected.
+	 *
+	 * Treat any mode that has configuration indicating
+	 * that usb-moded is going to take over a network
+	 * interface as "developer_mode" within this plugin.
+	 */
+	if (data->network && data->interface && *data->interface) {
+		usb_moded_status = USB_MODED_DEVELOPER_MODE;
+		set_developer_mode_interface(data->interface);
+	} else if (!found) {
+		DBG("unknown usb-moded status %s", data->mode);
 		usb_moded_status = USB_MODED_UNKNOWN;
-		goto out;
 	}
 
-	/*
-	 * If in developer mode and the network and dhcp server
-	 * are up and there is interface set, change interface
-	 */
-	if (usb_moded_status == USB_MODED_DEVELOPER_MODE && data->interface &&
-				*(data->interface) && data->network == 1 &&
-				data->dhcp_server == 1)
-		set_developer_mode_interface(data->interface);
-
-out:
 	DBG("mode:%s => %d:%s, interface: %s", data->mode, usb_moded_status,
-				usb_moded_status_to_str(),
-				usb_moded_interface);
+			usb_moded_status_to_str(), usb_moded_interface);
 
 	return usb_moded_status;
 }
