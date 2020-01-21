@@ -267,6 +267,13 @@ static int wg_connect(struct vpn_provider *provider,
 		info->device.flags |= WGDEVICE_HAS_LISTEN_PORT;
 	}
 
+	option = vpn_provider_get_string(provider, "WireGuard.DNS");
+	if (option) {
+		err = vpn_provider_set_nameservers(provider, option);
+		if (err)
+			goto done;
+	}
+
 	option = vpn_provider_get_string(provider, "WireGuard.PrivateKey");
 	if (!option) {
 		DBG("WireGuard.PrivateKey is missing");
