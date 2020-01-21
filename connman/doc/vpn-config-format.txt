@@ -306,6 +306,8 @@ WireGuard VPN supports following options
  Option name                              Description
  WireGuard.Address                        Internal IP address (local/netmask/peer)
  WireGuard.ListPort                       Local listen port (optional)
+ WireGuard.DNS                            List of nameservers separated
+                                          by comma (optional)
  WireGuard.PrivateKey                     Private key of interface
  WireGuard.PublicKey                      Public key of peer
  WireGuard.PresharedKey                   Preshared key of peer (optional)
@@ -360,6 +362,7 @@ Host = 3.2.5.6
 Domain = my.home.network
 WireGuard.Address = 10.2.0.2/24
 WireGuard.ListenPort = 47824
+WireGuard.DNS = 10.2.0.1
 WireGuard.PrivateKey = qKIj010hDdWSjQQyVCnEgthLXusBgm3I6HWrJUaJymc=
 WireGuard.PublicKey = zzqUfWGIil6QxrAGz77HE5BGUEdD2PgHYnCg3CDKagE=
 WireGuard.AllowedIPs = 0.0.0.0/0, ::/0
