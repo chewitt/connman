@@ -886,7 +886,7 @@ static int run_connect(struct oc_private_data *data)
 	/*
 	 * To clarify complex situation, if cookie is expected to be printed
 	 * to stdout all other output must go to syslog. But with PKCS all
-	 * output must be catched in order to get message about file decryption
+	 * output must be caught in order to get message about file decryption
 	 * error. For this reason, the mode has to be interactive as well.
 	 */
 	switch (data->connect_type) {
@@ -1537,7 +1537,7 @@ static int oc_error_code(struct vpn_provider *provider, int exit_code)
 {
 	connman_info("%d", exit_code);
 
-	/* OpenConnect process return values are ambigious in definition
+	/* OpenConnect process return values are ambiguous in definition
 	 * https://github.com/openconnect/openconnect/blob/master/main.c#L1693
 	 * and it is safer not to rely on them. Login error cannot be
 	 * differentiated from connection errors, e.g., when self signed

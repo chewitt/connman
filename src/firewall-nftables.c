@@ -22,7 +22,7 @@
 /*
  * This file is based on the libnftnl examples:
  *   https://git.netfilter.org/libnftnl/tree/examples
- * by Pablo Neira Ayuso. and inspiration from systemd nft implemention
+ * by Pablo Neira Ayuso. and inspiration from systemd nft implementation
  *   https://github.com/zonque/systemd/blob/rfc-nftnl/src/shared/firewall-util.c
  * by Daniel Mack.
  */

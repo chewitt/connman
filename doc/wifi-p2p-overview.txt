@@ -37,7 +37,7 @@ The UI willing to access to WiFi P2P technology should proceed this way:
 Internals
 =========
 
-Through such API, everything is made to hide irrelevant informations for the
+Through such API, everything is made to hide irrelevant information for the
 applications, which are:
 
 - Everything related to the P2P group and the Group Owner (GO)

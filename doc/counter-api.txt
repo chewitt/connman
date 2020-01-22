@@ -47,12 +47,12 @@ Methods		void Release()
 
 				RX.Errors
 
-					Total number of erronous packets
+					Total number of erroneous packets
 					received.
 
 				TX.Errors
 
-					Total number of erronous packets
+					Total number of erroneous packets
 					sent.
 
 				RX.Dropped

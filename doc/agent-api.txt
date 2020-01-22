@@ -36,7 +36,7 @@ Methods		void Release()
 		void RequestBrowser(object service, string url)
 
 			This method gets called when it is required
-			to ask the user to open a website to procceed
+			to ask the user to open a website to proceed
 			with login handling.
 
 			This can happen if connected to a hotspot portal
@@ -54,7 +54,7 @@ Methods		void Release()
 			keys are the field names and the values are the
 			actual fields. Alternatively an error indicating that
 			the request got canceled can be returned.
-			OperationAborted will be return on a successfull
+			OperationAborted will be return on a successful
 			cancel request.
 
 			Most common return field names are "Name" and of
@@ -121,7 +121,7 @@ Fields		string Name
 		string PreviousPassphrase
 
 			The previous passphrase successfully saved, i.e.
-			which led to a successfull connection. This field is
+			which led to a successful connection. This field is
 			provided as an informational argument when connecting
 			with it does not work anymore, for instance when it
 			has been changed on the AP. Such argument appears when

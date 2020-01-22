@@ -54,7 +54,7 @@ is established (meaning VPN client has managed to create a connection
 to VPN server), then State property is set to "ready" and PropertyChanged
 signal is sent. If the connection cannot be established, then
 State property is set to "failure".
-After successfull connection, the relevant connection properties are sent
+After successful connection, the relevant connection properties are sent
 by PropertyChanged signal; like IPv[4|6] information, the index of the
 VPN tunneling interface (if there is any), nameserver information,
 server specified routes etc.

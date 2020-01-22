@@ -47,7 +47,7 @@ Shows the abbreviated help menu in the terminal.
 .PP
 .TP
 .B state
-Shows the system properties. Includes ths online state of the
+Shows the system properties. Includes the online state of the
 system, offline mode, and session mode.
 .PP
 .TP

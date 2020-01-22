@@ -501,7 +501,7 @@ static int run_connect(struct ov_private_data *data,
 	 * moment. The problem is that when OpenVPN decides to switch
 	 * from CONNECTED state to RECONNECTING and then to RESOLVE,
 	 * it is not possible to do a DNS lookup. The DNS server is
-	 * not accessable through the tunnel anymore and so we end up
+	 * not accessible through the tunnel anymore and so we end up
 	 * trying to resolve the OpenVPN servers address.
 	 */
 	connman_task_add_argument(task, "--ping-restart", "0");

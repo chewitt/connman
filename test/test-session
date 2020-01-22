@@ -138,7 +138,7 @@ class SessionApplication(dbus.service.Object):
 
 		s = self.find_session(session_name)
 		if s and s['session'] :
-			print "Session %s already created-> drop reqest" % (session_name)
+			print "Session %s already created-> drop request" % (session_name)
 			return
 
 		try:
