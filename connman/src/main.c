@@ -94,6 +94,7 @@ static struct {
 	mode_t umask;
 	bool enable_6to4;
 	char *vendor_class_id;
+	GHashTable *fallback_device_types;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -112,6 +113,7 @@ static struct {
 	.umask = DEFAULT_UMASK,
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
+	.fallback_device_types = NULL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -135,6 +137,7 @@ static struct {
 #define CONF_UMASK                      "Umask"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
+#define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -161,6 +164,7 @@ static const char *supported_options[] = {
 	CONF_DISABLE_PLUGINS,
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
+	CONF_FALLBACK_DEVICE_TYPES,
 	NULL
 };
 
@@ -241,6 +245,33 @@ static char **parse_fallback_nameservers(char **nameservers, gsize len)
 	}
 
 	return servers;
+}
+
+static GHashTable *parse_fallback_device_types(char **devtypes, gsize len)
+{
+	GHashTable *h;
+
+	h = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+
+	for (gsize i = 0; i < len; ++i) {
+		char **v;
+
+		v = g_strsplit(devtypes[i], ":", 2);
+		if (!v)
+			continue;
+
+		if (v[0] && v[1])
+			g_hash_table_replace(h, g_strdup(v[0]),
+					g_strdup(v[1]));
+
+		g_strfreev(v);
+	}
+
+	if (g_hash_table_size(h) > 0)
+		return h;
+
+	g_hash_table_unref(h);
+	return NULL;
 }
 
 static void check_config(GKeyFile *config)
@@ -491,6 +522,17 @@ static void parse_config(GKeyFile *config)
 					CONF_VENDOR_CLASS_ID, &error);
 	if (!error)
 		connman_settings.vendor_class_id = vendor_class_id;
+
+	g_clear_error(&error);
+
+	str_list = __connman_config_get_string_list(config, "General",
+			CONF_FALLBACK_DEVICE_TYPES, &len, &error);
+
+	if (!error)
+		connman_settings.fallback_device_types =
+				parse_fallback_device_types(str_list, len);
+
+	g_strfreev(str_list);
 
 	g_clear_error(&error);
 }
@@ -767,6 +809,15 @@ unsigned int connman_timeout_browser_launch(void)
 	return connman_settings.timeout_browserlaunch;
 }
 
+const char *__connman_setting_get_fallback_device_type(const char *interface)
+{
+	if (!connman_settings.fallback_device_types)
+		return NULL;
+
+	return g_hash_table_lookup(connman_settings.fallback_device_types,
+			interface);
+}
+
 int main(int argc, char *argv[])
 {
 	GOptionContext *context;
@@ -985,6 +1036,9 @@ int main(int argc, char *argv[])
 	g_free(connman_settings.tethering_subnet_block);
 	g_free(connman_settings.storage_root);
 	g_free(connman_settings.fs_identity);
+
+	if (connman_settings.fallback_device_types)
+		g_hash_table_unref(connman_settings.fallback_device_types);
 
 	g_free(option_debug);
 	g_free(option_wifi);
