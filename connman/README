@@ -278,7 +278,7 @@ If timing conditions are relevant then it is recommended command to
 get log traces as follows:
     connmand -d 2>&1 | ts '[%H:%M:%.S]' | tee connman.log
 
-The 'ts' program is normaly avialable in the moreutils package.
+The 'ts' program is normally available in the moreutils package.
 
 
 Kernel configuration
@@ -427,7 +427,7 @@ the online check request (example):
 	Connection: close
 
 Currently following information is returned from connman.net if
-the connection is successfull (200 OK http response code is returned):
+the connection is successful (200 OK http response code is returned):
 	Server: nginx
 	Date: Mon, 09 Jun 2014 09:25:42 GMT
 	Content-Type: text/html

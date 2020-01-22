@@ -1009,7 +1009,7 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 			data->ipv6_gateway, do_ipv6);
 
 	/* with vpn this will be called after the network was deleted,
-	 * we need to call set_default here because we will not recieve any
+	 * we need to call set_default here because we will not receive any
 	 * gateway delete notification.
 	 * We hit the same issue if remove_gateway() fails.
 	 */

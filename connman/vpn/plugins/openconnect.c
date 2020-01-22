@@ -1668,7 +1668,7 @@ static int oc_error_code(struct vpn_provider *provider, int exit_code)
 {
 	DBG("%d", exit_code);
 
-	/* OpenConnect process return values are ambigious in definition
+	/* OpenConnect process return values are ambiguous in definition
 	 * https://github.com/openconnect/openconnect/blob/master/main.c#L1693
 	 * and it is safer not to rely on them. Login error cannot be
 	 * differentiated from connection errors, e.g., when self signed

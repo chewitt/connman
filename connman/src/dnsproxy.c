@@ -451,7 +451,7 @@ static void send_cached_response(int sk, unsigned char *buf, int len,
 	hdr->nscount = 0;
 	hdr->arcount = 0;
 
-	/* if this is a negative reply, we are authorative */
+	/* if this is a negative reply, we are authoritative */
 	if (answers == 0)
 		hdr->aa = 1;
 	else

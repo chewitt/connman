@@ -683,7 +683,7 @@ void connman_provider_set_index(struct connman_provider *provider, int index)
 
 		ipconfig = __connman_service_get_ip4config(service);
 		if (!ipconfig) {
-			DBG("Couldnt create ipconfig");
+			DBG("Couldn't create ipconfig");
 			goto done;
 		}
 	}
@@ -698,7 +698,7 @@ void connman_provider_set_index(struct connman_provider *provider, int index)
 
 		ipconfig = __connman_service_get_ip6config(service);
 		if (!ipconfig) {
-			DBG("Couldnt create ipconfig for IPv6");
+			DBG("Couldn't create ipconfig for IPv6");
 			goto done;
 		}
 	}

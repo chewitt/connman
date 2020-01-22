@@ -3479,7 +3479,7 @@ static int get_nfs_server_ip(const char *cmdline_file, const char *pnp_file,
 	if (cmdline[len - 1] == '\n')
 		cmdline[--len] = '\0';
 
-	/* split in arguments (seperated by space) */
+	/* split in arguments (separated by space) */
 	args = g_strsplit(cmdline, " ", 0);
 	if (!args) {
 		connman_error("%s: Cannot split cmdline \"%s\"\n", __func__,
@@ -3682,7 +3682,7 @@ char **__connman_inet_get_pnp_nameservers(const char *pnp_file)
 	}
 
 	/*
-	 * Perform two passes to retreive a char ** array of
+	 * Perform two passes to retrieve a char ** array of
 	 * nameservers that are not 0.0.0.0
 	 *
 	 * The first pass counts them, the second fills in the

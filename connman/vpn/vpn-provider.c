@@ -3226,7 +3226,7 @@ void vpn_provider_set_index(struct vpn_provider *provider, int index)
 		provider->ipconfig_ipv4 = __vpn_ipconfig_create(index,
 								AF_INET);
 		if (!provider->ipconfig_ipv4) {
-			DBG("Couldnt create ipconfig for IPv4");
+			DBG("Couldn't create ipconfig for IPv4");
 			goto done;
 		}
 	}
@@ -3237,7 +3237,7 @@ void vpn_provider_set_index(struct vpn_provider *provider, int index)
 		provider->ipconfig_ipv6 = __vpn_ipconfig_create(index,
 								AF_INET6);
 		if (!provider->ipconfig_ipv6) {
-			DBG("Couldnt create ipconfig for IPv6");
+			DBG("Couldn't create ipconfig for IPv6");
 			goto done;
 		}
 	}

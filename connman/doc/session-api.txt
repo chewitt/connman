@@ -140,7 +140,7 @@ Settings	string State [readonly]
 			The services are sorted in the order of the bearer
 			entries in this list.
 
-			Also "*" matches any bearer. This is usefull to prefer
+			Also "*" matches any bearer. This is useful to prefer
 			certain bearers such as 'wifi' with a fallback to any
 			other available bearer.
 

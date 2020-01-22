@@ -299,7 +299,7 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 			 * We need to remove first the old address, just
 			 * replacing the old address will not work as expected
 			 * because the old address will linger in the interface
-			 * and not disapper so the clearing is needed here.
+			 * and not disappear so the clearing is needed here.
 			 *
 			 * Also the state must change, otherwise the routes
 			 * will not be set properly.

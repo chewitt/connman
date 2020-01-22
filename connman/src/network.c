@@ -1306,7 +1306,7 @@ static void network_destruct(struct connman_network *network)
 
 /**
  * connman_network_create:
- * @identifier: network identifier (for example an unqiue name)
+ * @identifier: network identifier (for example an unique name)
  *
  * Allocate a new network and assign the #identifier to it.
  *

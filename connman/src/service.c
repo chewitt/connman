@@ -55,7 +55,7 @@
 
 #define VPN_AUTOCONNECT_TIMEOUT_DEFAULT 1
 #define VPN_AUTOCONNECT_TIMEOUT_STEP 30
-#define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD 270
+#define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD 270
 
 /* (Some) property names */
 #define PROP_ACCESS                     "Access"
@@ -5989,13 +5989,13 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 		goto out;
 	}
 
-	/* Increase the attempt count up to the treshold.*/
-	if (attempts < VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD)
+	/* Increase the attempt count up to the threshold.*/
+	if (attempts < VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD)
 		attempts++;
 
 	/*
 	 * Timeout increases with 1s after VPN_AUTOCONNECT_TIMEOUT_STEP amount
-	 * of attempts made. After VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD is
+	 * of attempts made. After VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD is
 	 * reached the delay does not increase.
 	 */
 	timeout = timeout + (int)(attempts / VPN_AUTOCONNECT_TIMEOUT_STEP);

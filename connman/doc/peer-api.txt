@@ -98,5 +98,5 @@ Properties	string State [readonly] [experimental]
 
 			array{byte} WiFiDisplayIEs [readonly]
 
-				The TLV formated byte array representing the
-				WiFi Display Informations Elements.
+				The TLV formatted byte array representing the
+				WiFi Display Information Elements.

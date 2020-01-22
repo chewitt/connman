@@ -55,7 +55,7 @@
  *
  * File properties:
  *   The ring buffer is mmap to a file
- *   Initialy only the smallest possible amount of disk space is allocated
+ *   Initially only the smallest possible amount of disk space is allocated
  *   The files grow to the configured maximal size
  *   The grows by _SC_PAGESIZE step size
  *   For each service a file is created
@@ -82,8 +82,8 @@
  *
  * History file:
  *   Same format as the ring buffer file
- *   For a period of at least 2 months dayly records are keept
- *   If older, then only a monthly record is keept
+ *   For a period of at least 2 months daily records are kept
+ *   If older, then only a monthly record is kept
  */
 
 
@@ -435,7 +435,7 @@ static int stats_open_temp(struct stats_file *file)
 					STORAGEDIR);
 	file->fd = g_mkstemp_full(file->name, O_RDWR | O_CREAT, 0644);
 	if (file->fd < 0) {
-		connman_error("create tempory file error %s for %s",
+		connman_error("create temporary file error %s for %s",
 				strerror(errno), file->name);
 		g_free(file->name);
 		file->name = NULL;

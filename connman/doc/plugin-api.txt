@@ -157,7 +157,7 @@ associate the new Network with the existing Device entity (the local Bluetooth
 Adapter).
 
 Then in the vtable's connect method all the needed pieces to perform a
-connection shall be perfomed.
+connection shall be performed.
 
 To learn how to use the connman_network_*() functions such as
 connman_network_set_index() and connman_network_set_connected() see

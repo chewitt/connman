@@ -241,7 +241,7 @@ void __connman_notifier_service_remove(struct connman_service *service)
 
 	if (g_hash_table_lookup(service_hash, service)) {
 		/*
-		 * This is a tempory check for consistency. It can be
+		 * This is a temporary check for consistency. It can be
 		 * removed when there are no reports for the following
 		 * error message.
 		 */
