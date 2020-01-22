@@ -223,6 +223,7 @@ static void free_connman_wispr_portal(gpointer data)
 	g_free(wispr_portal);
 }
 
+#ifdef DEAD_CODE
 static const char *message_type_to_string(int message_type)
 {
 	switch (message_type) {
@@ -242,7 +243,9 @@ static const char *message_type_to_string(int message_type)
 
 	return NULL;
 }
+#endif
 
+#ifdef DEAD_CODE
 static const char *response_code_to_string(int response_code)
 {
 	switch (response_code) {
@@ -272,6 +275,7 @@ static const char *response_code_to_string(int response_code)
 
 	return NULL;
 }
+#endif
 
 static struct {
 	const char *str;
@@ -528,6 +532,7 @@ static void wispr_portal_request_portal(
 		wispr_portal_error(wp_context);
 }
 
+#ifdef DEAD_CODE
 static bool wispr_input(const guint8 **data, gsize *length,
 						gpointer user_data)
 {
@@ -558,6 +563,7 @@ static bool wispr_input(const guint8 **data, gsize *length,
 
 	return false;
 }
+#endif
 
 static void wispr_portal_browser_reply_cb(struct connman_service *service,
 					bool authentication_done,
@@ -574,6 +580,7 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 	__connman_wispr_start(service, wp_context->type);
 }
 
+#ifdef DEAD_CODE
 static void wispr_portal_request_wispr_login(struct connman_service *service,
 				bool success,
 				const char *ssid, int ssid_len,
@@ -613,6 +620,7 @@ static void wispr_portal_request_wispr_login(struct connman_service *service,
 
 	connman_wispr_message_init(&wp_context->wispr_msg);
 }
+#endif
 
 /* Disable, this is not used because of commit
  * 7fad371bdc8ac397812e73d0f5baef25029b1419
