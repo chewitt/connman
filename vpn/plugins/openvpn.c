@@ -1114,6 +1114,8 @@ static void ov_disconnect(struct vpn_provider *provider)
 		return;
 
 	connman_agent_cancel(provider);
+
+	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_DISCONNECT);
 }
 
 static int ov_device_flags(struct vpn_provider *provider)
