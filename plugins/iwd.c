@@ -772,7 +772,7 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 	connman_network_set_blob(iwdn->network, "WiFi.SSID", iwdn->name,
 					strlen(iwdn->name));
 	connman_network_set_string(iwdn->network, "WiFi.Security",
-					iwdn->type);
+					security_remap(iwdn->type));
 	connman_network_set_string(iwdn->network, "WiFi.Mode", "managed");
 
 	if (connman_device_add_network(iwdd->device, iwdn->network) < 0) {
