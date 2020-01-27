@@ -30,6 +30,11 @@
 unsigned int *preferred_list = NULL;
 
 /* Dummies */
+const char *__connman_setting_get_fallback_device_type(const char *interface)
+{
+	return NULL;
+}
+
 unsigned int *connman_setting_get_uint_list(const char *key)
 { 
 	if (g_str_equal(key, "PreferredTechnologies"))
