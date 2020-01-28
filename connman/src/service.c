@@ -3,7 +3,8 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
- *  Copyright (C) 2014-2019  Jolla Ltd.
+ *  Copyright (C) 2014-2020  Jolla Ltd.
+ *  Copyright (C) 2020  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -8336,7 +8337,7 @@ const char *__connman_service_create(enum connman_service_type type,
 
 	/* Trigger autoconnect */
 	if (service->autoconnect) {
-		service->favorite = true;
+		__connman_service_set_favorite(service, true);
 
 		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 	}
