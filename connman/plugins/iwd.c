@@ -953,7 +953,7 @@ static unsigned char calculate_strength(int strength)
 	 * ConnMan expects it in the range from 100 (strongest) to 0
 	 * (weakest).
 	 */
-	res = (unsigned char)((strength * -10000) / 100);
+	res = (unsigned char)((strength + 10000) / 100);
 
 	return res;
 }
