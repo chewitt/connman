@@ -960,17 +960,9 @@ static unsigned char calculate_strength(int strength)
 
 static void _update_signal_strength(const char *path, int16_t signal_strength)
 {
-	struct iwd_station *iwds;
 	struct iwd_network *iwdn;
 
-	iwds = g_hash_table_lookup(stations, path);
-	if (!iwds)
-		return;
-
-	if (!iwds->connected_network)
-		return;
-
-	iwdn = g_hash_table_lookup(networks, iwds->connected_network);
+	iwdn = g_hash_table_lookup(networks, path);
 	if (!iwdn)
 		return;
 
