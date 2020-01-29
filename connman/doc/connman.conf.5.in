@@ -130,6 +130,12 @@ See RFC6343.  Default value is false (as recommended by RFC6343 section 4.1).
 Set DHCP option 60 (Vendor Class ID) to the given string. This option can
 be used by DHCP servers to identify specific clients without having to
 rely on MAC address ranges, etc
+.TP
+.BI FallbackDeviceTypes= interface:devtype\fR[,...]
+If /sys/class/net/<interface>/uevent does not contain DEVTYPE information,
+heuristics are used to choose between wifi and ethernet device types. If
+neither is appropriate, this setting can be used to provide more suitable
+fallback value - e.g. rndis0:gadget.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables
 ethernet tethering.

@@ -121,85 +121,102 @@ static bool wext_interface(char *ifname)
 	return true;
 }
 
+static bool read_devtype(const char *filename, char **devtype)
+{
+	FILE *file;
+	char buf[128];
+
+	*devtype = NULL;
+
+	if (!(file = fopen(filename, "re")))
+		return false;
+
+	while (fgets(buf, sizeof(buf), file)) {
+		static const char key[] = "DEVTYPE=";
+		const char *val;
+
+		if (strncmp(buf, key, sizeof(key) - 1))
+			continue;
+
+		val = buf + sizeof(key) - 1;
+		*devtype = g_strndup(val, strcspn(val, "\r\n"));
+
+		break;
+	}
+
+	fclose(file);
+
+	return true;
+}
+
 static void read_uevent(struct interface_data *interface)
 {
-	char *filename, *name, line[128];
-	bool found_devtype;
-	FILE *f;
+	char *name;
+	char *filename = NULL;
+	char *devtype = NULL;
+
+	interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+	interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
 
 	name = connman_inet_ifname(interface->index);
 
-	if (ether_blacklisted(name)) {
-		interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
-		interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
+	if (ether_blacklisted(name))
 		goto out;
-	} else {
-		interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
-		interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-	}
 
 	filename = g_strdup_printf("/sys/class/net/%s/uevent", name);
 
-	f = fopen(filename, "re");
-
-	g_free(filename);
-
-	if (!f) {
-		interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
-		interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
+	if (!read_devtype(filename, &devtype))
 		goto out;
-	}
 
-	found_devtype = false;
-	while (fgets(line, sizeof(line), f)) {
-		char *pos;
+	if (!devtype) {
+		const char *fallback =
+			__connman_setting_get_fallback_device_type(name);
 
-		pos = strchr(line, '\n');
-		if (!pos)
-			continue;
-		pos[0] = '\0';
-
-		if (strncmp(line, "DEVTYPE=", 8) != 0)
-			continue;
-
-		found_devtype = true;
-
-		if (strcmp(line + 8, "wlan") == 0) {
-			interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
-			interface->device_type = CONNMAN_DEVICE_TYPE_WIFI;
-		} else if (strcmp(line + 8, "wwan") == 0) {
-			interface->service_type = CONNMAN_SERVICE_TYPE_CELLULAR;
-			interface->device_type = CONNMAN_DEVICE_TYPE_CELLULAR;
-		} else if (strcmp(line + 8, "bluetooth") == 0) {
-			interface->service_type = CONNMAN_SERVICE_TYPE_BLUETOOTH;
-			interface->device_type = CONNMAN_DEVICE_TYPE_BLUETOOTH;
-		} else if (strcmp(line + 8, "gadget") == 0) {
-			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
-			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
-		} else if (strcmp(line + 8, "vlan") == 0) {
-			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
-			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-
-		} else {
-			interface->service_type = CONNMAN_SERVICE_TYPE_UNKNOWN;
-			interface->device_type = CONNMAN_DEVICE_TYPE_UNKNOWN;
+		if (fallback) {
+			connman_warn("%s no DEVTYPE, using fallback: %s",
+					name, fallback);
+			devtype = g_strdup(fallback);
 		}
 	}
 
-	fclose(f);
-
-	if (found_devtype)
-		goto out;
-
-	/* We haven't got a DEVTYPE, let's check if it's a wireless device */
-	if (wext_interface(name)) {
-		interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
-		interface->device_type = CONNMAN_DEVICE_TYPE_WIFI;
-
-		connman_error("%s runs an unsupported 802.11 driver", name);
+	if (devtype) {
+		if (strcmp(devtype, "wlan") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
+			interface->device_type = CONNMAN_DEVICE_TYPE_WIFI;
+		} else if (strcmp(devtype, "wwan") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_CELLULAR;
+			interface->device_type = CONNMAN_DEVICE_TYPE_CELLULAR;
+		} else if (strcmp(devtype, "bluetooth") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_BLUETOOTH;
+			interface->device_type = CONNMAN_DEVICE_TYPE_BLUETOOTH;
+		} else if (strcmp(devtype, "gadget") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_GADGET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_GADGET;
+		} else if (strcmp(devtype, "vlan") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
+		} else {
+			connman_warn("%s DEVTYPE=%s not supported, ignoring",
+					name, devtype);
+		}
+	} else {
+		/* We haven't got a DEVTYPE, let's check if it's a wireless device */
+		if (wext_interface(name)) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_WIFI;
+			interface->device_type = CONNMAN_DEVICE_TYPE_WIFI;
+			connman_error("%s runs an unsupported 802.11 driver",
+					name);
+		} else {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
+			connman_warn("%s no DEVTYPE, defaulting to ethernet",
+					name);
+		}
 	}
 
 out:
+	g_free(devtype);
+	g_free(filename);
 	g_free(name);
 }
 
