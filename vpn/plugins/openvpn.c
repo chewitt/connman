@@ -506,6 +506,19 @@ static int run_connect(struct ov_private_data *data,
 	 */
 	connman_task_add_argument(task, "--ping-restart", "0");
 
+	/*
+	 * Disable connetion retrying when OpenVPN is connected over TCP.
+	 * With TCP OpenVPN attempts to handle reconnection silently without
+	 * reporting the error back when establishing a connection or
+	 * reconnecting as succesful one. The latter causes trouble if the
+	 * retries are not limited to 1 (no retry) as the interface is up and
+	 * connman regards it as the default route and network ceases to work,
+	 * including DNS.
+	*/
+	option = vpn_provider_get_string(provider, "OpenVPN.Proto");
+	if (option && g_str_has_prefix(option, "tcp"))
+		connman_task_add_argument(task, "--connect-retry-max", "1");
+
 	err = connman_task_run(task, ov_died, data, NULL, NULL, NULL);
 	if (err < 0) {
 		data->cb = NULL;
