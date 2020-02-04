@@ -184,6 +184,24 @@ vpn_plugins_pptp_la_LDFLAGS = $(plugin_ldflags)
 endif
 endif
 
+if OPENFORTIVPN
+builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
+if OPENFORTIVPN_BUILTIN
+builtin_vpn_modules += openfortivpn
+builtin_vpn_sources += vpn/plugins/openfortivpn.c
+builtin_vpn_cflags += -DPPPD=\"@PPPD@\" -DOPENFORTIVPN=\"@OPENFORTIVPN@\"
+else
+vpn_plugin_LTLIBRARIES += vpn/plugins/openfortivpn.la
+vpn_plugin_objects += $(plugins_openfortivpn_la_OBJECTS)
+vpn_plugins_openfortivpn_la_SOURCES = vpn/plugins/openfortivpn.c
+vpn_plugins_openfortivpn_la_CFLAGS = $(plugin_cflags) -DPPPD=\"@PPPD@\" \
+                                        -DOPENFORTIVPN=\"@OPENFORTIVPN@\" \
+                                        -DSCRIPTDIR=\""$(build_scriptdir)"\"
+vpn_plugins_openfortivpn_la_LDFLAGS = $(plugin_ldflags)
+endif
+
+endif
+
 if SAILFISH_VPN_ACCESS
 builtin_vpn_source = vpn/plugins/vpn.c vpn/plugins/vpn.h
 if SAILFISH_VPN_ACCESS_BUILTIN

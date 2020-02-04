@@ -160,6 +160,16 @@ Requires:   vpnc
 %description plugin-vpn-vpnc
 This package provides Cisco3000 (VPNC) VPN plugin for connman.
 
+%package plugin-vpn-openfortivpn
+Summary:    Connection Manager PPTP VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   openfortivpn
+Requires:   ppp
+
+%description plugin-vpn-openfortivpn
+This package provides OpenFortiNet VPN plugin for connman.
+
 %prep
 %setup -q -n %{name}-%{version}/connman
 
@@ -174,6 +184,7 @@ This package provides Cisco3000 (VPNC) VPN plugin for connman.
     --enable-vpnc \
     --enable-l2tp \
     --enable-pptp \
+    --enable-openfortivpn \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
     --enable-sailfish-vpn-access=builtin \
@@ -333,4 +344,9 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/vpnc.so
+
+%files plugin-vpn-openfortivpn
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/openfortivpn.so
 
