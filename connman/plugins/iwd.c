@@ -241,7 +241,11 @@ static void cm_network_connect_cb(DBusMessage *message, void *user_data)
 			return;
 
 		DBG("%s connect failed: %s", path, dbus_error);
-		connman_network_set_error(iwdn->network,
+		if (!strcmp(dbus_error, "net.connman.iwd.Failed"))
+			connman_network_set_error(iwdn->network,
+					CONNMAN_NETWORK_ERROR_INVALID_KEY);
+		else
+			connman_network_set_error(iwdn->network,
 					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
 		return;
 	}
