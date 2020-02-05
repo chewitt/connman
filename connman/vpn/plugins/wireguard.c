@@ -375,6 +375,10 @@ static void wg_disconnect(struct vpn_provider *provider)
 	struct wireguard_info *info;
 
 	info = vpn_provider_get_plugin_data(provider);
+	if (!info)
+		return;
+	vpn_provider_set_plugin_data(provider, NULL);
+
 	wg_del_device(info->device.name);
 
 	g_free(info);
