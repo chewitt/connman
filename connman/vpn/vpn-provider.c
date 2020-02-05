@@ -3462,7 +3462,6 @@ void vpn_provider_driver_unregister(struct vpn_provider_driver *driver)
 		struct vpn_provider *provider = value;
 
 		if (provider && provider->driver &&
-				provider->driver->type == driver->type &&
 				g_strcmp0(provider->driver->name,
 							driver->name) == 0) {
 			/*

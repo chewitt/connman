@@ -37,11 +37,6 @@ extern "C" {
  * @short_description: Functions for handling providers
  */
 
-enum vpn_provider_type {
-	VPN_PROVIDER_TYPE_UNKNOWN = 0,
-	VPN_PROVIDER_TYPE_VPN     = 1,
-};
-
 enum vpn_provider_state {
 	VPN_PROVIDER_STATE_UNKNOWN       = 0,
 	VPN_PROVIDER_STATE_IDLE          = 1,
@@ -169,7 +164,6 @@ typedef void (* vpn_provider_password_cb_t) (struct vpn_provider *provider,
 
 struct vpn_provider_driver {
 	const char *name;
-	enum vpn_provider_type type;
 	int (*probe) (struct vpn_provider *provider);
 	int (*remove) (struct vpn_provider *provider);
 	int (*connect) (struct vpn_provider *provider,
