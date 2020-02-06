@@ -2911,11 +2911,21 @@ int __connman_inet_get_route(const char *dest_address,
 	rth->req.u.r.rt.rtm_scope = 0;
 	rth->req.u.r.rt.rtm_type = 0;
 	rth->req.u.r.rt.rtm_src_len = 0;
-	rth->req.u.r.rt.rtm_dst_len = rp->ai_addrlen << 3;
 	rth->req.u.r.rt.rtm_tos = 0;
 
-	__connman_inet_rtnl_addattr_l(&rth->req.n, sizeof(rth->req), RTA_DST,
-				&rp->ai_addr, rp->ai_addrlen);
+	if (rp->ai_family == AF_INET) {
+		struct sockaddr_in *sin = (struct sockaddr_in *)rp->ai_addr;
+
+		rth->req.u.r.rt.rtm_dst_len = 32;
+		__connman_inet_rtnl_addattr_l(&rth->req.n, sizeof(rth->req),
+			RTA_DST, &sin->sin_addr, sizeof(sin->sin_addr));
+	} else if (rp->ai_family == AF_INET6) {
+		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)rp->ai_addr;
+
+		rth->req.u.r.rt.rtm_dst_len = 128;
+		__connman_inet_rtnl_addattr_l(&rth->req.n, sizeof(rth->req),
+			RTA_DST, &sin6->sin6_addr, sizeof(sin6->sin6_addr));
+	}
 
 	freeaddrinfo(rp);
 
