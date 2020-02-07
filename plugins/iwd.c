@@ -972,6 +972,7 @@ static void _update_signal_strength(const char *path, int16_t signal_strength)
 
 	connman_network_set_strength(iwdn->network,
 					calculate_strength(signal_strength));
+	connman_network_update(iwdn->network);
 }
 
 static void ordered_networks_cb(DBusMessage *message, void *user_data)
