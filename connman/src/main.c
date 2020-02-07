@@ -250,10 +250,11 @@ static char **parse_fallback_nameservers(char **nameservers, gsize len)
 static GHashTable *parse_fallback_device_types(char **devtypes, gsize len)
 {
 	GHashTable *h;
+	gsize i;
 
 	h = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
-	for (gsize i = 0; i < len; ++i) {
+	for (i = 0; i < len; ++i) {
 		char **v;
 
 		v = g_strsplit(devtypes[i], ":", 2);
