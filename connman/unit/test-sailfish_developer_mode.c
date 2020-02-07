@@ -342,6 +342,7 @@ static void test_dbus_append_mode_details(DBusMessage *msg,
 	};
 	DBusMessageIter body, dict;
 	struct usb_moded_data sane;
+	size_t i;
 
 	DBG("");
 
@@ -358,7 +359,7 @@ static void test_dbus_append_mode_details(DBusMessage *msg,
 	sane = *data;
 	data = &sane;
 
-	for (size_t i = 0; modes_without_networking[i]; ++i) {
+	for (i = 0; modes_without_networking[i]; ++i) {
 		if (g_strcmp0(sane.mode_name, modes_without_networking[i]))
 			continue;
 
