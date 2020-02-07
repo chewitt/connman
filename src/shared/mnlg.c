@@ -28,6 +28,12 @@
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #endif
 
+#ifndef NETLINK_CAP_ACK
+#define NETLINK_CAP_ACK                 10
+#endif
+#ifndef NETLINK_EXT_ACK
+#define NETLINK_EXT_ACK                 11
+#endif
 
 struct mnlg_socket {
 	struct mnl_socket *nl;
