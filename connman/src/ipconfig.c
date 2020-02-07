@@ -163,7 +163,7 @@ static void store_set_int(struct ipconfig_store *store,
 		return;
 
 	pk = g_strdup_printf("%s%s", store->prefix, key);
-	g_key_file_set_integer(store->file, store->group, key, val);
+	g_key_file_set_integer(store->file, store->group, pk, val);
 	g_free(pk);
 }
 
@@ -173,7 +173,7 @@ static int store_get_int(struct ipconfig_store *store, const char *key)
 	char *pk;
 
 	pk = g_strdup_printf("%s%s", store->prefix, key);
-	val = g_key_file_get_integer(store->file, store->group, key, 0);
+	val = g_key_file_get_integer(store->file, store->group, pk, 0);
 	g_free(pk);
 
 	return val;
