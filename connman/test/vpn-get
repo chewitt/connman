@@ -4,7 +4,7 @@ import dbus
 
 def extract_values(values):
 	val = "{"
-	for key in values.keys():
+	for key in list(values.keys()):
 		val += " " + key + "="
 		if key in ["Servers", "Excludes"]:
 			val += extract_list(values[key])
@@ -34,15 +34,15 @@ for entry in manager.GetConnections():
 	path = entry[0]
 	properties = entry[1]
 
-	print "[ %s ]" % (path)
+	print("[ %s ]" % (path))
 
-	for key in properties.keys():
+	for key in list(properties.keys()):
 		if key in ["IPv4", "IPv6" ]:
 			val = extract_values(properties[key])
 		elif key in ["Nameservers","ServerRoutes","UserRoutes"]:
 			val = extract_list(properties[key])
 		else:
 			val = str(properties[key])
-		print "    %s = %s" % (key, val)
+		print("    %s = %s" % (key, val))
 
-	print
+	print()

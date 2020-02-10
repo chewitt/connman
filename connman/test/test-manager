@@ -4,7 +4,7 @@ import dbus
 
 def extract_values(values):
 	val = "{"
-	for key in values.keys():
+	for key in list(values.keys()):
 		val += " " + key + "="
 		if key in ["PrefixLength"]:
 			val += "%s" % (int(values[key]))
@@ -30,23 +30,23 @@ manager = dbus.Interface(bus.get_object("net.connman", "/"),
 
 properties = manager.GetProperties()
 
-for key in properties.keys():
+for key in list(properties.keys()):
 	if key in ["OfflineMode", "SessionMode"]:
-		print "%s" % (key)
+		print("%s" % (key))
 		if properties[key] == dbus.Boolean(1):
-			print "    true"
+			print("    true")
 		else:
-			print "    false"
+			print("    false")
 	else:
-		print "%s" % (key)
-		print "    %s" % (properties[key])
+		print("%s" % (key))
+		print("    %s" % (properties[key]))
 
 print ("Services")
 services = manager.GetServices()
 
 for (path, properties) in services:
-	print "    %s" % (path)
-	for key in properties.keys():
+	print("    %s" % (path))
+	for key in list(properties.keys()):
 		if key in ["Available", "Remember", "Default",
 				"Favorite", "Immutable", "AutoConnect",
 					"LoginRequired",
@@ -73,14 +73,14 @@ for (path, properties) in services:
 		else:
 			val = str(properties[key])
 
-		print "        %s = %s" % (key, val)
+		print("        %s = %s" % (key, val))
 
 print ("Technologies")
 technologies = manager.GetTechnologies()
 
 for (path, properties) in technologies:
-	print "    %s" % (path)
-	for key in properties.keys():
+	print("    %s" % (path))
+	for key in list(properties.keys()):
 
 		if key in ["Connected", "Powered", "Tethering"]:
 			if properties[key] == dbus.Boolean(1):
@@ -90,4 +90,4 @@ for (path, properties) in technologies:
 		else:
 			val = properties[key]
 
-		print "        %s = %s" % (key, val)
+		print("        %s = %s" % (key, val))

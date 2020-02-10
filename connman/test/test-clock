@@ -9,11 +9,11 @@ clock = dbus.Interface(bus.get_object("net.connman", "/"),
 
 properties = clock.GetProperties()
 
-for key in properties.keys():
+for key in list(properties.keys()):
 	if key in ["Timeservers"]:
 		list = ""
 		for val in properties[key]:
 			list = list + val + " "
-		print "%s = [ %s]" % (key, list)
+		print("%s = [ %s]" % (key, list))
 	else:
-		print "%s = %s" % (key, properties[key])
+		print("%s = %s" % (key, properties[key]))

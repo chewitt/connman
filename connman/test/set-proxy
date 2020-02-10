@@ -4,12 +4,12 @@ import sys
 import dbus
 
 if (len(sys.argv) < 2):
-	print "Usage:"
-	print "%s <service> direct" % (sys.argv[0])
-	print "%s <service> manual [servers=uri1,uri2,...] [excludes=host1,host2,...]" % (sys.argv[0])
-	print "%s <service> auto url=[pac-url]" % (sys.argv[0])
-	print "Example: %s service0 manual servers=proxy.example.com:8080" % sys.argv[0]
-	print "         This would set the proxy uri and the method to manual"
+	print("Usage:")
+	print("%s <service> direct" % (sys.argv[0]))
+	print("%s <service> manual [servers=uri1,uri2,...] [excludes=host1,host2,...]" % (sys.argv[0]))
+	print("%s <service> auto url=[pac-url]" % (sys.argv[0]))
+	print("Example: %s service0 manual servers=proxy.example.com:8080" % sys.argv[0])
+	print("         This would set the proxy uri and the method to manual")
 	sys.exit(1)
 
 bus = dbus.SystemBus()
@@ -40,5 +40,5 @@ for arg in sys.argv[3:]:
 
 try:
 	service.SetProperty("Proxy.Configuration", dbus.Dictionary(values, signature='sv'))
-except dbus.exceptions.DBusException, e_msg:
-	print e_msg
+except dbus.exceptions.DBusException as e_msg:
+	print(e_msg)
