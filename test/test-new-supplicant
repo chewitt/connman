@@ -11,4 +11,4 @@ bus = dbus.SystemBus()
 dummy = dbus.Interface(bus.get_object(WPA_NAME, WPA_PATH),
 				'org.freedesktop.DBus.Introspectable')
 
-print dummy.Introspect()
+print(dummy.Introspect())

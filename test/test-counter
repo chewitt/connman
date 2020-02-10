@@ -24,7 +24,7 @@ def make_bytes_readable(bytes):
 	return ''
 
 def print_stats(stats):
-	keys = stats.keys()
+	keys = list(stats.keys())
 	keys.sort()
 
 	for key in keys:
@@ -36,7 +36,7 @@ def print_stats(stats):
 			if hstr:
 				str = "%s (%s)" % (str, hstr)
 
-		print str
+		print(str)
 
 class Counter(dbus.service.Object):
 	@dbus.service.method("net.connman.Counter",
@@ -48,13 +48,13 @@ class Counter(dbus.service.Object):
 	@dbus.service.method("net.connman.Counter",
 				in_signature='oa{sv}a{sv}', out_signature='')
 	def Usage(self, path, home, roaming):
-		print "%s" % (path)
+		print("%s" % (path))
 
 		if len(home) > 0:
-			print "  Home"
+			print("  Home")
 			print_stats(home)
 		if len(roaming) > 0:
-			print "  Roaming"
+			print("  Roaming")
 			print_stats(roaming)
 
 if __name__ == '__main__':

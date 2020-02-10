@@ -7,7 +7,7 @@ def make_variant(string):
 	return dbus.String(string, variant_level=1)
 
 def print_usage():
-	print "Usage: %s <service> [off|dhcp|manual <address> [netmask] [gateway]]" % (sys.argv[0])
+	print("Usage: %s <service> [off|dhcp|manual <address> [netmask] [gateway]]" % (sys.argv[0]))
 
 
 if (len(sys.argv) < 3):
@@ -21,7 +21,7 @@ service = dbus.Interface(bus.get_object('net.connman', path),
 
 properties = service.GetProperties()
 
-print "Setting method %s for %s" % (sys.argv[2], sys.argv[1])
+print("Setting method %s for %s" % (sys.argv[2], sys.argv[1]))
 
 ipv4_configuration = { "Method": make_variant(sys.argv[2]) }
 if (len(sys.argv) > 3):
@@ -32,6 +32,6 @@ if (len(sys.argv) > 5):
         ipv4_configuration["Gateway"] = make_variant(sys.argv[5])
 
 service.SetProperty("IPv4.Configuration", ipv4_configuration)
-print "New IPv4.Configuration: ", ipv4_configuration
+print("New IPv4.Configuration: ", ipv4_configuration)
 
-print
+print()

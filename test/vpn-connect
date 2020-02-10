@@ -4,7 +4,7 @@ import sys
 import dbus
 
 if (len(sys.argv) < 2):
-	print "Usage: %s <VPN connection id>" % (sys.argv[0])
+	print("Usage: %s <VPN connection id>" % (sys.argv[0]))
 	sys.exit(1)
 
 bus = dbus.SystemBus()
@@ -16,7 +16,7 @@ connections = manager.GetConnections()
 
 path = "/net/connman/vpn/connection/" + sys.argv[1]
 
-print "Attempting to connect VPN %s" % (path)
+print("Attempting to connect VPN %s" % (path))
 
 connection = dbus.Interface(bus.get_object("net.connman.vpn", path),
 					    "net.connman.vpn.Connection")

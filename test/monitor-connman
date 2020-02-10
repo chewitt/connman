@@ -19,7 +19,7 @@ def extract_list(list):
 
 def extract_values(values):
 	val = "{"
-	for key in values.keys():
+	for key in list(values.keys()):
 		val += " " + key + "="
 		if key in ["PrefixLength"]:
 			val += "%s" % (int(values[key]))
@@ -54,7 +54,7 @@ def property_changed(name, value, path, interface):
 	iface = interface[interface.rfind(".") + 1:]
 	val = extract(name, value)
 
-	print "{%s} [%s] %s = %s" % (iface, path, name, val)
+	print("{%s} [%s] %s = %s" % (iface, path, name, val))
 
 def message_filter(connection, message):
 	if not isinstance(message, MethodCallMessage):

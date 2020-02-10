@@ -9,4 +9,4 @@ clock = dbus.Interface(bus.get_object('net.connman', '/'),
 
 properties = clock.GetProperties()
 
-print "Timeserver is %s" % (properties["Timeservers"])
+print("Timeserver is %s" % (properties["Timeservers"]))

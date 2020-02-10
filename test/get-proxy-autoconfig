@@ -1,12 +1,12 @@
 #!/usr/bin/python
 
 import dbus
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 def get_pac(url):
-	conn = urllib.urlopen(url, proxies={})
+	conn = urllib.request.urlopen(url, proxies={})
 	data = conn.read()
-	print data
+	print(data)
 	conn.close()
 
 bus = dbus.SystemBus()
@@ -23,15 +23,15 @@ for entry in services:
 	proxy = properties["Proxy"]
 
 	if "Method" in proxy:
-		print "[ %s ]" % (path)
+		print("[ %s ]" % (path))
 
 		method = proxy["Method"]
-		print "Method = %s" % (method)
+		print("Method = %s" % (method))
 
 		if method in ["auto"]:
 			url = proxy["URL"]
-			print "URL = %s" % (url)
-			print
+			print("URL = %s" % (url))
+			print()
 			get_pac(url)
 		else:
-			print
+			print()

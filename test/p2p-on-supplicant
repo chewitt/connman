@@ -38,7 +38,7 @@ class InputLine:
 
     def prompt(self):
         self.line = ''
-        print '> ',
+        print('> ', end=' ')
         stdout.flush()
 
     def input_cb(self, fd, event):
@@ -58,7 +58,7 @@ class InputLine:
         return True
 
 def error_print(ex):
-    print 'Command Error: %s' % ex
+    print('Command Error: %s' % ex)
 
 def checkarg(nb_args = 0, min_args = False):
     def under(function):
@@ -81,11 +81,11 @@ def print_dict(d):
     for k in d:
         try:
             if type(d[k]) is dbus.Byte:
-                print 'Key %s --> 0x%x' % (k, d[k])
+                print('Key %s --> 0x%x' % (k, d[k]))
             else:
-                print 'Key %s --> %s' % (k, d[k])
+                print('Key %s --> %s' % (k, d[k]))
         except:
-            print "Error: Key %s content cannot be printed" % k
+            print("Error: Key %s content cannot be printed" % k)
             pass
 
 def print_tuple(t):
@@ -93,7 +93,7 @@ def print_tuple(t):
         if type(e) is dbus.Dictionary:
             print_dict(e)
         else:
-            print 'Element: %s' % e
+            print('Element: %s' % e)
 
 class Wpa_s:
     def __init__(self, bus, iface_name, command):
@@ -116,41 +116,41 @@ class Wpa_s:
             try:
                 self.create_if([iface_name])
             except:
-                print "Error creating interface: %s" % iface_name
+                print("Error creating interface: %s" % iface_name)
 
         if len(command.strip(' ')):
             self.__command(command)
 
     def help(self, args):
-        list = self.command_list.keys()
+        list = list(self.command_list.keys())
         list.sort()
         for key in list:
             help = ''
-            if (self.command_list[key].has_key(ArgFields.help)):
+            if (ArgFields.help in self.command_list[key]):
                 help = self.command_list[key][ArgFields.help]
 
-            print "%s\t%s" % (key.rjust(25), help.ljust(50))
+            print("%s\t%s" % (key.rjust(25), help.ljust(50)))
 
     def __command(self, cmd_line):
         cmd = cmd_line.split(' ')
 
         try:
             func = getattr(self, cmd[0])
-        except Exception, e:
-            print 'Error: command unknown - %s' % e
+        except Exception as e:
+            print('Error: command unknown - %s' % e)
             return
 
         try:
             func(cmd[1:])
-        except Exception, e:
+        except Exception as e:
             error_print(e)
 
     def __wpa_property_changed(*args, **kwargs):
-        print 'WPA - Signal:  %s' % kwargs.get('signal')
+        print('WPA - Signal:  %s' % kwargs.get('signal'))
 
     def __if_property_changed(*args, **kwargs):
         signal = kwargs.get('signal')
-        print 'IF - Signal:  %s' % signal
+        print('IF - Signal:  %s' % signal)
 
         if signal == 'BSSAdded':
             return
@@ -159,12 +159,12 @@ class Wpa_s:
             print_tuple(args[1:])
 
     def __p2p_property_changed(*args, **kwargs):
-        print 'IF P2P - Signal:  %s' % kwargs.get('signal')
+        print('IF P2P - Signal:  %s' % kwargs.get('signal'))
         if args[0].debug:
             print_tuple(args[1:])
 
     def __peer_if_p2p_property_changed(*args, **kwargs):
-        print 'Peer - ',
+        print('Peer - ', end=' ')
         args[0].__p2p_property_changed(*args, **kwargs)
 
     def __DeviceFound(self, object_path):
@@ -187,31 +187,31 @@ class Wpa_s:
             del self.peers[object_path]
 
     def __PeerJoined(self, object_path):
-        print 'Peer %s joined' % object_path
+        print('Peer %s joined' % object_path)
 
     def __PeerDisconnected(self, object_path):
-        print 'Peer %s disconnected' % object_path
+        print('Peer %s disconnected' % object_path)
 
     def __group_if_property_changed(*args, **kwargs):
-        print 'Group - ',
+        print('Group - ', end=' ')
         args[0].__if_property_changed(*args, **kwargs)
 
     def __group_if_p2p_property_changed(*args, **kwargs):
-        print 'Group - ',
+        print('Group - ', end=' ')
         args[0].__p2p_property_changed(*args, **kwargs)
 
     def __GroupFinished(self, properties):
-        print 'Group running on %s is being removed' % ifname
+        print('Group running on %s is being removed' % ifname)
         self.group_obj = self.group_if = self.group_iface_path = None
 
         if self.debug:
             print_dict(properties)
 
     def __InvitationResult(self, response):
-        print 'Invitation result status: %d ' % response['status']
+        print('Invitation result status: %d ' % response['status'])
 
-        if response.has_key('bssid'):
-            print 'bssid: %s' % response['bssid']
+        if 'bssid' in response:
+            print('bssid: %s' % response['bssid'])
 
         if self.debug:
             print_dict(response)
@@ -257,11 +257,11 @@ class Wpa_s:
     def __ServiceDiscoveryResponse(self, response):
         peer = response['peer_object']
         if peer in self.peers:
-            print 'Peer %s has this TLVs:' % (self.peers[peer]['DeviceName'])
-            print response['tlvs']
+            print('Peer %s has this TLVs:' % (self.peers[peer]['DeviceName']))
+            print(response['tlvs'])
 
     def __InterfaceAdded(self, path, properties):
-        print 'Interface %s Added (%s)' % (properties['Ifname'], path)
+        print('Interface %s Added (%s)' % (properties['Ifname'], path))
         if self.debug:
             print_dict(properties)
             p2p = dbus.Interface(self.bus.get_object(WPA_INTF,
@@ -269,7 +269,7 @@ class Wpa_s:
             print_dict(p2p.GetAll(WPA_P2P_INTF))
 
     def __InterfaceRemoved(self, path):
-        print 'Interface Removed (%s)' % (path)
+        print('Interface Removed (%s)' % (path))
 
     def __listen_if_signals(self):
         self.bus.add_signal_receiver(self.__if_property_changed,
@@ -312,7 +312,7 @@ class Wpa_s:
         p2p_if.Set(WPA_P2P_INTF, 'P2PDeviceConfig',
                    dbus.Dictionary({ 'DeviceName' : 'ConnManP2P' },
                                    signature='sv'))
-        print 'Interface %s: %s' % (iface_name, self.iface_path)
+        print('Interface %s: %s' % (iface_name, self.iface_path))
         self.iface_name = iface_name
         self.__listen_if_signals()
 
@@ -342,7 +342,7 @@ class Wpa_s:
             return
 
         self.wpa.RemoveInterface(self.iface_path)
-        print 'Interface %s removed' % self.iface_name
+        print('Interface %s removed' % self.iface_name)
         self.__reset()
 
     @checkarg()
@@ -351,7 +351,7 @@ class Wpa_s:
             return
 
         self.iface.Scan(({ 'Type': 'passive' }))
-        print 'Scan started'
+        print('Scan started')
 
     @checkarg()
     def quit(self, args = None):
@@ -382,7 +382,7 @@ class Wpa_s:
             return
 
         for p in self.peers:
-            print 'Peer Name=%s' % (self.peers[p]['DeviceName'])
+            print('Peer Name=%s' % (self.peers[p]['DeviceName']))
 
     def __find_peer(self, peer_name, ret_object_path = False):
         if len(self.peers) == 0:
@@ -395,7 +395,7 @@ class Wpa_s:
                 break
 
         if not peer:
-            print 'No peer found under the name: %s' % peer_name
+            print('No peer found under the name: %s' % peer_name)
             p = None
 
         if ret_object_path:
@@ -426,19 +426,19 @@ class Wpa_s:
 
         if (peer['groupcapability'] & P2P_GROUP_CAPAB_GROUP_OWNER ==
                                             P2P_GROUP_CAPAB_GROUP_OWNER):
-            print 'Joining an existing P2P group'
+            print('Joining an existing P2P group')
             pin = self.p2p.Connect(({ 'peer' : peer_path,
                                       'wps_method' : 'pbc',
                                       'join' : True,
                                       'go_intent' : 0 }))
         else:
-            print 'Associating with another P2P device'
+            print('Associating with another P2P device')
             pin = self.p2p.Connect(({ 'peer' : peer_path,
                                       'wps_method' : 'pbc',
                                       'join' : False,
                                       'go_intent' : 7 }))
             if not pin:
-                print 'WPS PIN in use: %s' % pin
+                print('WPS PIN in use: %s' % pin)
 
     @checkarg(nb_args = 1)
     def p2p_disconnect(self, args):
@@ -450,7 +450,7 @@ class Wpa_s:
             return
 
         if not self.group_if:
-            print 'Peer %s is not connected' % (peer['DeviceName'])
+            print('Peer %s is not connected' % (peer['DeviceName']))
             return
 
         self.group_if.Disconnect()
@@ -496,7 +496,7 @@ class Wpa_s:
             sd_req.append(dbus.Byte(a))
 
         ref = self.p2p.ServiceDiscoveryRequest(({ 'tlv' : sd_req }))
-        print 'Service discovery reference: %s' % ref
+        print('Service discovery reference: %s' % ref)
 
     @checkarg(nb_args = 1)
     def p2p_serv_disc_cancel_req(self, args):
@@ -518,7 +518,7 @@ class Wpa_s:
             service['query'] = args[1]
             service['response'] = args[2]
         else:
-            print 'Unknown service: %s' % args[0]
+            print('Unknown service: %s' % args[0])
             return
 
         self.p2p.AddService((service))
@@ -535,7 +535,7 @@ class Wpa_s:
         elif args[0] == 'bonjour':
             service['query'] = args[1]
         else:
-            print 'Unknown service: %s' % args[0]
+            print('Unknown service: %s' % args[0])
             return
 
         self.p2p.DeleteService((service))
@@ -593,16 +593,16 @@ def build_args(parser):
     command['p2p_service_flush'] = {}
     command['p2p_invite'] = {ArgFields.help:'<p2p device name>'}
 
-    command_list = command.keys()
+    command_list = list(command.keys())
     command_list.sort()
     subparsers = parser.add_subparsers(help='commands', dest='command')
     subparsers.add_parser('')
     for key in command_list:
         help=None
         metavar=None
-        if command[key].has_key(ArgFields.help):
+        if ArgFields.help in command[key]:
             help = command[key][ArgFields.help]
-        if command[key].has_key(ArgFields.metavar):
+        if ArgFields.metavar in command[key]:
             metavar = command[key][ArgFields.metavar]
         command_parser = subparsers.add_parser(key, help=help)
         command_parser.add_argument(key, nargs='*', metavar=metavar, help=help)
@@ -611,7 +611,7 @@ def build_args(parser):
 
 def main():
     if version_info.major != 2:
-        print 'You need to run this under Python 2.x'
+        print('You need to run this under Python 2.x')
         exit(1)
 
     parser = argparse.ArgumentParser(description='Connman P2P Test')

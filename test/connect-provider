@@ -4,15 +4,15 @@ import sys
 import dbus
 
 if (len(sys.argv) < 4):
-	print "Usage: %s <type> ... " % (sys.argv[0])
-	print "  type: openconnect"
-	print "      <name> <host> <domain> <cookie> [servercert]"
-	print "  type: openvpn"
-	print "      <name> <host> <domain> [<cafile> <certfile> <keyfile>]"
-	print "  type: pptp"
-	print "      <name> <host> <domain> <user> <password>"
-	print "  type: l2tp"
-	print "      <name> <host> <domain> <user> <password>"
+	print("Usage: %s <type> ... " % (sys.argv[0]))
+	print("  type: openconnect")
+	print("      <name> <host> <domain> <cookie> [servercert]")
+	print("  type: openvpn")
+	print("      <name> <host> <domain> [<cafile> <certfile> <keyfile>]")
+	print("  type: pptp")
+	print("      <name> <host> <domain> <user> <password>")
+	print("  type: l2tp")
+	print("      <name> <host> <domain> <user> <password>")
 	sys.exit(1)
 
 bus = dbus.SystemBus()
@@ -20,7 +20,7 @@ bus = dbus.SystemBus()
 manager = dbus.Interface(bus.get_object("net.connman", "/"),
 					"net.connman.Manager")
 
-print "Attempting to connect service %s" % (sys.argv[3])
+print("Attempting to connect service %s" % (sys.argv[3]))
 
 if sys.argv[1] == "openconnect":
 	if (len(sys.argv) > 6):
@@ -67,7 +67,7 @@ elif sys.argv[1] == "l2tp":
 					"L2TP.Password": sys.argv[6]}))
 
 else:
-	print "Unknown VPN type"
+	print("Unknown VPN type")
 	sys.exit(1)
 
-print "VPN service path is %s" %(path)
+print("VPN service path is %s" %(path))
