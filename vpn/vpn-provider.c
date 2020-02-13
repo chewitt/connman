@@ -2852,7 +2852,7 @@ int vpn_provider_set_nameservers(struct vpn_provider *provider,
 	if (!nameservers)
 		return 0;
 
-	provider->nameservers = g_strsplit(nameservers, ", ", 0);
+	provider->nameservers = g_strsplit_set(nameservers, ", ", 0);
 
 	return 0;
 }
