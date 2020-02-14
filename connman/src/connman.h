@@ -1229,6 +1229,16 @@ enum connman_access __connman_access_firewall_manage
 			const char *name, const char *sender,
 			enum connman_access default_access);
 
+/* Storage */
+struct connman_access_storage_policy *__connman_access_storage_policy_create
+		(const char *spec);
+void __connman_access_storage_policy_free
+		(struct connman_access_storage_policy *policy);
+enum connman_access __connman_access_storage_change_user
+		(const struct connman_access_storage_policy *policy,
+			const char *user, const char *sender,
+			enum connman_access default_access);
+
 int __connman_util_get_random(uint64_t *val);
 unsigned int __connman_util_random_delay_ms(unsigned int secs);
 int __connman_util_init(void);
