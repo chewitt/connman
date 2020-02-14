@@ -1,3 +1,10 @@
+ver 1.38:
+	Fix issue with online check on IP address update.
+	Fix issue with OpenVPN and encrypted private keys.
+	Fix issue with finishing of VPN connections.
+	Add support for updated stable iwd APIs.
+	Add support for WireGuard networks.
+
 ver 1.37:
 	Fix issue with handling invalid gateway addresses.
 	Fix issue with handling updates of default gateway.
