@@ -84,6 +84,7 @@ static DBusConnection *connection = NULL;
 static const char *dbus_path = NULL;
 static const char *dbus_interface = NULL;
 static struct connman_storage_callbacks *cbs = NULL;
+struct connman_access_storage_policy *storage_access_policy = NULL;
 
 static void storage_dir_cleanup(const char *storagedir, int type);
 
@@ -106,6 +107,21 @@ static gboolean is_vpn_dir_name(const char *name);
 static gboolean is_vpn_dir(const char *name);
 
 static const char* storagedir_for(const char *name);
+
+static struct connman_access_storage_policy* get_storage_access_policy()
+{
+	/*
+	 * We can't initialize this variable in __connman_storage_init
+	 * because __connman_storage_init runs before sailfish access
+	 * plugin (or any other plugin) is loaded
+	 */
+	if (!storage_access_policy && cbs && cbs->access_policy_create) {
+		/* Use the default policy */
+		storage_access_policy = cbs->access_policy_create(NULL);
+	}
+
+	return storage_access_policy;
+}
 
 static void debug_subdirs(void)
 {
@@ -1953,6 +1969,9 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 		} else if (g_str_has_suffix(error.name, ".AlreadyEnabled")) {
 			DBG("User is already active");
 			err = -EALREADY;
+		} else if (g_str_has_suffix(error.name, ".PermissionDenied")) {
+			DBG("Not allowed to change user, permission denied");
+			err = -EPERM;
 		} else {
 			DBG("unknown error %s", error.name);
 			err = -ENOENT;
@@ -1985,6 +2004,9 @@ err:
 		break;
 	case EALREADY:
 		reply = __connman_error_already_enabled(data->pending);
+		break;
+	case EPERM:
+		reply = __connman_error_permission_denied(data->pending);
 		break;
 	case ENOENT:
 		reply = __connman_error_not_found(data->pending);
@@ -2026,6 +2048,31 @@ static DBusMessage *change_user(DBusConnection *conn,
 	if (dbus_error_is_set(&error)) {
 		dbus_error_free(&error);
 		return __connman_error_invalid_arguments(msg);
+	}
+
+	if (cbs && cbs->access_change_user) {
+		DBusMessage *error_reply = NULL;
+		const char *sender = dbus_message_get_sender(msg);
+		/* Because of libdbus da_policy_check() use int as string */
+		char *userid = g_strdup_printf("%d", uid);
+
+		switch (cbs->access_change_user(get_storage_access_policy(),
+					userid, sender,
+					CONNMAN_ACCESS_ALLOW)) {
+		case CONNMAN_ACCESS_ALLOW:
+			break;
+		case CONNMAN_ACCESS_DENY:
+			/* fall through */
+		default:
+			connman_warn("%s is not allowed to change user",
+						sender);
+			error_reply = __connman_error_permission_denied(msg);
+		}
+
+		g_free(userid);
+
+		if (error_reply)
+			return error_reply;
 	}
 
 	/* No error set = invalid user */
@@ -2101,6 +2148,22 @@ static DBusMessage *change_user_vpn(DBusConnection *conn,
 	if (dbus_error_is_set(&error)) {
 		dbus_error_free(&error);
 		return __connman_error_invalid_arguments(msg);
+	}
+
+	if (cbs && cbs->vpn_access_change_user) {
+		const char *sender = dbus_message_get_sender(msg);
+		char *userid = g_strdup_printf("%d", uid);
+
+		if (!cbs->vpn_access_change_user(sender, userid, TRUE)) {
+			connman_warn("%s is not allowed to change user",
+						sender);
+			error_reply = __connman_error_permission_denied(msg);
+		}
+
+		g_free(userid);
+
+		if (error_reply)
+			return error_reply;
 	}
 
 	pwd = check_user((uid_t)uid, &err, &system_user);
@@ -2257,4 +2320,10 @@ void __connman_storage_cleanup(void)
 
 	dbus_path = NULL;
 	dbus_interface = NULL;
+
+	if (cbs && cbs->access_policy_free && storage_access_policy)
+		cbs->access_policy_free(storage_access_policy);
+
+	storage_access_policy = NULL;
+
 }

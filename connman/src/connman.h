@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2013-2020  Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -301,6 +302,23 @@ struct connman_storage_callbacks {
 
 	/* Finalize callback is to do additional actions after setup. */
 	void (*finalize) (const char *username);
+
+	/* Callback to create access policy for connmand storage.*/
+	struct connman_access_storage_policy* (*access_policy_create)
+				(const char *spec);
+
+	/* Callback to check if connmand storage user change is allowed */
+	enum connman_access (*access_change_user)
+				(const struct connman_access_storage_policy *p,
+				const char *user, const char *sender,
+				enum connman_access default_access);
+
+	/* Callback to free the created connmand storage access policy. */
+	void (*access_policy_free) (struct connman_access_storage_policy *p);
+
+	/* Callback to check if connman-vpnd storage user change is allowed */
+	bool (*vpn_access_change_user) (const char *sender, const char *arg,
+				bool default_access);
 };
 
 mode_t __connman_storage_dir_mode(void);
