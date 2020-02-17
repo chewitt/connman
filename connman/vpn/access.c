@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2019-2020 Jolla Ltd. All rights reserved.
  *  Contact: David Llewellyn-Jones <david.llewellyn-jones@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -36,7 +36,10 @@ static const char * vpn_access_method_names[VPN_ACCESS_METHOD_COUNT] = {
 	"Remove",
 	"GetConnections",
 	"RegisterAgent",
-	"UnregisterAgent"
+	"UnregisterAgent",
+
+	/* Storage */
+	"ChangeUser"
 };
 
 const char *vpn_access_intf_name(enum vpn_access_intf intf)
@@ -46,6 +49,8 @@ const char *vpn_access_intf_name(enum vpn_access_intf intf)
 		return VPN_CONNECTION_INTERFACE;
 	case VPN_ACCESS_INTF_MANAGER:
 		return VPN_MANAGER_INTERFACE;
+	case VPN_ACCESS_INTF_STORAGE:
+		return VPN_STORAGE_INTERFACE;
 	default:
 		return NULL;
 	}
@@ -61,10 +66,12 @@ const char *vpn_access_method_name(enum vpn_access_method method)
 
 enum vpn_access_intf vpn_access_intf_from_method(enum vpn_access_method method)
 {
-	enum vpn_access_intf  intf = VPN_ACCESS_INTF_MANAGER;
+	enum vpn_access_intf intf = VPN_ACCESS_INTF_STORAGE;
 
 	if (method < VPN_ACCESS_CONNECTION_COUNT)
 		intf = VPN_ACCESS_INTF_CONNECTION;
+	else if (method < VPN_ACCESS_MANAGER_COUNT)
+		intf = VPN_ACCESS_INTF_MANAGER;
 
 	return intf;
 }

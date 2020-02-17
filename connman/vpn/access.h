@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2019-2020 Jolla Ltd. All rights reserved.
  *  Contact: David Llewellyn-Jones <david.llewellyn-jones@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -32,6 +32,7 @@ enum vpn_access {
 enum vpn_access_intf {
 	VPN_ACCESS_INTF_CONNECTION,
 	VPN_ACCESS_INTF_MANAGER,
+	VPN_ACCESS_INTF_STORAGE,
 
 	VPN_ACCESS_INTF_COUNT
 };
@@ -53,7 +54,11 @@ enum vpn_access_method {
 	VPN_ACCESS_MANAGER_UNREGISTER_AGENT,
 	VPN_ACCESS_MANAGER_COUNT,
 
-	VPN_ACCESS_METHOD_COUNT = VPN_ACCESS_MANAGER_COUNT
+	/* Storage */
+	VPN_ACCESS_STORAGE_CHANGE_USER = VPN_ACCESS_MANAGER_COUNT,
+	VPN_ACCESS_STORAGE_COUNT,
+
+	VPN_ACCESS_METHOD_COUNT = VPN_ACCESS_STORAGE_COUNT
 };
 
 #define VPN_ACCESS_PRIORITY_LOW     (-100)
