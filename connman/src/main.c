@@ -820,10 +820,13 @@ const char *__connman_setting_get_fallback_device_type(const char *interface)
 }
 
 static struct connman_storage_callbacks storage_callbacks = {
-	.pre =		__connman_technology_disable_all,
-	.unload =	__connman_service_unload_services,
-	.load =		__connman_service_load_services,
-	.post =		__connman_technology_enable_from_config,
+	.pre =			__connman_technology_disable_all,
+	.unload =		__connman_service_unload_services,
+	.load =			__connman_service_load_services,
+	.post =			__connman_technology_enable_from_config,
+	.access_policy_create =	__connman_access_storage_policy_create,
+	.access_change_user = 	__connman_access_storage_change_user,
+	.access_policy_free = 	__connman_access_storage_policy_free,
 };
 
 int main(int argc, char *argv[])
