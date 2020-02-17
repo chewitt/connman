@@ -187,9 +187,10 @@ vpn_connman_vpnd_SOURCES = $(builtin_vpn_sources) $(backtrace_sources) \
 			vpn/vpn-manager.c vpn/vpn-provider.c \
 			vpn/vpn-provider.h vpn/vpn-rtnl.h \
 			vpn/vpn-ipconfig.c src/inet.c vpn/vpn-rtnl.c \
-			src/dbus.c src/storage.c src/ipaddress.c src/agent.c vpn/access.c \
-			vpn/vpn-agent.c vpn/vpn-agent.h src/inotify.c \
-			vpn/vpn-config.c src/fsid.c vpn/vpn-settings.c
+			src/dbus.c src/storage.c src/ipaddress.c src/agent.c \
+			vpn/access.c vpn/vpn-agent.c vpn/vpn-agent.h \
+			src/inotify.c vpn/vpn-config.c src/fsid.c \
+			vpn/vpn-settings.c
 
 vpn_connman_vpnd_LDADD = gdbus/libgdbus-internal.la $(builtin_vpn_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ @DBUSACCESS_LIBS@ \
@@ -394,8 +395,7 @@ unit_test_globalproxy_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
 				$(backtrace_sources) \
 				src/connman.h src/log.c src/error.c \
-				src/inotify.c src/storage.c src/dbus.c \
-				src/access.c
+				src/inotify.c src/storage.c src/dbus.c
 unit_test_globalproxy_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 unit_test_firewall_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
