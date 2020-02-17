@@ -535,7 +535,7 @@ static void tech_enable_tethering_cb(const DBusError *error, void *user_data)
 {
 	struct tech_cb_data *cbd = user_data;
 	struct iwd_device *iwdd;
-	struct iwd_ap *iwdap;
+	struct iwd_ap *iwdap = NULL;
 
 	DBG("");
 
