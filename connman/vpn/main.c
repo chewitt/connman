@@ -173,10 +173,19 @@ unsigned int connman_timeout_input_request(void)
 	return __vpn_settings_get_timeout_inputreq();
 }
 
+static bool vpn_access_change_user(const char *sender, const char *user,
+							bool default_access)
+{
+	return __vpn_access_policy_check(sender,
+				VPN_ACCESS_STORAGE_CHANGE_USER, user,
+				default_access);
+}
+
 static struct connman_storage_callbacks storage_callbacks = {
-	.load =		vpn_provider_unload_providers,
-	.unload =	vpn_provider_load_providers,
-	.finalize = 	__vpn_settings_set_binary_user_override,
+	.unload =			vpn_provider_unload_providers,
+	.load =				vpn_provider_load_providers,
+	.finalize = 			__vpn_settings_set_binary_user_override,
+	.vpn_access_change_user = 	vpn_access_change_user,
 };
 
 int main(int argc, char *argv[])
