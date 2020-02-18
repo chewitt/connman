@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2014-2020  Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -704,6 +705,11 @@ static int technology_affect_devices(struct connman_technology *technology,
 		else
 			err_dev = __connman_device_disable(device);
 
+		if (!technology->rfkill_driven) {
+			if (enable_device && err_dev == -EALREADY)
+				__connman_technology_enabled(technology->type);
+		}
+
 		if (err_dev < 0 && err_dev != -EALREADY)
 			err = err_dev;
 	}
@@ -806,8 +812,10 @@ static int technology_enable(struct connman_technology *technology)
 					technology->tethering)
 		set_tethering(technology, true);
 
-	if (technology->rfkill_driven)
+	if (technology->rfkill_driven) {
 		err = __connman_rfkill_block(technology->type, false);
+		DBG("rfkill err %d/%s", -err, strerror(-err));
+	}
 
 	err_dev = technology_affect_devices(technology, true);
 
@@ -1706,6 +1714,196 @@ void __connman_technology_set_connected(enum connman_service_type type,
 	connman_dbus_property_changed_basic(technology->path,
 			CONNMAN_TECHNOLOGY_INTERFACE, "Connected",
 			DBUS_TYPE_BOOLEAN, &val);
+}
+
+bool __connman_technology_disable_all()
+{
+	GSList *list;
+	GSList *devlist;
+	GKeyFile *keyfile;
+	int err;
+
+	/*
+	 * If there is no keyfile present then none of the technologies are
+	 * enabled. Disabling of the technologies is skipped as all should be
+	 * off.
+	 */
+	keyfile = __connman_storage_load_global();
+	if (!keyfile) {
+		DBG("no keyfile found, all devices should be off.");
+		return false;
+	}
+
+	for (list = technology_list; list; list = list->next) {
+		struct connman_technology *technology = list->data;
+
+		if (!technology->enabled)
+			continue;
+
+		DBG("disabling enabled technology %p/%s", technology,
+					get_name(technology->type));
+
+		for (devlist = technology->device_list; devlist;
+					devlist = devlist->next) {
+			struct connman_device *device = list->data;
+
+			if (!connman_device_get_scanning(device))
+				continue;
+
+			err = connman_device_set_scanning(device,
+						technology->type, false);
+			if (err)
+				DBG("failed to stop scan: %s",
+							strerror(-err));
+		}
+
+		/* To make sure that all scan requests are replied */
+		reply_scan_pending(technology, -ECANCELED);
+
+		err = technology_disable(technology);
+		if (!err) {
+			if (technology_disabled(technology))
+				DBG("tech %p already powered off", technology);
+		}
+
+		if (err != -EBUSY)
+			technology->enable_persistent = false;
+
+		DBG("result %s", err ? strerror(-err) : "ok");
+	}
+
+	g_key_file_unref(keyfile);
+
+	return true;
+}
+
+bool __connman_technology_enable_from_config()
+{
+	GSList *list;
+	GKeyFile *keyfile;
+	GError *error = NULL;
+	const char *identifier;
+	bool offlinemode = false;
+	bool value;
+	int err;
+
+	keyfile = __connman_storage_load_global();
+	if (!keyfile) {
+		connman_warn("No global settings found, all techs are off.");
+		return false;
+	}
+
+	offlinemode = g_key_file_get_boolean(keyfile, "global",
+				"OfflineMode", &error);
+	if (error) {
+		offlinemode = false;
+		g_clear_error(&error);
+	}
+
+	DBG("offlinemode %s", offlinemode ? "true" : "false");
+
+	/*
+	 * If new mode is online but in offline mode, set new mode to
+	 * avoid setting offline override without actual need when a
+	 * technology is enabled.
+	 */
+	if (!offlinemode && global_offlinemode) {
+		DBG("in offline mode, set to online");
+		__connman_technology_set_offlinemode(offlinemode);
+	}
+
+	for (list = technology_list; list; list = list->next) {
+		struct connman_technology *technology = list->data;
+
+		identifier = get_name(technology->type);
+		if (!identifier)
+			continue;
+
+		value = g_key_file_get_boolean(keyfile, identifier,
+					"Enable", &error);
+		if (error) {
+			value = false;
+			g_clear_error(&error);
+		}
+
+		if (technology->rfkill_driven && technology->hardblocked) {
+			DBG("technology %p/%s hardblocked, not set as %s",
+					technology, get_name(technology->type),
+					value ? "enabled" : "disabled");
+			technology_save(technology);
+			continue;
+		}
+
+		DBG("technology %p/%s set as %s", technology,
+					get_name(technology->type),
+					value ? "enabled" : "disabled");
+
+		if (!value) {
+			if (!technology->enabled) {
+				DBG("tech %p/%s already disabled", technology,
+						get_name(technology->type));
+				continue;
+			}
+
+			err = technology_disable(technology);
+			if (!err) {
+				if (technology_disabled(technology))
+					DBG("tech %p already powered off",
+								technology);
+			}
+
+			DBG("tech %p/%s enabled set as disabled, result %s",
+						technology,
+						get_name(technology->type),
+						err ? strerror(-err) : "ok");
+		} else {
+			/*
+			 * Don't enable in offline mode but set
+			 * enable_persistent to make sure tech is enabled
+			 * when leaving offline mode.
+			*/
+			if (offlinemode) {
+				DBG("tech %p/%s not enabled in offlinemode",
+						technology,
+						get_name(technology->type));
+
+				technology->enable_persistent = value;
+
+				continue;
+			}
+
+			if (technology->enabled) {
+				DBG("tech %p/%s already enabled", technology,
+						get_name(technology->type));
+				continue;
+			}
+
+			err = technology_enable(technology);
+			if (!err) {
+				if (__connman_technology_enabled(
+							technology->type))
+					DBG("tech %p already powered on",
+								technology);
+			}
+
+			DBG("tech %p/%s disabled set as enabled, result %s",
+						technology,
+						get_name(technology->type),
+						err ? strerror(-err) : "ok");
+		}
+
+		if (err != -EBUSY)
+			technology->enable_persistent = value;
+
+		technology_save(technology);
+	}
+
+	DBG("setting offline mode %s", offlinemode ? "true" : "false");
+	__connman_technology_set_offlinemode(offlinemode);
+
+	g_key_file_unref(keyfile);
+
+	return true;
 }
 
 static bool technology_apply_rfkill_change(struct connman_technology *technology,
