@@ -173,6 +173,12 @@ unsigned int connman_timeout_input_request(void)
 	return __vpn_settings_get_timeout_inputreq();
 }
 
+static struct connman_storage_callbacks storage_callbacks = {
+	.load =		vpn_provider_unload_providers,
+	.unload =	vpn_provider_load_providers,
+	.finalize = 	__vpn_settings_set_binary_user_override,
+};
+
 int main(int argc, char *argv[])
 {
 	GOptionContext *context;
@@ -207,37 +213,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	__connman_log_init(argv[0], option_debug, option_detach, false,
-			"Connection Manager VPN daemon", VERSION);
-
-	if (!option_config)
-		__vpn_settings_init(CONFIGMAINFILE, CONFIGDIR);
-	else
-		__vpn_settings_init(option_config, CONFIGDIR);
-
-	const char* fs_identity = NULL;
-	if ((fs_identity = __vpn_settings_get_fs_identity()))
-		__connman_set_fsid(fs_identity);
-
-	__connman_inotify_init();
-	__connman_storage_init(__vpn_settings_get_storage_root(),
-			__vpn_settings_get_storage_dir_permissions(),
-			__vpn_settings_get_storage_file_permissions());
-
-	if (g_mkdir_with_parents(VPN_STATEDIR,
-			__vpn_settings_get_storage_dir_permissions()) < 0) {
-		if (errno != EEXIST)
-			perror("Failed to create state directory");
-	}
-
-	if (g_mkdir_with_parents(VPN_STORAGEDIR,
-			__vpn_settings_get_storage_dir_permissions()) < 0) {
-		if (errno != EEXIST)
-			perror("Failed to create VPN storage directory");
-	}
-
-	umask(__vpn_settings_get_umask());
-
 	main_loop = g_main_loop_new(NULL, FALSE);
 
 	signal = setup_signalfd();
@@ -256,7 +231,39 @@ int main(int argc, char *argv[])
 
 	g_dbus_set_disconnect_function(conn, disconnect_callback, NULL, NULL);
 
+	__connman_log_init(argv[0], option_debug, option_detach, false,
+			"Connection Manager VPN daemon", VERSION);
+
 	__connman_dbus_init(conn);
+
+	if (!option_config)
+		__vpn_settings_init(CONFIGMAINFILE, CONFIGDIR);
+	else
+		__vpn_settings_init(option_config, CONFIGDIR);
+
+	const char* fs_identity = NULL;
+	if ((fs_identity = __vpn_settings_get_fs_identity()))
+		__connman_set_fsid(fs_identity);
+
+	__connman_inotify_init();
+	__connman_storage_init(__vpn_settings_get_storage_root(),
+			__vpn_settings_get_storage_dir_permissions(),
+			__vpn_settings_get_storage_file_permissions());
+
+	mode_t dir_perm = __vpn_settings_get_storage_dir_permissions();
+	if (__connman_storage_create_dir(VPN_STATEDIR, dir_perm))
+		perror("Failed to create VPN state directory");
+
+	if (__connman_storage_create_dir(VPN_STORAGEDIR, dir_perm)) {
+		perror("Failed to create VPN storage directory");
+	} else {
+		if (__connman_storage_register_dbus(STORAGE_DIR_TYPE_VPN,
+					&storage_callbacks))
+			perror("Failed to register VPN storage D-Bus");
+	}
+
+	umask(__vpn_settings_get_umask());
+
 	__connman_agent_init();
 	__vpn_provider_init(option_routes);
 	__vpn_manager_init();
