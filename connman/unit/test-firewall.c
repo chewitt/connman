@@ -1365,10 +1365,10 @@ bool connman_device_has_status_changed_to(struct connman_device *device,
 
 #define CHAINS_GEN4 3
 #define CHAINS_MANGLE_GEN4 5
-#define RULES_GEN4 (CHAINS_GEN4 + 74 + CHAINS_MANGLE_GEN4 + 5)
+#define RULES_GEN4 (CHAINS_GEN4 + 78 + CHAINS_MANGLE_GEN4 + 5)
 #define CHAINS_GEN6 3
 #define CHAINS_MANGLE_GEN6 5
-#define RULES_GEN6 (CHAINS_GEN6 + 76 + CHAINS_MANGLE_GEN6 + 5)
+#define RULES_GEN6 (CHAINS_GEN6 + 77 + CHAINS_MANGLE_GEN6 + 5)
 #define RULES_ETH 17
 #define RULES_CEL 4
 #define RULES_TETH 7
@@ -1392,12 +1392,12 @@ static const char *general_input[] = {
 		/* Port switches with protocols */
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --sport 81 -j DROP",
-		"-p sctp --destination-port 8088 -j LOG",
-		"-p dccp --destination-port 8188 -j QUEUE",
+		"-p sctp -m sctp --destination-port 8088 -j LOG",
+		"-p dccp -m dccp --destination-port 8188 -j QUEUE",
 		"-p tcp -m tcp --destination-port 993 --source-port 992 -j LOG",
 		"-p udp -m udp --destination-port 997 --sport 996 -j ACCEPT",
-		"-p udplite -m udplite --dport 999 --sport 998 -j REJECT",
-		"-p sctp --dport 995 --source-port 994 -j DROP",
+		"-p udplite -m multiport --dports 999 -m multiport --sports 998 -j DROP",
+		"-p sctp -m sctp --dport 995 --source-port 994 -j DROP",
 		/* Port with services and their aliases */
 		"-p tcp -m tcp --dport smtp -j ACCEPT",
 		"-p tcp -m tcp --dport mail -j ACCEPT",
@@ -1417,14 +1417,14 @@ static const char *general_input[] = {
 		"-p ipv6-icmp -m ipv6-icmp --icmpv6-type 128/0 -j DROP",
 		/* Protocols with number and text match are allowed */
 		"-p 6 -m tcp --dport 9898 -j ACCEPT",
-		"-p 132 --dport 6789 -j LOG",
+		"-p 132 -m sctp --dport 6789 -j LOG",
 		"-p udp -m udp --sport echo -j QUEUE",
 		"-p 47 -j ACCEPT", /* gre */
 		/* Negations */
 		"! -p tcp -m multiport --dports 67,68,69 -j ACCEPT",
-		"-p tcp ! -m multiport --dports 70,71 -j ACCEPT",
+		"-p tcp -m multiport ! --dports 70,71 -j ACCEPT",
 		"-p icmpv6 -m icmpv6 ! --icmpv6-type 128/0 -j DROP",
-		"! -p udp ! -m udp ! --sport 23 -j ACCEPT",
+		"! -p udp -m udp ! --sport 23 -j ACCEPT",
 		/* Interfaces are allowed with general rules */
 		"-i eth0 -j ACCEPT",
 		"--in-interface rndis0 -j DROP",
@@ -1448,12 +1448,12 @@ static const char *general_output[] = {
 		/* Identical rules in different chains are allowed */
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --sport 81 -j DROP",
-		"-p sctp --destination-port 8088 -j LOG",
-		"-p dccp --source-port 8188 -j QUEUE",
+		"-p sctp -m sctp --destination-port 8088 -j LOG",
+		"-p dccp -m dccp --source-port 8188 -j QUEUE",
 		"-p tcp -m tcp --destination-port 993 --source-port 992 -j LOG",
 		"-p udp -m udp --destination-port 997 --sport 996 -j ACCEPT",
-		"-p udplite -m udplite --dport 999 --sport 998 -j REJECT",
-		"-p sctp --dport 995 --source-port 994 -j DROP",
+		"-p udplite -m multiport --dports 999 -m multiport --sports 998 -j REJECT",
+		"-p sctp -m sctp --dport 995 --source-port 994 -j DROP",
 		"-p icmp -m icmp --icmp-type 8/0 -j DROP", // +1 IPv4
 		"-p esp -j DROP",
 		"-p ah -j LOG",
@@ -1514,18 +1514,18 @@ static const char *eth_input[] = {
 		"-p sctp -m multiport --sports 200:300 -j LOG",
 		"-p sctp -m multiport --destination-ports 69:100 -j REJECT",
 		"-p tcp -m multiport --source-ports 23,24,45,65 -j LOG",
-		"-p tcp -m multiport --port 9999 -j LOG",
+		"-p tcp -m multiport --ports 9999 -j LOG",
 		"-p tcp -m multiport --ports 9999,10000 -j QUEUE",
-		"-p tcp -m multiport --dport 6789 -j ACCEPT",
-		"-p tcp -m multiport --sport 6789 -j DROP",
-		"-p tcp -m multiport --destination-port 6789 -j LOG",
-		"-p tcp -m multiport --source-port 6789 -j QUEUE",
+		"-p tcp -m multiport --dports 6789 -j ACCEPT",
+		"-p tcp -m multiport --sports 6789 -j DROP",
+		"-p tcp -m multiport --destination-ports 6789 -j LOG",
+		"-p tcp -m multiport --source-ports 6789 -j QUEUE",
 		NULL
 };
 static const char *eth_output[] = {
 		"-p tcp -m tcp --sport 8080 -j ACCEPT",
 		"-p udp -m udp --source-port 8081 -j DROP",
-		"-p sctp --sport 123 -j REJECT",
+		"-p sctp -m sctp --sport 123 -j REJECT",
 		NULL
 };
 static const char *cellular_input[] = {
@@ -1700,11 +1700,11 @@ static const char *general_options[] = {
 	"-p tcp -m ttl --ttl-lt 20 -j DROP",
 	"-p tcp -m ttl --ttl-gt 30 -j DROP",
 	/* dccp options */
-	"-p dccp --dccp-types REQUEST -j ACCEPT",
-	"-p dccp --dccp-types REQUEST,RESPONSE,DATA,ACK,DATAACK,CLOSEREQ,CLOSE,"
-				"RESET,SYNC,SYNCACK,INVALID -j ACCEPT",
-	"-p dccp --dccp-option 12 -j DROP",
-	"-p 33 --dccp-types DATA -j ACCEPT",
+	"-p dccp -m dccp --dccp-types REQUEST -j ACCEPT",
+	"-p dccp -m dccp --dccp-types REQUEST,RESPONSE,DATA,ACK,DATAACK,"
+			"CLOSEREQ,CLOSE,RESET,SYNC,SYNCACK,INVALID -j ACCEPT",
+	"-p dccp -m dccp --dccp-option 12 -j DROP",
+	"-p 33 -m dccp --dccp-types DATA -j ACCEPT",
 	/* conntrack options */
 	"-m conntrack --ctstate NEW,INVALID,ESTABLISHED,RELATED,UNTRACKED,"
 				"SNAT,DNAT -j ACCEPT",
@@ -1767,10 +1767,10 @@ static const char *general_options[] = {
 static const char *general_options_address4[] = {
 	/* Address options IPv4 */
 	"--source 192.168.1.1 -j DROP",
-	"--src 192.168.1.2/32 -j DROP",
+	"--source 192.168.1.2/32 -j DROP",
 	"-s 192.168.1.3/24 -j DROP",
 	"--destination 192.168.1.3 -j DROP",
-	"--dst 192.168.1.4 -j DROP",
+	"--destination 192.168.1.4/24 -j DROP",
 	"-d 192.168.1.5 -j DROP",
 	"--source 192.168.1.1 --destination 192.168.2.1 -j DROP",
 	"-p tcp ! -s 1.2.3.4 -j DROP",
@@ -1795,11 +1795,11 @@ static const char *general_options_address4[] = {
 static const char *general_options_address6[] = {
 	/* Address options IPv6 */
 	"--source 2001:db8:3333:4444:5555:6666:7777:8888 -j DROP",
-	"--src 2001:db8:: -j DROP",
+	"--source 2001:db8:: -j DROP",
 	"-s ::1234:5678/64 -j DROP",
 	"-p tcp ! -s ::1234:5678/64 -j DROP",
 	"--destination 2001:db8::1234:5678 -j DROP",
-	"--dst 2001:0db8:0001:0000:0000:0ab9:C0A8:0102 -j DROP",
+	"--destination 2001:0db8:0001:0000:0000:0ab9:C0A8:0102 -j DROP",
 	"-d 2001:db8:3333:4444:5555:6666:1.2.3.4 -j DROP",
 	"--source 2001:db8:: --destination ::1234:5678/64 -j DROP",
 	"-s 2001:db8::,::1234:5678/64,2001:db8::1234:5678/128 -j DROP",
@@ -1833,7 +1833,6 @@ static const char *invalid_general_options[] = {
 	/* ECN options */
 	"-p 17 -m ecn --ecn-tcp-cwr -j ACCEPT",
 	"-p udp -m ecn --ecn-tcp-ece -j ACCEPT",
-	"-p all -m ecn --ecn-ip-ect 0 -j ACCEPT",
 	"-p ecn -m ecn --ecn-ip-ect 3 -j ACCEPT",
 	"-p tcp -m ecn --ecn-ip-ect -1 -j ACCEPT",
 	"-p tcp -m ecn --ecn-ip-ect 4 -j ACCEPT",
@@ -1874,7 +1873,7 @@ static const char *invalid_general_options[] = {
 	"-p tcp -m tcp --ctorigdstport dummy -j ACCEPT",
 	"-m conntrack --ctreplsrcport 222222 -j ACCEPT",
 	"-m conntrack --ctreplsrcport ssha -j ACCEPT",
-	"-m conntrack --ctrepldstport 0 -j ACCEPT",
+	"-m conntrack --ctrepldstport -1 -j ACCEPT",
 	"-m conntrack --ctrepldstport sshd -j ACCEPT",
 	"-m conntrack --ctorigsrc 1.2.3.4/40 -j ACCEPT",
 	"-m conntrack --ctorigsrc connman.org,1.2.3.4/34 -j ACCEPT",
@@ -1966,10 +1965,8 @@ static const char *invalid_general_options[] = {
 	"-p tcp -m multiport --ports 44 --port 34 -j ACCEPT",
 	"-p tcp -m multiport --ports 34 --ports 44 -j ACCEPT",
 	"-p tcp -m multiport --port 44 --ports 34 -j ACCEPT",
-	/* Port ranges not valid for single port switches */
+	/* Port list not valid for single port switches */
 	"-p tcp -m tcp --dport 34,35 -j ACCEPT",
-	"-p tcp -m tcp --sport 34:35 -j ACCEPT",
-	"-p tcp -m tcp --sport echo:35 -j ACCEPT",
 	"-p tcp -m tcp --sport ssh,http -j ACCEPT",
 	/* Port ranges */
 	"-p tcp -m multiport --dports 44:44 -j ACCEPT",
@@ -2021,22 +2018,17 @@ static const char *invalid_general_options[] = {
 /* Main config with invalid rules */
 static const char *invalid_general_input[] = {
 		/* Match has to have options */
-		"-p tcp -m tcp -j ACCEPT",
-		"-p udp -m udp -j DROP",
+		"-p tcp -m multiport -j ACCEPT",
+		"-p udp -m iprange -j DROP",
 		/* Matches cannot be defined as protocol integers */
 		"-p 6 -m 6 --dport https -j LOG",
 		/* Only one target */
 		"-p tcp -m tcp --dport 80 -j ACCEPT -j DROP",
 		/* Protocol omitted */
 		"udp -m udp --dport 81 -j DROP",
-		/* -m sctp is not supported */
-		"-p sctp -m sctp --dport 5678 -j ACCEPT",
 		/* -m mh is not supported */
-		"-p mh -m mh -j ACCEPT",
 		"-p mh -m mh --mh-type binding-refresh-request -j LOG",
 		"-p mh -m mh --mh-type cot:be -j DROP",
-		/* -m dccp is not supported */
-		"-p dccp -m dccp --source-port 8188 -j QUEUE",
 		/* One protocol only */
 		"-p tcp -p all -m conntrack --ctstate RELATED -j ACCEPT",
 		/* State is disabled */
@@ -2136,10 +2128,8 @@ static const char *invalid_general_forward[] = {
 		"-j ACCEPT -j DROP",
 		/* Invalid multiport range */
 		"-p udp -m multiport --dports 11-4000 -j ACCEPT",
-		/* No protocol and double match */
+		/* No protocol */
 		"-m multiport -m tcp --dports 70:111 -j ACCEPT",
-		/* Double match */
-		"-p tcp -m multiport -m tcp --dports 555:666 -j ACCEPT",
 		/* No protocol */
 		"-p -j DROP",
 		/* Invalid targets */
@@ -2589,7 +2579,7 @@ static gboolean setup_main_config(GKeyFile *config)
 static const char *cel_input_add0[] = {
 			"-p udp -m udp --dport 12000 -j LOG",
 			"-p tcp -m tcp --dport 12001 -j QUEUE",
-			"-p dccp --dport 12002 -j REJECT",
+			"-p dccp -m dccp --dport 12002 -j REJECT",
 			NULL,
 };
 
@@ -2628,7 +2618,7 @@ static const char *input_fail2[] = {
 
 // Ethernet
 static const char *eth_input_add3[] = {
-			"-p dccp --sport 34 --dport 55 -j ACCEPT",
+			"-p dccp -m dccp --sport 34 --dport 55 -j ACCEPT",
 			"-p dccp -m multiport --ports 56:67 -j DROP",
 			"-p all -m conntrack --ctstate NEW -j ACCEPT",
 			NULL,
