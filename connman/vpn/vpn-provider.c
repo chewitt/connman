@@ -3,7 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
- *  Copyright (C) 2019  Jolla Ltd.
+ *  Copyright (C) 2019-2020  Jolla Ltd.
  *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -3418,6 +3418,51 @@ static void remove_unprovisioned_providers(void)
 	}
 
 	g_strfreev(providers);
+}
+
+void vpn_provider_unload_providers(char **providers, int len)
+{
+	struct vpn_provider *provider;
+	char *identifier;
+	int i;
+
+	DBG("providers %d/%p", len, providers);
+
+	if (!providers)
+		return;
+
+	for (i = 0; i < len && providers[i]; i++) {
+		if (strncmp(providers[i], "provider_", 9))
+			continue;
+
+		DBG("provider %d:%s", i, providers[i]);
+		identifier = providers[i] + 9;
+
+		provider = __vpn_provider_lookup(identifier);
+		if (!provider)
+			continue;
+
+		if (__vpn_provider_delete(provider))
+			DBG("cannot unload provider %s", providers[i]);
+	}
+}
+
+static void load_providers_for_driver(gpointer data, gpointer user_data)
+{
+	struct vpn_provider_driver *driver = data;
+
+	if (!driver)
+		return;
+
+	DBG("loading driver %p name %s", driver, driver->name);
+	provider_create_all_from_type(driver->name);
+}
+
+void vpn_provider_load_providers()
+{
+	DBG("");
+	g_slist_foreach(driver_list, load_providers_for_driver, NULL);
+	remove_unprovisioned_providers();
 }
 
 static gboolean connman_property_changed(DBusConnection *conn,
