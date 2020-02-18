@@ -3,7 +3,7 @@
  *  Connection Manager unit test for the exposed iptables functions
  *  for SailfishOS MDM.
  *
- *  Copyright (C) 2017-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2020  Jolla Ltd. All rights reserved.
  *  Contact: Jussi Laakkonen <jussi.laakkonen@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -409,6 +409,11 @@ int __connman_iptables_change_policy(int type,
 		return -1;
 
 	return 0;
+}
+
+DBusConnection *connman_dbus_get_connection(void)
+{
+	return NULL;
 }
 
 

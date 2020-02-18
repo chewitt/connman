@@ -382,9 +382,10 @@ unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
 				unit/test-sailfish_iptables_ext.c \
 				src/log.c src/storage.c src/inotify.c \
-				src/sailfish_iptables_ext.c
-unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
-				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
+				src/sailfish_iptables_ext.c src/error.c
+unit_test_sailfish_iptables_ext_LDADD = gdbus/libgdbus-internal.la \
+				@GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ \
+				@DBUS_LIBS@ -ldl
 
 unit_test_globalproxy_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
@@ -453,12 +454,13 @@ unit_test_sailfish_datacounter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_unref=test_time_notify_unref \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
-unit_test_sailfish_datacounter_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ \
-	@DBUS_LIBS@ -ldl
+unit_test_sailfish_datacounter_LDADD = gdbus/libgdbus-internal.la \
+				@GLIBUTIL_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_test_sailfish_datacounter_SOURCES = unit/test-sailfish_datacounter.c \
 	unit/test_timenotify.c src/sailfish_datacounter.c \
 	src/sailfish_datacounters_util.c src/inotify.c src/storage.c \
-	src/wakeup_timer.c src/log.c $(backtrace_sources)
+	src/wakeup_timer.c src/log.c src/error.c src/dbus.c \
+	$(backtrace_sources)
 noinst_PROGRAMS += unit/test-sailfish_datacounter
 TESTS += unit/test-sailfish_datacounter
 
@@ -472,13 +474,13 @@ unit_test_sailfish_datacounters_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_unref=test_time_notify_unref \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
-unit_test_sailfish_datacounters_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ \
-	@DBUS_LIBS@ -ldl
+unit_test_sailfish_datacounters_LDADD = gdbus/libgdbus-internal.la \
+				@GLIBUTIL_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_test_sailfish_datacounters_SOURCES = unit/test-sailfish_datacounters.c \
 	unit/test_timenotify.c src/sailfish_datacounters.c \
 	src/sailfish_datacounter.c src/sailfish_datacounters_util.c \
-	src/inotify.c src/storage.c src/wakeup_timer.c src/log.c \
-	$(backtrace_sources)
+	src/inotify.c src/storage.c src/wakeup_timer.c src/log.c src/error.c \
+	src/dbus.c $(backtrace_sources)
 noinst_PROGRAMS += unit/test-sailfish_datacounters
 TESTS += unit/test-sailfish_datacounters
 
@@ -494,14 +496,14 @@ unit_test_sailfish_datahistory_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_unref=test_time_notify_unref \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
-unit_test_sailfish_datahistory_LDADD = @GLIBUTIL_LIBS@ @GLIB_LIBS@ \
-	@DBUS_LIBS@ -ldl
+unit_test_sailfish_datahistory_LDADD = gdbus/libgdbus-internal.la \
+				@GLIBUTIL_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_test_sailfish_datahistory_SOURCES = unit/test-sailfish_datahistory.c \
 	unit/test_timenotify.c src/sailfish_datacounter.c \
 	src/sailfish_datacounters_util.c src/sailfish_datahistory.c \
 	src/sailfish_datahistory_memory.c src/sailfish_datahistory_file.c \
-	src/inotify.c src/storage.c src/wakeup_timer.c src/log.c \
-	$(backtrace_sources)
+	src/inotify.c src/storage.c src/wakeup_timer.c src/log.c src/error.c \
+	src/dbus.c $(backtrace_sources)
 noinst_PROGRAMS += unit/test-sailfish_datahistory
 TESTS += unit/test-sailfish_datahistory
 endif
@@ -570,15 +572,19 @@ tools_iptables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 			-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 			@DBUS_CFLAGS@
 tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
-		src/inotify.c src/iptables.c tools/iptables-test.c
-tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
+		src/inotify.c src/iptables.c tools/iptables-test.c \
+		src/error.c src/dbus.c
+tools_iptables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
+			@XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_ip6tables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 			-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 			@DBUS_CFLAGS@
 tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
-		src/inotify.c src/iptables.c tools/ip6tables-test.c
-tools_ip6tables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
+		src/inotify.c src/iptables.c tools/ip6tables-test.c \
+		src/error.c src/dbus.c
+tools_ip6tables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
+		@XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
@@ -596,7 +602,8 @@ tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c src/firewall.c src/nat.c \
-		src/inet.c src/iptables-validate.c tools/iptables-unit.c
+		src/inet.c src/iptables-validate.c tools/iptables-unit.c \
+		src/error.c src/dbus.c
 tools_iptables_unit_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c

@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2018 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2018-2020  Jolla Ltd. All rights reserved.
  *  Contact: David Llewellyn-Jones <david.llewellyn-jones@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -122,6 +122,15 @@ gboolean g_dbus_register_interface(DBusConnection *connection,
 	user_data_dbus_call = user_data;
 	g_assert_true(get_property_dbus_call);
 	g_assert_true(set_property_dbus_call);
+
+	return TRUE;
+}
+
+gboolean g_dbus_unregister_interface(DBusConnection *connection,
+					const char *path, const char *name)
+{
+	g_assert(connection);
+	g_assert_cmpstr(path, ==, "/");
 
 	return TRUE;
 }
