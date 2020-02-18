@@ -270,12 +270,46 @@ int __connman_resolver_redo_servers(int index);
 
 #define STORAGEDIR connman_storage_dir()
 #define VPN_STORAGEDIR connman_storage_vpn_dir()
+#define USER_STORAGEDIR connman_storage_user_dir()
+#define USER_VPN_STORAGEDIR connman_storage_user_vpn_dir()
 #define STORAGE_DIR_MODE __connman_storage_dir_mode()
 #define STORAGE_FILE_MODE __connman_storage_file_mode()
 
-int __connman_storage_dir_mode(void);
-int __connman_storage_file_mode(void);
-int __connman_storage_init(const char *root, int dir_mode, int file_mode);
+enum connman_storage_dir_type {
+	STORAGE_DIR_TYPE_MAIN	= 0x0001,
+	STORAGE_DIR_TYPE_VPN	= 0x0002,
+	STORAGE_DIR_TYPE_USER	= 0x0004,
+	STORAGE_DIR_TYPE_STATE	= 0x0008,
+};
+
+/*
+ * Callbacks to be use in user change process. Callbacks are executed in the
+ * defined order.
+ */
+struct connman_storage_callbacks {
+	/* Prepare is called to remove all used technologies from use */
+	bool (*pre) (void);
+
+	/* Unload is called to remove all used services/providers from use. */
+	void (*unload) (char **items, int len);
+
+	/* Load is called to load all the new services/providers. */
+	void (*load) (void);
+
+	/* Post callback is to initialize technologies from new settings. */
+	bool (*post) (void);
+
+	/* Finalize callback is to do additional actions after setup. */
+	void (*finalize) (const char *username);
+};
+
+mode_t __connman_storage_dir_mode(void);
+mode_t __connman_storage_file_mode(void);
+int __connman_storage_init(const char *root, mode_t dir_mode,
+			mode_t file_mode);
+int __connman_storage_create_dir(const char *dir, mode_t permissions);
+int __connman_storage_register_dbus(enum connman_storage_dir_type type,
+				struct connman_storage_callbacks *callbacks);
 void __connman_storage_cleanup(void);
 GKeyFile *__connman_storage_open_global(void);
 GKeyFile *__connman_storage_load_global(void);
@@ -559,6 +593,8 @@ int __connman_technology_set_offlinemode(bool offlinemode);
 bool __connman_technology_get_offlinemode(void);
 void __connman_technology_set_connected(enum connman_service_type type,
 					bool connected);
+bool __connman_technology_disable_all(void);
+bool __connman_technology_enable_from_config(void);
 
 int __connman_technology_add_rfkill(unsigned int index,
 					enum connman_service_type type,
@@ -703,6 +739,8 @@ int __connman_provider_init(void);
 
 int __connman_service_init(void);
 void __connman_service_cleanup(void);
+void __connman_service_unload_services(gchar **services, int len);
+void __connman_service_load_services(void);
 int __connman_service_load_modifiable(struct connman_service *service);
 
 void __connman_service_list_struct(DBusMessageIter *iter);

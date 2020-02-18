@@ -222,6 +222,9 @@ scriptdir = $(libdir)/connman/scripts
 
 storageroot = $(localstatedir)/lib
 
+# Path in users' home dir to use as storage dir
+userstorage = ".local/share/system/privileged"
+
 configdir = ${sysconfdir}/connman
 
 testconfigdir = "/tmp/connman_test"
@@ -261,8 +264,9 @@ src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-DSTATEDIR=\""$(statedir)"\" \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
-				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
-				-DCONFIGDIR=\""$(configdir)\"" \
+				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+				-DCONFIGDIR=\""$(configdir)"\" \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-I$(builddir)/src
 
@@ -277,8 +281,9 @@ vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-DPLUGINDIR=\""$(build_vpn_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
-				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
-				-DCONFIGDIR=\""$(configdir)\"" \
+				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+				-DCONFIGDIR=\""$(configdir)"\" \
 				-I$(builddir)/vpn
 
 endif
@@ -347,6 +352,7 @@ unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
 unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
 
 unit_test_service_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 				-DSTATEDIR=\""$(statedir)"\"
 unit_test_service_SOURCES = $(backtrace_sources) $(gdhcp_sources) \
 				$(gweb_sources) $(shared_sources) \
@@ -370,7 +376,9 @@ unit_test_service_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ -lresolv \
 				-ldl
 
-unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@
+unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+				 @DBUS_CFLAGS@
 unit_test_sailfish_iptables_ext_SOURCES = $(backtrace_sources) \
 				unit/test-sailfish_iptables_ext.c \
 				src/log.c src/storage.c src/inotify.c \
@@ -379,6 +387,7 @@ unit_test_sailfish_iptables_ext_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ \
 				@LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 unit_test_globalproxy_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 				$(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				-DSTATEDIR=\""$(statedir)"\"
 unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
@@ -435,6 +444,7 @@ if SAILFISH_COUNTERS
 unit_test_sailfish_datacounter_CPPFLAGS = -I$(builddir)/src \
 	@GLIBUTIL_CFLAGS@ $(AM_CPPFLAGS)
 unit_test_sailfish_datacounter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+	-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 	-DSTATS_SHORT_WRITE_PERIOD_SEC=1 \
 	-DSTATS_LONG_WRITE_PERIOD_SEC=3 \
 	-Ddatacounters_time_now=test_time_now \
@@ -455,6 +465,7 @@ TESTS += unit/test-sailfish_datacounter
 unit_test_sailfish_datacounters_CPPFLAGS = -I$(builddir)/src \
 	@GLIBUTIL_CFLAGS@ $(AM_CPPFLAGS)
 unit_test_sailfish_datacounters_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+	-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 	-Ddatacounters_time_now=test_time_now \
 	-Dgutil_time_notify_new=test_time_notify_new \
 	-Dgutil_time_notify_ref=test_time_notify_ref \
@@ -474,6 +485,7 @@ TESTS += unit/test-sailfish_datacounters
 unit_test_sailfish_datahistory_CPPFLAGS = -I$(builddir)/src \
 	@GLIBUTIL_CFLAGS@ $(AM_CPPFLAGS)
 unit_test_sailfish_datahistory_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+	-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 	-DSTATS_SHORT_WRITE_PERIOD_SEC=1 \
 	-DSTATS_LONG_WRITE_PERIOD_SEC=3 \
 	-Ddatacounters_time_now=test_time_now \
@@ -554,12 +566,16 @@ tools_dbus_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_polkit_test_LDADD = @DBUS_LIBS@
 
-tools_iptables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" @DBUS_CFLAGS@
+tools_iptables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
+			-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+			@DBUS_CFLAGS@
 tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c tools/iptables-test.c
 tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
-tools_ip6tables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" @DBUS_CFLAGS@
+tools_ip6tables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
+			-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+			@DBUS_CFLAGS@
 tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c tools/ip6tables-test.c
 tools_ip6tables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
@@ -573,9 +589,10 @@ tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
+		-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\" \
 		-DIP6TABLES_SAVE=\""${IP6TABLES_SAVE}"\" \
-		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
+		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
 		src/inotify.c src/iptables.c src/firewall.c src/nat.c \
