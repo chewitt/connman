@@ -85,6 +85,7 @@ unit/test-firewall
 unit/test-globalproxy
 unit/test-iptables
 unit/test-device
+unit/test-storage
 
 *.gcda
 *.gcno

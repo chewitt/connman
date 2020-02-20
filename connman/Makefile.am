@@ -317,7 +317,8 @@ noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
-	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access
+	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access \
+	unit/test-storage
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -424,11 +425,22 @@ unit_test_sailfish_vpn_access_SOURCES = unit/test-sailfish_vpn_access.c \
 			$(backtrace_sources)
 unit_test_sailfish_vpn_access_LDADD = @GLIB_LIBS@ @DBUSACCESS_LIBS@ -ldl
 
+# Workaround for redefining the DEFAULT_STORAGE_ROOT
+unit_test_storage_CFLAGS = -DDEFAULT_TMPDIR=\""$(testconfigdir)"\" \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+				-include unit/test-storage_helper.h \
+				$(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
+				@DBUSACCESS_CFLAGS@
+unit_test_storage_SOURCES = unit/test-storage.c $(backtrace_sources) \
+				src/connman.h src/log.c src/error.c \
+				src/inotify.c src/storage.c src/technology.c
+unit_test_storage_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+
 TESTS = unit/test-access unit/test-vpn_access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
-	unit/test-device unit/test-sailfish_vpn_access
+	unit/test-device unit/test-sailfish_vpn_access unit/test-storage
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
