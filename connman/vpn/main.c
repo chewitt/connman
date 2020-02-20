@@ -3,6 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2015-2020  Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -210,9 +211,9 @@ int main(int argc, char *argv[])
 			"Connection Manager VPN daemon", VERSION);
 
 	if (!option_config)
-		__vpn_settings_init(CONFIGMAINFILE);
+		__vpn_settings_init(CONFIGMAINFILE, CONFIGDIR);
 	else
-		__vpn_settings_init(option_config);
+		__vpn_settings_init(option_config, CONFIGDIR);
 
 	const char* fs_identity = NULL;
 	if ((fs_identity = __vpn_settings_get_fs_identity()))
