@@ -1014,6 +1014,7 @@ static void test_iptables_default_save_path()
 {
 	gint i = 0;
 
+	g_assert_cmpint(__connman_storage_init(NULL, 0, 0), ==, 0);
 	for (i = 0; i < 4 ; i++)
 		g_assert(!connman_iptables_default_save_path(i));
 
@@ -1022,6 +1023,8 @@ static void test_iptables_default_save_path()
 
 	for (i = 7; i < 10 ; i++)
 		g_assert(!connman_iptables_default_save_path(i));
+
+	__connman_storage_cleanup();
 }
 
 int __connman_iptables_save_all();
