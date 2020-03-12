@@ -1020,6 +1020,7 @@ static void station_property_change(GDBusProxy *proxy, const char *name,
 		DBusMessageIter *iter, void *user_data)
 {
 	struct iwd_station *iwds;
+	struct iwd_device *iwdd;
 	const char *path;
 
 	path = g_dbus_proxy_get_path(proxy);
@@ -1055,6 +1056,11 @@ static void station_property_change(GDBusProxy *proxy, const char *name,
 
 		if (!iwds->scanning)
 			update_signal_strength(iwds);
+
+		iwdd = g_hash_table_lookup(devices, path);
+		if (iwdd)
+			connman_device_set_scanning(iwdd->device,
+				CONNMAN_SERVICE_TYPE_WIFI, iwds->scanning);
 
 		DBG("%s scanning %d", path, iwds->scanning);
 	}
