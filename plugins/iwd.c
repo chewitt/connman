@@ -972,12 +972,15 @@ static void _update_signal_strength(const char *path, int16_t signal_strength)
 
 	connman_network_set_strength(iwdn->network,
 					calculate_strength(signal_strength));
+	connman_network_set_available(iwdn->network, true);
 	connman_network_update(iwdn->network);
 }
 
 static void ordered_networks_cb(DBusMessage *message, void *user_data)
 {
 	DBusMessageIter array, entry;
+	struct iwd_device *iwdd;
+	char *path = user_data;
 
 	DBG("");
 
@@ -1005,6 +1008,11 @@ static void ordered_networks_cb(DBusMessage *message, void *user_data)
 
 		dbus_message_iter_next(&entry);
 	}
+
+	iwdd = g_hash_table_lookup(devices, path);
+	if (iwdd)
+		connman_device_set_scanning(iwdd->device,
+				CONNMAN_SERVICE_TYPE_WIFI, false);
 }
 
 static void update_signal_strength(struct iwd_station *iwds)
@@ -1012,7 +1020,7 @@ static void update_signal_strength(struct iwd_station *iwds)
 	if (!g_dbus_proxy_method_call(iwds->proxy,
 					"GetOrderedNetworks",
 					NULL, ordered_networks_cb,
-					NULL, NULL))
+					g_strdup(iwds->path), g_free))
 		DBG("GetOrderedNetworks() failed");
 }
 
@@ -1054,13 +1062,15 @@ static void station_property_change(GDBusProxy *proxy, const char *name,
 		dbus_message_iter_get_basic(iter, &scanning);
 		iwds->scanning = scanning;
 
-		if (!iwds->scanning)
+		if (iwds->scanning) {
+			iwdd = g_hash_table_lookup(devices, path);
+			if (iwdd)
+				connman_device_set_scanning(iwdd->device,
+					CONNMAN_SERVICE_TYPE_WIFI, true);
+		} else {
 			update_signal_strength(iwds);
+		}
 
-		iwdd = g_hash_table_lookup(devices, path);
-		if (iwdd)
-			connman_device_set_scanning(iwdd->device,
-				CONNMAN_SERVICE_TYPE_WIFI, iwds->scanning);
 
 		DBG("%s scanning %d", path, iwds->scanning);
 	}
