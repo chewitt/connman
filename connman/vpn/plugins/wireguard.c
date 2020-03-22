@@ -49,6 +49,16 @@
 #include "vpn.h"
 #include "wireguard.h"
 
+#define DNS_RERESOLVE_TIMEOUT 20
+
+struct wireguard_info {
+	struct wg_device device;
+	struct wg_peer peer;
+	char *endpoint_fqdn;
+	char *port;
+	int reresolve_id;
+};
+
 static int parse_key(const char *str, wg_key key)
 {
 	unsigned char *buf;
@@ -116,7 +126,7 @@ static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer)
 	return 0;
 }
 
-static int parse_endpoint(const char *host, const char *port, wg_peer *peer)
+static int parse_endpoint(const char *host, const char *port, struct sockaddr *addr)
 {
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
@@ -151,7 +161,7 @@ static int parse_endpoint(const char *host, const char *port, wg_peer *peer)
 		return -EINVAL;
 	}
 
-	memcpy(&peer->endpoint.addr, rp->ai_addr, rp->ai_addrlen);
+	memcpy(addr, rp->ai_addr, rp->ai_addrlen);
 	freeaddrinfo(result);
 
 	return 0;
@@ -236,10 +246,59 @@ static char *get_ifname(void)
 	return NULL;
 }
 
-struct wireguard_info {
-	struct wg_device device;
-	struct wg_peer peer;
-};
+static bool sockaddr_cmp_addr(struct sockaddr *a, struct sockaddr *b)
+{
+	if (a->sa_family != b->sa_family)
+		return false;
+
+	if (a->sa_family == AF_INET) {
+		struct sockaddr_in *a4 = (struct sockaddr_in *)a;
+		struct sockaddr_in *b4 = (struct sockaddr_in *)b;
+
+		return !memcmp(a4, b4, sizeof(struct sockaddr_in));
+	} else if (a->sa_family == AF_INET6) {
+		struct sockaddr_in6 *a6 = (struct sockaddr_in6 *)a;
+		struct sockaddr_in6 *b6 = (struct sockaddr_in6 *)b;
+
+		return !memcmp(a6->sin6_addr.s6_addr,
+				b6->sin6_addr.s6_addr,
+				sizeof(a6->sin6_addr.s6_addr));
+	}
+
+	return false;
+}
+
+static gboolean wg_dns_reresolve_cb(gpointer user_data)
+{
+	struct wireguard_info *info = user_data;
+	int err;
+	struct sockaddr addr;
+
+	DBG("");
+
+	err = parse_endpoint(info->endpoint_fqdn,
+			info->port, &addr);
+	if (err)
+		return TRUE;
+
+	if (sockaddr_cmp_addr(&addr, &info->peer.endpoint.addr))
+		return TRUE;
+
+	if (addr.sa_family == AF_INET)
+		memcpy(&info->peer.endpoint.addr, &addr,
+			sizeof(info->peer.endpoint.addr4));
+	else
+		memcpy(&info->peer.endpoint.addr, &addr,
+			sizeof(info->peer.endpoint.addr6));
+
+	DBG("Endpoint address has changed, udpate WireGuard device");
+	err = wg_set_device(&info->device);
+	if (err)
+		DBG("Failed to update Endpoint address for WireGuard device %s",
+			info->device.name);
+
+	return TRUE;
+}
 
 static int wg_connect(struct vpn_provider *provider,
 			struct connman_task *task, const char *if_name,
@@ -323,9 +382,12 @@ static int wg_connect(struct vpn_provider *provider,
 		option = "51820";
 
 	gateway = vpn_provider_get_string(provider, "Host");
-	err = parse_endpoint(gateway, option, &info->peer);
+	err = parse_endpoint(gateway, option, &info->peer.endpoint.addr);
 	if (err)
 		goto done;
+
+	info->endpoint_fqdn = g_strdup(gateway);
+	info->port = g_strdup(option);
 
 	option = vpn_provider_get_string(provider, "WireGuard.Address");
 	if (!option) {
@@ -367,6 +429,11 @@ done:
 
 	connman_ipaddress_free(ipaddress);
 
+	if (!err)
+		info->reresolve_id =
+			g_timeout_add_seconds(DNS_RERESOLVE_TIMEOUT,
+						wg_dns_reresolve_cb, info);
+
 	return err;
 }
 
@@ -377,10 +444,16 @@ static void wg_disconnect(struct vpn_provider *provider)
 	info = vpn_provider_get_plugin_data(provider);
 	if (!info)
 		return;
+
+	if (info->reresolve_id > 0)
+		g_source_remove(info->reresolve_id);
+
 	vpn_provider_set_plugin_data(provider, NULL);
 
 	wg_del_device(info->device.name);
 
+	g_free(info->endpoint_fqdn);
+	g_free(info->port);
 	g_free(info);
 }
 
