@@ -229,7 +229,7 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 
 	host = get_string(config_provider, "Host");
 	domain = get_string(config_provider, "Domain");
-	if (host && domain) {
+	if (host) {
 		char *id = __vpn_provider_create_identifier(host, domain);
 
 		struct vpn_provider *provider;

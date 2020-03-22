@@ -2166,9 +2166,10 @@ char *__vpn_provider_create_identifier(const char *host, const char *domain)
 {
 	char *ident;
 
-	ident = g_strdup_printf("%s_%s", host, domain);
-	if (!ident)
-		return NULL;
+	if (domain)
+		ident = g_strdup_printf("%s_%s", host, domain);
+	else
+		ident = g_strdup_printf("%s", host);
 
 	provider_dbus_ident(ident);
 
@@ -2219,7 +2220,7 @@ int __vpn_provider_create(DBusMessage *msg)
 		dbus_message_iter_next(&array);
 	}
 
-	if (!host || !domain)
+	if (!host)
 		return -EINVAL;
 
 	DBG("Type %s name %s networks %p", type, name, networks);
@@ -2404,7 +2405,7 @@ int __vpn_provider_create_from_config(GHashTable *settings,
 	networks_str = get_string(settings, "Networks");
 	networks = parse_user_networks(networks_str);
 
-	if (!host || !domain) {
+	if (!host) {
 		err = -EINVAL;
 		goto fail;
 	}

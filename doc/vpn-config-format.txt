@@ -38,7 +38,7 @@ Allowed fields:
 VPN related parameters (M = mandatory, O = optional):
 - Name: A user defined name for the VPN (M)
 - Host: VPN server IP address (M)
-- Domain: Domain name for the VPN service (M)
+- Domain: Domain name for the VPN service (O)
 - Networks: The networks behind the VPN link can be defined here. This can
   be missing if all traffic should go via VPN tunnel. If there are more
   than one network, then separate them by comma. Format of the entry
