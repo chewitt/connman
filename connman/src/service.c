@@ -69,6 +69,12 @@
 #define PROP_CA_CERT                    "CACert"
 #define PROP_CA_CERT_FILE               "CACertFile"
 #define PROP_DOMAIN_SUFFIX_MATCH        "DomainSuffixMatch"
+#define PROP_CLIENT_CERT                "ClientCert"
+#define PROP_CLIENT_CERT_FILE           "ClientCertFile"
+#define PROP_PRIVATE_KEY                "PrivateKey"
+#define PROP_PRIVATE_KEY_FILE           "PrivateKeyFile"
+#define PROP_PRIVATE_KEY_PASSPHRASE     "PrivateKeyPassphrase"
+#define PROP_ANONYMOUS_IDENTITY         "AnonymousIdentity"
 
 /* Get/set properties */
 #define GET_ACCESS_ACCESS               CONNMAN_ACCESS_ALLOW
@@ -89,6 +95,16 @@
 #define SET_CA_CERT_FILE_ACCESS         CONNMAN_ACCESS_DENY
 #define GET_DOMAIN_SUFFIX_MATCH_ACCESS  CONNMAN_ACCESS_ALLOW
 #define SET_DOMAIN_SUFFIX_MATCH_ACCESS  CONNMAN_ACCESS_DENY
+#define GET_CLIENT_CERT_ACCESS          CONNMAN_ACCESS_ALLOW
+#define SET_CLIENT_CERT_ACCESS          CONNMAN_ACCESS_DENY
+#define GET_PRIVATE_KEY_ACCESS          CONNMAN_ACCESS_ALLOW
+#define SET_PRIVATE_KEY_ACCESS          CONNMAN_ACCESS_DENY
+#define GET_PRIVATE_KEY_PASSPHRASE_ACCESS \
+					CONNMAN_ACCESS_ALLOW
+#define SET_PRIVATE_KEY_PASSPHRASE_ACCESS \
+	                                CONNMAN_ACCESS_DENY
+#define GET_ANONYMOUS_IDENTITY_ACCESS   CONNMAN_ACCESS_ALLOW
+#define SET_ANONYMOUS_IDENTITY_ACCESS   CONNMAN_ACCESS_DENY
 
 /* Set properties (Get is always ACCESS_ALLOW for these) */
 #define SET_PROXYCONFIG_ACCESS          CONNMAN_ACCESS_DENY
@@ -110,6 +126,13 @@
 #define ACCESS_PROP_CA_CERT             0x00000040
 #define ACCESS_PROP_CA_CERT_FILE        0x00000080
 #define ACCESS_PROP_DOMAIN_SUFFIX_MATCH 0x00000100
+#define ACCESS_PROP_CLIENT_CERT         0x00000200
+#define ACCESS_PROP_CLIENT_CERT_FILE    0x00000400
+#define ACCESS_PROP_PRIVATE_KEY         0x00000800
+#define ACCESS_PROP_PRIVATE_KEY_FILE    0x00001000
+#define ACCESS_PROP_PRIVATE_KEY_PASSPHRASE \
+					0x00002000
+#define ACCESS_PROP_ANONYMOUS_IDENTITY  0x00004000
 
 #define ACCESS_METHOD_CLEAR_PROPERTY    0x00000001
 #define ACCESS_METHOD_CONNECT           0x00000002
@@ -178,6 +201,36 @@ static const struct connman_service_property_access {
 		PROP_DOMAIN_SUFFIX_MATCH,
 		GET_DOMAIN_SUFFIX_MATCH_ACCESS,
 		SET_DOMAIN_SUFFIX_MATCH_ACCESS
+	},{
+		ACCESS_PROP_CLIENT_CERT,
+		PROP_CLIENT_CERT,
+		GET_CLIENT_CERT_ACCESS,
+		SET_CLIENT_CERT_ACCESS
+	},{
+		ACCESS_PROP_CLIENT_CERT_FILE,
+		PROP_CLIENT_CERT_FILE,
+		GET_CLIENT_CERT_ACCESS,
+		SET_CLIENT_CERT_ACCESS
+	},{
+		ACCESS_PROP_PRIVATE_KEY,
+		PROP_PRIVATE_KEY,
+		GET_PRIVATE_KEY_ACCESS,
+		SET_PRIVATE_KEY_ACCESS
+	},{
+		ACCESS_PROP_PRIVATE_KEY_FILE,
+		PROP_PRIVATE_KEY_FILE,
+		GET_PRIVATE_KEY_ACCESS,
+		SET_PRIVATE_KEY_ACCESS
+	},{
+		ACCESS_PROP_PRIVATE_KEY_PASSPHRASE,
+		PROP_PRIVATE_KEY_PASSPHRASE,
+		GET_PRIVATE_KEY_PASSPHRASE_ACCESS,
+		SET_PRIVATE_KEY_PASSPHRASE_ACCESS
+	},{
+		ACCESS_PROP_ANONYMOUS_IDENTITY,
+		PROP_ANONYMOUS_IDENTITY,
+		GET_ANONYMOUS_IDENTITY_ACCESS,
+		SET_ANONYMOUS_IDENTITY_ACCESS
 	}
 };
 
@@ -905,15 +958,15 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 					&service->domain_suffix_match);
 	get_config_string(keyfile, service->identifier, "DomainMatch",
 					&service->domain_match);
-	get_config_string(keyfile, service->identifier, "ClientCertFile",
+	get_config_string(keyfile, service->identifier, PROP_CLIENT_CERT_FILE,
 					&service->client_cert_file);
-	get_config_string(keyfile, service->identifier, "ClientCert",
+	get_config_string(keyfile, service->identifier, PROP_CLIENT_CERT,
 					&service->client_cert);
-	get_config_string(keyfile, service->identifier, "PrivateKeyFile",
+	get_config_string(keyfile, service->identifier, PROP_PRIVATE_KEY_FILE,
 					&service->private_key_file);
-	get_config_string(keyfile, service->identifier, "PrivateKey",
+	get_config_string(keyfile, service->identifier, PROP_PRIVATE_KEY,
 					&service->private_key);
-	get_config_string(keyfile, service->identifier, "PrivateKeyPassphrase",
+	get_config_string(keyfile, service->identifier, PROP_PRIVATE_KEY_PASSPHRASE,
 					&service->private_key_passphrase);
 	get_config_string(keyfile, service->identifier, PROP_PHASE2,
 					&service->phase2);
@@ -1097,15 +1150,16 @@ static int service_save(struct connman_service *service)
 		set_config_string(keyfile, service->identifier,
 			"DomainMatch", service->domain_match);
 		set_config_string(keyfile, service->identifier,
-			"ClientCertFile", service->client_cert_file);
+			PROP_CLIENT_CERT_FILE, service->client_cert_file);
 		set_config_string(keyfile, service->identifier,
-			"ClientCert", service->client_cert);
+			PROP_CLIENT_CERT, service->client_cert);
 		set_config_string(keyfile, service->identifier,
-			"PrivateKeyFile", service->private_key_file);
+			PROP_PRIVATE_KEY_FILE, service->private_key_file);
 		set_config_string(keyfile, service->identifier,
-			"PrivateKey", service->private_key);
+			PROP_PRIVATE_KEY, service->private_key);
 		set_config_string(keyfile, service->identifier,
-			"PrivateKeyPassphrase", service->private_key_passphrase);
+			PROP_PRIVATE_KEY_PASSPHRASE,
+			service->private_key_passphrase);
 		set_config_string(keyfile, service->identifier,
 			PROP_PHASE2, service->phase2);
 		/* fall through */
@@ -3125,6 +3179,28 @@ static DBusMessage *get_property(DBusConnection *conn,
 		return check_and_reply_string(msg, service, name,
 					service->domain_suffix_match,
 					GET_DOMAIN_SUFFIX_MATCH_ACCESS);
+	} else if (!g_strcmp0(name, PROP_CLIENT_CERT)) {
+		return check_and_reply_string(msg, service, name,
+				service->client_cert, GET_CLIENT_CERT_ACCESS);
+	} else if (!g_strcmp0(name, PROP_CLIENT_CERT_FILE)) {
+		return check_and_reply_string(msg, service, name,
+					service->client_cert_file,
+					GET_CLIENT_CERT_ACCESS);
+	} else if (!g_strcmp0(name, PROP_PRIVATE_KEY)) {
+		return check_and_reply_string(msg, service, name,
+				service->private_key, GET_PRIVATE_KEY_ACCESS);
+	} else if (!g_strcmp0(name, PROP_PRIVATE_KEY_FILE)) {
+		return check_and_reply_string(msg, service, name,
+					service->private_key_file,
+					GET_PRIVATE_KEY_ACCESS);
+	} else if (!g_strcmp0(name, PROP_PRIVATE_KEY_PASSPHRASE)) {
+		return check_and_reply_string(msg, service, name,
+					service->private_key_passphrase,
+					GET_PRIVATE_KEY_PASSPHRASE_ACCESS);
+	} else if (!g_strcmp0(name, PROP_ANONYMOUS_IDENTITY)) {
+		return check_and_reply_string(msg, service, name,
+					service->anonymous_identity,
+					GET_ANONYMOUS_IDENTITY_ACCESS);
 	}
 
 	DBG("%s requested %s - why?", dbus_message_get_sender(msg), name);
@@ -3202,6 +3278,12 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 		connman_dbus_dict_append_basic(dict, "Hidden",
 						DBUS_TYPE_BOOLEAN, &val);
 
+		if (service->anonymous_identity)
+			connman_dbus_dict_append_basic(dict,
+						"AnonymousIdentity",
+						DBUS_TYPE_STRING,
+						&service->anonymous_identity);
+
 		append_restricted_string(dict, service, PROP_PASSPHRASE,
 				service->passphrase, GET_PASSPHRASE_ACCESS);
 		append_restricted_string(dict, service, PROP_IDENTITY,
@@ -3219,6 +3301,24 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 					PROP_DOMAIN_SUFFIX_MATCH,
 					service->domain_suffix_match,
 					GET_DOMAIN_SUFFIX_MATCH_ACCESS);
+		append_restricted_string(dict, service, PROP_CLIENT_CERT,
+				service->client_cert, GET_CLIENT_CERT_ACCESS);
+		append_restricted_string(dict, service, PROP_CLIENT_CERT_FILE,
+						service->client_cert_file,
+						GET_CLIENT_CERT_ACCESS);
+		append_restricted_string(dict, service, PROP_PRIVATE_KEY,
+				service->private_key, GET_PRIVATE_KEY_ACCESS);
+		append_restricted_string(dict, service, PROP_PRIVATE_KEY_FILE,
+						service->private_key_file,
+						GET_PRIVATE_KEY_ACCESS);
+		append_restricted_string(dict, service,
+				PROP_PRIVATE_KEY_PASSPHRASE,
+				service->private_key_passphrase,
+				GET_PRIVATE_KEY_PASSPHRASE_ACCESS);
+		append_restricted_string(dict, service,
+				PROP_ANONYMOUS_IDENTITY,
+				service->anonymous_identity,
+				GET_ANONYMOUS_IDENTITY_ACCESS);
 		break;
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
@@ -4063,6 +4163,54 @@ static gboolean set_domain_suffix_match(struct connman_service *service,
 				suffix, GET_DOMAIN_SUFFIX_MATCH_ACCESS);
 }
 
+static gboolean set_client_cert(struct connman_service *service,
+						const char *client_cert)
+{
+	return set_prop_string(service, PROP_CLIENT_CERT,
+					&service->client_cert, client_cert,
+					GET_CLIENT_CERT_ACCESS);
+}
+
+static gboolean set_client_cert_file(struct connman_service *service,
+						const char *client_cert_file)
+{
+	return set_prop_string(service, PROP_CLIENT_CERT_FILE,
+				&service->client_cert_file, client_cert_file,
+				GET_CLIENT_CERT_ACCESS);
+}
+
+static gboolean set_private_key(struct connman_service *service,
+							const char *private_key)
+{
+	return set_prop_string(service, PROP_PRIVATE_KEY, &service->private_key,
+						private_key, GET_PRIVATE_KEY_ACCESS);
+}
+
+static gboolean set_private_key_file(struct connman_service *service,
+						const char *private_key_file)
+{
+	return set_prop_string(service, PROP_PRIVATE_KEY_FILE, &service->private_key_file,
+				private_key_file, GET_PRIVATE_KEY_ACCESS);
+}
+
+static gboolean set_private_key_passphrase(struct connman_service *service,
+						const char *private_key_passphrase)
+{
+	return set_prop_string(service, PROP_PRIVATE_KEY_PASSPHRASE,
+				&service->private_key_passphrase,
+				private_key_passphrase,
+				GET_PRIVATE_KEY_PASSPHRASE_ACCESS);
+}
+
+static gboolean set_anonymous_identity(struct connman_service *service,
+						const char *anonymous_identity)
+{
+	return set_prop_string(service, PROP_ANONYMOUS_IDENTITY,
+				&service->anonymous_identity,
+				anonymous_identity,
+				GET_ANONYMOUS_IDENTITY_ACCESS);
+}
+
 static DBusMessage *set_restricted_string(struct connman_service *service,
 		const char *name, DBusMessageIter *value, DBusMessage *msg,
 		gboolean (*set)(struct connman_service *, const char *),
@@ -4819,6 +4967,28 @@ static DBusMessage *set_property(DBusConnection *conn,
 		return set_restricted_string(service, name, &value, msg,
 					set_domain_suffix_match,
 					SET_DOMAIN_SUFFIX_MATCH_ACCESS);
+	} else if (g_str_equal(name, PROP_CLIENT_CERT)) {
+		return set_restricted_string(service, name, &value, msg,
+					set_client_cert, SET_CLIENT_CERT_ACCESS);
+	} else if (g_str_equal(name, PROP_CLIENT_CERT_FILE)) {
+		return set_restricted_string(service, name, &value, msg,
+						set_client_cert_file,
+						SET_CLIENT_CERT_ACCESS);
+	} else if (g_str_equal(name, PROP_PRIVATE_KEY)) {
+		return set_restricted_string(service, name, &value, msg,
+					set_private_key, SET_PRIVATE_KEY_ACCESS);
+	} else if (g_str_equal(name, PROP_PRIVATE_KEY_FILE)) {
+		return set_restricted_string(service, name, &value, msg,
+						set_private_key_file,
+						SET_PRIVATE_KEY_ACCESS);
+	} else if (g_str_equal(name, PROP_PRIVATE_KEY_PASSPHRASE)) {
+		return set_restricted_string(service, name, &value, msg,
+						set_private_key_passphrase,
+						SET_PRIVATE_KEY_PASSPHRASE_ACCESS);
+	} else if (g_str_equal(name, PROP_ANONYMOUS_IDENTITY)) {
+		return set_restricted_string(service, name, &value, msg,
+						set_anonymous_identity,
+						SET_ANONYMOUS_IDENTITY_ACCESS);
 	} else
 		return __connman_error_invalid_property(msg);
 
