@@ -2,7 +2,7 @@
  *  ConnMan VPN daemon settings
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
- *  Copyright (C) 2018-2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2018-2020 Jolla Ltd. All rights reserved.
  *  Contact: jussi.laakkonen@jolla.com
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -23,6 +23,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <pwd.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include <connman/log.h>
 
@@ -33,7 +36,7 @@
 #define DEFAULT_STORAGE_FILE_PERMISSIONS (0600)
 #define DEFAULT_UMASK (0077)
 
-#define PLUGIN_CONFIGDIR CONFIGDIR "/vpn-plugin"
+#define PLUGIN_CONFIGDIR "vpn-plugin"
 #define VPN_GROUP "DACPrivileges"
 
 static struct {
@@ -47,6 +50,8 @@ static struct {
 	char *binary_user;
 	char *binary_group;
 	char **binary_supplementary_groups;
+	char *binary_user_override;
+	char **system_binary_users;
 } connman_vpn_settings  = {
 	.timeout_inputreq		= DEFAULT_INPUT_REQUEST_TIMEOUT,
 	.fs_identity 			= NULL,
@@ -58,6 +63,8 @@ static struct {
 	.binary_user			= NULL,
 	.binary_group			= NULL,
 	.binary_supplementary_groups	= NULL,
+	.binary_user_override		= NULL,
+	.system_binary_users		= NULL,
 };
 
 struct vpn_plugin_data {
@@ -67,6 +74,7 @@ struct vpn_plugin_data {
 };
 
 GHashTable *plugin_hash = NULL;
+static char *configdir = NULL;
 
 const char *vpn_settings_get_state_dir()
 {
@@ -102,12 +110,68 @@ mode_t __vpn_settings_get_umask()
 	return connman_vpn_settings.umask;
 }
 
+void __vpn_settings_set_binary_user_override(const char *username)
+{
+	if (connman_vpn_settings.binary_user_override)
+		g_free(connman_vpn_settings.binary_user_override);
+
+	connman_vpn_settings.binary_user_override = g_strdup(username);
+}
+
+static bool is_system_user(const char *username)
+{
+	struct passwd *pwd;
+	int i;
+
+	/* The username is not set = override should not be used. */
+	if (!username)
+		return true;
+
+	DBG("check user");
+
+	if (!connman_vpn_settings.system_binary_users) {
+		DBG("no binary users set");
+		pwd = getpwnam(username);
+
+		/* Ignore errors if no entry was found. Treat as system user to
+		 * prevent using an invalid override. */
+		if (!pwd)
+			return true;
+
+		/*
+		 * Check if the user is root, or the uid equals to process
+		 * effective uid.
+		 */
+		return !pwd->pw_uid || pwd->pw_uid == geteuid();
+	}
+
+	for (i = 0; connman_vpn_settings.system_binary_users[i]; i++) {
+		if (!g_strcmp0(connman_vpn_settings.system_binary_users[i],
+					username))
+			return true;
+	}
+
+	return false;
+}
+
 const char *vpn_settings_get_binary_user(struct vpn_plugin_data *data)
 {
-	if (data && data->binary_user)
-		return data->binary_user;
+	const char *binary_user;
 
-	return connman_vpn_settings.binary_user;
+	if (data && data->binary_user)
+		binary_user = data->binary_user;
+	else
+		binary_user = connman_vpn_settings.binary_user;
+
+	/*
+	 * Use overridden user instead configured one if set, but don't
+	 * override configured  system user.
+	 */
+	if (connman_vpn_settings.binary_user_override &&
+				!is_system_user(binary_user))
+		binary_user = connman_vpn_settings.binary_user_override;
+
+	return binary_user;
 }
 
 const char *vpn_settings_get_binary_group(struct vpn_plugin_data *data)
@@ -215,6 +279,9 @@ static void parse_config(GKeyFile *config, const char *file)
 	connman_vpn_settings.binary_supplementary_groups = get_string_list(
 						config, VPN_GROUP,
 						"SupplementaryGroups");
+	connman_vpn_settings.system_binary_users = get_string_list(
+						config, VPN_GROUP,
+						"SystemBinaryUsers");
 }
 
 struct vpn_plugin_data *vpn_settings_get_vpn_plugin_config(const char *name)
@@ -252,7 +319,7 @@ int vpn_settings_parse_vpn_plugin_config(const char *name)
 	if (vpn_settings_get_vpn_plugin_config(name))
 		return -EALREADY;
 
-	file = g_strconcat(PLUGIN_CONFIGDIR, "/", name, ext, NULL);
+	file = g_strconcat(configdir, "/", name, ext, NULL);
 
 	config =  __vpn_settings_load_config(file);
 
@@ -314,9 +381,21 @@ GKeyFile *__vpn_settings_load_config(const char *file)
 	return keyfile;
 }
 
-int __vpn_settings_init(const char *file)
+int __vpn_settings_init(const char *file, const char *dir)
 {
 	GKeyFile *config;
+
+	if (!file || !dir)
+		return -EINVAL;
+
+	connman_vpn_settings.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT;
+	connman_vpn_settings.storage_dir_permissions =
+				DEFAULT_STORAGE_DIR_PERMISSIONS;
+	connman_vpn_settings.storage_file_permissions =
+				DEFAULT_STORAGE_FILE_PERMISSIONS;
+	connman_vpn_settings.umask = DEFAULT_UMASK;
+
+	configdir = g_build_filename(dir, PLUGIN_CONFIGDIR, NULL);
 
 	config = __vpn_settings_load_config(file);
 	parse_config(config, file);
@@ -329,11 +408,31 @@ int __vpn_settings_init(const char *file)
 void __vpn_settings_cleanup()
 {
 	g_free(connman_vpn_settings.fs_identity);
+	connman_vpn_settings.fs_identity = NULL;
+
 	g_free(connman_vpn_settings.storage_root);
+	connman_vpn_settings.storage_root = NULL;
+
 	g_free(connman_vpn_settings.state_dir);
+	connman_vpn_settings.state_dir = NULL;
+
 	g_free(connman_vpn_settings.binary_user);
+	connman_vpn_settings.binary_user = NULL;
+
 	g_free(connman_vpn_settings.binary_group);
+	connman_vpn_settings.binary_group = NULL;
+
 	g_strfreev(connman_vpn_settings.binary_supplementary_groups);
+	connman_vpn_settings.binary_supplementary_groups = NULL;
+
+	g_strfreev(connman_vpn_settings.system_binary_users);
+	connman_vpn_settings.system_binary_users = NULL;
+
+	g_free(connman_vpn_settings.binary_user_override);
+	connman_vpn_settings.binary_user_override = NULL;
+
+	g_free(configdir);
+	configdir = NULL;
 
 	if (plugin_hash) {
 		g_hash_table_destroy(plugin_hash);

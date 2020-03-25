@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2020 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -33,6 +33,10 @@ struct connman_access_tech_policy_impl {
 };
 
 struct connman_access_firewall_policy_impl {
+	int unused;
+};
+
+struct connman_access_storage_policy_impl {
 	int unused;
 };
 
@@ -98,6 +102,18 @@ static void test_firewall_policy_free
 	g_free(policy);
 }
 
+static struct connman_access_storage_policy_impl *test_storage_policy_create
+		(const char *spec)
+{
+	return g_new0(struct connman_access_storage_policy_impl, 1);
+}
+
+static void test_storage_policy_free
+		(struct connman_access_storage_policy_impl *policy)
+{
+	g_free(policy);
+}
+
 /*==========================================================================*
  * Test driver 1
  *==========================================================================*/
@@ -136,6 +152,14 @@ static enum connman_access test1_firewall_manage
 	return CONNMAN_ACCESS_ALLOW;
 }
 
+static enum connman_access test1_storage_change_user
+		(const struct connman_access_storage_policy_impl *policy,
+			const char *sender, const char *name,
+			enum connman_access default_access)
+{
+	return CONNMAN_ACCESS_ALLOW;
+}
+
 static const struct connman_access_driver test1_driver = {
 	.name = "test1",
 	.default_service_policy = "allow",
@@ -151,7 +175,10 @@ static const struct connman_access_driver test1_driver = {
 	.tech_set_property = test1_tech_set_property,
 	.firewall_policy_create = test_firewall_policy_create,
 	.firewall_policy_free = test_firewall_policy_free,
-	.firewall_manage = test1_firewall_manage
+	.firewall_manage = test1_firewall_manage,
+	.storage_policy_create = test_storage_policy_create,
+	.storage_policy_free = test_storage_policy_free,
+	.storage_change_user = test1_storage_change_user,
 };
 
 /*==========================================================================*
@@ -192,6 +219,14 @@ static enum connman_access test2_firewall_manage
 	return CONNMAN_ACCESS_DENY;
 }
 
+static enum connman_access test2_storage_change_user
+		(const struct connman_access_storage_policy_impl *policy,
+			const char *sender, const char *name,
+			enum connman_access default_access)
+{
+	return CONNMAN_ACCESS_DENY;
+}
+
 static const struct connman_access_driver test2_driver = {
 	.name = "test2",
 	.default_service_policy = "deny",
@@ -207,7 +242,10 @@ static const struct connman_access_driver test2_driver = {
 	.tech_set_property = test2_tech_set_property,
 	.firewall_policy_create = test_firewall_policy_create,
 	.firewall_policy_free = test_firewall_policy_free,
-	.firewall_manage = test2_firewall_manage
+	.firewall_manage = test2_firewall_manage,
+	.storage_policy_create = test_storage_policy_create,
+	.storage_policy_free = test_storage_policy_free,
+	.storage_change_user = test2_storage_change_user,
 };
 
 /*==========================================================================*
@@ -248,12 +286,21 @@ static enum connman_access test3_firewall_manage
 	return default_access;
 }
 
+static enum connman_access test3_storage_change_user
+		(const struct connman_access_storage_policy_impl *policy,
+			const char *sender, const char *name,
+			enum connman_access default_access)
+{
+	return default_access;
+}
+
 static const struct connman_access_driver test3_driver = {
 	.name = "test3",
 	.service_policy_check = test3_service_policy_check,
 	.manager_policy_check = test3_manager_policy_check,
 	.tech_set_property = test3_tech_set_property,
-	.firewall_manage = test3_firewall_manage
+	.firewall_manage = test3_firewall_manage,
+	.storage_change_user = test3_storage_change_user
 };
 
 /*==========================================================================*
@@ -284,6 +331,12 @@ static struct connman_access_firewall_policy_impl *test4_firewall_policy_create
 	return NULL;
 }
 
+static struct connman_access_storage_policy_impl *test4_storage_policy_create
+		(const char *spec)
+{
+	return NULL;
+}
+
 static const struct connman_access_driver test4_driver = {
 	.name = "test4",
 	.service_policy_create = test4_service_policy_create,
@@ -292,7 +345,9 @@ static const struct connman_access_driver test4_driver = {
 	.tech_policy_create = test4_tech_policy_create,
 	.tech_set_property = test3_tech_set_property,
 	.firewall_policy_create = test4_firewall_policy_create,
-	.firewall_manage = test3_firewall_manage
+	.firewall_manage = test3_firewall_manage,
+	.storage_policy_create = test4_storage_policy_create,
+	.storage_change_user = test3_storage_change_user
 };
 
 /*==========================================================================*
@@ -327,12 +382,20 @@ static struct connman_access_firewall_policy_impl *test5_firewall_policy_create
 	return &impl;
 }
 
+static struct connman_access_storage_policy_impl *test5_storage_policy_create
+		(const char *spec)
+{
+	static struct connman_access_storage_policy_impl impl;
+	return &impl;
+}
+
 static const struct connman_access_driver test5_driver = {
 	.name = "test5",
 	.service_policy_create = test5_service_policy_create,
 	.manager_policy_create = test5_manager_policy_create,
 	.tech_policy_create = test5_tech_policy_create,
-	.firewall_policy_create = test5_firewall_policy_create
+	.firewall_policy_create = test5_firewall_policy_create,
+	.storage_policy_create = test5_storage_policy_create
 };
 
 /*==========================================================================*
@@ -714,6 +777,66 @@ static void test_access_firewall_policy()
 				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
 }
 
+static void test_access_storage_policy()
+{
+	struct connman_access_storage_policy *policy;
+
+	g_assert(!__connman_access_storage_policy_create(NULL));
+	g_assert(connman_access_driver_register(&test1_driver) == 0);
+	g_assert(connman_access_driver_register(&test2_driver) == 0);
+
+	/* test3_driver has no storage_policy_create callback */
+	g_assert(connman_access_driver_register(&test3_driver) == 0);
+	g_assert(!__connman_access_storage_policy_create(NULL));
+	connman_access_driver_unregister(&test3_driver);
+
+	/* test4_driver has storage_policy_create which returns NULL */
+	g_assert(connman_access_driver_register(&test4_driver) == 0);
+	g_assert(!__connman_access_storage_policy_create(NULL));
+	connman_access_driver_unregister(&test4_driver);
+
+	/*
+	 * test5_driver has storage_policy_create but no storage_policy_free.
+	 * It also has no storage_change_user callback.
+	 */
+	g_assert(connman_access_driver_register(&test5_driver) == 0);
+	policy = __connman_access_storage_policy_create(NULL);
+	g_assert(policy);
+	g_assert(__connman_access_storage_change_user(policy, NULL, NULL,
+				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_ALLOW);
+	g_assert(__connman_access_storage_change_user(policy, NULL, NULL,
+				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+	__connman_access_storage_policy_free(policy);
+	connman_access_driver_unregister(&test5_driver);
+
+	/* Invalid driver name */
+	g_assert(!__connman_access_storage_policy_create("test:"));
+
+	/* test1_driver allows everything */
+	policy = __connman_access_storage_policy_create("test1:whatever");
+	g_assert(__connman_access_storage_change_user(policy, NULL, NULL,
+				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_ALLOW);
+	__connman_access_storage_policy_free(policy);
+
+	/* test2_driver (last one, i.e. default) disallows everything */
+	policy = __connman_access_storage_policy_create("test2");
+	g_assert(__connman_access_storage_change_user(policy, NULL, NULL,
+				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_DENY);
+	__connman_access_storage_policy_free(policy);
+
+	connman_access_driver_unregister(&test1_driver);
+	connman_access_driver_unregister(&test2_driver);
+
+	/* It's OK to delete NULL */
+	__connman_access_storage_policy_free(NULL);
+
+	/* or to pass NULL policy */
+	g_assert(__connman_access_storage_change_user(NULL, NULL, NULL,
+				CONNMAN_ACCESS_ALLOW) == CONNMAN_ACCESS_ALLOW);
+	g_assert(__connman_access_storage_change_user(NULL, NULL, NULL,
+				CONNMAN_ACCESS_DENY) == CONNMAN_ACCESS_DENY);
+}
+
 #define PREFIX "/access/"
 
 int main(int argc, char *argv[])
@@ -732,6 +855,7 @@ int main(int argc, char *argv[])
 	g_test_add_func(PREFIX "manager_policy", test_access_manager_policy);
 	g_test_add_func(PREFIX "tech_policy", test_access_tech_policy);
 	g_test_add_func(PREFIX "firewall_policy", test_access_firewall_policy);
+	g_test_add_func(PREFIX "storage_policy", test_access_storage_policy);
 	return g_test_run();
 }
 

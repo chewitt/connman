@@ -33,6 +33,8 @@ GKeyFile *connman_storage_load_service(const char *service_id);
 
 const char *connman_storage_dir(void);
 const char *connman_storage_vpn_dir(void);
+const char *connman_storage_user_dir(void);
+const char *connman_storage_user_vpn_dir(void);
 
 #ifdef __cplusplus
 }

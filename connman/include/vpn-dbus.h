@@ -40,6 +40,9 @@ extern "C" {
 #define VPN_AGENT_INTERFACE		VPN_SERVICE ".Agent"
 #define VPN_TASK_INTERFACE		VPN_SERVICE ".Task"
 
+#define VPN_STORAGE_INTERFACE		VPN_SERVICE ".Storage"
+#define VPN_STORAGE_PATH		"/"
+
 #define VPN_PRIVILEGE_MODIFY		1
 #define VPN_PRIVILEGE_SECRET		2
 
@@ -51,6 +54,7 @@ extern "C" {
 #define VPN_CONNECT2			"Connect2"
 #define VPN_DISCONNECT			"Disconnect"
 #define VPN_REMOVE			"Remove"
+#define VPN_STORAGE_CHANGE_USER		"ChangeUser"
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2020 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -36,6 +36,11 @@ struct connman_access_tech_policy {
 
 struct connman_access_firewall_policy {
 	struct connman_access_firewall_policy_impl *impl;
+	const struct connman_access_driver *driver;
+};
+
+struct connman_access_storage_policy {
+	struct connman_access_storage_policy_impl *impl;
 	const struct connman_access_driver *driver;
 };
 
@@ -379,6 +384,51 @@ enum connman_access __connman_access_firewall_manage
 {
 	if (p && p->driver->firewall_manage)
 		return p->driver->firewall_manage(p->impl, name, sender,
+							default_access);
+
+	return default_access;
+}
+
+/* Storage */
+struct connman_access_storage_policy *__connman_access_storage_policy_create
+							(const char *spec)
+{
+	struct connman_access_storage_policy *p = NULL;
+	const struct connman_access_driver *driver =
+		access_get_driver(spec, &spec);
+
+	if (driver && driver->storage_policy_create) {
+		struct connman_access_storage_policy_impl *impl =
+			driver->storage_policy_create(spec);
+
+		if (impl) {
+			p = g_slice_new(struct connman_access_storage_policy);
+			p->impl = impl;
+			p->driver = driver;
+		}
+	}
+
+	return p;
+}
+
+void __connman_access_storage_policy_free(
+			struct connman_access_storage_policy *p)
+{
+	if (p) {
+		if (p->driver->storage_policy_free)
+			p->driver->storage_policy_free(p->impl);
+
+		g_slice_free(struct connman_access_storage_policy, p);
+	}
+}
+
+enum connman_access __connman_access_storage_change_user
+			(const struct connman_access_storage_policy *p,
+			const char *user, const char *sender,
+			enum connman_access default_access)
+{
+	if (p && p->driver->storage_change_user)
+		return p->driver->storage_change_user(p->impl, user, sender,
 							default_access);
 
 	return default_access;

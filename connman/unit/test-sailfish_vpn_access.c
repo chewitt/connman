@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2019 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2019-2020 Jolla Ltd. All rights reserved.
  *  Contact: David Llewellyn-Jones <david.llewellyn-jones@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -228,6 +228,30 @@ static const struct test_config_data config_tests [] = {
 		"* = " DA_POLICY_VERSION "; * = allow \n"
 		"GetConnections = " DA_POLICY_VERSION "; "
 		"* = deny \n"  /* <= Applied */
+	},{
+		TRUE, NON_PRIVILEGED_SENDER,
+		VPN_ACCESS_STORAGE_CHANGE_USER,
+		"", TRUE,
+		"[net.connman.vpn.Storage]\n"
+		"* = " DA_POLICY_VERSION "; * = allow \n" /* <= Applied */
+		"ChangeUser = invalid \n"
+	},{
+		FALSE, PRIVILEGED_SENDER,
+		VPN_ACCESS_STORAGE_CHANGE_USER,
+		"", TRUE,
+		"[net.connman.vpn.Storage]\n"
+		"* = " DA_POLICY_VERSION "; * = allow \n"
+		"ChangeUser = " DA_POLICY_VERSION "; "
+		"* = deny \n"  /* <= Applied */
+	},{
+		FALSE, NON_PRIVILEGED_SENDER,
+		VPN_ACCESS_STORAGE_CHANGE_USER,
+		"", FALSE,
+		"[Common]\n"
+		"DefaultAccess = " DA_POLICY_VERSION "; * = allow \n"
+		"[net.connman.vpn.Storage]\n"
+		"ChangeUser = " DA_POLICY_VERSION "; * = deny; "
+		"group(privileged) = allow\n"
 	}
 };
 

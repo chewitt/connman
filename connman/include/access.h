@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2020 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -53,6 +53,8 @@ struct connman_access_manager_policy;
 struct connman_access_manager_policy_impl;
 struct connman_access_firewall_policy;
 struct connman_access_firewall_policy_impl;
+struct connman_access_storage_policy;
+struct connman_access_storage_policy_impl;
 
 struct connman_access_driver {
 	const char *name;
@@ -101,6 +103,16 @@ struct connman_access_driver {
 	enum connman_access (*firewall_manage)
 		(const struct connman_access_firewall_policy_impl *policy,
 			const char *name, const char *sender,
+			enum connman_access default_access);
+
+	/* Storage */
+	struct connman_access_storage_policy_impl *(*storage_policy_create)
+		(const char *spec);
+	void (*storage_policy_free)
+		(struct connman_access_storage_policy_impl *policy);
+	enum connman_access (*storage_change_user)
+		(const struct connman_access_storage_policy_impl *policy,
+			const char *user, const char *sender,
 			enum connman_access default_access);
 };
 

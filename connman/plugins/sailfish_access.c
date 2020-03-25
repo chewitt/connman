@@ -1,7 +1,7 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2017-2020 Jolla Ltd. All rights reserved.
  *  Contact: Slava Monich <slava.monich@jolla.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -46,12 +46,20 @@ struct connman_access_firewall_policy_impl {
 	DAPolicy *impl;
 };
 
+struct connman_access_storage_policy_impl {
+	DAPolicy *impl;
+};
+
 enum sailfish_tech_access_action {
 	TECH_ACCESS_SET_PROPERTY = 1
 };
 
 enum sailfish_firewall_access_action {
 	FIREWALL_ACCESS_RELOAD = 1
+};
+
+enum sailfish_storage_access_action {
+	STORAGE_ACCESS_CHANGE_USER = 1
 };
 
 #define CONNMAN_BUS DA_BUS_SYSTEM
@@ -128,6 +136,15 @@ static const char *firewall_policy_default =
 static const DA_ACTION firewall_policy_actions [] = {
         { "Reload", FIREWALL_ACCESS_RELOAD, 1 },
         { NULL }
+};
+
+static const char *storage_policy_default =
+	DA_POLICY_VERSION ";"
+	"ChangeUser(*)=deny;"
+	"group(privileged)=allow";
+static const DA_ACTION storage_policy_actions [] = {
+	{ "ChangeUser", STORAGE_ACCESS_CHANGE_USER, 1 },
+	{ NULL }
 };
 
 static void sailfish_access_service_policy_free
@@ -370,6 +387,53 @@ static enum connman_access sailfish_access_firewall_manage
 		(DA_ACCESS)default_access) : CONNMAN_ACCESS_DENY;
 }
 
+static struct connman_access_storage_policy_impl *
+		sailfish_access_storage_policy_create(const char *spec)
+{
+	DAPolicy *impl;
+
+	if (!spec || !spec[0]) {
+		/* Empty policy = use default */
+		spec = storage_policy_default;
+	}
+
+	/* Parse the policy string */
+	impl = da_policy_new_full(spec, storage_policy_actions);
+	if (impl) {
+		/* String is usable */
+		struct connman_access_storage_policy_impl *p =
+			g_slice_new0(
+				struct connman_access_storage_policy_impl);
+
+		p->impl = impl;
+		return p;
+	} else {
+		DBG("invalid spec \"%s\"", spec);
+		return NULL;
+	}
+}
+
+static void sailfish_access_storage_policy_free
+			(struct connman_access_storage_policy_impl *p)
+{
+	da_policy_unref(p->impl);
+	g_slice_free(struct connman_access_storage_policy_impl, p);
+}
+
+static enum connman_access sailfish_access_storage_change_user
+		(const struct connman_access_storage_policy_impl *policy,
+			const char *user, const char *sender,
+			enum connman_access default_access)
+{
+	/* Don't unref this one: */
+	DAPeer* peer = da_peer_get(CONNMAN_BUS, sender);
+
+	/* Reject the access if the peer is gone */
+	return peer ? (enum connman_access)da_policy_check(policy->impl,
+		&peer->cred, STORAGE_ACCESS_CHANGE_USER, user,
+		(DA_ACCESS)default_access) : CONNMAN_ACCESS_DENY;
+}
+
 static const struct connman_access_driver sailfish_connman_access_driver = {
 	.name                   = DRIVER_NAME,
 	.default_service_policy = service_policy_default,
@@ -385,7 +449,10 @@ static const struct connman_access_driver sailfish_connman_access_driver = {
 	.tech_set_property      = sailfish_access_tech_set_property,
 	.firewall_policy_create = sailfish_access_firewall_policy_create,
 	.firewall_policy_free   = sailfish_access_firewall_policy_free,
-	.firewall_manage        = sailfish_access_firewall_manage
+	.firewall_manage        = sailfish_access_firewall_manage,
+	.storage_policy_create  = sailfish_access_storage_policy_create,
+	.storage_policy_free    = sailfish_access_storage_policy_free,
+	.storage_change_user    = sailfish_access_storage_change_user
 };
 
 static int sailfish_access_init()

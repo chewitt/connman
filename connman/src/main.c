@@ -819,6 +819,16 @@ const char *__connman_setting_get_fallback_device_type(const char *interface)
 			interface);
 }
 
+static struct connman_storage_callbacks storage_callbacks = {
+	.pre =			__connman_technology_disable_all,
+	.unload =		__connman_service_unload_services,
+	.load =			__connman_service_load_services,
+	.post =			__connman_technology_enable_from_config,
+	.access_policy_create =	__connman_access_storage_policy_create,
+	.access_change_user = 	__connman_access_storage_change_user,
+	.access_policy_free = 	__connman_access_storage_policy_free,
+};
+
 int main(int argc, char *argv[])
 {
 	GOptionContext *context;
@@ -894,18 +904,14 @@ int main(int argc, char *argv[])
 				connman_settings.storage_dir_permissions,
 				connman_settings.storage_file_permissions);
 
-	char *connman_dir = g_build_filename(connman_settings.storage_root,
-				"connman", NULL);
-
-	if (g_mkdir_with_parents(connman_dir,
-			connman_settings.storage_dir_permissions) < 0) {
-		if (errno != EEXIST)
-			connman_error("Failed to create storage directory "
-						"\"%s\", error: %s",
-						connman_dir, strerror(errno));
+	if (__connman_storage_create_dir(STORAGEDIR,
+				connman_settings.storage_dir_permissions)) {
+		connman_error("failed to create storage directory");
+	} else {
+		if (__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+					&storage_callbacks))
+			connman_error("failed to register storage D-Bus");
 	}
-
-	g_free(connman_dir);
 
 	umask(connman_settings.umask);
 

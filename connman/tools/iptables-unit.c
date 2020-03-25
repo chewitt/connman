@@ -3,7 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2013-2014  BMW Car IT GmbH.
- *  Copyright (C) 2018,2019  Jolla Ltd.
+ *  Copyright (C) 2018-2020  Jolla Ltd.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -155,26 +155,6 @@ void connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled)
 {
 	return;
-}
-
-DBusMessage *__connman_error_invalid_arguments(DBusMessage *msg)
-{
-	return NULL;
-}
-
-DBusMessage *__connman_error_permission_denied(DBusMessage *msg)
-{
-	return NULL;
-}
-
-DBusMessage *__connman_error_failed(DBusMessage *msg, int errnum)
-{
-	return NULL;
-}
-
-DBusConnection *connman_dbus_get_connection(void)
-{
-	return NULL;
 }
 
 struct connman_access_firewall_policy *__connman_access_firewall_policy_create

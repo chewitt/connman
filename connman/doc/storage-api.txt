@@ -1,0 +1,39 @@
+Storage
+============
+
+Service		net.connman
+Interface	net.connman.Storage
+Object path	/
+
+Methods		void ChangeUser(uint32 uid)
+
+			Change the user for storage. This affects WiFi and
+			VPN service use. Both WiFi and VPN services are loaded
+			from the users' storage paths, other services are
+			shared with main user (usually, root). User also has
+			own main settings file defining the offline state as
+			well as the states of each technology. Each technology
+			is first put down to make sure that correct state is
+			restored. Offline state is changed according to
+			configuration. Change is in effect first with vpnd,
+			and if successful then connmand will do the change as
+			well.
+
+			User id (uid) must be a valid uid in the system for an
+			user that has a valid login shell. If the user id is
+			not valid InvalidArguments error is returned.
+
+			If a VPN has a regular, non-system user set as user to
+			run the VPN binary the changed user overrides the
+			configured user. In case system user is used override
+			is not used. This is a VPN configuration specific.
+
+			If the user is already enabled nothing is done. Error
+			AlreadyEnabled is returned instead.
+
+			If the user calling the method is not allowed to use
+			the method PermissionDenied error is returned.
+
+			Possible Errors: [service].Error.InvalidArguments
+					 [service].Error.AlreadyEnabled
+					 [service].Error.PermissionDenied

@@ -8546,10 +8546,13 @@ static gboolean load_wifi_services(gpointer unused)
 			const enum connman_service_type type =
 				__connman_service_string2type(ident);
 
+			DBG("service %d:%s", i, services[i]);
+
 			if (type == CONNMAN_SERVICE_TYPE_WIFI &&
-				!g_hash_table_contains(service_hash, ident)) {
+				!g_hash_table_contains(service_hash, ident))
 				load_wifi_service(ident);
-			}
+			else if (g_hash_table_contains(service_hash, ident))
+				DBG("is in hash table, not loaded");
 		}
 
 		g_strfreev(services);
@@ -9457,6 +9460,52 @@ static struct connman_agent_driver agent_driver = {
 	.context_ref	= agent_context_ref,
 	.context_unref	= agent_context_unref,
 };
+
+void __connman_service_unload_services(gchar **services, int len)
+{
+	struct connman_service *service;
+	int i;
+
+	DBG("services %d/%p", len, services);
+
+	if (!services)
+		return;
+
+	for (i = 0; i < len && services[i]; i++) {
+		DBG("service %d:%s", i, services[i]);
+
+		service = connman_service_lookup_from_identifier(services[i]);
+		if (!service) {
+			DBG("no service for %s", services[i]);
+			continue;
+		}
+
+		if (connman_service_get_type(service) !=
+					CONNMAN_SERVICE_TYPE_WIFI) {
+			DBG("skip non WiFi %p/%s", service,
+						service->identifier);
+			continue;
+		}
+
+		__connman_service_remove_from_network(
+				__connman_service_get_network(service));
+
+		if (!__connman_service_remove(service))
+			DBG("cannot unload service %s", services[i]);
+	}
+
+}
+
+void __connman_service_load_services(void)
+{
+	/* Remove previous loading function from main loop if it exists */
+	if (load_wifi_services_id) {
+		g_source_remove(load_wifi_services_id);
+		load_wifi_services_id = 0;
+	}
+
+	load_wifi_services(NULL);
+}
 
 int __connman_service_init(void)
 {
