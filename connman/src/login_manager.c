@@ -34,6 +34,17 @@ int __connman_login_manager_init()
 	if (!connman_setting_get_bool("EnableLoginManager"))
 		return -EOPNOTSUPP;
 
+#ifdef SYSTEMD
+	int err;
+
+	err = __systemd_login_init();
+	if (err)
+		connman_warn("cannot initialize systemd login manager (%s)",
+					strerror(-err));
+
+	return err;
+#endif
+
 	return 0;
 }
 
@@ -41,4 +52,8 @@ void __connman_login_manager_cleanup()
 {
 	if (!connman_setting_get_bool("EnableLoginManager"))
 		return;
+
+#ifdef SYSTEMD
+	__systemd_login_cleanup();
+#endif
 }

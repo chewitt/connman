@@ -143,6 +143,10 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/sailfish_iptables_ext.c src/iptables-validate.c \
 			src/login_manager.c
 
+if SYSTEMD
+src_connmand_SOURCES += src/systemd_login.c
+endif
+
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
 			@IPHB_LIBS@ @LIBIPTC_LIBS@ @DBUSACCESS_LIBS@ -lresolv -ldl -lrt
