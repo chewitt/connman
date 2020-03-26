@@ -140,7 +140,8 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c \
-			src/sailfish_iptables_ext.c src/iptables-validate.c
+			src/sailfish_iptables_ext.c src/iptables-validate.c \
+			src/login_manager.c
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \

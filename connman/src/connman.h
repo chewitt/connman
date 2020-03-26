@@ -1263,3 +1263,6 @@ int __connman_util_init(void);
 void __connman_util_cleanup(void);
 
 void __connman_set_fsid(const char *fs_identity);
+
+int __connman_login_manager_init();
+void __connman_login_manager_cleanup();

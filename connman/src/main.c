@@ -95,6 +95,7 @@ static struct {
 	bool enable_6to4;
 	char *vendor_class_id;
 	GHashTable *fallback_device_types;
+	bool enable_login_manager;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -114,6 +115,7 @@ static struct {
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
 	.fallback_device_types = NULL,
+	.enable_login_manager = false,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -138,6 +140,7 @@ static struct {
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
+#define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -165,6 +168,7 @@ static const char *supported_options[] = {
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
 	CONF_FALLBACK_DEVICE_TYPES,
+	CONF_ENABLE_LOGIN_MANAGER,
 	NULL
 };
 
@@ -533,6 +537,13 @@ static void parse_config(GKeyFile *config)
 		connman_settings.fallback_device_types =
 				parse_fallback_device_types(str_list, len);
 
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+				CONF_ENABLE_LOGIN_MANAGER, &error);
+	if (!error)
+		connman_settings.enable_login_manager = boolean;
+
 	g_strfreev(str_list);
 
 	g_clear_error(&error);
@@ -766,6 +777,9 @@ bool connman_setting_get_bool(const char *key)
 	if (g_str_equal(key, CONF_ENABLE_6TO4))
 		return connman_settings.enable_6to4;
 
+	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
+		return connman_settings.enable_login_manager;
+
 	return false;
 }
 
@@ -915,6 +929,7 @@ int main(int argc, char *argv[])
 
 	umask(connman_settings.umask);
 
+	__connman_login_manager_init();
 	__connman_util_init();
 	__connman_technology_init();
 	__connman_notifier_init();
@@ -1017,6 +1032,7 @@ int main(int argc, char *argv[])
 	__connman_ipconfig_cleanup();
 	__connman_notifier_cleanup();
 	__connman_technology_cleanup();
+	__connman_login_manager_cleanup();
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 
