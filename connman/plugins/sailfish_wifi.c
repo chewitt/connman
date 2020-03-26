@@ -114,6 +114,7 @@ enum network_interface_events {
 	NETWORK_INTERFACE_EVENT_PRESENT,
 	NETWORK_INTERFACE_EVENT_STATE,
 	NETWORK_INTERFACE_EVENT_BSS,
+	NETWORK_INTERFACE_EVENT_EAP,
 	NETWORK_INTERFACE_EVENT_COUNT
 };
 
@@ -164,6 +165,14 @@ typedef enum wifi_network_state {
 	WIFI_NETWORK_DISCONNECTING
 } WIFI_NETWORK_STATE;
 
+typedef enum wifi_network_eap_state {
+	WIFI_NETWORK_EAP_UNKNOWN,
+	WIFI_NETWORK_EAP_REJECTED,
+	WIFI_NETWORK_EAP_ACCEPTED,
+	WIFI_NETWORK_EAP_CA_VERIFIED,
+	WIFI_NETWORK_EAP_CA_REJECTED
+} WIFI_NETWORK_EAP_STATE;
+
 struct wifi_network {
 	struct wifi_device *dev;
 	struct connman_network *network;
@@ -181,6 +190,7 @@ struct wifi_network {
 	int remove_in_process;          /* See wifi_device_remove_network */
 	GCancellable *pending;          /* Pending call */
 	WIFI_NETWORK_STATE state;
+	WIFI_NETWORK_EAP_STATE eap_state;
 	int handshake_retries;
 	char *last_passphrase;
 };
@@ -825,6 +835,34 @@ static void wifi_network_interface_scanning(struct wifi_network *net)
 	}
 }
 
+static enum connman_network_error wifi_network_error(struct wifi_network *net)
+{
+	/*
+	 * There is probably a configuration error, if no proposed EAP method
+	 * is accepted (WIFI_NETWORK_EAP_REJECTED), the server fails public key
+	 * verification (WIFI_NETWORK_EAP_CA_REJECTED), or private key is used
+	 * for authentication and it has been successfully decrypted, which is
+	 * done before CA validation.
+	 *
+	 * Otherwise we have invalid credentials, report to core to make
+	 * connman query WiFi password again. For automatic connects this
+	 * disables subsequent connect attempts (if we have exceeded the
+	 * maximum number of retries).
+	 *
+	 * For WEP/WPA-PSK, the EAP state is always UNKNOWN.
+	 */
+	if (net->eap_state == WIFI_NETWORK_EAP_REJECTED ||
+			net->eap_state == WIFI_NETWORK_EAP_CA_REJECTED ||
+			((connman_network_get_string(net->network,
+							"WiFi.PrivateKey") ||
+				connman_network_get_string(net->network,
+						"WiFi.PrivateKeyFile")) &&
+				net->eap_state == WIFI_NETWORK_EAP_CA_VERIFIED))
+		return CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL;
+
+	return CONNMAN_NETWORK_ERROR_INVALID_KEY;
+}
+
 static void wifi_network_interface_disconnected(struct wifi_network *net)
 {
 	/*
@@ -860,16 +898,8 @@ static void wifi_network_interface_disconnected(struct wifi_network *net)
 
 		if (user_connect ||
 			net->handshake_retries >= MAX_HANDSHAKE_RETRIES) {
-
-			/*
-			 * For interactive connects, this will (hopefully)
-			 * make connman query WiFi password again. For
-			 * automatic connects this disables subsequent
-			 * connect attempts (if we have exceeded the
-			 * maximum number of retries).
-			 */
 			connman_network_set_error(net->network,
-					CONNMAN_NETWORK_ERROR_INVALID_KEY);
+						wifi_network_error(net));
 			return;
 		}
 	} else {
@@ -1243,6 +1273,65 @@ static void wifi_network_connect_finished(struct wifi_network *net,
 	}
 }
 
+static void wifi_network_eap_event(GSupplicantInterface *iface,
+					GSUPPLICANT_INTERFACE_EAP_EVENT event,
+					void *data)
+{
+	struct wifi_network *net = data;
+
+	DBG("Eap eventt %d", (int)event);
+
+	switch (event) {
+	case GSUPPLICANT_INTERFACE_EAP_REJECT_METHOD:
+		/*
+		 * If some EAP method has already been accepted, keep the
+		 * accepted state.
+		 */
+		if (net->eap_state < WIFI_NETWORK_EAP_REJECTED)
+			net->eap_state = WIFI_NETWORK_EAP_REJECTED;
+		break;
+
+	case GSUPPLICANT_INTERFACE_EAP_ACCEPT_METHOD:
+		net->eap_state = WIFI_NETWORK_EAP_ACCEPTED;
+		break;
+
+	case GSUPPLICANT_INTERFACE_EAP_REMOTE_CERT_REJECTED:
+		net->eap_state = WIFI_NETWORK_EAP_CA_REJECTED;
+		break;
+
+	case GSUPPLICANT_INTERFACE_EAP_REMOTE_CERT_ACCEPTED:
+		net->eap_state = WIFI_NETWORK_EAP_CA_VERIFIED;
+		break;
+
+	/*
+	 * When wpa_supplicant reports that an eap parameter is needed,
+	 * it starts waiting for the parameter to be provided. The D-Bus API,
+	 * however, does not have any way to indicate to resume connecting
+	 * when the approriate property is set, so just fail if a request
+	 * is received.
+	 */
+	case GSUPPLICANT_INTERFACE_EAP_PASSPHRASE_NEEDED:
+		net->pending = NULL;
+		NDBG(net, "passphrase required");
+		connman_network_set_error(net->network,
+					CONNMAN_NETWORK_ERROR_INVALID_KEY);
+		wifi_network_set_state(net, WIFI_NETWORK_IDLE);
+		break;
+
+	case GSUPPLICANT_INTERFACE_EAP_PARAM_NEEDED:
+		net->pending = NULL;
+		NDBG(net, "error: eap parameter required");
+		connman_network_set_error(net->network,
+					CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
+		wifi_network_set_state(net, WIFI_NETWORK_IDLE);
+		break;
+
+	case GSUPPLICANT_INTERFACE_EAP_FAILED:
+	case GSUPPLICANT_INTERFACE_EAP_COMPLETED:
+		break;
+	}
+}
+
 static void wifi_network_wps_started_pbc(GSupplicantInterface *iface,
 				GCancellable *cancel, const GError *error,
 				const char *pin, void *data)
@@ -1361,6 +1450,7 @@ static int wifi_network_connect(struct wifi_network *net)
 				gsupplicant_bss_unref(net->connecting_to);
 				net->connecting_to = gsupplicant_bss_ref(bss);
 			}
+			net->eap_state = WIFI_NETWORK_EAP_UNKNOWN;
 			wifi_network_init_connect_params(net, bss_data, &np, &blobs);
 			net->pending =
 				gsupplicant_interface_add_network_full2(net->iface,
@@ -1402,6 +1492,11 @@ static int wifi_network_connect(struct wifi_network *net)
 				gsupplicant_interface_add_handler(net->iface,
 				GSUPPLICANT_INTERFACE_PROPERTY_CURRENT_BSS,
 				wifi_network_current_bss_changed, net);
+
+			net->iface_event_id[NETWORK_INTERFACE_EVENT_EAP] =
+				gsupplicant_interface_add_eap_status_handler(
+						net->iface,
+						wifi_network_eap_event, net);
 
 			return (-EINPROGRESS);
 		} else {
