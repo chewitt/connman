@@ -943,8 +943,8 @@ static gchar **__connman_storage_get_system_services(int *len)
 {
 	gchar **result = NULL;
 	GList *l;
-	int sum;
-	int pos = 0;
+	unsigned int subdir_count;
+	unsigned int pos = 0;
 
 	DBG("");
 
@@ -955,11 +955,11 @@ static gchar **__connman_storage_get_system_services(int *len)
 			return NULL;
 	}
 
-	sum = g_list_length(storage.subdirs);
-	if (!sum)
+	subdir_count = g_list_length(storage.subdirs);
+	if (!subdir_count)
 		goto out;
 
-	result = g_new0(gchar *, sum + 1);
+	result = g_new0(gchar *, subdir_count + 1);
 
 	for (pos = 0, l = storage.subdirs; l; l = l->next) {
 		struct storage_subdir *subdir = l->data;
@@ -983,8 +983,8 @@ static gchar **__connman_storage_get_system_services(int *len)
 	DBG("%d system services", pos);
 
 	/* Set the list to correct size */
-	if (sum != pos)
-		result = g_realloc(result, sizeof(gchar *) * (pos + 1));
+	if (subdir_count != pos)
+		result = g_renew(gchar *, result, pos + 1);
 
 out:
 	*len = pos;
@@ -994,8 +994,9 @@ out:
 static gchar **__connman_storage_get_user_services(gchar **list, int *len)
 {
 	GList *l;
-	int sum;
-	int pos;
+	unsigned int subdir_count;
+	unsigned int pos;
+	unsigned int count;
 
 	DBG("");
 
@@ -1006,16 +1007,16 @@ static gchar **__connman_storage_get_user_services(gchar **list, int *len)
 			return list;
 	}
 
-	sum = g_list_length(storage.user_subdirs);
-	if (!sum)
+	subdir_count = g_list_length(storage.user_subdirs);
+	if (!subdir_count)
 		return list;
 
 	if (!list)
-		list = g_new0(gchar *, sum + 1);
+		list = g_new0(gchar *, subdir_count + 1);
 	else
-		list = g_realloc(list, sizeof(gchar *) * (*len + sum + 1));
+		list = g_renew(gchar *, list, *len + subdir_count + 1);
 
-	for (pos = *len, l = storage.user_subdirs; l; l = l->next) {
+	for (pos = *len, count = 0, l = storage.user_subdirs; l; l = l->next) {
 		struct storage_subdir *subdir = l->data;
 
 		if (!is_user_dir(subdir->name)) {
@@ -1028,6 +1029,7 @@ static gchar **__connman_storage_get_user_services(gchar **list, int *len)
 					subdir->has_settings) {
 			DBG("keep WiFi/VPN service %s", subdir->name);
 			list[pos++] = g_strdup(subdir->name);
+			count++;
 		} else {
 			DBG("non-service %s - %s settings", subdir->name,
 						subdir->has_settings ?
@@ -1035,14 +1037,14 @@ static gchar **__connman_storage_get_user_services(gchar **list, int *len)
 		}
 	}
 
-	DBG("%d user services", pos);
+	DBG("%d user services", count);
 
-	/* Set list to correct size */
-	if (sum != pos)
-		list = g_realloc(list, sizeof(gchar *) * (*len + pos + 1));
+	/* Set list to correct size if all in the user subdirs are not added */
+	if (subdir_count != count)
+		list = g_renew(gchar *, list, pos + 1);
 
 	list[pos] = NULL;
-	*len += pos;
+	*len = pos;
 
 	return list;
 }
@@ -1409,8 +1411,8 @@ static gchar **__connman_storage_get_system_providers(int *len)
 {
 	gchar **result = NULL;
 	GList *l;
-	int sum;
-	int pos = 0;
+	unsigned int subdir_count;
+	unsigned int pos = 0;
 
 	DBG("");
 
@@ -1426,11 +1428,11 @@ static gchar **__connman_storage_get_system_providers(int *len)
 			return NULL;
 	}
 
-	sum = g_list_length(storage.subdirs);
-	if (!sum)
+	subdir_count = g_list_length(storage.subdirs);
+	if (!subdir_count)
 		goto out;
 
-	result = g_new0(gchar *, sum + 1);
+	result = g_new0(gchar *, subdir_count + 1);
 
 	for (pos = 0, l = storage.subdirs; l; l = l->next) {
 		struct storage_subdir *subdir = l->data;
@@ -1439,8 +1441,8 @@ static gchar **__connman_storage_get_system_providers(int *len)
 	}
 
 	/* Set the list to correct size */
-	if (sum != pos)
-		result = g_realloc(result, sizeof(gchar *) * (pos + 1));
+	if (subdir_count != pos)
+		result = g_renew(gchar *, result, pos + 1);
 
 out:
 	*len = pos;
@@ -1450,8 +1452,9 @@ out:
 static gchar **__connman_storage_get_user_providers(gchar **list, int *len)
 {
 	GList *l;
-	int sum;
-	int pos;
+	unsigned int subdir_count;
+	unsigned int pos;
+	unsigned int count;
 
 	DBG("list %p len %d", list, *len);
 
@@ -1462,29 +1465,32 @@ static gchar **__connman_storage_get_user_providers(gchar **list, int *len)
 			return list;
 	}
 
-	sum = g_list_length(storage.user_subdirs);
-	if (!sum)
+	subdir_count = g_list_length(storage.user_subdirs);
+	if (!subdir_count)
 		return list;
 
 	if (!list)
-		list = g_new0(gchar *, sum + 1);
+		list = g_new0(gchar *, subdir_count + 1);
 	else
-		list = g_realloc(list, sizeof(gchar *) * (*len + sum + 1));
+		list = g_renew(gchar *, list, *len + subdir_count + 1);
 
-	for (pos = *len, l = storage.user_subdirs; l; l = l->next) {
+	for (pos = *len, count = 0, l = storage.user_subdirs; l; l = l->next) {
 		struct storage_subdir *subdir = l->data;
-		if (is_provider_dir_name(subdir->name) && subdir->has_settings)
+		if (is_provider_dir_name(subdir->name) &&
+					subdir->has_settings) {
 			list[pos++] = g_strdup(subdir->name);
+			count++;
+		}
 	}
 
-	DBG("%d user providers ", pos);
+	DBG("%d user providers ", count);
 
-	/* Set list to correct size */
-	if (pos != sum)
-		list = g_realloc(list, sizeof(gchar *) * (*len + pos + 1));
+	/* Set list to correct size if all in user subdirs are not added */
+	if (subdir_count != count)
+		list = g_renew(gchar *, list, pos + 1);
 
 	list[pos] = NULL;
-	*len += pos;
+	*len = pos;
 
 	return list;
 }
@@ -1561,7 +1567,7 @@ static char* build_filename(const char *dir,
 }
 
 static int change_storage_dir(const char *root,
-					enum connman_storage_dir_type type)
+			enum connman_storage_dir_type type, bool prepare_only)
 {
 	gchar **items;
 	char *path;
@@ -1591,12 +1597,13 @@ static int change_storage_dir(const char *root,
 
 		vpn_path = build_filename(root, STORAGE_DIR_TYPE_VPN);
 
+		/*
+		 * Set user VPN regarless if it is already set as the same.
+		 * This shouldn't be reached as the user storage would be also
+		 * set. */
 		if (user_vpn_storage_dir &&
-				!g_strcmp0(user_storage_dir, vpn_path)) {
+				!g_strcmp0(user_vpn_storage_dir, vpn_path))
 			DBG("system vpn is already at %s", path);
-			g_free(vpn_path);
-			vpn_path = NULL;
-		}
 
 		/*
 		 * Changing to other user or going back to root both are set.
@@ -1654,11 +1661,11 @@ static int change_storage_dir(const char *root,
 		if (root) {
 			DBG("change user dir to %s vpn %s", path, vpn_path);
 
-			if (cbs && cbs->pre && !cbs->pre())
+			if (!prepare_only && cbs && cbs->pre && !cbs->pre())
 				DBG("main system preparations failed");
 
 			/* Nothing to unload if storage isn't initialized */
-			if (storage.initialized) {
+			if (!prepare_only && storage.initialized) {
 				DBG("unload system services");
 
 				items = __connman_storage_get_system_services(
@@ -1699,6 +1706,15 @@ static int change_storage_dir(const char *root,
 			storage_dir_cleanup(vpn_storage_dir,
 						STORAGE_DIR_TYPE_VPN);
 		}
+
+		/*
+		 * If requested only to prepare technology setup and service
+		 * loading will be done by the component initialization using
+		 * the user set here in storage. Thus, load and post cb's are
+		 * skipped.
+		 */
+		if (prepare_only)
+			break;
 
 		DBG("load services");
 
@@ -1882,7 +1898,8 @@ out:
 	return pwd;
 }
 
-static int set_user_dir(const char *root, enum connman_storage_dir_type type)
+static int set_user_dir(const char *root, enum connman_storage_dir_type type,
+			bool prepare_only)
 {
 	const char *dir;
 	int err;
@@ -1890,7 +1907,7 @@ static int set_user_dir(const char *root, enum connman_storage_dir_type type)
 	DBG("");
 
 	/* This sets both main and VPN! */
-	err = change_storage_dir(root, type);
+	err = change_storage_dir(root, type, prepare_only);
 	if (err) {
 		DBG("cannot change dir root to %s error %s", root,
 					strerror(-err));
@@ -1934,16 +1951,60 @@ static int set_user_dir(const char *root, enum connman_storage_dir_type type)
 	return 0;
 
 err:
-	change_storage_dir(NULL, type);
+	change_storage_dir(NULL, type, prepare_only);
 
 	return err;
 }
 
 struct change_user_data {
 	DBusMessage *pending;
+	connman_storage_change_user_result_cb_t result_cb;
+	void *user_cb_data;
+	uid_t uid;
 	char *user;
 	char *path;
+	bool prepare_only;
 };
+
+static struct change_user_data *new_change_user_data(DBusMessage *msg,
+			connman_storage_change_user_result_cb_t cb,
+			void *user_cb_data, uid_t uid, const char *user,
+			const char *path, bool system_user, bool prepare_only)
+{
+	struct change_user_data *data;
+
+	data = g_new0(struct change_user_data, 1);
+
+	if (msg)
+		data->pending = dbus_message_ref(msg);
+
+	data->result_cb = cb;
+	data->user_cb_data = user_cb_data;
+	data->uid = uid;
+	data->user = g_strdup(user);
+
+	/* For system user path is NULL */
+	if (!system_user)
+		data->path = g_build_filename(path, DEFAULT_USER_STORAGE,
+					NULL);
+
+	data->prepare_only = prepare_only;
+
+	return data;
+}
+
+static void free_change_user_data(struct change_user_data *data)
+{
+	if (!data)
+		return;
+
+	if (data->pending)
+		dbus_message_unref(data->pending);
+
+	g_free(data->user);
+	g_free(data->path);
+	g_free(data);
+}
 
 static void change_user_reply(DBusPendingCall *call, void *user_data)
 {
@@ -1972,6 +2033,10 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 		} else if (g_str_has_suffix(error.name, ".PermissionDenied")) {
 			DBG("Not allowed to change user, permission denied");
 			err = -EPERM;
+		} else if (g_str_has_suffix(error.name, ".Timeout") ||
+				g_str_has_suffix(error.name, ".TimedOut")) {
+			DBG("Timeout with D-Bus occurred");
+			err = -ETIMEDOUT;
 		} else {
 			DBG("unknown error %s", error.name);
 			err = -ENOENT;
@@ -1981,47 +2046,118 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 	}
 
 	dbus_message_unref(reply);
-	dbus_pending_call_unref(call);
 
 	if (err)
 		goto err;
 
-	err = set_user_dir(data->path, STORAGE_DIR_TYPE_MAIN);
-	if (err)
-		goto err;
+	/* Preparations are done prior to D-Bus message to vpnd */
+	if (!data->prepare_only) {
+		err = set_user_dir(data->path, STORAGE_DIR_TYPE_MAIN,
+					data->prepare_only);
+		if (err)
+			goto err;
+	}
 
 	if (cbs && cbs->finalize)
 		cbs->finalize(data->user);
 
-	g_dbus_send_reply(connection, data->pending, DBUS_TYPE_INVALID);
+	if (data->pending) {
+		if (!g_dbus_send_reply(connection, data->pending,
+					DBUS_TYPE_INVALID))
+			connman_error("cannot reply to pending user change");
+
+		/* g_dbus_send_reply() always unrefs the message */
+		data->pending = NULL;
+	}
 
 	goto out;
 
 err:
+	/* When preparing revert to root user if vpnd fails to change user. */
+	if (data->prepare_only) {
+		set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
+		data->uid = 0;
+	}
+
+	if (!data->pending)
+		goto out;
+
 	switch (-err) {
-	case EINVAL:
-		reply = __connman_error_invalid_arguments(data->pending);
-		break;
 	case EALREADY:
 		reply = __connman_error_already_enabled(data->pending);
-		break;
-	case EPERM:
-		reply = __connman_error_permission_denied(data->pending);
 		break;
 	case ENOENT:
 		reply = __connman_error_not_found(data->pending);
 		break;
 	default:
+		/* EINVAL, EPERM and ETIMEDOUT are handled correctly */
 		reply = __connman_error_failed(data->pending, -err);
 	}
 
-	g_dbus_send_message(connection, reply);
+	if (!g_dbus_send_message(connection, reply))
+		connman_error("cannot send D-Bus error %d/%s reply", err,
+					strerror(-err));
 
 out:
-	dbus_message_unref(data->pending);
-	g_free(data->user);
-	g_free(data->path);
-	g_free(data);
+	dbus_pending_call_unref(call);
+
+	if (data->result_cb)
+		data->result_cb(data->uid, err, data->user_cb_data);
+
+	free_change_user_data(data);
+}
+
+static int send_change_user_msg(struct change_user_data *data)
+{
+	DBusPendingCall *call;
+	DBusMessage *msg;
+	dbus_uint32_t uid;
+	int err = -EINPROGRESS;
+
+	if (!data)
+		return -EINVAL;
+
+	msg = dbus_message_new_method_call(VPN_SERVICE, VPN_STORAGE_PATH,
+				VPN_STORAGE_INTERFACE,
+				VPN_STORAGE_CHANGE_USER);
+	if (!msg) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	uid = (dbus_uint32_t)data->uid;
+
+	if (!dbus_message_append_args(msg, DBUS_TYPE_UINT32, &uid,
+				DBUS_TYPE_INVALID)) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	if (!g_dbus_send_message_with_reply(connection, msg, &call,
+				DBUS_TIMEOUT_USE_DEFAULT)) {
+		connman_error("Unable to call %s.%s()", VPN_STORAGE_INTERFACE,
+					VPN_STORAGE_CHANGE_USER);
+		err = -EPERM;
+		goto out;
+	}
+
+	if (!call) {
+		err = -ECANCELED;
+		goto out;
+	}
+
+	if (!dbus_pending_call_set_notify(call, change_user_reply, data,
+				NULL)) {
+		connman_warn("Failed to set notify for change user request");
+		err = -ENOMEM;
+		dbus_pending_call_unref(call);
+	}
+
+out:
+	if (msg)
+		dbus_message_unref(msg);
+
+	return err;
 }
 
 static DBusMessage *change_user(DBusConnection *conn,
@@ -2029,11 +2165,7 @@ static DBusMessage *change_user(DBusConnection *conn,
 {
 	struct change_user_data *user_data;
 	struct passwd *pwd;
-	DBusPendingCall *call;
-	DBusMessage *vpn_msg;
-	DBusMessage *reply = NULL;
 	DBusError error;
-	char *path = NULL;
 	dbus_uint32_t uid;
 	int err;
 	bool system_user;
@@ -2080,51 +2212,18 @@ static DBusMessage *change_user(DBusConnection *conn,
 	if (!pwd)
 		return __connman_error_failed(msg, err ? err : EINVAL);
 
-	vpn_msg = dbus_message_new_method_call(VPN_SERVICE, VPN_STORAGE_PATH,
-					VPN_STORAGE_INTERFACE,
-					VPN_STORAGE_CHANGE_USER);
-	if (!vpn_msg)
-		return __connman_error_failed(msg, ENOMEM);
+	user_data = new_change_user_data(msg, NULL, NULL, uid, pwd->pw_name,
+				pwd->pw_dir, system_user, false);
 
-	if (!dbus_message_append_args(vpn_msg, DBUS_TYPE_UINT32, &uid,
-				DBUS_TYPE_INVALID)) {
-		reply = __connman_error_invalid_arguments(msg);
-		goto out;
+	DBG("path \"%s\"", user_data->path);
+
+	err = send_change_user_msg(user_data);
+	if (err != -EINPROGRESS) {
+		free_change_user_data(user_data);
+		return __connman_error_failed(msg, -err);
 	}
 
-	if (!dbus_connection_send_with_reply(conn, vpn_msg, &call,
-				DBUS_TIMEOUT_USE_DEFAULT)) {
-		connman_error("Unable to call %s.%s()", VPN_STORAGE_INTERFACE,
-					VPN_STORAGE_CHANGE_USER);
-		reply = __connman_error_permission_denied(msg);
-		goto out;
-	}
-
-	if (!call) {
-		reply = __connman_error_operation_canceled(msg);
-		goto out;
-	}
-
-	user_data = g_new0(struct change_user_data, 1);
-	user_data->pending = dbus_message_ref(msg);
-	user_data->user = g_strdup(pwd->pw_name);
-
-	/*
-	 * Setting user as root causes user dirs to be removed from use. No
-	 * path defined for the system user.
-	 */
-	user_data->path = system_user ? NULL :
-				g_build_filename(pwd->pw_dir,
-				DEFAULT_USER_STORAGE, NULL);
-
-	DBG("path \"%s\"", path);
-
-	dbus_pending_call_set_notify(call, change_user_reply, user_data, NULL);
-
-out:
-	dbus_message_unref(vpn_msg);
-
-	return reply;
+	return NULL;
 }
 
 static DBusMessage *change_user_vpn(DBusConnection *conn,
@@ -2178,7 +2277,7 @@ static DBusMessage *change_user_vpn(DBusConnection *conn,
 
 	DBG("path \"%s\"", path);
 
-	err = set_user_dir(path, STORAGE_DIR_TYPE_VPN);
+	err = set_user_dir(path, STORAGE_DIR_TYPE_VPN, false);
 	switch (err) {
 	case 0:
 		break;
@@ -2200,6 +2299,84 @@ static DBusMessage *change_user_vpn(DBusConnection *conn,
 		cbs->finalize(pwd->pw_name);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
+}
+
+/*
+ * This function is called internally only. When doing the initial preparation
+ * at startup (prepare_only = true) the callback (cb) is called twice. First at
+ * the end of the function, and second when a reply from vpnd arrives.When
+ * calling this with prepare_only = false, the callback will be called when
+ * reply is received from vpnd.
+ *
+ * In case of an error, the callback is called only once, as the call to vpnd
+ * is not sent.
+ *
+ * When success this function returns -EINPROGRESS to indicate that the call
+ * to vpnd is sent and reply is pending.
+ */
+int __connman_storage_change_user(uid_t uid,
+			connman_storage_change_user_result_cb_t cb,
+			void *user_cb_data, bool prepare_only)
+{
+	struct change_user_data *user_data;
+	struct passwd *pwd;
+	int err;
+	bool system_user;
+
+	/* No error set = invalid user */
+	pwd = check_user(uid, &err, &system_user);
+	if (!pwd)
+		return err ? -err : -EINVAL;
+
+	/*
+	 * UID is normally an unsigned 32bit integer. Report error if the UID
+	 * value is bigger than that.
+	 */
+	if (uid > UINT32_MAX) {
+		connman_error("uid exceeds uint32 limit");
+		return -EINVAL;
+	}
+
+	user_data = new_change_user_data(NULL, cb, user_cb_data, uid,
+				pwd->pw_name, pwd->pw_dir, system_user,
+				prepare_only);
+
+	DBG("path \"%s\"", user_data->path);
+
+	/* Use reverse order in preparation, set connmand paths before
+	 * communicating with vpnd. vpnd is initialized by systemd and has
+	 * initialized all when the message is processed. But connmand has
+	 * not initialized technology, service and device.
+	 */
+	if (user_data->prepare_only) {
+		err = set_user_dir(user_data->path, STORAGE_DIR_TYPE_MAIN,
+					user_data->prepare_only);
+		if (err)
+			goto out;
+	}
+
+	err = send_change_user_msg(user_data);
+
+out:
+	if (user_data->prepare_only) {
+		/* If sending of D-Bus message fails or the setup of user dir
+		 * is not successful revert back to root user in connmand.
+		 */
+		if (err != -EINPROGRESS) {
+			set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
+			uid = 0;
+		}
+
+		/* Inform the caller twice when preparing */
+		if (user_data->result_cb)
+			user_data->result_cb(user_data->uid, err,
+						user_data->user_cb_data);
+	}
+
+	if (err != -EINPROGRESS)
+		free_change_user_data(user_data);
+
+	return err;
 }
 
 static const GDBusMethodTable storage_methods[] = {
