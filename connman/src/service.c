@@ -9358,7 +9358,7 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	 * exist set current time as modify time if service is saved as is.
 	 */
 	if (__connman_service_load_modifiable(service) != 0)
-		g_get_current_time(&service->modified);
+		update_modified(service);
 
 	service->order = service->do_split_routing ? 0 : 10;
 	service->favorite = true;
