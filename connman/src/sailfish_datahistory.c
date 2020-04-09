@@ -403,7 +403,11 @@ static void datahistory_class_init(DataHistoryClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 	object_class->finalize = datahistory_finalize;
+
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 	g_type_class_add_private(klass, sizeof(struct datahistory_priv));
+	G_GNUC_END_IGNORE_DEPRECATIONS
+
 	datahistory_signal[SIGNAL_CLEARED] =
 		g_signal_new(SIGNAL_CLEARED_NAME, G_OBJECT_CLASS_TYPE(klass),
 			G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL,

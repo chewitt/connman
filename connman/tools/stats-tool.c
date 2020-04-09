@@ -110,13 +110,18 @@ static char *option_last_file_name = NULL;
 static bool parse_start_ts(const char *key, const char *value,
 					gpointer user_data, GError **error)
 {
-	GTimeVal time_val;
+	GTimeZone *tz;
+	GDateTime *dt;
 
-	if (!g_time_val_from_iso8601(value, &time_val))
+	tz = g_time_zone_new_local();
+	dt = g_date_time_new_from_iso8601(value, tz);
+	g_time_zone_unref(tz);
+	if (!dt)
 		return false;
 
-	option_start_ts = time_val.tv_sec;
+	option_start_ts = g_date_time_get_second(dt);
 
+	g_date_time_unref(dt);
 	return true;
 }
 
