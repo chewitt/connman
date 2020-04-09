@@ -266,7 +266,11 @@ static void datacounters_class_init(DataCountersClass *klass)
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
 	object_class->finalize = datacounters_finalize;
+
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 	g_type_class_add_private(klass, sizeof(struct datacounters_priv));
+	G_GNUC_END_IGNORE_DEPRECATIONS
+
 	datacounters_signal[SIGNAL_COUNTERS] =
 		g_signal_new(SIGNAL_COUNTERS_NAME, G_OBJECT_CLASS_TYPE(klass),
 			G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL,

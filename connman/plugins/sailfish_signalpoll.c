@@ -227,7 +227,11 @@ static void signalpoll_class_init(SignalPollClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 	object_class->finalize = signalpoll_finalize;
+
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 	g_type_class_add_private(klass, sizeof(struct signalpoll_priv));
+	G_GNUC_END_IGNORE_DEPRECATIONS
+
         signalpoll_signals[SIGNAL_AVERAGE_CHANGED] =
 		g_signal_new(SIGNAL_AVERAGE_CHANGED_NAME,
 			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
