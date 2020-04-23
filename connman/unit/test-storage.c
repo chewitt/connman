@@ -1,7 +1,8 @@
 /*
  *  ConnMan storage unit tests
  *
- *  Copyright (C) 2020 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020  Jolla Ltd.
+ *  Copyright (C) 2020  Open Mobile Platform LLC.
  *  Contact: jussi.laakkonen@jolla.com
  *
  *  This program is free software; you can redistribute it and/or modify

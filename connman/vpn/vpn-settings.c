@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
  *  Copyright (C) 2018-2020 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020  Open Mobile Platform LLC.
  *  Contact: jussi.laakkonen@jolla.com
  *
  *  This program is free software; you can redistribute it and/or modify
