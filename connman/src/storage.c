@@ -894,12 +894,17 @@ GKeyFile *__connman_storage_load_config(const char *ident)
 GKeyFile *__connman_storage_load_provider_config(const char *ident)
 {
 	gchar *pathname;
+	const char *storagedir;
 	GKeyFile *keyfile = NULL;
 
 	if (!ident)
 		return NULL;
 
-	pathname = g_strdup_printf("%s/%s.config", VPN_STORAGEDIR, ident);
+	storagedir = storagedir_for(ident);
+	if (!storagedir)
+		return NULL;
+
+	pathname = g_strdup_printf("%s/%s.config", storagedir, ident);
 	if (!pathname)
 		return NULL;
 
