@@ -111,33 +111,82 @@ mode_t __vpn_settings_get_umask()
 	return connman_vpn_settings.umask;
 }
 
-void __vpn_settings_set_binary_user_override(const char *username)
-{
-	if (connman_vpn_settings.binary_user_override)
-		g_free(connman_vpn_settings.binary_user_override);
-
-	connman_vpn_settings.binary_user_override = g_strdup(username);
-}
-
-static bool is_system_user(const char *username)
+void __vpn_settings_set_binary_user_override(uid_t uid, void *user_data)
 {
 	struct passwd *pwd;
+
+	if (connman_vpn_settings.binary_user_override) {
+		g_free(connman_vpn_settings.binary_user_override);
+		connman_vpn_settings.binary_user_override = NULL;
+	}
+
+	/* Setting override to root (0) resets the override */
+	if (!uid)
+		return;
+
+	pwd = getpwuid(uid);
+	if (!pwd)
+		return;
+
+	connman_vpn_settings.binary_user_override = g_strdup(pwd->pw_name);
+}
+
+static bool is_string_digits(const char *str)
+{
 	int i;
 
-	/* The username is not set = override should not be used. */
+	if (!str || !*str)
+		return false;
+
+	for (i = 0; str[i]; i++) {
+		if (!g_ascii_isdigit(str[i]))
+			return false;
+	}
+
+	return true;
+}
+
+static uid_t get_user_uid(const char *username)
+{
 	if (!username)
+		return 0;
+
+	return (uid_t)g_ascii_strtoull(username, NULL, 10);
+}
+
+static bool is_system_user(const char *user)
+{
+	struct passwd *pwd;
+	struct passwd *system_pwd;
+	uid_t uid;
+	int i;
+
+	/*
+	 * The username is not set = override should not be used. This is the
+	 * case after the override is reset.
+	 */
+	if (!user)
 		return true;
 
-	DBG("check user");
+	DBG("check user \"%s\"", user);
+
+	/* If user is given as uid as string use getpwuid() */
+	if (is_string_digits(user)) {
+		uid = get_user_uid(user);
+		pwd = getpwuid(uid);
+	} else {
+		pwd = getpwnam(user);
+	}
+
+	/*
+	 * Ignore errors if no entry was found. Treat as system user to
+	 * prevent using an invalid override.
+	 */
+	if (!pwd)
+		return true;
 
 	if (!connman_vpn_settings.system_binary_users) {
 		DBG("no binary users set");
-		pwd = getpwnam(username);
-
-		/* Ignore errors if no entry was found. Treat as system user to
-		 * prevent using an invalid override. */
-		if (!pwd)
-			return true;
 
 		/*
 		 * Check if the user is root, or the uid equals to process
@@ -146,9 +195,25 @@ static bool is_system_user(const char *username)
 		return !pwd->pw_uid || pwd->pw_uid == geteuid();
 	}
 
+	/* Root set as user or the effective user id */
+	if (!pwd->pw_uid || pwd->pw_uid == geteuid())
+		return true;
+
 	for (i = 0; connman_vpn_settings.system_binary_users[i]; i++) {
-		if (!g_strcmp0(connman_vpn_settings.system_binary_users[i],
-					username))
+		const char *system_user =
+				connman_vpn_settings.system_binary_users[i];
+
+		if (is_string_digits(system_user)) {
+			uid_t system_uid = get_user_uid(system_user);
+			system_pwd = getpwuid(system_uid);
+		} else {
+			system_pwd = getpwnam(system_user);
+		}
+
+		if (!system_pwd)
+			continue;
+
+		if (pwd->pw_uid == system_pwd->pw_uid)
 			return true;
 	}
 
