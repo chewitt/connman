@@ -1638,7 +1638,7 @@ static bool post_cb(void)
 	return true;
 }
 
-static void finalize_cb(const char *username)
+static void finalize_cb(uid_t uid, void *user_data)
 {
 	DBG("");
 	cb_counts[FINALIZE_CB]++;
