@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
  *  Copyright (C) 2014-2020  Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as

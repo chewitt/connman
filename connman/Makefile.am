@@ -140,7 +140,12 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c \
-			src/sailfish_iptables_ext.c src/iptables-validate.c
+			src/sailfish_iptables_ext.c src/iptables-validate.c \
+			src/login_manager.c
+
+if SYSTEMD
+src_connmand_SOURCES += src/systemd_login.c
+endif
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
@@ -318,7 +323,7 @@ noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
 	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access \
-	unit/test-storage
+	unit/test-storage unit/test-systemd_login
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -436,11 +441,19 @@ unit_test_storage_SOURCES = unit/test-storage.c $(backtrace_sources) \
 				src/inotify.c src/storage.c src/technology.c
 unit_test_storage_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+
+unit_test_systemd_login_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_systemd_login_SOURCES = unit/test-systemd_login.c \
+				$(backtrace_sources) src/connman.h src/log.c \
+				src/systemd_login.c
+unit_test_systemd_login_LDADD = @GLIB_LIBS@ -ldl
+
 TESTS = unit/test-access unit/test-vpn_access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
-	unit/test-device unit/test-sailfish_vpn_access unit/test-storage
+	unit/test-device unit/test-sailfish_vpn_access unit/test-storage \
+	unit/test-systemd_login
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)

@@ -4,6 +4,7 @@
  *
  *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
  *  Copyright (C) 2013-2020  Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -321,6 +322,9 @@ struct connman_storage_callbacks {
 				bool default_access);
 };
 
+typedef void (*connman_storage_change_user_result_cb_t)(uid_t uid, int err,
+			void *user_data);
+
 mode_t __connman_storage_dir_mode(void);
 mode_t __connman_storage_file_mode(void);
 int __connman_storage_init(const char *root, mode_t dir_mode,
@@ -328,6 +332,9 @@ int __connman_storage_init(const char *root, mode_t dir_mode,
 int __connman_storage_create_dir(const char *dir, mode_t permissions);
 int __connman_storage_register_dbus(enum connman_storage_dir_type type,
 				struct connman_storage_callbacks *callbacks);
+int __connman_storage_change_user(uid_t uid,
+			connman_storage_change_user_result_cb_t cb,
+			void *user_cb_data, bool prepare_only);
 void __connman_storage_cleanup(void);
 GKeyFile *__connman_storage_open_global(void);
 GKeyFile *__connman_storage_load_global(void);
@@ -1263,3 +1270,11 @@ int __connman_util_init(void);
 void __connman_util_cleanup(void);
 
 void __connman_set_fsid(const char *fs_identity);
+
+int __connman_login_manager_init();
+void __connman_login_manager_cleanup();
+
+#ifdef SYSTEMD
+int __systemd_login_init();
+void __systemd_login_cleanup();
+#endif

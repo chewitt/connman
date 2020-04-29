@@ -254,6 +254,14 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 	return reply;
 }
 
+gboolean g_dbus_send_message_with_reply(DBusConnection *connection,
+					DBusMessage *message,
+					DBusPendingCall **call, int timeout)
+{
+	return dbus_connection_send_with_reply(connection, message, call,
+				timeout);
+}
+
 // Replaces function from libdbusaccess/src/dbusaccess_policy.c
 // Needed to control permissions independent of reality
 DAPolicy* da_policy_new_full(const char* spec, const DA_ACTION* actions)

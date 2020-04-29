@@ -86,6 +86,7 @@ unit/test-globalproxy
 unit/test-iptables
 unit/test-device
 unit/test-storage
+unit/test-systemd_login
 
 *.gcda
 *.gcno
