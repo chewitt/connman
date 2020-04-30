@@ -302,7 +302,10 @@ struct connman_storage_callbacks {
 	bool (*post) (void);
 
 	/* Finalize callback is to do additional actions after setup. */
-	void (*finalize) (const char *username);
+	void (*finalize) (uid_t uid, void *user_data);
+
+	/* Additional data to be passed on finalize callback */
+	void *finalize_user_data;
 
 	/* Callback to create access policy for connmand storage.*/
 	struct connman_access_storage_policy* (*access_policy_create)

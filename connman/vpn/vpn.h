@@ -133,7 +133,7 @@ const char *__vpn_settings_get_storage_root(void);
 mode_t __vpn_settings_get_storage_dir_permissions(void);
 mode_t __vpn_settings_get_storage_file_permissions(void);
 mode_t __vpn_settings_get_umask(void);
-void __vpn_settings_set_binary_user_override(const char *username);
+void __vpn_settings_set_binary_user_override(uid_t uid, void *user_data);
 
 struct vpn_plugin_data;
 

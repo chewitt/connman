@@ -4267,7 +4267,7 @@ static DBusMessage *get_properties(DBusConnection *conn,
 
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
-		return NULL;
+		return __connman_error_failed(msg, ENOMEM);
 
 	dbus_message_iter_init_append(reply, &array);
 
@@ -9508,18 +9508,22 @@ void __connman_service_unload_services(gchar **services, int len)
 			continue;
 		}
 
-		if (connman_service_get_type(service) !=
-					CONNMAN_SERVICE_TYPE_WIFI) {
-			DBG("skip non WiFi %p/%s", service,
+		switch (connman_service_get_type(service)) {
+		case CONNMAN_SERVICE_TYPE_WIFI:
+			if (service->network)
+				__connman_service_remove_from_network(
+							service->network);
+			break;
+		case CONNMAN_SERVICE_TYPE_VPN:
+			break;
+		default:
+			DBG("skip non WiFi/VPN %p/%s", service,
 						service->identifier);
 			continue;
 		}
 
-		__connman_service_remove_from_network(
-				__connman_service_get_network(service));
-
 		if (!__connman_service_remove(service))
-			DBG("cannot unload service %s", services[i]);
+			connman_warn("cannot unload service %s", services[i]);
 	}
 
 }

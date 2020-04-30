@@ -64,6 +64,11 @@ static struct passwd passwd_list[] = {
 		.pw_shell = "/usr/bin/nologin",
 	},
 	{
+		.pw_name = "toor2",
+		.pw_uid = 998,
+		.pw_shell = "/usr/bin/nologin",
+	},
+	{
 		.pw_name = "sys",
 		.pw_uid = 1,
 		.pw_shell = "/bin/false",
@@ -82,9 +87,23 @@ struct passwd *getpwnam(const char *name)
 	return NULL;
 }
 
+struct passwd *getpwuid(uid_t uid)
+{
+	int i;
+
+	for (i = 0; i < G_N_ELEMENTS(passwd_list); i++) {
+		if (passwd_list[i].pw_uid == uid)
+			return &passwd_list[i];
+	}
+
+	return NULL;
+}
+
+static uid_t euid = 0;
+
 uid_t geteuid(void)
 {
-	return 0;
+	return euid;
 }
 
 static gchar* setup_test_directory()
@@ -127,13 +146,44 @@ static gchar* setup_plugin_test_directory(const char *path)
 	return plugin_path;
 }
 
+static int rmdir_r(const gchar* path)
+{
+	DIR *d = opendir(path);
+
+	if (d) {
+		const struct dirent *p;
+		int r = 0;
+
+		while (!r && (p = readdir(d))) {
+			char *buf;
+			struct stat st;
+
+			if (!strcmp(p->d_name, ".") ||
+						!strcmp(p->d_name, "..")) {
+				continue;
+			}
+
+			buf = g_strdup_printf("%s/%s", path, p->d_name);
+			if (!stat(buf, &st)) {
+				r =  S_ISDIR(st.st_mode) ? rmdir_r(buf) :
+								unlink(buf);
+			}
+			g_free(buf);
+		}
+		closedir(d);
+		return r ? r : rmdir(path);
+	} else {
+		return -1;
+	}
+}
+
 static void cleanup_test_directory(gchar *test_path)
 {
 	gint access_mode = R_OK|W_OK|X_OK;
 
 	if (g_file_test(test_path, G_FILE_TEST_IS_DIR)) {
 		g_assert(!access(test_path, access_mode));
-		g_rmdir(test_path);
+		rmdir_r(test_path);
 	}
 }
 
@@ -767,20 +817,20 @@ static void test_vpn_settings_plugin_config_override1()
 	test_data = vpn_settings_get_vpn_plugin_config(plugin_name);
 	g_assert(test_data);
 
-	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
-								"user") == 0);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data), ==, "user");
 
 	/* Override works */
-	__vpn_settings_set_binary_user_override("username");
-	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
-							"username") == 0);
+	__vpn_settings_set_binary_user_override(1001, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data), ==,
+				"username");
 
 	/* No username set in plugin or main config - override is not used */
 	test_data = vpn_settings_get_vpn_plugin_config(plugin2_name);
 	g_assert(test_data);
 	g_assert(vpn_settings_get_binary_user(test_data) == NULL);
 
-	__vpn_settings_set_binary_user_override(NULL);
+	/* Using 0 as uid resets binary user override */
+	__vpn_settings_set_binary_user_override(0, NULL);
 
 	vpn_settings_delete_vpn_plugin_config(plugin_name);
 	vpn_settings_delete_vpn_plugin_config(plugin2_name);
@@ -840,14 +890,15 @@ static void test_vpn_settings_plugin_config_override2()
 	test_data = vpn_settings_get_vpn_plugin_config(plugin_name);
 	g_assert(test_data);
 
-	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
-								"user") == 0);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data), ==, "user");
 
 	/* Regular username can be overridden */
-	__vpn_settings_set_binary_user_override("username");
-	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
-							"username") == 0);
-	__vpn_settings_set_binary_user_override(NULL);
+	__vpn_settings_set_binary_user_override(1001, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data), ==,
+				"username");
+
+	/* Using 0 as uid resets binary user override */
+	__vpn_settings_set_binary_user_override(0, NULL);
 
 	vpn_settings_delete_vpn_plugin_config(plugin_name);
 	__vpn_settings_cleanup();
@@ -874,7 +925,7 @@ static void test_vpn_settings_plugin_config_override3()
 		"[General]",
 		"InputRequestTimeout = 200",
 		"[DACPrivileges]",
-		"SystemBinaryUsers = toor, sys",
+		"SystemBinaryUsers = 999, sys, toor2",
 		NULL
 	};
 
@@ -891,6 +942,30 @@ static void test_vpn_settings_plugin_config_override3()
 	};
 	struct vpn_plugin_data *test_data = NULL;
 
+	gchar* plugin2_name = "test_plugin2";
+	gchar *plugin2_file = NULL;
+	gchar *plugin2_content[] = {
+		"# ConnMan vpn-settings plugin2 test config",
+		"[DACPrivileges]",
+		"User = 998", /* Numeric id can be used */
+		"Group = vpn",
+		"SupplementaryGroups = inet, net_admin, net_raw",
+		NULL
+	};
+	struct vpn_plugin_data *test_data2 = NULL;
+
+	gchar* plugin3_name = "test_plugin3";
+	gchar *plugin3_file = NULL;
+	gchar *plugin3_content[] = {
+		"# ConnMan vpn-settings plugin3 test config",
+		"[DACPrivileges]",
+		"User = root",
+		"Group = vpn",
+		"SupplementaryGroups = inet, net_admin, net_raw",
+		NULL
+	};
+	struct vpn_plugin_data *test_data3 = NULL;
+
 	set_and_verify_content(test_file, content);
 	g_assert_cmpint(__vpn_settings_init(test_file, test_path), ==, 0);
 
@@ -904,20 +979,78 @@ static void test_vpn_settings_plugin_config_override3()
 	test_data = vpn_settings_get_vpn_plugin_config(plugin_name);
 	g_assert(test_data);
 
-	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
-								"toor") == 0);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data), ==, "toor");
 
 	/* Cannot override system user */
-	__vpn_settings_set_binary_user_override("username");
-	g_assert(g_ascii_strcasecmp(vpn_settings_get_binary_user(test_data),
-							"toor") == 0);
-	__vpn_settings_set_binary_user_override(NULL);
+	__vpn_settings_set_binary_user_override(1000, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data), ==, "toor");
+
+	/* Using 0 as uid resets binary user override */
+	__vpn_settings_set_binary_user_override(0, NULL);
+
+	/* Prepare plugin2 content */
+	plugin2_file = g_strdup_printf("%s/%s.conf", plugin_path,
+				plugin2_name);
+	set_and_verify_content(plugin2_file, plugin2_content);
+	g_assert_cmpint(vpn_settings_parse_vpn_plugin_config(plugin2_name),
+								==, 0);
+
+	test_data2 = vpn_settings_get_vpn_plugin_config(plugin2_name);
+	g_assert(test_data2);
+
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data2), ==, "998");
+
+	/* Cannot override system user */
+	__vpn_settings_set_binary_user_override(1001, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data2), ==, "998");
+
+	/* Cannot override system user with another one */
+	__vpn_settings_set_binary_user_override(999, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data2), ==, "998");
+
+	/* Using the effective uid does not change situation */
+	euid = 998;
+	__vpn_settings_set_binary_user_override(1, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data2), ==, "998");
+	euid = 0;
+
+	/* Using 0 as uid resets binary user override */
+	__vpn_settings_set_binary_user_override(0, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data2), ==, "998");
+
+	/* Prepare plugin3 content */
+	plugin3_file = g_strdup_printf("%s/%s.conf", plugin_path,
+				plugin3_name);
+	set_and_verify_content(plugin3_file, plugin3_content);
+	g_assert_cmpint(vpn_settings_parse_vpn_plugin_config(plugin3_name),
+								==, 0);
+
+	test_data3 = vpn_settings_get_vpn_plugin_config(plugin3_name);
+	g_assert(test_data3);
+
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data3), ==, "root");
+
+	/* Cannot override system user */
+	__vpn_settings_set_binary_user_override(1001, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data3), ==, "root");
+
+	/* Cannot override system user with another one */
+	__vpn_settings_set_binary_user_override(999, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data3), ==, "root");
+
+	/* Using 0 as uid resets binary user override */
+	__vpn_settings_set_binary_user_override(0, NULL);
+	g_assert_cmpstr(vpn_settings_get_binary_user(test_data3), ==, "root");
 
 	vpn_settings_delete_vpn_plugin_config(plugin_name);
+	vpn_settings_delete_vpn_plugin_config(plugin2_name);
 	__vpn_settings_cleanup();
 
 	g_remove(plugin_file);
 	g_remove(plugin_path);
+	g_remove(plugin2_file);
+	g_remove(plugin3_file);
+
 	g_remove(test_file);
 
 	cleanup_test_directory(test_path);
@@ -926,6 +1059,9 @@ static void test_vpn_settings_plugin_config_override3()
 	g_free(test_file);
 	g_free(plugin_file);
 	g_free(plugin_path);
+	g_free(plugin2_file);
+	g_free(plugin3_file);
+
 }
 
 static gchar *option_debug = NULL;

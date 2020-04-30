@@ -894,12 +894,17 @@ GKeyFile *__connman_storage_load_config(const char *ident)
 GKeyFile *__connman_storage_load_provider_config(const char *ident)
 {
 	gchar *pathname;
+	const char *storagedir;
 	GKeyFile *keyfile = NULL;
 
 	if (!ident)
 		return NULL;
 
-	pathname = g_strdup_printf("%s/%s.config", VPN_STORAGEDIR, ident);
+	storagedir = storagedir_for(ident);
+	if (!storagedir)
+		return NULL;
+
+	pathname = g_strdup_printf("%s/%s.config", storagedir, ident);
 	if (!pathname)
 		return NULL;
 
@@ -1962,7 +1967,6 @@ struct change_user_data {
 	connman_storage_change_user_result_cb_t result_cb;
 	void *user_cb_data;
 	uid_t uid;
-	char *user;
 	char *path;
 	bool prepare_only;
 };
@@ -1982,7 +1986,6 @@ static struct change_user_data *new_change_user_data(DBusMessage *msg,
 	data->result_cb = cb;
 	data->user_cb_data = user_cb_data;
 	data->uid = uid;
-	data->user = g_strdup(user);
 
 	/* For system user path is NULL */
 	if (!system_user)
@@ -2002,7 +2005,6 @@ static void free_change_user_data(struct change_user_data *data)
 	if (data->pending)
 		dbus_message_unref(data->pending);
 
-	g_free(data->user);
 	g_free(data->path);
 	g_free(data);
 }
@@ -2060,7 +2062,7 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 	}
 
 	if (cbs && cbs->finalize)
-		cbs->finalize(data->user);
+		cbs->finalize(data->uid, cbs->finalize_user_data);
 
 	if (data->pending) {
 		if (!g_dbus_send_reply(connection, data->pending,
@@ -2297,7 +2299,7 @@ static DBusMessage *change_user_vpn(DBusConnection *conn,
 		return error_reply;
 
 	if (cbs && cbs->finalize)
-		cbs->finalize(pwd->pw_name);
+		cbs->finalize((uid_t)uid, cbs->finalize_user_data);
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
@@ -2443,6 +2445,18 @@ int __connman_storage_register_dbus(enum connman_storage_dir_type type,
 	cbs = callbacks;
 
 	return 0;
+}
+
+/* Update the finalize callback, when cb is NULL the callback is reset. */
+void connman_storage_update_finalize_cb(
+				void (*cb) (uid_t uid, void *user_data),
+				void *user_data)
+{
+	if (!cbs)
+		return;
+
+	cbs->finalize = cb;
+	cbs->finalize_user_data = user_data;
 }
 
 int __connman_storage_init(const char *dir, mode_t dir_mode, mode_t file_mode)
