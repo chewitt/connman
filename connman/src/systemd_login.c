@@ -585,6 +585,15 @@ static int check_session_status(struct systemd_login_data *login_data)
 		goto out;
 	case SD_SESSION_OPENING:
 		DBG("user %u is opening session", uid);
+
+		/*
+		 * The system main user (root) is in use prior to user change
+		 * is in effect. This ensures that all technologies are off
+		 * when logging in also after boot. get_session_uid_and_state()
+		 * ignores remote sessions so this is not triggered by, e.g.,
+		 * new ssh connection.
+		 */
+		__connman_technology_disable_all();
 		goto out;
 	case SD_SESSION_ACTIVE:
 		if (uid == login_data->active_uid) {
