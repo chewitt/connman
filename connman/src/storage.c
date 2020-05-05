@@ -238,8 +238,6 @@ bool service_id_is_valid(const char *id)
 
 static gboolean is_service_wifi_dir_name(const char *name)
 {
-	DBG("name %s", name);
-
 	if (!strncmp(name, "wifi_", 5) && service_id_is_valid(name))
 		return TRUE;
 
@@ -248,8 +246,6 @@ static gboolean is_service_wifi_dir_name(const char *name)
 
 static gboolean is_service_dir_name(const char *name)
 {
-	DBG("name %s", name);
-
 	if (strncmp(name, "provider_", 9) == 0 || !service_id_is_valid(name))
 		return FALSE;
 
@@ -258,8 +254,6 @@ static gboolean is_service_dir_name(const char *name)
 
 static gboolean is_provider_dir_name(const char *name)
 {
-	DBG("name %s", name);
-
 	if (strncmp(name, "provider_", 9) == 0)
 		return TRUE;
 
@@ -268,8 +262,6 @@ static gboolean is_provider_dir_name(const char *name)
 
 static gboolean is_vpn_dir_name(const char *name)
 {
-	DBG("name %s", name);
-
 	if (strncmp(name, "vpn_", 4) == 0)
 		return TRUE;
 
@@ -501,11 +493,45 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 
 		DBG("delete/move-from %s", event->name);
 
+		/*
+		 * To support manual removal of services as well call the
+		 * unload callback to propagate the notify about the removal
+		 * to proper locations and for the service/provider to be
+		 * removed from the service/provider lists.
+		 */
+		if (cbs && cbs->unload) {
+			bool unload_state = storage.only_unload;
+			char *name = event->name;
+
+			DBG("unloading %s (unload in progress: %s)",
+					name, unload_state ? "y" : "n");
+
+			/*
+			 * To prevent attempt to remove an already removed one
+			 * and to eventually call the unregister set only
+			 * unload mode and restore original mode afterwards.
+			 *
+			 * If the service was not manually removed then the
+			 * unload callback does nothing as the service/provider
+			 * is not found.
+			 */
+			storage.only_unload = TRUE;
+			cbs->unload(&name, 1);
+			storage.only_unload = unload_state;
+		}
+
 		if (is_user_dir(event->name))
 			subdirs = storage.user_subdirs;
 		else
 			subdirs = storage.subdirs;
 
+		/*
+		 * If the service was manually removed it is removed also from
+		 * subdirs when the unload callback reaches back to service/
+		 * provider removal in unload only mode. But in case it was
+		 * removed using internal functionality it must be removed from
+		 * the subdirs here.
+		 */
 		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
 		if (pos) {
 			storage_subdir_unregister(pos->data);
@@ -518,6 +544,14 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 	if ((event->mask & IN_CREATE) || (event->mask & IN_MOVED_TO)) {
 		DBG("create %s", event->name);
 		storage_subdir_append(event->name);
+
+		/*
+		 * This ensures manually added services/providers are also
+		 * loaded and notified properly.
+		 */
+		if (cbs && cbs->load)
+			cbs->load();
+
 		debug_subdirs();
 		return;
 	}
@@ -1720,17 +1754,7 @@ static int change_storage_dir(const char *root,
 		 * skipped.
 		 */
 		if (prepare_only)
-			break;
-
-		DBG("load services");
-
-		if (cbs && cbs->load)
-			cbs->load();
-
-		DBG("Run post setup");
-
-		if (cbs && cbs->post && !cbs->post())
-			DBG("main post setup failed");
+			goto out;
 
 		break;
 	case STORAGE_DIR_TYPE_VPN:
@@ -1804,17 +1828,23 @@ static int change_storage_dir(const char *root,
 							STORAGE_DIR_TYPE_VPN);
 		}
 
-		if (cbs && cbs->load)
-			cbs->load();
-
-		if (cbs && cbs->post && !cbs->post())
-			DBG("VPN post setup failed");
-
 		break;
 	case STORAGE_DIR_TYPE_USER:
 	case STORAGE_DIR_TYPE_STATE:
 		err = -EINVAL;
-		break;
+		goto out;
+	}
+
+	if (cbs && cbs->load) {
+		DBG("load services");
+		cbs->load();
+	}
+
+	if (cbs && cbs->post) {
+		DBG("Run post setup");
+
+		if (!cbs->post())
+			DBG("post setup failed");
 	}
 
 out:
