@@ -9489,6 +9489,7 @@ static struct connman_agent_driver agent_driver = {
 	.context_unref	= agent_context_unref,
 };
 
+/* This is used as a callback for user change unload services. */
 void __connman_service_unload_services(gchar **services, int len)
 {
 	struct connman_service *service;
@@ -9526,6 +9527,15 @@ void __connman_service_unload_services(gchar **services, int len)
 			connman_warn("cannot unload service %s", services[i]);
 	}
 
+	/*
+	 * Immediately inform about the service changes. If there were
+	 * services removed the services_notify->id is set.
+	 */
+	if (services_notify->id != 0) {
+		g_source_remove(services_notify->id);
+		services_notify->id = 0;
+		service_send_changed(NULL);
+	}
 }
 
 void __connman_service_load_services(void)
