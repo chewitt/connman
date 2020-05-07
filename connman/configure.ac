@@ -290,8 +290,8 @@ fi
 
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.44, dummy=yes,
-				AC_MSG_ERROR(GLib >= 2.44 is required))
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.62, dummy=yes,
+				AC_MSG_ERROR(GLib >= 2.62 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 
@@ -458,8 +458,8 @@ AM_CONDITIONAL(SAILFISH_WIFI, test "${enable_sailfish_wifi}" != "no")
 if (test "${enable_sailfish_wifi}" = "yes"); then
 	PKG_CHECK_MODULES(LIBMCE, libmce-glib, dummy=yes,
 				AC_MSG_ERROR(libmce-glib is required))
-	PKG_CHECK_MODULES(GSUPPLICANT, libgsupplicant >= 1.0.12, dummy=yes,
-				AC_MSG_ERROR(libgsupplicant >= 1.0.12 is required))
+	PKG_CHECK_MODULES(GSUPPLICANT, libgsupplicant >= 1.0.17, dummy=yes,
+				AC_MSG_ERROR(libgsupplicant >= 1.0.17 is required))
 	CFLAGS="$CFLAGS $GSUPPLICANT_CFLAGS $LIBMCE_CFLAGS"
 	LIBS="$LIBS $GSUPPLICANT_LIBS $LIBMCE_LIBS"
 	need_glibutil=yes
