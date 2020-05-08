@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2017-2018 Jolla Ltd. All rights reserved.
- *  Contact: Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2017-2020 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -2737,9 +2737,15 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 		connect->user_data = NULL;
 		wifi_hidden_connect_free(connect);
 	} else {
-		if (wifi_ssid_hidden(ssid)) {
+		/*
+		 * If it's a recovered network then there's no need to
+		 * schedule a new scan.
+		 */
+		if (!recovered && wifi_ssid_hidden(ssid)) {
 			wifi_device_active_scan_init(dev);
-			wifi_device_scan_request(dev, SCAN_MANUAL);
+			if (dev->active_scans) {
+				wifi_device_scan_request(dev, SCAN_MANUAL);
+			}
 		}
 
 		/*
