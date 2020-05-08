@@ -906,6 +906,37 @@ static int technology_disable(struct connman_technology *technology)
 	return err;
 }
 
+/*
+ * This function supports notifying about power change for both rfkill and
+ * non-rfkill technologies.
+ */
+static int technology_changed_state(struct connman_technology *technology,
+								bool on)
+{
+	if (on) {
+		if (technology->rfkill_driven) {
+			if (technology->tethering_persistent)
+				enable_tethering(technology);
+		}
+
+		return technology_enabled(technology);
+	} else {
+		if (!technology->rfkill_driven) {
+			GSList *list;
+
+			for (list = technology->device_list; list;
+						list = list->next) {
+				struct connman_device *device = list->data;
+
+				if (connman_device_get_powered(device))
+					return 0;
+			}
+		}
+
+		return technology_disabled(technology);
+	}
+}
+
 static gboolean enable_delayed(gpointer user_data)
 {
 	struct connman_technology *technology = user_data;
@@ -936,7 +967,10 @@ static gboolean enable_delayed(gpointer user_data)
 		 */
 		break;
 	case 0:
-		technology_enabled(technology);
+		if (technology_changed_state(technology, true))
+			connman_warn("technology %p state not notified",
+						technology);
+
 		break;
 	default:
 		break;
@@ -1872,8 +1906,12 @@ bool __connman_technology_disable_all(void)
 			connman_warn("could not reply to pending request");
 
 		err = technology_disable(technology);
-		if (!err)
-			technology_disabled(technology);
+		if (!err) {
+			if (technology_changed_state(technology, false))
+				connman_warn("technology %p state change not "
+							"notified",
+							technology);
+		}
 
 		if (err != -EBUSY)
 			technology->enable_persistent = false;
@@ -1956,8 +1994,13 @@ bool __connman_technology_enable_from_config()
 			}
 
 			err = technology_disable(technology);
-			if (!err)
-				technology_disabled(technology);
+			if (!err) {
+				if (technology_changed_state(technology,
+							false))
+					connman_warn("technology %p state"
+							"change not notified",
+							technology);
+			}
 
 			DBG("tech %p/%s enabled set as disabled, result %s",
 						technology,
@@ -1994,11 +2037,16 @@ bool __connman_technology_enable_from_config()
 							technology);
 			} else {
 				err = technology_enable(technology);
-				if (!err)
-					technology_enabled(technology);
-				else if (err == -EBUSY)
+				if (!err) {
+					if (technology_changed_state(
+							technology, true))
+						connman_warn("tech %p state"
+							"change notify fail",
+							technology);
+				} else if (err == -EBUSY) {
 					technology_init_enable_delayed(
 								technology);
+				}
 			}
 
 			DBG("tech %p/%s disabled set as enabled, result %s",
