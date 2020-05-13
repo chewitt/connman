@@ -434,7 +434,7 @@ static GString *wifi_bss_ident_append_suffix(GString *str, GSupplicantBSS *bss)
 	return str;
 }
 
-static gboolean wifi_ssid_hidden(GBytes* ssid)
+static gboolean wifi_ssid_hidden(GBytes *ssid)
 {
 	/*
 	 * Some APs configured to hide SSID are still broadcasting non-empty
@@ -617,8 +617,7 @@ static void wifi_bss_free(struct wifi_bss *bss_data, struct wifi_device *dev)
 		}
 	}
 
-	gsupplicant_bss_remove_handlers(bss_data->bss, bss_data->event_id,
-					G_N_ELEMENTS(bss_data->event_id));
+	gsupplicant_bss_remove_all_handlers(bss_data->bss, bss_data->event_id);
 	gsupplicant_bss_unref(bss_data->bss);
 	if (bss_data->ssid) {
 		g_bytes_unref(bss_data->ssid);
@@ -654,9 +653,8 @@ static void wifi_network_disconnect_timeout_cancel(struct wifi_network *net)
 static void wifi_network_drop_interface(struct wifi_network *net)
 {
 	if (net->iface) {
-		gsupplicant_interface_remove_handlers(net->iface,
-				net->iface_event_id,
-				G_N_ELEMENTS(net->iface_event_id));
+		gsupplicant_interface_remove_all_handlers(net->iface,
+							net->iface_event_id);
 		gsupplicant_interface_unref(net->iface);
 		net->iface = NULL;
 	}
@@ -1069,11 +1067,9 @@ static gboolean wifi_network_update_current_bss(struct wifi_network *net)
 }
 
 static void wifi_network_current_bss_changed(GSupplicantInterface *iface,
-								void *data)
+								void *net)
 {
-	struct wifi_network *net = data;
-
-	wifi_network_update_current_bss(net);
+	wifi_network_update_current_bss((struct wifi_network *)net);
 }
 
 static void wifi_network_update_wps_caps_from_bss(struct wifi_network *net,
@@ -1109,25 +1105,21 @@ static void wifi_network_save_network_param(struct wifi_network *net,
 	}
 }
 
-static void wifi_network_init_add_blob(GHashTable **blobs,
-					const char *name,
-					const char *blob)
+static void wifi_network_init_add_blob(GHashTable **blobs, const char *name,
+							const char *blob)
 {
-	if (!*blobs)
-		*blobs = g_hash_table_new_full(g_str_hash,
-						g_str_equal,
-						NULL,
-						(GDestroyNotify)g_bytes_unref);
-
+	if (!*blobs) {
+		*blobs = g_hash_table_new_full(g_str_hash, g_str_equal,
+						NULL, wifi_bytes_unref);
+	}
 	g_hash_table_replace(*blobs, (gpointer)name,
-				g_bytes_new_static(blob,
-							strlen(blob)));
+				g_bytes_new_static(blob, strlen(blob)));
 }
 
-static void wifi_network_init_connect_params(struct wifi_network *net,
-		struct wifi_bss *bss_data, GSupplicantNetworkParams *params,
-		GHashTable **blobs)
+static GHashTable *wifi_network_init_connect_params(struct wifi_network *net,
+		struct wifi_bss *bss_data, GSupplicantNetworkParams *params)
 {
+	GHashTable *blobs = NULL;
 	const char *eap;
 
 	memset(params, 0, sizeof(*params));
@@ -1146,10 +1138,13 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 		} else if (!g_ascii_strcasecmp(eap, "ttls")) {
 			params->eap = GSUPPLICANT_EAP_METHOD_TTLS;
 		} else {
-			if (!g_ascii_strcasecmp(eap, "peapv0"))
-				params->auth_flags |= GSUPPLICANT_AUTH_PHASE1_PEAPV0;
-			else if (!g_ascii_strcasecmp(eap, "peapv1"))
-				params->auth_flags |= GSUPPLICANT_AUTH_PHASE1_PEAPV1;
+			if (!g_ascii_strcasecmp(eap, "peapv0")) {
+				params->auth_flags |=
+					GSUPPLICANT_AUTH_PHASE1_PEAPV0;
+			} else if (!g_ascii_strcasecmp(eap, "peapv1")) {
+				params->auth_flags |=
+					GSUPPLICANT_AUTH_PHASE1_PEAPV1;
+			}
 			params->eap = GSUPPLICANT_EAP_METHOD_PEAP;
 		}
 		if (params->eap != GSUPPLICANT_EAP_METHOD_TLS ||
@@ -1195,7 +1190,7 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 		if ((value = connman_network_get_string(net->network,
 				NETWORK_KEY_WIFI_CLIENT_CERT))) {
 			params->client_cert_file = "blob://client_cert";
-			wifi_network_init_add_blob(blobs, "client_cert",
+			wifi_network_init_add_blob(&blobs, "client_cert",
 							value);
 		} else {
 			params->client_cert_file =
@@ -1205,7 +1200,7 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 		if ((value = connman_network_get_string(net->network,
 				NETWORK_KEY_WIFI_PRIVATE_KEY))) {
 			params->private_key_file = "blob://private_key";
-			wifi_network_init_add_blob(blobs, "private_key",
+			wifi_network_init_add_blob(&blobs, "private_key",
 							value);
 		} else {
 			params->private_key_file =
@@ -1218,8 +1213,7 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 		if ((value = connman_network_get_string(net->network,
 				NETWORK_KEY_WIFI_CA_CERT))) {
 			params->ca_cert_file = "blob://ca_cert";
-			wifi_network_init_add_blob(blobs, "ca_cert",
-							value);
+			wifi_network_init_add_blob(&blobs, "ca_cert", value);
 		} else {
 			params->ca_cert_file =
 				connman_network_get_string(net->network,
@@ -1251,6 +1245,7 @@ static void wifi_network_init_connect_params(struct wifi_network *net,
 		net->last_passphrase = g_strdup(params->passphrase);
 		net->handshake_retries = 0;
 	}
+	return blobs;
 }
 
 static void wifi_network_connect_finished(struct wifi_network *net,
@@ -1274,21 +1269,20 @@ static void wifi_network_connect_finished(struct wifi_network *net,
 }
 
 static void wifi_network_eap_event(GSupplicantInterface *iface,
-					GSUPPLICANT_INTERFACE_EAP_EVENT event,
-					void *data)
+			GSUPPLICANT_INTERFACE_EAP_EVENT event, void *data)
 {
 	struct wifi_network *net = data;
 
-	DBG("Eap eventt %d", (int)event);
-
+	DBG("EAP event %d", (int)event);
 	switch (event) {
 	case GSUPPLICANT_INTERFACE_EAP_REJECT_METHOD:
 		/*
 		 * If some EAP method has already been accepted, keep the
 		 * accepted state.
 		 */
-		if (net->eap_state < WIFI_NETWORK_EAP_REJECTED)
+		if (net->eap_state < WIFI_NETWORK_EAP_REJECTED) {
 			net->eap_state = WIFI_NETWORK_EAP_REJECTED;
+		}
 		break;
 
 	case GSUPPLICANT_INTERFACE_EAP_ACCEPT_METHOD:
@@ -1445,22 +1439,24 @@ static int wifi_network_connect(struct wifi_network *net)
 			}
 		} else {
 			GSupplicantNetworkParams np;
-			GHashTable *blobs = NULL;
+			GHashTable *blobs;
+
 			if (net->connecting_to != bss) {
 				gsupplicant_bss_unref(net->connecting_to);
 				net->connecting_to = gsupplicant_bss_ref(bss);
 			}
 			net->eap_state = WIFI_NETWORK_EAP_UNKNOWN;
-			wifi_network_init_connect_params(net, bss_data, &np, &blobs);
-			net->pending =
-				gsupplicant_interface_add_network_full2(net->iface,
-					NULL, &np, GSUPPLICANT_ADD_NETWORK_SELECT |
-					GSUPPLICANT_ADD_NETWORK_DELETE_OTHER |
-					GSUPPLICANT_ADD_NETWORK_ENABLE,
-					blobs,
-					wifi_network_connected, NULL, net);
-			if (blobs)
+			blobs = wifi_network_init_connect_params(net, bss_data,
+									&np);
+			net->pending = gsupplicant_interface_add_network_full2(
+				net->iface, NULL, &np,
+				GSUPPLICANT_ADD_NETWORK_SELECT |
+				GSUPPLICANT_ADD_NETWORK_DELETE_OTHER |
+				GSUPPLICANT_ADD_NETWORK_ENABLE,
+				blobs, wifi_network_connected, NULL, net);
+			if (blobs) {
 				g_hash_table_unref(blobs);
+			}
 		}
 
 		if (net->pending) {
@@ -1921,7 +1917,7 @@ static void wifi_device_hidden_network_cb(struct connman_service *service,
 	if (connman_service_get_type(service) == CONNMAN_SERVICE_TYPE_WIFI &&
 			__connman_service_is_really_hidden(service)) {
 		struct wifi_device *dev = data;
-		GBytes* ssid = __connman_service_get_ssid(service);
+		GBytes *ssid = __connman_service_get_ssid(service);
 
 		if (!wifi_ssid_hidden(ssid)) {
 			wifi_device_active_scan_add(dev, ssid);
@@ -2037,9 +2033,8 @@ static void wifi_device_drop_interface(struct wifi_device *dev)
 		dev->scan_start_timeout_id = 0;
 	}
 	if (dev->iface) {
-		gsupplicant_interface_remove_handlers(dev->iface,
-				dev->iface_event_id,
-				G_N_ELEMENTS(dev->iface_event_id));
+		gsupplicant_interface_remove_all_handlers(dev->iface,
+							dev->iface_event_id);
 		gsupplicant_interface_unref(dev->iface);
 		dev->iface = NULL;
 	}
@@ -2547,15 +2542,15 @@ static void wifi_device_bss_signal_changed(GSupplicantBSS *bss, void *data)
 	}
 }
 
-static void wifi_device_bss_frequency_changed(GSupplicantBSS *bss, void *data)
+static void wifi_device_bss_frequency_changed(GSupplicantBSS *bss, void *dev)
 {
-	wifi_network_update_frequency(wifi_device_network_for_bss(data, bss));
+	wifi_network_update_frequency(wifi_device_network_for_bss(dev, bss));
 }
 
-static void wifi_device_bss_wps_caps_changed(GSupplicantBSS *bss, void *data)
+static void wifi_device_bss_wps_caps_changed(GSupplicantBSS *bss, void *dev)
 {
 	DBG("%s WPS caps 0x%02x", bss->path, bss->wps_caps);
-	wifi_network_update_wps_caps(wifi_device_network_for_bss(data, bss));
+	wifi_network_update_wps_caps(wifi_device_network_for_bss(dev, bss));
 }
 
 static void wifi_device_bss_ident_changed(GSupplicantBSS *bss, void *data)
@@ -3044,8 +3039,7 @@ static void wifi_device_on_4(GSupplicantInterface *iface, void *data)
 
 		/* remove_handlers also zeros the event id */
 		gsupplicant_interface_remove_handlers(dev->iface,
-			dev->iface_event_id +
-			DEVICE_INTERFACE_EVENT_VALID, 1);
+			dev->iface_event_id + DEVICE_INTERFACE_EVENT_VALID, 1);
 
 		wifi_device_on_5(dev);
 	}
@@ -3284,8 +3278,7 @@ static void wifi_device_tether_5(GSupplicantInterface *iface, void *data)
 
 		/* remove_handlers also zeros the event id */
 		gsupplicant_interface_remove_handlers(dev->iface,
-			dev->iface_event_id +
-			DEVICE_INTERFACE_EVENT_VALID, 1);
+			dev->iface_event_id + DEVICE_INTERFACE_EVENT_VALID, 1);
 
 		wifi_device_tether_6(dev);
 	}
@@ -3560,9 +3553,8 @@ static void wifi_device_set_state(struct wifi_device *dev,
 			wifi_device_remove_all_networks(dev);
 
 			/* No interface notifications in this state */
-			gsupplicant_interface_remove_handlers(dev->iface,
-				dev->iface_event_id,
-				G_N_ELEMENTS(dev->iface_event_id));
+			gsupplicant_interface_remove_all_handlers(dev->iface,
+							dev->iface_event_id);
 		}
 
 		/*
@@ -3772,11 +3764,11 @@ static void wifi_device_delete(struct wifi_device *dev)
 	if (dev->pending) {
 		g_cancellable_cancel(dev->pending);
 	}
-	mce_display_remove_handlers(dev->mce_display,
-		dev->mce_display_event_id, DISPLAY_EVENT_COUNT);
+	mce_display_remove_all_handlers(dev->mce_display,
+					dev->mce_display_event_id);
 	mce_display_unref(dev->mce_display);
-	mce_tklock_remove_handlers(dev->mce_tklock,
-		dev->mce_tklock_event_id, TKLOCK_EVENT_COUNT);
+	mce_tklock_remove_all_handlers(dev->mce_tklock,
+					dev->mce_tklock_event_id);
 	mce_tklock_unref(dev->mce_tklock);
 	gsupplicant_unref(dev->supplicant);
 	g_hash_table_destroy(dev->bss_pending);
@@ -3969,7 +3961,7 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 
 		for (l = plugin->devices; l && !ap_dev; l = l->next) {
 			struct wifi_device *dev = l->data;
-			GSupplicantInterface* iface = dev->iface;
+			GSupplicantInterface *iface = dev->iface;
 
 			/*
 			 * GSupplicantInterface pointer can be NULL if
@@ -4053,8 +4045,8 @@ static void wifi_plugin_delete(struct wifi_plugin *plugin)
 {
 	if (plugin) {
 		g_slist_free_full(plugin->devices, wifi_device_delete1);
-		gsupplicant_remove_handlers(plugin->supplicant,
-			plugin->supplicant_event_id, SUPPLICANT_EVENT_COUNT);
+		gsupplicant_remove_all_handlers(plugin->supplicant,
+						plugin->supplicant_event_id);
 		gsupplicant_unref(plugin->supplicant);
 		g_free(plugin);
 	}
