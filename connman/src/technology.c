@@ -1860,19 +1860,8 @@ bool __connman_technology_disable_all(void)
 {
 	GSList *list;
 	GSList *devlist;
-	GKeyFile *keyfile;
 	int err;
-
-	/*
-	 * If there is no keyfile present then none of the technologies are
-	 * enabled. Disabling of the technologies is skipped as all should be
-	 * off.
-	 */
-	keyfile = __connman_storage_load_global();
-	if (!keyfile) {
-		DBG("no keyfile found, all devices should be off.");
-		return false;
-	}
+	bool ret = true;
 
 	for (list = technology_list; list; list = list->next) {
 		struct connman_technology *technology = list->data;
@@ -1911,6 +1900,8 @@ bool __connman_technology_disable_all(void)
 				connman_warn("technology %p state change not "
 							"notified",
 							technology);
+		} else {
+			ret = false;
 		}
 
 		if (err != -EBUSY)
@@ -1919,9 +1910,7 @@ bool __connman_technology_disable_all(void)
 		DBG("result %s", err ? strerror(-err) : "ok");
 	}
 
-	g_key_file_unref(keyfile);
-
-	return true;
+	return ret;
 }
 
 bool __connman_technology_enable_from_config()
