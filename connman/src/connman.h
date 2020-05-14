@@ -307,6 +307,9 @@ struct connman_storage_callbacks {
 	/* Additional data to be passed on finalize callback */
 	void *finalize_user_data;
 
+	/* Callback for notifying about user change. */
+	void (*uid_changed) (uid_t uid);
+
 	/* Callback to create access policy for connmand storage.*/
 	struct connman_access_storage_policy* (*access_policy_create)
 				(const char *spec);
