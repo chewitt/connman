@@ -300,6 +300,18 @@ bool __connman_technology_disable_all(void)
 
 /* END STORAGE STUB */
 
+/* notifier stubs */
+
+int connman_notifier_register(struct connman_notifier *notifier)
+{
+	return 0;
+}
+
+void connman_notifier_unregister(struct connman_notifier *notifier)
+{
+	return;
+}
+
 static void monitor_initialize(uid_t uid, enum sd_session_state initial_state,
 			const char *seat, int expected_return)
 {

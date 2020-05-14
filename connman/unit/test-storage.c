@@ -456,6 +456,21 @@ gboolean g_dbus_emit_signal(DBusConnection *connection,
 	return TRUE;
 }
 
+static guint watch_id = 123654798;
+
+guint g_dbus_add_service_watch(DBusConnection *connection, const char *name,
+				GDBusWatchFunction connect,
+				GDBusWatchFunction disconnect,
+				void *user_data, GDBusDestroyFunction destroy)
+{
+	return watch_id;
+}
+
+gboolean g_dbus_remove_watch(DBusConnection *connection, guint id)
+{
+	return id == watch_id;
+}
+
 const char *__connman_service_type2string(enum connman_service_type type)
 {
 	switch (type) {
@@ -1302,7 +1317,8 @@ enum user_change_mode {
 	USER_CHANGE_SUCCESS = 		0x0001,
 	USER_CHANGE_INVALID_USER =	0x0002,
 	USER_CHANGE_ERROR_REPLY =	0x0004,
-	USER_CHANGE_ACCESS_DENIED =	0x0008
+	USER_CHANGE_ACCESS_DENIED =	0x0008,
+	USER_CHANGE_ALREADY_SET =	0x0010
 };
 
 static DBusMessage *create_dbus_error(DBusMessage *reply_to,
@@ -1332,7 +1348,7 @@ static void user_change_process(uid_t uid, enum user_change_mode mode,
 			int *cb_checklist, int *vpn_cb_checklist)
 {
 	DBusMessage *change_user_msg;
-	DBusMessage *change_user_reply;
+	DBusMessage *change_user_reply = NULL;
 	DBusConnection *connection;
 	DBusError error;
 	dbus_uint32_t user_id;
@@ -1360,7 +1376,8 @@ static void user_change_process(uid_t uid, enum user_change_mode mode,
 	g_assert(connmand_method);
 
 	if (mode & USER_CHANGE_INVALID_USER ||
-				mode & USER_CHANGE_ACCESS_DENIED) {
+				mode & USER_CHANGE_ACCESS_DENIED ||
+				mode & USER_CHANGE_ALREADY_SET) {
 		DBusMessage *initial_reply;
 
 		initial_reply = connmand_method(connection, last_message,
@@ -1376,7 +1393,7 @@ static void user_change_process(uid_t uid, enum user_change_mode mode,
 	}
 
 	g_assert_null(connmand_method(connection, last_message,
-					connmand_data));
+				connmand_data));
 
 
 	if (fake_error) {
@@ -1481,7 +1498,7 @@ static void storage_test_user_change1()
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
 
-	user_change_process(UID_ROOT, USER_CHANGE_ERROR_REPLY,
+	user_change_process(UID_ROOT, USER_CHANGE_ALREADY_SET,
 				"net.connman.Error.AlreadyEnabled", false,
 				NULL, NULL);
 
@@ -1672,7 +1689,7 @@ static void storage_test_user_change5()
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_VPN, &callbacks), ==, 0);
 
-	user_change_process(UID_ROOT, USER_CHANGE_ERROR_REPLY,
+	user_change_process(UID_ROOT, USER_CHANGE_ALREADY_SET,
 				"net.connman.Error.AlreadyEnabled", false,
 				NULL, NULL);
 
@@ -2886,8 +2903,9 @@ static void result_cb(uid_t uid, int err, void *user_data)
 
 /*
  * Change to user in prepare mode which causes already enabled error to be
- * received and user changed to root as the preparing mode is impossible to
- * test without forking/threads.
+ * received as the preparing mode is impossible to test without
+ * forking/threads. One user change in prepare mode sets the current_uid in
+ * storage and vpnd cannot change that but reports already enabled.
  */
 static void storage_test_user_change12()
 {
@@ -2895,7 +2913,7 @@ static void storage_test_user_change12()
 	mode_t m_dir = 0700;
 	mode_t m_file = 0600;
 	struct user_cb_data_t data = {
-				.uids = { UID_USER, UID_ROOT },
+				.uids = { UID_USER, UID_USER },
 				.errs = { -EINPROGRESS, -EALREADY },
 				};
 
@@ -3000,7 +3018,7 @@ static void storage_test_user_change14()
 	data.call_count = 0;
 	data.errs[0] = -EALREADY;
 	internal_user_change_process(UID_USER, result_cb, &data, false,
-				-EINPROGRESS,
+				-EALREADY,
 				"net.connman.Error.AlreadyEnabled", dbus_mode);
 
 	clean_dbus();
