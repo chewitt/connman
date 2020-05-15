@@ -985,6 +985,7 @@ void __connman_notifier_tethering_changed(struct connman_technology* tech,
 								bool on);
 void __connman_notifier_device_status_changed(struct connman_device *device,
 								bool on);
+void __connman_notifier_storage_uid_changed(uid_t uid);
 
 bool __connman_notifier_is_connected(void);
 const char *__connman_notifier_get_state(void);
