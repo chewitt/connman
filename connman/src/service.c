@@ -6990,6 +6990,11 @@ bool connman_service_get_favorite(struct connman_service *service)
 	return service->favorite;
 }
 
+bool connman_service_get_saved(struct connman_service *service)
+{
+	return service_saved_value(service);
+}
+
 bool connman_service_get_autoconnect(struct connman_service *service)
 {
 	return service->autoconnect;
