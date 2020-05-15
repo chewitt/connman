@@ -1031,6 +1031,22 @@ static void clean_restore_sd_connection(gpointer user_data)
 	}
 }
 
+static void uid_changed(uid_t uid)
+{
+	if (!login_data)
+		return;
+
+	DBG("uid change from %u to %u", login_data->active_uid, uid);
+
+	login_data->active_uid = uid;
+}
+
+static struct connman_notifier systemd_login_notifier = {
+	.name			= "systemd_login",
+	.priority		= CONNMAN_NOTIFIER_PRIORITY_DEFAULT,
+	.storage_uid_changed	= uid_changed
+};
+
 int __systemd_login_init()
 {
 	int err;
@@ -1041,6 +1057,7 @@ int __systemd_login_init()
 		return -EALREADY;
 
 	login_data = g_new0(struct systemd_login_data, 1);
+	connman_notifier_register(&systemd_login_notifier);
 
 	err = init_sd_login_monitor(login_data);
 	if (err) {
@@ -1085,6 +1102,8 @@ void __systemd_login_cleanup()
 
 	close_io_channel(login_data);
 	close_sd_login_monitor(login_data);
+
+	connman_notifier_unregister(&systemd_login_notifier);
 
 	g_free(login_data);
 	login_data = NULL;
