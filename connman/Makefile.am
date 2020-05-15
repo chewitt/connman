@@ -593,19 +593,15 @@ tools_dbus_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 
 tools_polkit_test_LDADD = @DBUS_LIBS@
 
-tools_iptables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
-			-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
-			@DBUS_CFLAGS@
-tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
+tools_iptables_test_CFLAGS = @DBUS_CFLAGS@
+tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c \
 		src/inotify.c src/iptables.c tools/iptables-test.c \
 		src/error.c src/dbus.c
 tools_iptables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
 			@XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
-tools_ip6tables_test_CFLAGS = -DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
-			-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
-			@DBUS_CFLAGS@
-tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
+tools_ip6tables_test_CFLAGS = @DBUS_CFLAGS@
+tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c \
 		src/inotify.c src/iptables.c tools/ip6tables-test.c \
 		src/error.c src/dbus.c
 tools_ip6tables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
