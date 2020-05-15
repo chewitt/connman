@@ -62,6 +62,11 @@
 #define WIFI_BSS_SIGNAL_HISTORY_SIZE (20)
 #define WIFI_BSS_SIGNAL_HISTORY_SEC (10)
 
+#define WIFI_BSS_COUNT_SMALL (10)
+#define WIFI_BSS_COUNT_MAX (100)
+#define WIFI_WEAK_RSSI (-85) /* dBm */
+#define WIFI_WEAK_BSS_MIN_SIGHTINGS (3)
+
 /* Access point (tethering) configuration */
 #define WIFI_AP_FREQUENCY (2412)
 #define WIFI_AP_SECURITY  GSUPPLICANT_SECURITY_PSK
@@ -151,8 +156,11 @@ struct wifi_bss {
 	GSupplicantBSS *bss;
 	GBytes *ssid;
 	gulong event_id[BSS_EVENT_COUNT];
-	GUtilIntHistory *history;       /* Signal strength history */
-	guint strength;                 /* Median strength */
+	struct wifi_network *net;       /* Associated network */
+	GUtilIntHistory *history;       /* Signal RSSI history */
+	char *ident;                    /* Service identifier */
+	guint signal;                   /* Averaged signal (RSSI) */
+	guint weak_sightings;
 	gboolean hidden;
 };
 
@@ -185,7 +193,7 @@ struct wifi_network {
 	GSupplicantBSS *current_bss;    /* BSS we are connected to */
 	gulong iface_event_id[NETWORK_INTERFACE_EVENT_COUNT];
 	GSUPPLICANT_INTERFACE_STATE interface_states[3];
-	GList *bss_list;                /* Contains wifi_bss */
+	GSList *bss_list;               /* Contains wifi_bss */
 	int recover_attempt;            /* Passive scans after BSS is gone */
 	int remove_in_process;          /* See wifi_device_remove_network */
 	GCancellable *pending;          /* Pending call */
@@ -266,10 +274,11 @@ struct wifi_device {
 	struct wifi_hidden_connect *hidden_connect;
 	struct wifi_network *selected;      /* Selected network */
 	struct wifi_network *connect_next;  /* Next network to connect */
-	GList *networks;                    /* List of wifi_network */
+	GSList *networks;                   /* List of wifi_network */
+	GSList *bss_valid_list;             /* Sorted list of wifi_bss */
 	GHashTable *bss_pending;            /* BSS path -> wifi_bss */
+	GHashTable *bss_valid;              /* BSS path -> wifi_bss */
 	GHashTable *bssid_map;              /* BSSID -> GSList(wifi_bss) */
-	GHashTable *bss_net;                /* BSS path -> wifi_network */
 	GHashTable *ident_net;              /* Ident -> wifi_network */
 	int ifi;                            /* Interface index */
 	unsigned int iff;                   /* Interface flags */
@@ -461,10 +470,10 @@ static char *wifi_bss_ident(struct wifi_bss *bss_data)
 	gsize id_len = 0;
 	const guint8 *id_data;
 	GSupplicantBSS *bss = bss_data->bss;
-	const gboolean hidden = wifi_ssid_hidden(bss_data->ssid);
+	const gboolean ssid_hidden = wifi_ssid_hidden(bss_data->ssid);
 
 	GASSERT(bss->valid && bss->present);
-	if (hidden) {
+	if (ssid_hidden) {
 		id_data = g_bytes_get_data(bss->bssid, &id_len);
 	} else {
 		id_data = g_bytes_get_data(bss_data->ssid, &id_len);
@@ -472,7 +481,7 @@ static char *wifi_bss_ident(struct wifi_bss *bss_data)
 
 	str = g_string_sized_new(id_len*2 + 32);
 
-	if (hidden) {
+	if (ssid_hidden) {
 		g_string_append_printf(str, "hidden_");
 	}
 
@@ -519,6 +528,11 @@ static gboolean wifi_bytes_equal(GBytes *b1, GBytes *b2)
 	} else {
 		return g_bytes_equal(b1, b2);
 	}
+}
+
+static void wifi_slist_destroy(gpointer value)
+{
+	g_slist_free(value);
 }
 
 /*==========================================================================*
@@ -601,39 +615,67 @@ static void wifi_hidden_connect_free(struct wifi_hidden_connect *connect)
  * BSS
  *==========================================================================*/
 
-static void wifi_bss_free(struct wifi_bss *bss_data, struct wifi_device *dev)
+static struct wifi_bss *wifi_bss_new(GSupplicantBSS *bss)
 {
-	if (dev && bss_data->bss && bss_data->bss->bssid) {
-		GBytes *bssid = bss_data->bss->bssid;
-		GSList *bssid_list = g_slist_remove(g_hash_table_lookup(
-					dev->bssid_map, bssid), bss_data);
+	struct wifi_bss *bss_data = g_slice_new0(struct wifi_bss);
 
-		if (bssid_list) {
-			GASSERT(!g_slist_find(bssid_list, bss_data));
-			g_hash_table_replace(dev->bssid_map,
-					g_bytes_ref(bssid), bssid_list);
-		} else {
-			g_hash_table_remove(dev->bssid_map, bssid);
-		}
-	}
+	DBG("%s", bss->path);
+	bss_data->bss = gsupplicant_bss_ref(bss);
+	return bss_data;
+}
 
+static void wifi_bss_free(struct wifi_bss *bss_data)
+{
 	gsupplicant_bss_remove_all_handlers(bss_data->bss, bss_data->event_id);
 	gsupplicant_bss_unref(bss_data->bss);
 	if (bss_data->ssid) {
 		g_bytes_unref(bss_data->ssid);
 	}
 	gutil_int_history_unref(bss_data->history);
+	g_free(bss_data->ident);
 	g_slice_free(struct wifi_bss, bss_data);
 }
 
-static void wifi_bss_free_value(gpointer key, gpointer value, gpointer data)
+static inline gboolean wifi_bss_weak(const struct wifi_bss *bss_data)
 {
-	wifi_bss_free(value, NULL);
+	return (bss_data->signal < WIFI_WEAK_RSSI);
 }
 
-static void wifi_slist_free_value(gpointer key, gpointer value, gpointer data)
+static inline gboolean wifi_bss_ignorable(const struct wifi_bss *bss_data)
 {
-	g_slist_free(value);
+	return wifi_bss_weak(bss_data) &&
+		bss_data->weak_sightings < WIFI_WEAK_BSS_MIN_SIGHTINGS;
+}
+
+static void wifi_bss_destroy(gpointer value)
+{
+	wifi_bss_free(value);
+}
+
+static gboolean wifi_bss_ident_update(struct wifi_bss *bss_data)
+{
+	if (bss_data) {
+		GSupplicantBSS *bss = bss_data->bss;
+
+		if (bss->valid && bss->present) {
+			char *ident = wifi_bss_ident(bss_data);
+
+			if (g_strcmp0(bss_data->ident, ident)) {
+				if (bss_data->ident) {
+					DBG("%s ident %s -> %s", bss->path,
+						bss_data->ident, ident);
+					g_free(bss_data->ident);
+				} else {
+					DBG("%s ident %s", bss->path, ident);
+				}
+				bss_data->ident = ident;
+				return TRUE;
+			} else {
+				g_free(ident);
+			}
+		}
+	}
+	return FALSE;
 }
 
 /*==========================================================================*
@@ -994,17 +1036,18 @@ static void wifi_network_interface_changed(GSupplicantInterface *iface,
 
 static GSupplicantBSS *wifi_network_current_bss(struct wifi_network *net)
 {
-	if (net->connecting_to && net->connecting_to->valid) {
-		return net->connecting_to;
-	} else if (net->current_bss && net->current_bss->valid) {
-		return net->current_bss;
-	} else if (net->bss_list) {
-		struct wifi_bss *best = net->bss_list->data;
+	if (net) {
+		if (net->connecting_to && net->connecting_to->valid) {
+			return net->connecting_to;
+		} else if (net->current_bss && net->current_bss->valid) {
+			return net->current_bss;
+		} else if (net->bss_list) {
+			struct wifi_bss *best = net->bss_list->data;
 
-		return best->bss;
-	} else {
-		return NULL;
+			return best->bss;
+		}
 	}
+	return NULL;
 }
 
 static void wifi_network_update_bssid(struct wifi_network *net)
@@ -1027,10 +1070,13 @@ static void wifi_network_update_bssid(struct wifi_network *net)
 
 static void wifi_network_update_frequency(struct wifi_network *net)
 {
-	GSupplicantBSS *bss = wifi_network_current_bss(net);
+	if (net) {
+		GSupplicantBSS *bss = wifi_network_current_bss(net);
 
-	if (bss) {
-		connman_network_set_frequency(net->network, bss->frequency);
+		if (bss) {
+			connman_network_set_frequency(net->network,
+							bss->frequency);
+		}
 	}
 }
 
@@ -1085,12 +1131,6 @@ static void wifi_network_update_wps_caps_from_bss(struct wifi_network *net,
 				(wps & (GSUPPLICANT_WPS_PUSH_BUTTON |
 					GSUPPLICANT_WPS_PIN)) &&
 				(wps & GSUPPLICANT_WPS_REGISTRAR));
-}
-
-static void wifi_network_update_wps_caps(struct wifi_network *net)
-{
-	wifi_network_update_wps_caps_from_bss(net,
-					wifi_network_current_bss(net));
 }
 
 static void wifi_network_save_network_param(struct wifi_network *net,
@@ -1552,16 +1592,16 @@ static int wifi_network_disconnect(struct wifi_network *net)
 	}
 }
 
-static void wifi_network_bss_update_strength(gpointer data, gpointer user_data)
+static void wifi_network_bss_update_signal(gpointer data, gpointer user_data)
 {
 	struct wifi_bss *bss_data = data;
 
-	bss_data->strength = gutil_int_history_size(bss_data->history) ?
-		(guint)gutil_int_history_median(bss_data->history, 0) :
-		wifi_rssi_strength(bss_data->bss->signal);
+	bss_data->signal = gutil_int_history_size(bss_data->history) ?
+		gutil_int_history_median(bss_data->history, 0) :
+		bss_data->bss->signal;
 }
 
-static gint wifi_network_bss_sort_func(gconstpointer a, gconstpointer b)
+static gint wifi_network_bss_compare(gconstpointer a, gconstpointer b)
 {
 	const struct wifi_bss *d1 = a;
 	const struct wifi_bss *d2 = b;
@@ -1573,38 +1613,38 @@ static gint wifi_network_bss_sort_func(gconstpointer a, gconstpointer b)
 	} else if (b2->present != b1->present) {
 		return (gint)b2->present - (gint)b1->present;
 	} else {
-		return d2->strength - d1->strength;
+		return d2->signal - d1->signal;
 	}
 }
 
 static void wifi_network_update_strength(struct wifi_network *net)
 {
-	struct wifi_bss *best;
+	/*
+	 * If we are polling, signal strength is updated by
+	 * wifi_network_signalpoll
+	 */
+	if (net && !net->signalpoll) {
+		guint strength;
 
-	/* Update the median values before sorting */
-	g_list_foreach(net->bss_list, wifi_network_bss_update_strength, NULL);
-	net->bss_list = g_list_sort(net->bss_list, wifi_network_bss_sort_func);
-	best = net->bss_list->data;
-	NDBG(net, "best bss %s", best->bss->path);
-	GASSERT(best->bss->valid && best->bss->present);
-	connman_network_set_strength(net->network, best->strength);
-}
+		if (net->bss_list) {
+			struct wifi_bss *best;
 
-static struct wifi_bss *wifi_network_get_bss_data(struct wifi_network *net,
-						GSupplicantBSS *bss)
-{
-	if (net) {
-		GList *l;
-
-		for (l = net->bss_list; l; l = l->next) {
-			struct wifi_bss *data = l->data;
-
-			if (data->bss == bss) {
-				return data;
-			}
+			/* Update the average before sorting */
+			g_slist_foreach(net->bss_list,
+				wifi_network_bss_update_signal, NULL);
+			net->bss_list = g_slist_sort(net->bss_list,
+						wifi_network_bss_compare);
+			best = net->bss_list->data;
+			strength = wifi_rssi_strength(best->signal);
+			NDBG(net, "best bss %s %u%%", best->bss->path,
+								strength);
+			GASSERT(best->bss->valid && best->bss->present);
+		} else {
+			strength = 0;
+			NDBG(net, "no best bss");
 		}
+		connman_network_set_strength(net->network, strength);
 	}
-	return NULL;
 }
 
 static void wifi_network_init(struct wifi_network *net, struct wifi_bss *data)
@@ -1699,13 +1739,6 @@ static void wifi_network_init(struct wifi_network *net, struct wifi_bss *data)
 	g_free(tmp);
 }
 
-static void wifi_network_free_bss(gpointer data, gpointer user_data)
-{
-	struct wifi_network *net = user_data;
-
-	wifi_bss_free(data, net->dev);
-}
-
 static void wifi_network_delete(struct wifi_network *net)
 {
 	if (connman_network_get_connected(net->network)) {
@@ -1724,8 +1757,7 @@ static void wifi_network_delete(struct wifi_network *net)
 	connman_network_unref(net->network);
 	gsupplicant_bss_unref(net->connecting_to);
 	gsupplicant_bss_unref(net->current_bss);
-	g_list_foreach(net->bss_list, wifi_network_free_bss, net);
-	g_list_free(net->bss_list);
+	g_slist_free(net->bss_list);
 	g_free(net->ident);
 	g_free(net->last_passphrase);
 	g_slice_free(struct wifi_network, net);
@@ -1771,11 +1803,40 @@ static void wifi_device_tp_free(struct wifi_device_tp *tp)
  * Device
  *==========================================================================*/
 
-static void wifi_device_bss_add(struct wifi_device *dev, GSupplicantBSS *bss);
 static void wifi_device_active_scan_perform(struct wifi_device *dev);
 static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev);
+static gboolean wifi_device_bss_list_check(struct wifi_device *dev,
+						struct wifi_bss *must_have);
 static void wifi_device_set_state(struct wifi_device *dev,
 						WIFI_DEVICE_STATE state);
+
+static struct wifi_bss *wifi_device_get_bss_data2(struct wifi_device *dev,
+							const char *path)
+{
+	struct wifi_bss *data = g_hash_table_lookup(dev->bss_valid, path);
+
+	return data ? data : g_hash_table_lookup(dev->bss_pending, path);
+}
+
+static struct wifi_bss *wifi_device_get_bss_data(struct wifi_device *dev,
+						GSupplicantBSS *bss)
+{
+	return bss ? wifi_device_get_bss_data2(dev, bss->path) : NULL;
+}
+
+static struct wifi_network *wifi_device_network_for_bss(
+				struct wifi_device *dev, GSupplicantBSS *bss)
+{
+	if (bss) {
+		struct wifi_bss * bss_data =
+			wifi_device_get_bss_data2(dev, bss->path);
+
+		if (bss_data) {
+			return bss_data->net;
+		}
+	}
+	return NULL;
+}
 
 static int wifi_device_connect_next(struct wifi_device *dev)
 {
@@ -1839,7 +1900,7 @@ static gboolean wifi_device_find_hidden_network(gpointer key,
 					gpointer value, gpointer user_data)
 {
 	struct wifi_network *net = value;
-	GList *l;
+	GSList *l;
 
 	for (l = net->bss_list; l; l = l->next) {
 		struct wifi_bss *bss_data = l->data;
@@ -1965,7 +2026,7 @@ static void wifi_device_remove_all_networks_cb(gpointer netp, gpointer devp)
 	 *     g_hash_table_remove (ghash.c)
 	 *     connman_device_remove_network (device.c)
 	 *     wifi_device_remove_all_networks_cb (sailfish_wifi.c)
-	 *     g_list_foreach (glist.c:1005)
+	 *     g_slist_foreach (gslist.c)
 	 *     wifi_device_remove_all_networks (sailfish_wifi.c)
 	 */
 	GASSERT(!net->remove_in_process);
@@ -1977,14 +2038,9 @@ static void wifi_device_remove_all_networks_cb(gpointer netp, gpointer devp)
 
 static void wifi_device_remove_all_networks(struct wifi_device *dev)
 {
-	g_hash_table_foreach(dev->bss_pending, wifi_bss_free_value, NULL);
-	g_hash_table_foreach(dev->bssid_map, wifi_slist_free_value, NULL);
-	g_hash_table_remove_all(dev->bss_pending);
-	g_hash_table_remove_all(dev->bssid_map);
-	g_hash_table_remove_all(dev->bss_net);
 	g_hash_table_remove_all(dev->ident_net);
-	g_list_foreach(dev->networks, wifi_device_remove_all_networks_cb, dev);
-	g_list_free(dev->networks);
+	g_slist_foreach(dev->networks, wifi_device_remove_all_networks_cb, dev);
+	g_slist_free(dev->networks);
 	dev->networks = NULL;
 	dev->selected = NULL;
 	dev->connect_next = NULL;
@@ -2050,7 +2106,128 @@ static void wifi_device_drop_expired_networks_cb(gpointer netp, gpointer devp)
 		/* Absent for too long, kill the network */
 		DBG("removing %s", net->ident);
 		GASSERT(!net->bss_list);
+		/* It is safe to remove the current element from the list */
 		wifi_device_remove_network(dev, net);
+	}
+}
+
+static struct wifi_network *wifi_device_alloc_network(struct wifi_device *dev,
+						struct wifi_bss *bss_data)
+{
+	struct wifi_network *net;
+	struct connman_service *service;
+
+	GASSERT(!wifi_device_network_for_bss(dev, bss_data->bss));
+	net = g_slice_new0(struct wifi_network);
+	net->ident = g_strdup(bss_data->ident);
+	net->dev = dev;
+	dev->networks = g_slist_prepend(dev->networks, net);
+	g_hash_table_replace(dev->ident_net, net->ident, net);
+	wifi_network_init(net, bss_data);
+	connman_device_add_network(dev->device, net->network);
+
+	/*
+	 * Make sure that the service has its ipconfig initialized,
+	 * otherwise autoconnect barfs.
+	 */
+	service = connman_service_lookup_from_network(net->network);
+	GASSERT(service);
+	if (service) {
+		if (bss_data->hidden) {
+			__connman_service_set_hidden(service);
+		}
+		connman_service_create_ip4config(service, dev->ifi);
+		connman_service_create_ip6config(service, dev->ifi);
+	}
+	return net;
+}
+
+/* Connman network must already exist */
+static void wifi_device_add_bss_to_existing_network(struct wifi_device *dev,
+			struct wifi_network *net, struct wifi_bss *bss_data)
+{
+	struct connman_service *service;
+
+	GASSERT(!g_slist_find(net->bss_list, bss_data));
+	GASSERT(!bss_data->net);
+	if (net->recover_attempt) {
+		DBG("%s recovered", net->ident);
+		net->recover_attempt = 0;
+	}
+	bss_data->net = net;
+	net->bss_list = g_slist_prepend(net->bss_list, bss_data);
+	service = connman_service_lookup_from_network(net->network);
+	GASSERT(service);
+	if (service && bss_data->hidden) {
+		__connman_service_set_hidden(service);
+	}
+}
+
+/* Creates the network if necessary */
+static struct wifi_network *wifi_device_add_bss_to_network(
+			struct wifi_device *dev, struct wifi_bss *bss_data)
+{
+	if (bss_data && bss_data->ident && !bss_data->net) {
+		struct wifi_network *net = g_hash_table_lookup(dev->ident_net,
+							bss_data->ident);
+
+		if (!net) {
+			DBG("creating %s for %s", bss_data->ident,
+							bss_data->bss->path);
+			net = wifi_device_alloc_network(dev, bss_data);
+		} else {
+			DBG("adding %s to %s", bss_data->bss->path,
+							net->ident);
+		}
+		wifi_device_add_bss_to_existing_network(dev, net, bss_data);
+		return net;
+	}
+	return NULL;
+}
+
+/* Things that need to be done after each scan */
+static void wifi_device_scanning_off(struct wifi_device *dev)
+{
+	gboolean need_check = FALSE;
+	GHashTableIter it;
+	gpointer value;
+
+	/*
+	 * Quite often WiFi networks disappear from the scan results
+	 * and then re-appear after a scan or two with a different
+	 * D-Bus path. When that happens connman won't even notice
+	 * because we keep connman network alive. Only after the
+	 * network is absent from too many scans in a row, we
+	 * declare it officially dead and notify the connman core.
+	 */
+	g_slist_foreach(dev->networks, wifi_device_drop_expired_networks_cb,
+									dev);
+
+	/* Update weak sightings. */
+	g_hash_table_iter_init(&it, dev->bss_valid);
+	while (g_hash_table_iter_next(&it, NULL, &value)) {
+		struct wifi_bss *bss_data = value;
+		gboolean was_ignorable = wifi_bss_ignorable(bss_data);
+
+		if (bss_data->net && wifi_bss_weak(bss_data)) {
+			bss_data->weak_sightings++;
+			DBG("%s (weak %u)", bss_data->bss->path,
+						bss_data->weak_sightings);
+		} else if (bss_data->weak_sightings) {
+			DBG("%s (weak %u -> 0)", bss_data->bss->path,
+						bss_data->weak_sightings);
+			bss_data->weak_sightings = 0;
+		} else {
+			continue;
+
+		}
+		if (was_ignorable != wifi_bss_ignorable(bss_data)) {
+			need_check = TRUE;
+		}
+	}
+
+	if (need_check) {
+		wifi_device_bss_list_check(dev, NULL);
 	}
 }
 
@@ -2066,16 +2243,8 @@ static void wifi_device_scanning_changed(GSupplicantInterface *iface,
 		dev->scan_start_timeout_id = 0;
 	}
 
-	/*
-	 * Quite often WiFi networks disappear from the scan results and
-	 * then re-appear after a scan or two with a different path. When
-	 * that happens connman won't even notice because we keep connman
-	 * network alive. Only after the network is absent from too many
-	 * scans in a row, we declare it dead and notify connman core.
-	 */
 	if (!iface->scanning) {
-		g_list_foreach(dev->networks,
-				wifi_device_drop_expired_networks_cb, dev);
+		wifi_device_scanning_off(dev);
 	}
 
 	wifi_device_update_scanning(dev);
@@ -2101,6 +2270,22 @@ static void wifi_device_interface_presence_changed(GSupplicantInterface *iface,
 	}
 }
 
+static gboolean wifi_device_actually_connecting(struct wifi_device *dev)
+{
+	/*
+	 * This function evaluates the "connecting" state for the purpose
+	 * of allowing or disallowing scanning.
+	 *
+	 * Even if a connect request is pending, network's bss_list can
+	 * be empty meaning that network is in "recovery" state. In that
+	 * case we better do scanning, otherwise such network can get stuck
+	 * in the "connecting" state for a very long time (and prevent
+	 * switching to mobile data).
+	 */
+	return dev->selected && wifi_network_connecting(dev->selected) &&
+		dev->selected->bss_list;
+}
+
 static gboolean wifi_device_can_scan(struct wifi_device *dev)
 {
 	/* Really basic requirements for any kind of scan */
@@ -2111,10 +2296,9 @@ static gboolean wifi_device_can_scan(struct wifi_device *dev)
 static gboolean wifi_device_can_active_scan(struct wifi_device *dev)
 {
 	return wifi_device_can_scan(dev) &&
-		/* Do not scan when network is connecting */
-		(!dev->selected || !wifi_network_connecting(dev->selected) ||
-		/* Unless we are connecting to a hidden network */
-		dev->hidden_connect);
+		/* Do not scan when network is connecting, unless we are
+		 * connecting to a hidden network */
+		(dev->hidden_connect || !wifi_device_actually_connecting(dev));
 }
 
 static gboolean wifi_device_can_autoscan(struct wifi_device *dev)
@@ -2122,8 +2306,8 @@ static gboolean wifi_device_can_autoscan(struct wifi_device *dev)
 	return wifi_device_can_scan(dev) &&
 		/* Do not autoscan too often */
 		!dev->autoscan_holdoff_timer_id &&
-		/* Do not autoscan when network is connecting */
-		(!dev->selected || !wifi_network_connecting(dev->selected));
+		/* Do not autoscan when network is (actually) connecting */
+		!wifi_device_actually_connecting(dev);
 }
 
 static void wifi_device_autoscan_stop(struct wifi_device *dev)
@@ -2357,7 +2541,7 @@ static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 {
 	if (gsupplicant_interface_scan(dev->iface, NULL, NULL, NULL)) {
 		DBG("requested passive scan");
-		g_list_foreach(dev->networks,
+		g_slist_foreach(dev->networks,
 				wifi_device_update_recover_attempt_cb, dev);
 		wifi_device_scan_requested(dev);
 		return TRUE;
@@ -2375,11 +2559,11 @@ static void wifi_device_autoscan_restart(struct wifi_device *dev)
 	wifi_device_scan_request(dev, SCAN_AUTO);
 }
 
-static void wifi_device_remove_bss(gpointer bssp, gpointer devp)
+static void wifi_device_clear_bss_net(gpointer list_data, gpointer user_data)
 {
-	struct wifi_bss *bss_data = bssp;
-	struct wifi_device *dev = devp;
-	GVERIFY(g_hash_table_remove(dev->bss_net, bss_data->bss->path));
+	struct wifi_bss *bss_data = list_data;
+
+	bss_data->net = NULL;
 }
 
 static void wifi_device_remove_network(struct wifi_device *dev,
@@ -2400,80 +2584,53 @@ static void wifi_device_remove_network(struct wifi_device *dev,
 	 *     ...
 	 */
 	if (!(net->remove_in_process++)) {
-		dev->networks = g_list_remove(dev->networks, net);
+		dev->networks = g_slist_remove(dev->networks, net);
 		connman_device_remove_network(dev->device, net->network);
 		g_hash_table_remove(dev->ident_net, net->ident);
-		g_list_foreach(net->bss_list, wifi_device_remove_bss, dev);
+		g_slist_foreach(net->bss_list, wifi_device_clear_bss_net, NULL);
 		wifi_device_delete_network(dev, net);
 	} else {
 		net->remove_in_process--;
 	}
 }
 
-static struct wifi_network *wifi_device_network_for_bss(
-				struct wifi_device *dev, GSupplicantBSS *bss)
-{
-	return bss ? g_hash_table_lookup(dev->bss_net, bss->path) : NULL;
-}
-
-static struct wifi_bss *wifi_device_get_bss_data(struct wifi_device *dev,
-						GSupplicantBSS *bss)
-{
-	return wifi_network_get_bss_data(wifi_device_network_for_bss(dev, bss),
-									bss);
-}
-
-static void wifi_device_remove_bss_from_network2(struct wifi_device *dev,
-				struct wifi_network *net, GSupplicantBSS *bss)
-{
-	GList *l;
-
-	DBG("removing %s from %s", bss->path, net->ident);
-	g_hash_table_remove(dev->bss_net, bss->path);
-
-	for (l = net->bss_list; l; l = l->next) {
-		struct wifi_bss *data = l->data;
-
-		if (data->bss == bss) {
-			net->bss_list = g_list_delete_link(net->bss_list, l);
-			wifi_bss_free(data, dev);
-			if (net->bss_list && !net->signalpoll) {
-				/* Best BSS may be gone, update the strength */
-				wifi_network_update_strength(net);
-			}
-			break;
-		}
-	}
-}
-
 static void wifi_device_remove_bss_from_network(struct wifi_device *dev,
-						GSupplicantBSS *bss)
+						struct wifi_bss *bss_data)
 {
-	struct wifi_network *net = wifi_device_network_for_bss(dev, bss);
+	struct wifi_network *net = bss_data->net;
 
 	if (net) {
-		wifi_device_remove_bss_from_network2(dev, net, bss);
+		bss_data->net = NULL;
+		net->bss_list = g_slist_remove(net->bss_list, bss_data);
+		/* Best BSS may be gone, update the strength */
+		wifi_network_update_strength(net);
+
+		/*
+		 * Don't remove the network just yet even if this was its
+		 * last BSS. The network still may recover.
+		 */
 	}
 }
 
 static void wifi_device_steal_bss_data_from_network(struct wifi_device *dev,
 						struct wifi_bss *bss_data)
 {
-	GSupplicantBSS *bss = bss_data->bss;
-	struct wifi_network *net = wifi_device_network_for_bss(dev, bss);
+	struct wifi_network *net = bss_data->net;
 
 	if (net) {
-		DBG("stealing %s from %s", bss->path, net->ident);
-		g_hash_table_remove(dev->bss_net, bss->path);
-		net->bss_list = g_list_remove(net->bss_list, bss_data);
-
+		DBG("stealing %s from %s", bss_data->bss->path, net->ident);
+		bss_data->net = NULL;
+		net->bss_list = g_slist_remove(net->bss_list, bss_data);
 		if (net->bss_list) {
-			if (!net->signalpoll) {
-				/* Best BSS may be gone, update the strength */
-				wifi_network_update_strength(net);
-			}
+			/* Best BSS may be gone, update the strength */
+			wifi_network_update_strength(net);
 		} else {
-			/* The last BSS is gone, kill the network */
+			/*
+			 * Kill the network right away. Stealing occurs
+			 * when we have found SSID for a hidden BSS, in
+			 * which case we create a new network for it,
+			 * there's no need to keep this one any longer.
+			 */
 			DBG("removing %s", net->ident);
 			wifi_device_remove_network(dev, net);
 		}
@@ -2483,15 +2640,15 @@ static void wifi_device_steal_bss_data_from_network(struct wifi_device *dev,
 static void wifi_device_cleanup_bss_list(struct wifi_device *dev,
 			struct wifi_network *net, struct wifi_bss *keep)
 {
-	GList *l;
-	GSupplicantBSS *bss = keep->bss;
+	GSList *l;
 
 	for (l = net->bss_list; l; l = l->next) {
 		struct wifi_bss *data = l->data;
+		GSupplicantBSS *bss = data->bss;
 
 		if (data != keep &&
-			wifi_bytes_equal(data->bss->bssid, bss->bssid) &&
-			wifi_bytes_equal(data->bss->ssid, bss->ssid)) {
+			wifi_bytes_equal(bss->bssid, bss->bssid) &&
+			wifi_bytes_equal(bss->ssid, bss->ssid)) {
 
 			/*
 			 * This is most likely the dead BSS that we kept
@@ -2502,27 +2659,233 @@ static void wifi_device_cleanup_bss_list(struct wifi_device *dev,
 			 * and one by the active one. The former will
 			 * have empty SSID.
 			 */
-			GSupplicantBSS *dump = data->bss;
-
-			DBG("dumping %s", dump->path);
-			wifi_device_remove_bss_from_network2(dev, net, dump);
+			DBG("dumping %s", bss->path);
+			wifi_device_remove_bss_from_network(dev, data);
 			break;
+		}
+	}
+}
+
+static gint wifi_device_bss_list_compare(gconstpointer a, gconstpointer b)
+{
+	const struct wifi_bss *bss_data1 = a;
+	const struct wifi_bss *bss_data2 = b;
+	const char *ident1 = bss_data1->ident;
+	const char *ident2 = bss_data2->ident;
+
+	/* The one with identifier goes before the one without identifier */
+	if (ident1 && !ident2) {
+		return -1;
+	} else if (!ident1 && ident2) {
+		return 1;
+	} else if (ident1 /* No need to check both */) {
+		struct connman_service *service1 =
+			connman_service_lookup_from_identifier(ident1);
+		struct connman_service *service2 =
+			connman_service_lookup_from_identifier(ident2);
+
+		/* The one with service goes before the one without service */
+		if (service1 && !service2) {
+			return -1;
+		} else if (!service1 && service2) {
+			return 1;
+		} else if (service1 /* No need to check both */) {
+			gboolean saved1 = connman_service_get_saved(service1);
+			gboolean saved2 = connman_service_get_saved(service2);
+
+			/* Preconfigured ones go before others */
+			if (saved1 && !saved2) {
+				return -1;
+			} else if (!saved1 && saved2) {
+				return 1;
+			}
+		}
+	}
+
+	/* Compare signal strengths */
+	if (bss_data1->signal > bss_data2->signal) {
+		return -1;
+	} else if (bss_data1->signal < bss_data2->signal) {
+		return 1;
+	}
+
+	/* Same strength */
+	if (wifi_bss_weak(bss_data1)) {
+		/* The one seen more often, wins */
+		return (int) bss_data2->weak_sightings -
+					(int)bss_data1->weak_sightings;
+	}
+
+	/* No difference */
+	return 0;
+}
+
+static gboolean wifi_device_bss_list_check(struct wifi_device *dev,
+						struct wifi_bss *must_have)
+{
+	GSList *l;
+	guint i;
+	gboolean significant_change = FALSE;
+
+	/* Make sure the list is sorted */
+	dev->bss_valid_list = g_slist_sort(dev->bss_valid_list,
+					wifi_device_bss_list_compare);
+
+	/* Skip preconfigured networks. Those are at the beginning. */
+	for (l = dev->bss_valid_list; l; l = l->next) {
+		struct wifi_bss *bss_data = l->data;
+		const char *ident = bss_data->ident;
+
+		if (ident) {
+			struct connman_service *service =
+				connman_service_lookup_from_identifier(ident);
+
+			if (service && connman_service_get_saved(service)) {
+				/* Create a network for it */
+				if (!bss_data->net) {
+					significant_change = TRUE;
+					wifi_device_add_bss_to_network(dev,
+								bss_data);
+				}
+				/* And skip this one */
+				continue;
+			}
+		}
+		break;
+	}
+
+	/* Add the first WIFI_BSS_COUNT_SMALL networks unconditionally */
+	for (i = 0; i < WIFI_BSS_COUNT_SMALL && l; i++, l = l->next) {
+		wifi_device_add_bss_to_network(dev, l->data);
+	}
+
+	/*
+	 * Then only non-ignorable networks (and must_have) up to
+	 * WIFI_BSS_COUNT_MAX.
+	 */
+	for (; i < WIFI_BSS_COUNT_MAX && l; i++, l = l->next) {
+		struct wifi_bss *bss_data = l->data;
+
+		if (bss_data == must_have || !wifi_bss_ignorable(bss_data)) {
+			if (!bss_data->net) {
+				if (!wifi_bss_weak(bss_data)) {
+					significant_change = TRUE;
+				}
+				wifi_device_add_bss_to_network(dev, bss_data);
+			}
+		} else if (bss_data->net) {
+			DBG("dropping %s (rssi %d dBm)", bss_data->bss->path,
+							bss_data->signal);
+			wifi_device_remove_bss_from_network(dev, bss_data);
+		} else {
+			DBG("ignoring %s (rssi %d dBm)", bss_data->bss->path,
+							bss_data->signal);
+		}
+	}
+
+	/* And kill all the others (except for must_have) */
+	for (; l; l = l->next) {
+		struct wifi_bss *bss_data = l->data;
+
+		if (bss_data == must_have) {
+			if (!bss_data->net) {
+				wifi_device_add_bss_to_network(dev, bss_data);
+			}
+		} else if (bss_data->net) {
+			DBG("dropping %s (rssi %d dBm)", bss_data->bss->path,
+							bss_data->signal);
+			wifi_device_remove_bss_from_network(dev, bss_data);
+		} else {
+			DBG("ignoring %s (rssi %d dBm)", bss_data->bss->path,
+							bss_data->signal);
+		}
+	}
+
+	return significant_change;
+}
+
+static void wifi_device_remove_bss_from_bssid_map(struct wifi_device *dev,
+				GBytes *bssid, struct wifi_bss *bss_data)
+{
+	GSList *list = g_hash_table_lookup(dev->bssid_map, bssid);
+
+	if (list) {
+		if (list->data == bss_data) {
+			GSList *tail = list->next;
+
+			if (tail) {
+				/* Cut the tail */
+				list->next = NULL;
+				g_hash_table_replace(dev->bssid_map,
+					g_bytes_ref(bssid), tail);
+			} else {
+				/* The last bssid is gone */
+				g_hash_table_remove(dev->bssid_map, bssid);
+			}
+		} else {
+			/*
+			 * The head of the list remains untouched,
+			 * no need to update the hashtable.
+			 */
+			list->next = g_slist_remove(list->next, bss_data);
 		}
 	}
 }
 
 static void wifi_device_bss_presence_changed(GSupplicantBSS *bss, void *data)
 {
-	struct wifi_device *dev = data;
-
 	/* We assume that BSS never reappeares with the same path */
 	if (!bss->valid || !bss->present) {
-		struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
+		struct wifi_device *dev = data;
+		const char *path = bss->path;
+		struct wifi_bss *bss_data;
+		gboolean was_valid;
+
+		/*
+		 * struct wifi_bss can only be in one hashtable and most
+		 * likely it's bss_valid, check it first.
+		 */
+		bss_data = g_hash_table_lookup(dev->bss_valid, path);
+		if (bss_data) {
+			was_valid = TRUE;
+		} else {
+			was_valid = FALSE;
+			bss_data = g_hash_table_lookup(dev->bss_pending, path);
+		}
 
 		GASSERT(bss_data);
 		if (bss_data) {
-			DBG("%s is gone", bss->path);
-			wifi_device_remove_bss_from_network(dev, bss);
+			struct wifi_network *net = bss_data->net;
+
+			DBG("%s is gone", path);
+			wifi_device_remove_bss_from_bssid_map(dev, bss->bssid,
+								bss_data);
+			if (net) {
+				DBG("removing %s from %s", path, net->ident);
+				wifi_device_remove_bss_from_network(dev,
+								bss_data);
+			}
+
+			/* Remove it from the table where we have found it */
+			if (was_valid) {
+				dev->bss_valid_list =
+					g_slist_remove(dev->bss_valid_list,
+								bss_data);
+				g_hash_table_remove(dev->bss_valid, path);
+			} else {
+				GASSERT(!g_slist_find(dev->bss_valid_list,
+								bss_data));
+				g_hash_table_remove(dev->bss_pending, path);
+			}
+
+			if (net) {
+				/*
+				 * This event could only affect bss_list
+				 * if this BSS had a wifi_network associated
+				 * with it.
+				 */
+				wifi_device_bss_list_check(dev, NULL);
+			}
 		}
 	}
 }
@@ -2530,15 +2893,20 @@ static void wifi_device_bss_presence_changed(GSupplicantBSS *bss, void *data)
 static void wifi_device_bss_signal_changed(GSupplicantBSS *bss, void *data)
 {
 	struct wifi_device *dev = data;
-	struct wifi_network *net = wifi_device_network_for_bss(dev, bss);
 	struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
+	const int prev = bss_data->signal;
 
-	bss_data->strength = gutil_int_history_add(bss_data->history,
-					wifi_rssi_strength(bss->signal));
+	/* Update the average */
+	bss_data->signal = gutil_int_history_add(bss_data->history,
+							bss->signal);
 
-	/* If signal strength is being polled, don't update it here */
-	if (!net->signalpoll) {
-		wifi_network_update_strength(net);
+	/*
+	 * Update the network list if average signal strength has
+	 * actually changed.
+	 */
+	if (prev != bss_data->signal) {
+		wifi_network_update_strength(bss_data->net);
+		wifi_device_bss_list_check(dev, NULL);
 	}
 }
 
@@ -2549,34 +2917,37 @@ static void wifi_device_bss_frequency_changed(GSupplicantBSS *bss, void *dev)
 
 static void wifi_device_bss_wps_caps_changed(GSupplicantBSS *bss, void *dev)
 {
+	struct wifi_network *net = wifi_device_network_for_bss(dev, bss);
+
 	DBG("%s WPS caps 0x%02x", bss->path, bss->wps_caps);
-	wifi_network_update_wps_caps(wifi_device_network_for_bss(dev, bss));
+	if (net) {
+		wifi_network_update_wps_caps_from_bss(net,
+					wifi_network_current_bss(net));
+	}
 }
 
 static void wifi_device_bss_ident_changed(GSupplicantBSS *bss, void *data)
 {
 	struct wifi_device *dev = data;
-	struct wifi_network *net = wifi_device_network_for_bss(dev, bss);
-	struct wifi_bss *bss_data = wifi_network_get_bss_data(net, bss);
+	struct wifi_bss *bss_data = wifi_device_get_bss_data(dev, bss);
 
 	DBG("%s security %s ssid %s", bss->path,
 		__connman_service_security2string(wifi_bss_security(bss)),
 		bss->ssid_str);
 
-	GASSERT(net && bss_data);
-	if (net && bss_data) {
-		char *ident = wifi_bss_ident(bss_data);
-
-		if (strcmp(ident, net->ident)) {
-			/*
-			 * Network identifier has changed (because it
-			 * includes the security and ssid). Remove it
-			 * and associate this BSS with the new network.
-			 */
-			wifi_device_remove_bss_from_network(dev, bss);
-			wifi_device_bss_add(dev, bss);
+	GASSERT(bss_data);
+	if (wifi_bss_ident_update(bss_data)) {
+		/*
+		 * Network identifier has changed (because it includes
+		 * the security and ssid). Remove it and associate this
+		 * BSS with a new network.
+		 */
+		if (bss_data->net) {
+			DBG("removing %s from %s", bss->path,
+						bss_data->net->ident);
+			wifi_device_remove_bss_from_network(dev, bss_data);
 		}
-		g_free(ident);
+		wifi_device_bss_list_check(dev, NULL);
 	}
 }
 
@@ -2584,14 +2955,35 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 						struct wifi_bss *bss_data)
 {
 	GSupplicantBSS *bss = bss_data->bss;
+	const char *path = bss->path;
 	GBytes *bssid = bss->bssid;
 	GBytes *ssid = bss_data->ssid;
-	char *ident = wifi_bss_ident(bss_data);
-	struct wifi_network *net = g_hash_table_lookup(dev->ident_net, ident);
-	gboolean recovered = FALSE;
 	GSList *bssid_list;
+	struct wifi_network *net;
+	gboolean recovered = FALSE;
+	const gboolean continue_with_hidden_connect = (dev->hidden_connect &&
+		wifi_bss_security(bss) == dev->hidden_connect->security &&
+		wifi_bytes_equal(ssid, dev->hidden_connect->ssid));
+	struct wifi_bss *must_have = continue_with_hidden_connect ?
+		bss_data : NULL;
 
 	GASSERT(bss->valid && bss->present);
+
+	/* Generate (or update) the service identifier */
+	wifi_bss_ident_update(bss_data);
+	net = g_hash_table_lookup(dev->ident_net, bss_data->ident);
+
+	/*
+	 * Just like with bss_pending, we are using the path owned
+	 * by GSupplicantBSS as the key in the hashtable, to avoid
+	 * copying the key.
+	 */
+	if (!g_hash_table_contains(dev->bss_valid, path)) {
+		/* It's not there yet */
+		g_hash_table_insert(dev->bss_valid, (gpointer) path, bss_data);
+		dev->bss_valid_list = g_slist_prepend(dev->bss_valid_list,
+								bss_data);
+	}
 
 	/*
 	 * Attach signal handlers if it's not done yet. It's enough to
@@ -2644,57 +3036,9 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 		bss_data->history =
 			gutil_int_history_new(WIFI_BSS_SIGNAL_HISTORY_SIZE,
 				WIFI_BSS_SIGNAL_HISTORY_SEC*GUTIL_HISTORY_SEC);
-		bss_data->strength = gutil_int_history_add(bss_data->history,
-					wifi_rssi_strength(bss->signal));
+		bss_data->signal = gutil_int_history_add(bss_data->history,
+								bss->signal);
 	}
-
-	if (net) {
-		struct connman_service *service;
-		DBG("adding %s to %s", bss->path, ident);
-
-		service = connman_service_lookup_from_network(net->network);
-		GASSERT(service);
-		if (service && bss_data->hidden)
-			__connman_service_set_hidden(service);
-
-		/*
-		 * We are keeping BSS-less networks alive for some time in
-		 * the hope that they will recover. And sometimes they do!
-		 */
-		if (net->recover_attempt) {
-			DBG("%s recovered", ident);
-			net->recover_attempt = 0;
-			recovered = TRUE;
-		}
-		g_free(ident);
-	} else {
-		struct connman_service *service;
-
-		DBG("creating network %s for %s", ident, bss->path);
-		net = g_slice_new0(struct wifi_network);
-		net->ident = ident;
-		net->dev = dev;
-		dev->networks = g_list_append(dev->networks, net);
-		g_hash_table_replace(dev->ident_net, g_strdup(ident), net);
-		wifi_network_init(net, bss_data);
-		connman_device_add_network(dev->device, net->network);
-
-		/*
-		 * Make sure that the service has its ipconfig initialized,
-		 * otherwise autoconnect barfs.
-		 */
-		service = connman_service_lookup_from_network(net->network);
-		GASSERT(service);
-		if (service) {
-			if (bss_data->hidden)
-				__connman_service_set_hidden(service);
-			connman_service_create_ip4config(service, dev->ifi);
-			connman_service_create_ip6config(service, dev->ifi);
-		}
-	}
-
-	g_hash_table_replace(dev->bss_net, g_strdup(bss->path), net);
-	net->bss_list = g_list_append(net->bss_list, bss_data);
 
 	/*
 	 * There's usually only one network in this list, sometimes two,
@@ -2704,24 +3048,61 @@ static void wifi_device_bss_add_3(struct wifi_device *dev,
 	 */
 	bssid_list = g_hash_table_lookup(dev->bssid_map, bssid);
 	if (!g_slist_find(bssid_list, bss_data)) {
-		bssid_list = g_slist_prepend(bssid_list, bss_data);
-		g_hash_table_replace(dev->bssid_map, g_bytes_ref(bssid),
-							bssid_list);
+		if (bssid_list) {
+			/*
+			 * Insert new list entry at position #1 to avoid
+			 * modifying the hashtable.
+			 */
+			bssid_list->next = g_slist_prepend(bssid_list->next,
+								bss_data);
+		} else {
+			/* Create a new entry in the hashtable */
+			g_hash_table_replace(dev->bssid_map,
+					g_bytes_ref(bssid),
+					g_slist_prepend(NULL, bss_data));
+		}
 	}
 
+	if (net) {
+		DBG("adding %s to %s", path, net->ident);
+		recovered = (net->recover_attempt > 0);
+		wifi_device_add_bss_to_existing_network(dev, net, bss_data);
+		wifi_device_bss_list_check(dev, must_have);
+	} else {
+		wifi_device_bss_list_check(dev, must_have);
+		net = bss_data->net;
+		if (!net) {
+			/*
+			 * There's no connman network for this BSS and it's
+			 * not needed (not at the moment, anyway). We still
+			 * have to keep orphaned bss_data in bss_valid table,
+			 * in case if we need to create connman network for
+			 * those in the future.
+			 */
+			DBG("skipping %s", path);
+			return;
+		}
+	}
+
+	/*
+	 * We are keeping BSS-less networks alive for some time in
+	 * the hope that they will recover. And sometimes they do!
+	 */
+	if (net->recover_attempt) {
+		DBG("%s recovered", net->ident);
+		net->recover_attempt = 0;
+		recovered = TRUE;
+	}
+
+	wifi_network_update_strength(net);
 	wifi_device_cleanup_bss_list(dev, net, bss_data);
 	if (!wifi_network_update_current_bss(net)) {
 		wifi_network_update_bssid(net);
 		wifi_network_update_frequency(net);
 	}
-	if (!net->signalpoll) {
-		wifi_network_update_strength(net);
-	}
 
 	/* Check if this is the hidden network we are trying to connect to. */
-	if (dev->hidden_connect && wifi_bss_security(bss) ==
-			dev->hidden_connect->security &&
-			wifi_bytes_equal(ssid, dev->hidden_connect->ssid)) {
+	if (continue_with_hidden_connect) {
 		struct wifi_hidden_connect *connect = dev->hidden_connect;
 
 		DBG("Hello, %.*s", (int)g_bytes_get_size(ssid),
@@ -2795,11 +3176,33 @@ static void wifi_device_bss_add_2(struct wifi_device *dev,
 {
 	GSupplicantBSS *bss = bss_data->bss;
 
+	/*
+	 * At this point bss_data is a free hanging pointer, i.e. it's
+	 * been removed from bss_pending map (or was never added there
+	 * in the first place) but hasn't been added to bss_valid yet.
+	 */
 	GASSERT(bss->valid);
 	if (bss->present && bss->bssid) {
-		if (bss->ssid && g_bytes_get_size(bss->ssid)) {
+		if (wifi_ssid_hidden(bss->ssid)) {
+			/* No SSID broadcast */
+			struct wifi_bss *named = wifi_device_named_bss(dev,
+								bss->bssid);
+
+			bss_data->hidden = TRUE;
+			if (named) {
+				/* We already know SSID for this network */
+				bss_data->ssid = g_bytes_ref(named->ssid);
+				DBG("%s -> \"%.*s\"", bss->path,
+					(int)g_bytes_get_size(named->ssid),
+					(char*)g_bytes_get_data(named->ssid,
+								NULL));
+				named->hidden = TRUE;
+			}
+			/* Otherwise leave bss_data->ssid as is (i.e. NULL) */
+		} else {
 			struct wifi_bss *hidden = wifi_device_unnamed_bss(dev,
 								bss->bssid);
+
 			bss_data->ssid = g_bytes_ref(bss->ssid);
 			if (hidden) {
 				/* Found SSID for a hidden network */
@@ -2811,27 +3214,14 @@ static void wifi_device_bss_add_2(struct wifi_device *dev,
 				hidden->ssid = g_bytes_ref(bss->ssid);
 				wifi_device_bss_add_3(dev, hidden);
 
+				/* Mark this one hidden, too */
 				bss_data->hidden = TRUE;
-			}
-		} else {
-			/* No SSID broadcast */
-			struct wifi_bss *named = wifi_device_named_bss(dev,
-								bss->bssid);
-			bss_data->hidden = TRUE;
-			if (named) {
-				/* We already know SSID for this network */
-				bss_data->ssid = g_bytes_ref(named->ssid);
-				DBG("%s -> \"%.*s\"", bss->path,
-					(int)g_bytes_get_size(named->ssid),
-					(char*)g_bytes_get_data(named->ssid,
-								NULL));
-				named->hidden = TRUE;
 			}
 		}
 		wifi_device_bss_add_3(dev, bss_data);
 	} else {
 		DBG("BSS %s gone?", bss->path);
-		wifi_bss_free(bss_data, dev);
+		wifi_bss_free(bss_data);
 	}
 }
 
@@ -2839,13 +3229,19 @@ static void wifi_device_bss_add_1(GSupplicantBSS *bss, void *data)
 {
 	if (bss->valid) {
 		struct wifi_device *dev = data;
-		struct wifi_bss *bss_data =
-			g_hash_table_lookup(dev->bss_pending, bss->path);
+		gpointer value;
 
-		GASSERT(bss_data);
-		if (bss_data) {
+		/*
+		 * Remove struct wifi_bss from dev->bss_pending without
+		 * calling wifi_bss_destroy, turning it into a free hanging
+		 * pointer.
+		 */
+		if (g_hash_table_steal_extended(dev->bss_pending, (gpointer)
+						bss->path, NULL, &value)) {
+			struct wifi_bss *bss_data = value;
+
 			GASSERT(bss_data->bss == bss);
-			g_hash_table_remove(dev->bss_pending, bss->path);
+			/* Remove this (one) handler and clear its id */
 			gsupplicant_bss_remove_handlers(bss_data->bss,
 				bss_data->event_id + BSS_EVENT_VALID, 1);
 			wifi_device_bss_add_2(dev, bss_data);
@@ -2855,10 +3251,8 @@ static void wifi_device_bss_add_1(GSupplicantBSS *bss, void *data)
 
 static void wifi_device_bss_add(struct wifi_device *dev, GSupplicantBSS *bss)
 {
-	struct wifi_bss *bss_data = g_slice_new0(struct wifi_bss);
+	struct wifi_bss *bss_data = wifi_bss_new(bss);
 
-	DBG("%s", bss->path);
-	bss_data->bss = gsupplicant_bss_ref(bss);
 	if (bss->valid) {
 		wifi_device_bss_add_2(dev, bss_data);
 	} else {
@@ -2888,17 +3282,16 @@ static void wifi_device_bss_add_path(struct wifi_device *dev, const char *path)
 
 static void wifi_device_update_bss_list(struct wifi_device *dev)
 {
-	const GStrV *list = NULL;
-
 	if (dev->iface) {
-		list = dev->iface->bsss;
-	}
-	if (list) {
-		while (*list) {
-			const char *path = *list++;
-			if (!g_hash_table_contains(dev->bss_pending, path) &&
-				!g_hash_table_contains(dev->bss_net, path)) {
-				wifi_device_bss_add_path(dev, path);
+		const GStrV *list = dev->iface->bsss;
+
+		if (list) {
+			while (*list) {
+				const char *path = *list++;
+
+				if (!wifi_device_get_bss_data2(dev, path)) {
+					wifi_device_bss_add_path(dev, path);
+				}
 			}
 		}
 	}
@@ -2948,9 +3341,11 @@ static int wifi_device_scan(struct wifi_device *dev,
 static void wifi_device_bsss_changed(GSupplicantInterface *iface, void *data)
 {
 	struct wifi_device *dev = data;
+	gboolean may_restart_autoscan;
 
 	GASSERT(dev->state == WIFI_DEVICE_ON && !dev->pending);
 	wifi_device_update_bss_list(dev);
+	may_restart_autoscan = wifi_device_bss_list_check(dev, NULL);
 
 	/*
 	 * If the list of WiFi network is changing, request scans
@@ -2960,7 +3355,11 @@ static void wifi_device_bsss_changed(GSupplicantInterface *iface, void *data)
 	 */
 	if (dev->screen_active && (!dev->selected ||
 			dev->selected->state != WIFI_NETWORK_CONNECTED)) {
-		wifi_device_autoscan_restart(dev);
+		if (may_restart_autoscan) {
+			wifi_device_autoscan_restart(dev);
+		} else {
+			DBG("not restarting autoscan");
+		}
 	}
 }
 
@@ -3699,13 +4098,21 @@ static struct wifi_device *wifi_device_new(GSupplicant *supplicant,
 		dev->supplicant = gsupplicant_ref(supplicant);
 		dev->device = connman_device_ref(device);
 		dev->autoscan_interval_sec = WIFI_AUTOSCAN_MIN_SEC;
-		dev->bss_pending = g_hash_table_new(g_str_hash, g_str_equal);
+
+		/*
+		 * struct wifi_bss is referenced by either bss_pending or
+		 * bss_valid but never both. The key (path) is owned by
+		 * GSupplicantBSS referenced by struct wifi_bss.
+		 */
+		dev->bss_pending = g_hash_table_new_full(g_str_hash,
+			g_str_equal, NULL, wifi_bss_destroy);
+		dev->bss_valid = g_hash_table_new_full(g_str_hash,
+			g_str_equal, NULL, wifi_bss_destroy);
 		dev->bssid_map = g_hash_table_new_full(g_bytes_hash,
-					g_bytes_equal, wifi_bytes_unref, NULL);
-		dev->bss_net = g_hash_table_new_full(g_str_hash,
-					g_str_equal, g_free, NULL);
+			g_bytes_equal, wifi_bytes_unref, wifi_slist_destroy);
 		dev->ident_net = g_hash_table_new_full(g_str_hash,
-					g_str_equal, g_free, NULL);
+			g_str_equal, NULL, NULL);
+
 		dev->ifi = index;
 		dev->watch = connman_rtnl_add_newlink_watch(index,
 						wifi_device_newlink, dev);
@@ -3743,6 +4150,7 @@ static void wifi_device_delete(struct wifi_device *dev)
 	wifi_device_autoscan_stop(dev);
 	wifi_device_drop_interface(dev);
 	wifi_device_tp_free(dev->tp);
+
 	connman_rtnl_remove_watch(dev->watch);
 	if (dev->device) {
 		connman_device_set_powered(dev->device, FALSE);
@@ -3772,9 +4180,10 @@ static void wifi_device_delete(struct wifi_device *dev)
 	mce_tklock_unref(dev->mce_tklock);
 	gsupplicant_unref(dev->supplicant);
 	g_hash_table_destroy(dev->bss_pending);
+	g_hash_table_destroy(dev->bss_valid);
 	g_hash_table_destroy(dev->bssid_map);
-	g_hash_table_destroy(dev->bss_net);
 	g_hash_table_destroy(dev->ident_net);
+	g_slist_free(dev->bss_valid_list);
 	g_slist_free_full(dev->active_scans, wifi_bytes_unref);
 	g_free(dev->bridge);
 	g_slice_free(struct wifi_device, dev);
