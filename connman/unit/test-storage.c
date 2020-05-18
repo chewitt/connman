@@ -322,11 +322,11 @@ gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message)
 
 	DBG("connection %p message %p", connection, message);
 
-	if (!dbus_on)
-		return FALSE;
-
 	if (last_reply_error)
 		dbus_message_unref(last_reply_error);
+
+	if (!dbus_on)
+		return FALSE;
 
 	last_reply_error = dbus_message_ref(message);
 
@@ -350,13 +350,14 @@ gboolean g_dbus_send_reply(DBusConnection *connection,
 
 	DBG("connection %p message %p", connection, message);
 
-	if (!dbus_on)
-		return FALSE;
-
 	if (last_reply)
 		dbus_message_unref(last_reply);
 
-	last_reply = dbus_message_ref(message);
+	if (!dbus_on)
+		return FALSE;
+
+	last_reply = g_dbus_create_reply(message, type);
+	dbus_message_unref(message);
 
 	return TRUE;
 }
@@ -457,12 +458,23 @@ gboolean g_dbus_emit_signal(DBusConnection *connection,
 }
 
 static guint watch_id = 123654798;
+static GDBusWatchFunction connect_watch = NULL;
+static GDBusWatchFunction disconnect_watch = NULL;
 
 guint g_dbus_add_service_watch(DBusConnection *connection, const char *name,
 				GDBusWatchFunction connect,
 				GDBusWatchFunction disconnect,
 				void *user_data, GDBusDestroyFunction destroy)
 {
+	g_assert(name);
+	g_assert(connect);
+	g_assert(disconnect);
+
+	g_assert_cmpstr(name, ==, "net.connman.vpn");
+
+	connect_watch = connect;
+	disconnect_watch = disconnect;
+
 	return watch_id;
 }
 
@@ -747,26 +759,31 @@ static struct passwd passwd_list[] = {
 		.pw_name = "root",
 		.pw_uid = UID_ROOT,
 		.pw_shell = "/bin/bash",
+		.pw_dir = NULL,
 	},
 	{
 		.pw_name = "user",
 		.pw_uid = UID_USER,
 		.pw_shell = "/bin/sh",
+		.pw_dir = NULL,
 	},
 	{
 		.pw_name = "user2",
 		.pw_uid = UID_USER2,
 		.pw_shell = "/usr/bin/sh",
+		.pw_dir = NULL,
 	},
 	{
 		.pw_name = "invalid",
 		.pw_uid = UID_INVALID,
 		.pw_shell = "/usr/bin/nologin",
+		.pw_dir = NULL,
 	},
 	{
 		.pw_name = "http",
 		.pw_uid = UID_HTTP,
 		.pw_shell = "/bin/false",
+		.pw_dir = NULL,
 	}
 };
 
@@ -783,16 +800,32 @@ struct passwd *getpwuid(uid_t uid)
 
 	for (i = 0; i < G_N_ELEMENTS(passwd_list); i++) {
 		if (passwd_list[i].pw_uid == uid) {
-			if (user_pw_dir_root)
+			if (user_pw_dir_root) {
+				if (passwd_list[i].pw_dir)
+					g_free(passwd_list[i].pw_dir);
+
 				passwd_list[i].pw_dir =
 					g_build_filename(user_pw_dir_root,
 					passwd_list[i].pw_name, NULL);
+			}
 
 			return &passwd_list[i];
 		}
 	}
 
 	return NULL;
+}
+
+static void clean_pwd()
+{
+	int i;
+
+	for (i = 0; i < G_N_ELEMENTS(passwd_list); i++) {
+		if (passwd_list[i].pw_dir) {
+			g_free(passwd_list[i].pw_dir);
+			passwd_list[i].pw_dir = NULL;
+		}
+	}
 }
 
 uid_t geteuid(void)
@@ -856,6 +889,8 @@ static void clean_dbus(void)
 	last_pending_function = NULL;
 	last_pending_function_data = NULL;
 	steal_reply_error = false;
+
+	clean_pwd();
 }
 
 static void set_reply_error(DBusMessage *reply_error)
@@ -1122,6 +1157,21 @@ static void storage_test_basic3()
 	g_assert_false(__connman_storage_remove_service("wifi1"));
 	g_assert_null(connman_storage_get_services());
 
+	/*
+	 * Create a service from a new keyfile, save it before cleanup to
+	 * be able to fool storage to load it as inotify is not running in
+	 * tests.
+	 */
+	keyfile = g_key_file_new();
+	g_key_file_set_value(keyfile, "wifi_1_managed_psk", "Name", "wifi1");
+	g_key_file_set_value(keyfile, "wifi_1_managed_psk", "SSID",
+				"444e412d4d6f6b6b756c612d35472d444");
+	g_key_file_set_value(keyfile, "wifi_1_managed_psk", "Frequency",
+				"2417");
+	g_assert_cmpint(__connman_storage_save_service(keyfile,
+				"wifi_1_managed_psk"), ==, 0);
+	g_key_file_unref(keyfile);
+
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 
@@ -1143,6 +1193,63 @@ static void storage_test_basic3()
 	g_assert_false(__connman_storage_remove_provider(NULL));
 	g_assert_false(__connman_storage_remove_provider("provider1"));
 	g_assert_null(__connman_storage_get_providers());
+
+	/* And provider for VPN */
+	keyfile = g_key_file_new();
+	g_key_file_set_value(keyfile, "provider_123", "Name", "VPN1");
+	g_key_file_set_value(keyfile, "provider_123", "Type", "openvpn");
+	g_key_file_set_value(keyfile, "provider_123", "Host", "1.1.1.1");
+	__connman_storage_save_provider(keyfile, "123");
+	g_key_file_unref(keyfile);
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+
+	/* Init main */
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
+				__connman_storage_dir_mode()), ==, 0);
+	g_assert_true(g_file_test(STORAGEDIR, G_FILE_TEST_IS_DIR));
+
+	/* Should return 0 as the dir exists */
+	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
+				__connman_storage_dir_mode()), ==, 0);
+	__connman_inotify_init();
+
+	/* Load the service */
+	keyfile = connman_storage_load_service("wifi_1_managed_psk");
+	g_assert(keyfile);
+	g_assert_true(g_key_file_has_group(keyfile, "wifi_1_managed_psk"));
+	g_key_file_unref(keyfile);
+
+	gchar **services = connman_storage_get_services();
+	g_assert(services);
+	g_assert_cmpint(g_strv_length(services), ==, 1);
+	g_assert_cmpstr(services[0], ==, "wifi_1_managed_psk");
+	g_strfreev(services);
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+
+	/* VPNd */
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR, m_dir),
+									==, 0);
+	g_assert_true(g_file_test(VPN_STORAGEDIR, G_FILE_TEST_IS_DIR));
+	__connman_inotify_init();
+
+	keyfile = __connman_storage_load_provider("123");
+	g_assert(keyfile);
+	g_assert_true(g_key_file_has_group(keyfile, "provider_123"));
+	g_key_file_unref(keyfile);
+
+	gchar **providers = __connman_storage_get_providers();
+	g_assert(providers);
+	g_assert_cmpint(g_strv_length(providers), ==, 1);
+	g_assert_cmpstr(providers[0], ==, "provider_123");
+	g_strfreev(providers);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -1318,7 +1425,8 @@ enum user_change_mode {
 	USER_CHANGE_INVALID_USER =	0x0002,
 	USER_CHANGE_ERROR_REPLY =	0x0004,
 	USER_CHANGE_ACCESS_DENIED =	0x0008,
-	USER_CHANGE_ALREADY_SET =	0x0010
+	USER_CHANGE_ALREADY_SET =	0x0010,
+	USER_CHANGE_VPN_CRASH =		0x0020,
 };
 
 static DBusMessage *create_dbus_error(DBusMessage *reply_to,
@@ -1343,18 +1451,21 @@ static const char *get_connman_error(const char *error_name)
 	return NULL;
 }
 
+static uid_t current_uid = 0;
+
 static void user_change_process(uid_t uid, enum user_change_mode mode,
 			const char *error_name, bool fake_error,
 			int *cb_checklist, int *vpn_cb_checklist)
 {
 	DBusMessage *change_user_msg;
-	DBusMessage *change_user_reply = NULL;
+	DBusMessage *change_user_reply;
 	DBusConnection *connection;
 	DBusError error;
 	dbus_uint32_t user_id;
 	int i;
 
 	user_id = (dbus_uint32_t)uid;
+	current_uid = UID_ROOT;
 
 	connection = connman_dbus_get_connection();
 	dbus_error_init(&error);
@@ -1388,12 +1499,22 @@ static void user_change_process(uid_t uid, enum user_change_mode mode,
 
 		g_assert_cmpstr(error.name, ==, error_name);
 		dbus_error_free(&error);
+		dbus_message_unref(initial_reply);
+		dbus_message_unref(change_user_msg);
 
 		return;
 	}
 
 	g_assert_null(connmand_method(connection, last_message,
-				connmand_data));
+					connmand_data));
+
+	if (mode & USER_CHANGE_VPN_CRASH) {
+		g_assert(disconnect_watch);
+		g_assert(connect_watch);
+
+		disconnect_watch(connection, NULL);
+		connect_watch(connection, NULL);
+	}
 
 
 	if (fake_error) {
@@ -1467,7 +1588,11 @@ static void user_change_process(uid_t uid, enum user_change_mode mode,
 		g_assert_cmpstr(error.name, ==, connman_error_name);
 
 		dbus_error_free(&error);
+		dbus_message_unref(last_reply_error);
 	}
+
+	if (fake_error)
+		dbus_message_unref(change_user_reply);
 
 	dbus_message_unref(change_user_msg);
 
@@ -1584,7 +1709,7 @@ static void storage_test_user_change4()
 	mode_t m_file = 0600;
 	const uid_t users[6] = { UID_USER, UID_USER2, UID_ROOT, UID_USER,
 				UID_USER2, UID_ROOT };
-	int i;
+	int i = 0;
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
@@ -1600,10 +1725,12 @@ static void storage_test_user_change4()
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
 
-	for (i = 0; i < 6; init_dbus(TRUE), i++) {
+	while (i < 6) {
 		user_change_process(users[i], USER_CHANGE_SUCCESS, NULL, false,
 					NULL, NULL);
 		clean_dbus();
+		init_dbus(TRUE);
+		i++;
 	}
 
 	__connman_storage_cleanup();
@@ -1661,12 +1788,19 @@ static void finalize_cb(uid_t uid, void *user_data)
 	cb_counts[FINALIZE_CB]++;
 }
 
+static void uid_changed_cb(uid_t uid)
+{
+	DBG("cb called with uid %u", uid);
+	current_uid = uid;
+}
+
 static struct connman_storage_callbacks callbacks = {
 	.pre = pre_cb,
 	.unload = unload_cb,
 	.load = load_cb,
 	.post = post_cb,
 	.finalize = finalize_cb,
+	.uid_changed = uid_changed_cb,
 };
 
 /* No user change, user is root, with callbacks */
@@ -1683,6 +1817,7 @@ static void storage_test_user_change5()
 									0);
 
 	init_dbus(TRUE);
+	current_uid = 0;
 
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_MAIN, &callbacks), ==, 0);
@@ -1692,6 +1827,8 @@ static void storage_test_user_change5()
 	user_change_process(UID_ROOT, USER_CHANGE_ALREADY_SET,
 				"net.connman.Error.AlreadyEnabled", false,
 				NULL, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -1719,6 +1856,7 @@ static void storage_test_user_change6()
 									0);
 
 	init_dbus(TRUE);
+	current_uid = 0;
 
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_MAIN, &callbacks), ==, 0);
@@ -1727,6 +1865,8 @@ static void storage_test_user_change6()
 
 	user_change_process(UID_USER, USER_CHANGE_SUCCESS, NULL, false,
 				cb_checklist, vpn_cb_checklist);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	clean_dbus();
@@ -1819,7 +1959,7 @@ static void storage_test_user_change7()
 	/* Unload does not happen because vpnd uses same storage impl here. */
 	int cb_checklist[TOTAL_CB_COUNT] = {2, 0, 1, 1, 1};
 	/* Unload is called for the second user change */
-	int user2_cb_checklist[TOTAL_CB_COUNT] = {2, 1, 1, 1, 1};
+	int user2_cb_checklist[TOTAL_CB_COUNT] = {2, 2, 1, 1, 1};
 	int vpn_cb_checklist[TOTAL_CB_COUNT] = {1, 1, 1, 1, 1};
 	int user2_vpn_cb_checklist[TOTAL_CB_COUNT] = {2, 0, 1, 1, 1};
 	int i;
@@ -1872,6 +2012,11 @@ static void storage_test_user_change7()
 		"Name=wifi1user1",
 		"SSID=444e412d4d6f6b6b756c612d35472d444a3335726e5f322e3447",
 		"Frequency=2417",
+		NULL
+	};
+	gchar *user_cellular1[] = {
+		"[cellular_1_user_context1]",
+		"Name=cellular1user",
 		NULL
 	};
 	gchar *user_vpn1[] = {
@@ -1946,6 +2091,7 @@ static void storage_test_user_change7()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
+	current_uid = 0;
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
@@ -1967,6 +2113,12 @@ static void storage_test_user_change7()
 	create_settings_file(VPN_STORAGEDIR, "vpn_1_2_3_4_root_org_2",
 				root_vpn2_vpn);
 
+	/* Create a non-service dir without settings */
+	char *non_service = g_build_filename(STORAGEDIR, "iptables", NULL);
+	g_assert_cmpint(g_mkdir_with_parents(non_service,
+				S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH), ==, 0);
+	g_free(non_service);
+
 	/* Verify that services are loaded */
 	gchar **services = connman_storage_get_services();
 	g_assert(services);
@@ -1975,6 +2127,7 @@ static void storage_test_user_change7()
 				"wifi_1_managed_psk"));
 	g_assert_true(g_strv_contains((const gchar**)services,
 				"wifi_2_managed_psk"));
+	g_strfreev(services);
 
 	services = __connman_storage_get_providers();
 	g_assert(services);
@@ -1983,6 +2136,7 @@ static void storage_test_user_change7()
 				"provider_1_2_3_4_root_org_1"));
 	g_assert_true(g_strv_contains((const gchar**)services,
 				"provider_1_2_3_4_root_org_2"));
+	g_strfreev(services);
 
 	init_dbus(TRUE);
 
@@ -2082,6 +2236,8 @@ static void storage_test_user_change7()
 					services[i]));
 	}
 
+	g_strfreev(services);
+
 	/* Call the pending callback to finish change in connmand*/
 	DBG("call connmand pending call notify");
 	last_pending_function(last_pending_call, last_pending_function_data);
@@ -2098,9 +2254,23 @@ static void storage_test_user_change7()
 		cb_counts[i] = 0;
 	}
 
-	/* Create user1 service and test that it is loaded after change */
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* Create user1 service and test that it is loaded after user change.*/
 	create_settings_file(USER_STORAGEDIR, "wifi_1_user1_managed_psk",
 				user_wifi1);
+
+	/* Try to load and save the wifi service */
+	GKeyFile *wifi1_keyfile = connman_storage_load_service(
+				"wifi_1_user1_managed_psk");
+	g_assert(wifi1_keyfile);
+	g_assert_cmpint(__connman_storage_save_service(wifi1_keyfile,
+				"wifi_1_user1_managed_psk"), ==, 0);
+	g_key_file_unref(wifi1_keyfile);
+
+	/* This is not attempted to be watched and is ignored. */
+	create_settings_file(USER_STORAGEDIR, "cellular_1_user_context1",
+				user_cellular1);
 
 	services = connman_storage_get_services();
 	g_assert(services);
@@ -2119,6 +2289,7 @@ static void storage_test_user_change7()
 	g_assert_false(check_settings_file(USER_STORAGEDIR, services[0]));
 	g_assert_false(check_settings_file(STORAGEDIR, services[0]));
 
+	g_strfreev(services);
 	clean_dbus();
 	init_dbus(TRUE);
 
@@ -2187,6 +2358,7 @@ static void storage_test_user_change7()
 
 	g_assert_false(check_settings_file(USER_VPN_STORAGEDIR,
 				services[0]));
+	g_strfreev(services);
 
 	/* Call the pending callback */
 	DBG("call connmand pending call notify");
@@ -2203,6 +2375,8 @@ static void storage_test_user_change7()
 		g_assert_cmpint(cb_counts[i], ==, user2_cb_checklist[i]);
 		cb_counts[i] = 0;
 	}
+
+	g_assert_cmpint(current_uid, ==, UID_USER2);
 
 	/* Create user Wifi files */
 	create_settings_file(USER_STORAGEDIR, "wifi_1_user2_managed_psk",
@@ -2228,6 +2402,7 @@ static void storage_test_user_change7()
 					services[i]));
 	}
 
+	g_strfreev(services);
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 	clean_dbus();
@@ -2376,6 +2551,7 @@ static void storage_test_user_change8()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
+	current_uid = 0;
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
@@ -2405,6 +2581,7 @@ static void storage_test_user_change8()
 				"wifi_1_managed_psk"));
 	g_assert_true(g_strv_contains((const gchar**)services,
 				"wifi_2_managed_psk"));
+	g_strfreev(services);
 
 	services = __connman_storage_get_providers();
 	g_assert(services);
@@ -2413,6 +2590,7 @@ static void storage_test_user_change8()
 				"provider_1_2_3_4_root_org_1"));
 	g_assert_true(g_strv_contains((const gchar**)services,
 				"provider_1_2_3_4_root_org_2"));
+	g_strfreev(services);
 
 	init_dbus(TRUE);
 
@@ -2499,6 +2677,7 @@ static void storage_test_user_change8()
 	for (i = 0; i < 3; i++)
 		g_assert_true(check_settings_file(USER_VPN_STORAGEDIR,
 					services[i]));
+	g_strfreev(services);
 
 	/* Call the pending callback to finish change in connmand*/
 	DBG("call connmand pending call notify for user");
@@ -2519,6 +2698,8 @@ static void storage_test_user_change8()
 	/* Root has 2 services */
 	g_assert_cmpint(unload_items, ==, 2);
 
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
 	/* Create user1 service and test that it is loaded after change */
 	create_settings_file(USER_STORAGEDIR, "wifi_1_user1_managed_psk",
 				user_wifi1);
@@ -2530,6 +2711,7 @@ static void storage_test_user_change8()
 
 	g_assert_true(check_settings_file(USER_STORAGEDIR, services[0]));
 
+	g_strfreev(services);
 	clean_dbus();
 	init_dbus(TRUE);
 
@@ -2556,6 +2738,7 @@ static void storage_test_user_change8()
 
 	g_assert_true(dbus_connection_send_with_reply(connection,
 				change_user_msg, NULL, 0));
+	dbus_message_unref(change_user_msg);
 
 	/* Process message in connmand */
 	DBG("call connmand change_user() for user2");
@@ -2608,6 +2791,7 @@ static void storage_test_user_change8()
 	g_assert_true(check_settings_file(USER_VPN_STORAGEDIR, vpn_id));
 	g_free(vpn_id);
 	g_strfreev(provider_set);
+	g_strfreev(services);
 
 	/* Call the pending callback */
 	DBG("call connmand pending call notify");
@@ -2617,8 +2801,6 @@ static void storage_test_user_change8()
 	g_assert(last_reply);
 	g_assert_null(last_reply_error);
 
-	dbus_message_unref(change_user_msg);
-
 	DBG("verify callback count for user2");
 	for (i = 0; i < TOTAL_CB_COUNT; i++) {
 		g_assert_cmpint(cb_counts[i], ==, user2_cb_checklist[i]);
@@ -2626,6 +2808,8 @@ static void storage_test_user_change8()
 	}
 
 	g_assert_cmpint(unload_items, ==, 2);
+
+	g_assert_cmpint(current_uid, ==, UID_USER2);
 
 	/* Create user Wifi files */
 	create_settings_file(USER_STORAGEDIR, "wifi_1_user2_managed_psk",
@@ -2645,6 +2829,8 @@ static void storage_test_user_change8()
 	for (i = 0; i < 2; i++)
 		g_assert_true(check_settings_file(USER_STORAGEDIR,
 					services[i]));
+
+	g_strfreev(services);
 
 	/* Check that user services and providers are kept */
 	check_settings_file(USER_STORAGEDIR, "wifi_1_user1_managed_psk");
@@ -2700,6 +2886,7 @@ static struct connman_storage_callbacks access_success_callbacks = {
 	.load = load_cb,
 	.post = post_cb,
 	.finalize = finalize_cb,
+	.uid_changed = uid_changed_cb,
 	.access_policy_create = policy_create,
 	.access_change_user = allow_change_user,
 	.access_policy_free = policy_free,
@@ -2717,6 +2904,8 @@ static void storage_test_user_change9()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
+	current_uid = 0;
+
 	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
 									0);
 
@@ -2731,6 +2920,8 @@ static void storage_test_user_change9()
 
 	user_change_process(UID_USER, USER_CHANGE_SUCCESS, NULL, false,
 				cb_checklist, vpn_cb_checklist);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	clean_dbus();
@@ -2760,6 +2951,7 @@ static void internal_user_change_process(uid_t uid,
 	int call_count = prepare_only ? 2 : 1;
 
 	DBG("uid %u", uid);
+	current_uid = 0;
 
 	connection = connman_dbus_get_connection();
 	dbus_error_init(&error);
@@ -2854,6 +3046,10 @@ static void storage_test_user_change10()
 	g_free(test_path);
 }
 
+static struct connman_storage_callbacks uid_callback = {
+	.uid_changed = uid_changed_cb,
+};
+
 /* Test user change without result callback in normal mode */
 static void storage_test_user_change11()
 {
@@ -2870,12 +3066,14 @@ static void storage_test_user_change11()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
 
 	internal_user_change_process(UID_USER, NULL, NULL, false, -EINPROGRESS,
 				NULL, dbus_mode);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -2926,14 +3124,16 @@ static void storage_test_user_change12()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
 
 	internal_user_change_process(UID_USER, result_cb, &data, true,
 				-EINPROGRESS,
 				"net.connman.Error.AlreadyEnabled",
 				DBUS_MODE_USER_CHANGE_TO_VPND);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -2963,12 +3163,14 @@ static void storage_test_user_change13()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
 
 	internal_user_change_process(UID_USER, result_cb, &data, false,
 				-EINPROGRESS, NULL, dbus_mode);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -2978,9 +3180,37 @@ static void storage_test_user_change13()
 	g_free(test_path);
 }
 
+static int finalize_cb1_call_count = 0;
+
+static void finalize_cb1(uid_t uid, void *user_data)
+{
+	DBG("uid %u data %p", uid, user_data);
+
+	finalize_cb1_call_count++;
+	g_assert_null(user_data);
+}
+
+static int finalize_cb2_call_count = 0;
+static void *finalize_cb2_data = (void*)0x987123;
+
+static void finalize_cb2(uid_t uid, void *user_data)
+{
+	DBG("uid %u data %p", uid, user_data);
+
+	finalize_cb2_call_count++;
+	g_assert(user_data == finalize_cb2_data);
+}
+
+struct connman_storage_callbacks finalize_callback = {
+	.uid_changed		= uid_changed_cb,
+	.finalize		= finalize_cb1,
+	.finalize_user_data	= NULL,
+};
+
 /*
  * Normal change to user, then next call is already enabled and change to
- * another user2.
+ * another user2 and then return back to user. Change the finalize function
+ * and last to NULL so it is dropped.
  */
 static void storage_test_user_change14()
 {
@@ -3005,13 +3235,21 @@ static void storage_test_user_change14()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &finalize_callback),
+				==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &finalize_callback),
+				==, 0);
 
 	internal_user_change_process(UID_USER, result_cb, &data, false,
 				-EINPROGRESS, NULL, dbus_mode);
 
+	/* Both connmand and vpnd call the callbacks. */
+	g_assert_cmpint(finalize_cb1_call_count, ==, 2);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* Another call results in EALREADY */
 	clean_dbus();
 	init_dbus(TRUE);
 
@@ -3021,16 +3259,683 @@ static void storage_test_user_change14()
 				-EALREADY,
 				"net.connman.Error.AlreadyEnabled", dbus_mode);
 
+	/* Change to user2 */
 	clean_dbus();
 	init_dbus(TRUE);
 
+	connman_storage_update_finalize_cb(finalize_cb2, finalize_cb2_data);
+
 	internal_user_change_process(UID_USER2, result_cb, &data2, false,
 				-EINPROGRESS, NULL, dbus_mode);
+
+	/* Both connmand and vpnd call the callbacks. */
+	g_assert_cmpint(finalize_cb2_call_count, ==, 2);
+
+	g_assert_cmpint(current_uid, ==, UID_USER2);
+
+	/* Change back to user */
+	clean_dbus();
+	init_dbus(TRUE);
+
+	data.call_count = 0;
+	data.errs[0] = 0;
+	connman_storage_update_finalize_cb(NULL, NULL);
+
+	internal_user_change_process(UID_USER, result_cb, &data, false,
+				-EINPROGRESS, NULL, dbus_mode);
+
+	/* Set to NULL, these are not called */
+	g_assert_cmpint(finalize_cb1_call_count, ==, 2);
+	g_assert_cmpint(finalize_cb2_call_count, ==, 2);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
 	clean_dbus();
 
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/* Total wait of 0.120s */
+#define MAIN_LOOP_ITERATIONS_DEFAULT 6000
+#define MAIN_LOOP_SLEEP_USEC 20
+
+static unsigned int iterate_main_context(GMainContext *context,
+			gboolean may_block, unsigned int max_events)
+{
+	unsigned int counter = 0;
+	unsigned int events = 0;
+	bool event_recorded = false;
+
+	g_assert(context);
+	g_assert_true(g_main_context_acquire(context));
+
+	DBG("");
+
+	while (counter < MAIN_LOOP_ITERATIONS_DEFAULT && events < max_events) {
+
+		/*
+		 * This main loop iteration simulation is for re-sending user
+		 * change messages to vpnd.
+		 */
+		dbus_mode = DBUS_MODE_USER_CHANGE_TO_VPND;
+
+		if (g_main_context_pending(context)) {
+			events++;
+			DBG("event #%u @ iteration %u", events, counter);
+
+			/*
+			 * Main context iteration is not set to wait, dispatch
+			 * here.
+			 */
+			if (!may_block)
+				g_main_context_dispatch(context);
+
+			event_recorded = true;
+		}
+
+		/* If iteration fails to dispatch do that manually. */
+		if (!g_main_context_iteration(context, may_block)) {
+			g_main_context_dispatch(context);
+		/*
+		 * If the g_main_context_pending() already recorded an event
+		 * skip it here to avoid double.
+		 */
+		} else if (!event_recorded) {
+			events++;
+			DBG("event #%u @ iteration %u", events, counter);
+		}
+
+		usleep(MAIN_LOOP_SLEEP_USEC);
+
+		counter++;
+		event_recorded = false;
+	}
+
+	g_main_context_release(context);
+
+	DBG("ended with %u events", events);
+
+	return events;
+}
+
+/*
+ * Change to regular user and back to root, use vpnd notify to disconnect and
+ * connect it again to trigger message resending. Simulate vpnd action. No
+ * callbacks in use.
+ */
+static void storage_test_vpn_crash1()
+{
+	GMainLoop *mainloop;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	DBusConnection *connection;
+	DBusMessage *reply;
+	DBusError error;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	dbus_error_init(&error);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+				&uid_callback), ==, 0);
+	g_assert(connect_watch);
+	g_assert(disconnect_watch);
+
+	connection = connman_dbus_get_connection();
+	connect_watch(connection, NULL); // does nothing
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+
+	user_change_process(UID_USER, USER_CHANGE_SUCCESS, NULL, false, NULL,
+				NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	/* vpnd started, send_change_user_msg() is used */
+	connect_watch(connection, NULL);
+
+	/* Process the user notify */
+	DBG("call vpnd change user()");
+	g_assert(vpnd_method);
+	reply = vpnd_method(connection, last_message, vpnd_data);
+	g_assert(reply);
+
+	/* Because storage.c is shared by both, EALREADY error is sent */
+	g_assert_true(dbus_set_error_from_message(&error, reply));
+	g_assert_cmpstr(error.name, ==, "net.connman.Error.AlreadyEnabled");
+	dbus_error_free(&error);
+	set_reply_error(reply);
+
+	/* Call the pending callback */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	g_assert(last_reply_error);
+	g_assert_null(last_reply);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	DBG("change back to root");
+	user_change_process(UID_ROOT, USER_CHANGE_SUCCESS, NULL, false, NULL,
+				NULL);
+
+	disconnect_watch(connection, NULL);
+	connect_watch(connection, NULL); // Does nothing, uid = root
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/* Send user change, then crash vpnd */
+static void storage_test_vpn_crash2()
+{
+	GMainLoop *mainloop;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	DBusConnection *connection;
+	DBusMessage *reply;
+	DBusError error;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	dbus_error_init(&error);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+				&uid_callback), ==, 0);
+	g_assert(connect_watch);
+	g_assert(disconnect_watch);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+	connection = connman_dbus_get_connection();
+
+	user_change_process(UID_USER, USER_CHANGE_SUCCESS, NULL, false, NULL,
+				NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	/* vpnd started, send_change_user_msg() is used */
+	connect_watch(connection, NULL);
+
+	/* Fake error as reply, failed can result from any of mkdir errors. */
+	reply = create_dbus_error(last_message, "net.connman.Error.Failed");
+	g_assert(reply);
+	set_reply_error(reply);
+
+	/* Call the pending callback */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+
+	/* User is reset to root in case the error is unknown */
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	g_assert(last_reply_error);
+	g_assert_null(last_reply);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed for second time */
+	disconnect_watch(connection, NULL);
+
+	/* vpnd started, send_change_user_msg() is used, which fails*/
+	dbus_mode = DBUS_MODE_NONE;
+	connect_watch(connection, NULL);
+	connect_watch(connection, NULL); // Does nothing
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/*
+ * Send user change, simulate vpnd slow response by doing a crash vpnd while
+ * doing the request then crash vpnd but errors are reported back
+ */
+static void storage_test_vpn_crash3()
+{
+	GMainLoop *mainloop;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+				&uid_callback), ==, 0);
+	g_assert(connect_watch);
+	g_assert(disconnect_watch);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+
+	user_change_process(UID_USER,
+				USER_CHANGE_SUCCESS|USER_CHANGE_VPN_CRASH,
+				NULL, false, NULL, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	clean_dbus();
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	g_main_loop_unref(mainloop);
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/*
+ * Send user change, then crash vpnd, user change comes during it and call is
+ * delayed.
+ */
+static void storage_test_vpn_crash4()
+{
+	GMainLoop *mainloop;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	DBusConnection *connection;
+	DBusMessage *change_user_msg;
+	DBusMessage *change_user_reply = NULL;
+	DBusError error;
+	dbus_uint32_t user_id;
+	enum dbus_mode_t mode;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	dbus_error_init(&error);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+				&uid_callback), ==, 0);
+	g_assert(connect_watch);
+	g_assert(disconnect_watch);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+	connection = connman_dbus_get_connection();
+
+	user_change_process(UID_USER, USER_CHANGE_SUCCESS, NULL, false, NULL,
+				NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	/* Disable dbus */
+	dbus_on = false;
+	mode = dbus_mode;
+	dbus_mode = DBUS_MODE_NONE;
+
+	/* Cannot send message when detected again */
+	connect_watch(connection, NULL);
+
+	/*No delayed user change event exists */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	/* Enable dbus */
+	dbus_on = true;
+	dbus_mode = mode;
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	/* Block with pending call that vpnd watch delays user change */
+	user_id = (dbus_uint32_t)UID_USER2;
+
+	/* Create user change message and "send" it */
+	change_user_msg = dbus_message_new_method_call("net.connman",
+				"/", "net.connman.Storage", "ChangeUser");
+	g_assert(change_user_msg);
+
+	g_assert_true(dbus_message_append_args(change_user_msg,
+				DBUS_TYPE_UINT32, &user_id,
+				DBUS_TYPE_INVALID));
+
+	g_assert_true(dbus_connection_send_with_reply(connection,
+				change_user_msg, NULL, 0));
+
+	/* Process message in connmand */
+	DBG("call connmand change_user()");
+	g_assert(connmand_method);
+	g_assert_null(connmand_method(connection, last_message,
+				connmand_data));
+
+	/* vpnd started, send_change_user_msg() but pending call is ongoing */
+	connect_watch(connection, NULL);
+
+	/* User is not changed */
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* Trigger first event and result is still EBUSY */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 1);
+
+	/* Fake reply from vpnd */
+	change_user_reply = create_dbus_error(last_message,
+					"net.connman.error.Failed");
+	g_assert(change_user_reply);
+	set_reply_error(change_user_reply);
+
+	/* Call the pending callback to process fake call */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+	dbus_message_unref(last_reply_error);
+
+	/* User is not changed */
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	dbus_on = false;
+
+	/*A delayed user change event is added */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 1);
+
+	dbus_on = true;
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	dbus_message_unref(change_user_msg);
+	g_main_loop_unref(mainloop);
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/* Send user change with internal process, then crash vpnd */
+static void storage_test_vpn_crash5()
+{
+	GMainLoop *mainloop;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	DBusConnection *connection;
+	DBusMessage *reply;
+	DBusError error;
+	struct user_cb_data_t data = { 0 };
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	dbus_error_init(&error);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+				&uid_callback), ==, 0);
+	g_assert(connect_watch);
+	g_assert(disconnect_watch);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+	connection = connman_dbus_get_connection();
+
+	data.uids[0] = UID_USER;
+	internal_user_change_process(UID_USER, result_cb, &data, false,
+				-EINPROGRESS, NULL, dbus_mode);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	/* vpnd started, send_change_user_msg() is used */
+	connect_watch(connection, NULL);
+
+	/* Fake error as reply, failed can result from any of mkdir errors. */
+	reply = create_dbus_error(last_message, "net.connman.Error.Failed");
+	g_assert(reply);
+	set_reply_error(reply);
+
+	/* Call the pending callback */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+
+	/* User is reset to root in case the error is unknown */
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	/* No events in main loop either */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	g_assert(last_reply_error);
+	g_assert_null(last_reply);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed for second time */
+	disconnect_watch(connection, NULL);
+
+	/* vpnd started, send_change_user_msg() is used, which fails*/
+	dbus_mode = DBUS_MODE_NONE;
+	connect_watch(connection, NULL);
+	connect_watch(connection, NULL); // Does nothing
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/* Call with internal change process that fails */
+static void storage_test_vpn_crash6()
+{
+	GMainLoop *mainloop;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	DBusConnection *connection;
+	DBusMessage *change_user_reply = NULL;
+	DBusError error;
+	struct user_cb_data_t data = { 0 };
+	enum dbus_mode_t mode;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	dbus_error_init(&error);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
+				&uid_callback), ==, 0);
+	g_assert(connect_watch);
+	g_assert(disconnect_watch);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+	connection = connman_dbus_get_connection();
+
+	data.uids[0] = UID_USER;
+	internal_user_change_process(UID_USER, result_cb, &data, false,
+				-EINPROGRESS, NULL, dbus_mode);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	/* Disable dbus */
+	dbus_on = false;
+	mode = dbus_mode;
+	dbus_mode = DBUS_MODE_NONE;
+
+	/* Cannot send message when detected again */
+	connect_watch(connection, NULL);
+
+	/*No delayed user change event exists */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 0);
+
+	/* Enable dbus */
+	dbus_on = true;
+	dbus_mode = mode;
+
+	/* vpnd crashed */
+	disconnect_watch(connection, NULL);
+
+	data.call_count = 0;
+	data.uids[0] = UID_USER2;
+	data.errs[0] = -ENOENT;
+
+	/* Block with pending call that vpnd watch delays user change */
+	g_assert_cmpint(__connman_storage_change_user(UID_USER2, result_cb,
+				&data, false), ==, -EINPROGRESS);
+
+	/* This will result in failure, just reuse the last message */
+	DBG("call connmand change_user()");
+	g_assert(connmand_method);
+	change_user_reply = connmand_method(connection, last_message,
+				connmand_data);
+	g_assert(change_user_reply);
+	dbus_error_init(&error);
+	g_assert_true(dbus_set_error_from_message(&error, change_user_reply));
+	g_assert_cmpstr(error.name, ==, "net.connman.Error.Failed");
+	dbus_error_free(&error);
+
+	/* vpnd started, send_change_user_msg() but pending call is ongoing */
+	connect_watch(connection, NULL);
+
+	/* User is not changed */
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	/* Trigger first event and result is still EBUSY */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 1);
+
+	/* Fake reply from vpnd */
+	change_user_reply = create_dbus_error(last_message,
+					"net.connman.error.Failed");
+	g_assert(change_user_reply);
+	set_reply_error(change_user_reply);
+
+	/* Call the pending callback to process fake call */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+
+	/* User is not changed */
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	dbus_on = false;
+
+	/*A delayed user change event is added */
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+				FALSE, 1), ==, 1);
+
+	dbus_on = true;
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	g_main_loop_unref(mainloop);
 	cleanup_test_directory(test_path);
 	g_free(test_path);
 }
@@ -3060,6 +3965,7 @@ static void storage_test_invalid_user_change1()
 		user_change_process(users[i], USER_CHANGE_INVALID_USER,
 					"net.connman.Error.InvalidArguments",
 					false, NULL, NULL);
+		g_assert_cmpint(current_uid, ==, UID_ROOT);
 		clean_dbus();
 	}
 
@@ -3085,6 +3991,7 @@ static bool deny_vpn_change_user(const char *sender, const char *arg,
 }
 
 static struct connman_storage_callbacks access_deny_callbacks = {
+	.uid_changed = uid_changed_cb,
 	.access_policy_create = policy_create,
 	.access_change_user = deny_change_user,
 	.access_policy_free = policy_free,
@@ -3115,6 +4022,8 @@ static void storage_test_invalid_user_change2()
 	user_change_process(UID_USER, USER_CHANGE_ACCESS_DENIED,
 					"net.connman.Error.PermissionDenied",
 					false, NULL, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
 
 	__connman_storage_cleanup();
 	clean_dbus();
@@ -3157,6 +4066,8 @@ static void storage_test_invalid_user_change3()
 					"net.connman.Error.PermissionDenied",
 					false, NULL, NULL);
 
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
 	__connman_storage_cleanup();
 	clean_dbus();
 	cleanup_test_directory(test_path);
@@ -3190,6 +4101,7 @@ static void storage_test_invalid_user_change4()
 		internal_user_change_process(users[i], result_cb, &data, false,
 				-EINVAL, NULL, dbus_mode);
 		g_assert_cmpint(data.call_count, ==, 0);
+		g_assert_cmpint(current_uid, ==, UID_ROOT);
 		clean_dbus();
 	}
 
@@ -3200,39 +4112,229 @@ static void storage_test_invalid_user_change4()
 	g_free(test_path);
 }
 
-static void internal_error_user_change_process(uid_t uid,
-			connman_storage_change_user_result_cb_t cb,
-			void *user_cb_data, bool prepare_only,
-			const char *error_name, enum dbus_mode_t mode)
+static void dbus_error_user_change_process(uid_t uid,
+			enum user_change_mode mode, const char *error_name,
+			bool fake_error)
 {
-	DBusMessage *change_user_error;
-	struct user_cb_data_t *cb_data = user_cb_data;
-	int call_count = prepare_only ? 2 : 1;
+	GMainLoop *mainloop;
+	GMainContext *context;
+	DBusMessage *change_user_msg;
+	DBusMessage *change_user_reply = NULL;
+	DBusConnection *connection;
+	DBusError error;
+	dbus_uint32_t user_id;
 
-	DBG("uid %u", uid);
+	user_id = (dbus_uint32_t)uid;
+	current_uid = UID_ROOT;
 
-	if (cb_data)
-		cb_data->expected_call_count = call_count;
+	mainloop = g_main_loop_new(NULL, FALSE);
+	g_assert(mainloop);
 
-	dbus_mode = mode;
+	connection = connman_dbus_get_connection();
+	dbus_error_init(&error);
 
-	g_assert_cmpint(__connman_storage_change_user(uid, cb, cb_data,
-				prepare_only), ==, -EINPROGRESS);
+	/* Create user change message and "send" it */
+	change_user_msg = dbus_message_new_method_call("net.connman",
+				"/", "net.connman.Storage", "ChangeUser");
+	g_assert(change_user_msg);
 
-	/* Fake error as reply */
-	change_user_error = create_dbus_error(last_message, error_name);
-	g_assert(change_user_error);
-	set_reply(change_user_error);
+	g_assert_true(dbus_message_append_args(change_user_msg,
+				DBUS_TYPE_UINT32, &user_id,
+				DBUS_TYPE_INVALID));
 
-	/* Call the pending callback */
+	g_assert_true(dbus_connection_send_with_reply(connection,
+				change_user_msg, NULL, 0));
+
+	/* Process message in connmand */
+	DBG("call connmand change_user()");
+	g_assert(connmand_method);
+	g_assert_null(connmand_method(connection, last_message,
+				connmand_data));
+
+	DBG("fake error \"%s\" for user change", error_name);
+	change_user_reply = create_dbus_error(last_message, error_name);
+	set_reply_error(change_user_reply);
+
+	/* Call the pending callback which will trigger timeout init */
 	DBG("call connmand pending call notify");
 	last_pending_function(last_pending_call, last_pending_function_data);
 
-	if (cb_data)
-		g_assert_cmpint(cb_data->call_count, ==, call_count);
+	/* Iterate mainloop to trigger timeout function to message vpnd */
+	context = g_main_loop_get_context(mainloop);
+	g_assert(context);
+	g_assert_cmpint(iterate_main_context(context, TRUE, 1), ==, 1);
+
+	/* Call vpnd method and get return */
+	DBG("call vpnd change user()");
+	g_assert(vpnd_method);
+	change_user_reply = vpnd_method(connection, last_message, vpnd_data);
+	g_assert(change_user_reply);
+	g_assert_false(dbus_set_error_from_message(&error, change_user_reply));
+	set_reply(change_user_reply);
+
+	/* Call the pending callback again which now has correct answer */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+
+	g_assert(last_reply);
+	g_assert(last_reply_error);
+
+	dbus_message_unref(change_user_msg);
+	g_main_loop_unref(mainloop);
 }
 
-/* Change to regular user, no callbacks with timeout and noreply errors */
+/* Invalid arguments in the D-Bus message */
+static void storage_test_dbus_error1()
+{
+	DBusMessage *change_user_msg;
+	DBusMessage *change_user_reply;
+	DBusConnection *connection;
+	DBusError error;
+	gchar *user_id;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+
+	user_id = g_strdup_printf("%u", UID_USER);
+	g_assert(user_id);
+
+	current_uid = UID_ROOT;
+
+	connection = connman_dbus_get_connection();
+
+	/* Create user change message and "send" it */
+	change_user_msg = dbus_message_new_method_call("net.connman",
+				"/", "net.connman.Storage", "ChangeUser");
+	g_assert(change_user_msg);
+
+	g_assert_true(dbus_message_append_args(change_user_msg,
+				DBUS_TYPE_STRING, &user_id,
+				DBUS_TYPE_INVALID));
+
+	g_assert_true(dbus_connection_send_with_reply(connection,
+				change_user_msg, NULL, 0));
+
+	/* Process message in connmand */
+	DBG("call connmand change_user()");
+	g_assert(connmand_method);
+	change_user_reply = connmand_method(connection, last_message,
+				connmand_data);
+	g_assert(change_user_reply);
+
+	dbus_error_init(&error);
+	g_assert_true(dbus_set_error_from_message(&error, change_user_reply));
+	g_assert_cmpstr(error.name, ==, "net.connman.Error.InvalidArguments");
+	dbus_error_free(&error);
+	dbus_message_unref(change_user_reply);
+
+	/*
+	 * "Send" directly to vpnd - note that this shouldn't work when vpnd is
+	 * restricted to accept user change from connmand only.
+	 */
+	g_assert_true(dbus_connection_send_with_reply(connection,
+				change_user_msg, NULL, 0));
+	DBG("call vpnd change_user_vpnd()");
+	g_assert(vpnd_method);
+	change_user_reply = vpnd_method(connection, last_message, vpnd_data);
+	g_assert(change_user_reply);
+
+	dbus_error_init(&error);
+	g_assert_true(dbus_set_error_from_message(&error, change_user_reply));
+	g_assert_cmpstr(error.name, ==, "net.connman.Error.InvalidArguments");
+	dbus_error_free(&error);
+	dbus_message_unref(change_user_reply);
+
+	__connman_storage_cleanup();
+	clean_dbus();
+	cleanup_test_directory(test_path);
+
+	dbus_message_unref(change_user_msg);
+	g_free(test_path);
+	g_free(user_id);
+}
+
+static void storage_test_dbus_error2()
+{
+	DBusMessage *change_user_msg;
+	DBusMessage *change_user_reply;
+	DBusConnection *connection;
+	DBusError error;
+	dbus_uint32_t user_id;
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+
+	user_id = (dbus_uint32_t)UID_USER;
+	g_assert(user_id);
+
+	current_uid = UID_ROOT;
+
+	connection = connman_dbus_get_connection();
+
+	/* Create user change message and "send" it */
+	change_user_msg = dbus_message_new_method_call("net.connman",
+				"/", "net.connman.Storage", "ChangeUser");
+	g_assert(change_user_msg);
+
+	g_assert_true(dbus_message_append_args(change_user_msg,
+				DBUS_TYPE_UINT32, &user_id,
+				DBUS_TYPE_INVALID));
+
+	g_assert_true(dbus_connection_send_with_reply(connection,
+				change_user_msg, NULL, 0));
+
+	/* Process message in connmand when dbus reports error */
+	dbus_on = false;
+
+	DBG("call connmand change_user()");
+	g_assert(connmand_method);
+	change_user_reply = connmand_method(connection, last_message,
+				connmand_data);
+	g_assert(change_user_reply);
+	dbus_on = true;
+
+	dbus_error_init(&error);
+	g_assert_true(dbus_set_error_from_message(&error, change_user_reply));
+	g_assert_cmpstr(error.name, ==, "net.connman.Error.Failed");
+	dbus_error_free(&error);
+
+	__connman_storage_cleanup();
+	clean_dbus();
+	cleanup_test_directory(test_path);
+
+	dbus_message_unref(change_user_msg);
+	dbus_message_unref(change_user_reply);
+	g_free(test_path);
+}
+
+/*
+ * Change to regular users UID_USER and UID_USER2, no callbacks with timeout,
+ * noreply, limits exceeded and unknown method errors.
+ */
 static void storage_test_error_user_change1()
 {
 	gchar *test_path;
@@ -3247,27 +4349,50 @@ static void storage_test_error_user_change1()
 	init_dbus(TRUE);
 
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
 
-	user_change_process(UID_USER, USER_CHANGE_ERROR_REPLY,
-				"org.freedesktop.DBus.Error.TimedOut", true,
-				NULL, NULL);
+	/* One timeout then change is a success with main loop timeout func */
+	dbus_error_user_change_process(UID_USER, USER_CHANGE_ERROR_REPLY,
+				"org.freedesktop.DBus.Error.TimedOut", true);
 
-	clean_dbus();
-	init_dbus(TRUE);
-
-	user_change_process(UID_USER, USER_CHANGE_ERROR_REPLY,
-				"org.freedesktop.DBus.Error.Timeout", true,
-				NULL, NULL);
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	clean_dbus();
 	init_dbus(TRUE);
 
-	user_change_process(UID_USER, USER_CHANGE_ERROR_REPLY,
-				"org.freedesktop.DBus.Error.NoReply", true,
-				NULL, NULL);
+	/* One timeout then change is a success with main loop timeout func */
+	dbus_error_user_change_process(UID_USER2, USER_CHANGE_ERROR_REPLY,
+				"org.freedesktop.DBus.Error.Timeout", true);
+
+	g_assert_cmpint(current_uid, ==, UID_USER2);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	dbus_error_user_change_process(UID_USER, USER_CHANGE_ERROR_REPLY,
+				"org.freedesktop.DBus.Error.NoReply", true);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	dbus_error_user_change_process(UID_USER2, USER_CHANGE_ERROR_REPLY,
+				"org.freedesktop.DBus.Error.LimitsExceeded",
+				true);
+
+	g_assert_cmpint(current_uid, ==, UID_USER2);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	dbus_error_user_change_process(UID_USER, USER_CHANGE_ERROR_REPLY,
+				"org.freedesktop.DBus.Error.UnknownMethod",
+				true);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	clean_dbus();
@@ -3276,15 +4401,91 @@ static void storage_test_error_user_change1()
 	g_free(test_path);
 }
 
-/* Test initial user change with D-Bus timeout or noreply errors.*/
+static void internal_error_user_change_process(uid_t uid,
+			connman_storage_change_user_result_cb_t cb,
+			void *user_cb_data, bool prepare_only,
+			int expected_return, const char *error_name,
+			enum dbus_mode_t mode, int limit,
+			const char *final_error_name)
+{
+	GMainLoop *mainloop;
+	GMainContext *context;
+	DBusMessage *change_user_error;
+	struct user_cb_data_t *cb_data = user_cb_data;
+	int call_count = prepare_only ? 2 : 1;
+	int i;
+
+	DBG("uid %u", uid);
+
+	if (cb_data)
+		cb_data->expected_call_count = call_count;
+
+	dbus_mode = mode;
+	current_uid = UID_ROOT;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+	g_assert(mainloop);
+
+	g_assert_cmpint(__connman_storage_change_user(uid, cb, cb_data,
+				prepare_only), ==, expected_return);
+
+	/* Error in the message sending, don't process messages */
+	if (expected_return != -EINPROGRESS)
+		return;
+
+	for (i = 0; i < limit; i++) {
+		/* Fake error as reply */
+		change_user_error = create_dbus_error(last_message,
+					error_name);
+		g_assert(change_user_error);
+		set_reply_error(change_user_error);
+
+		/* Call the pending callback */
+		DBG("call connmand pending call notify");
+		last_pending_function(last_pending_call,
+					last_pending_function_data);
+
+		/* Iterate mainloop to trigger timeout function */
+		context = g_main_loop_get_context(mainloop);
+		g_assert(context);
+		g_assert_cmpint(iterate_main_context(context, TRUE, 1), ==, 1);
+	}
+
+	if (final_error_name) {
+		/* Fake error as final reply */
+		change_user_error = create_dbus_error(last_message,
+					final_error_name);
+		g_assert(change_user_error);
+		set_reply_error(change_user_error);
+	} else {
+		dbus_message_unref(last_reply_error);
+		last_reply_error = NULL;
+		set_reply(g_dbus_create_reply(last_message,
+					DBUS_TYPE_INVALID));
+	}
+
+	/* Call the pending callback */
+	DBG("call connmand pending call notify");
+	last_pending_function(last_pending_call, last_pending_function_data);
+
+	if (cb_data)
+		g_assert_cmpint(cb_data->call_count, ==, call_count);
+
+	g_main_loop_unref(mainloop);
+}
+
+/*
+ * Test initial user change with D-Bus timeout or noreply errors which will
+ * eventually succeed.
+ */
 static void storage_test_error_user_change2()
 {
 	gchar *test_path;
 	mode_t m_dir = 0700;
 	mode_t m_file = 0600;
 	struct user_cb_data_t data = {
-				.uids = { UID_USER, 0 },
-				.errs = { -EINPROGRESS, -ETIMEDOUT },
+				.uids = { UID_USER, UID_USER },
+				.errs = { -EINPROGRESS, 0 },
 				};
 
 	test_path = setup_test_directory();
@@ -3296,30 +4497,42 @@ static void storage_test_error_user_change2()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
 
 	internal_error_user_change_process(UID_USER, result_cb, &data, true,
+				-EINPROGRESS,
 				"org.freedesktop.DBus.Error.TimedOut",
-				DBUS_MODE_USER_CHANGE_TO_VPND);
+				DBUS_MODE_USER_CHANGE_TO_VPND, 3, NULL);
 
 	clean_dbus();
 	init_dbus(TRUE);
 
 	data.call_count = 0;
-	internal_error_user_change_process(UID_USER, result_cb, &data, true,
-				"org.freedesktop.DBus.Error.Timeout",
-				DBUS_MODE_USER_CHANGE_TO_VPND);
-
-	clean_dbus();
-	init_dbus(TRUE);
-
-	data.call_count = 0;
+	data.uids[0] = UID_USER2;
+	data.uids[1] = 0;
 	data.errs[1] = -ENOENT;
+	internal_error_user_change_process(UID_USER2, result_cb, &data, true,
+				-EINPROGRESS,
+				"org.freedesktop.DBus.Error.Timeout",
+				DBUS_MODE_USER_CHANGE_TO_VPND, 3,
+				"org.freedesktop.DBus.Error.Failed");
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	data.call_count = 0;
+	data.uids[0] = data.uids[1] = UID_USER;
+	data.errs[1] = 0;
 	internal_error_user_change_process(UID_USER, result_cb, &data, true,
+				-EINPROGRESS,
 				"org.freedesktop.DBus.Error.NoReply",
-				DBUS_MODE_USER_CHANGE_TO_VPND);
+				DBUS_MODE_USER_CHANGE_TO_VPND, 1, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -3329,7 +4542,10 @@ static void storage_test_error_user_change2()
 	g_free(test_path);
 }
 
-/* Test normal user change with D-Bus timeout or noreply errors.*/
+/*
+ * Test normal user change with D-Bus timeout or noreply errors, which will
+ * eventually succeed.
+ */
 static void storage_test_error_user_change3()
 {
 	gchar *test_path;
@@ -3337,7 +4553,7 @@ static void storage_test_error_user_change3()
 	mode_t m_file = 0600;
 	struct user_cb_data_t data = {
 				.uids = { UID_USER, 0 },
-				.errs = { -ETIMEDOUT, 0 },
+				.errs = { 0, 0 },
 				};
 
 	test_path = setup_test_directory();
@@ -3349,30 +4565,102 @@ static void storage_test_error_user_change3()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
 
 	internal_error_user_change_process(UID_USER, result_cb, &data, false,
+				-EINPROGRESS,
 				"org.freedesktop.DBus.Error.TimedOut",
-				dbus_mode);
+				dbus_mode, 3, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER);
 
 	clean_dbus();
 	init_dbus(TRUE);
 
 	data.call_count = 0;
-	internal_error_user_change_process(UID_USER, result_cb, &data, false,
-				"org.freedesktop.DBus.Error.Timeout",
-				dbus_mode);
-
-	clean_dbus();
-	init_dbus(TRUE);
-
-	data.call_count = 0;
+	data.uids[0] = UID_USER2;
 	data.errs[0] = -ENOENT;
-	internal_error_user_change_process(UID_USER, result_cb, &data, false,
+	internal_error_user_change_process(UID_USER2, result_cb, &data, false,
+				-EINPROGRESS,
+				"org.freedesktop.DBus.Error.Timeout",
+				dbus_mode, 3,
+				"org.freedesktop.DBus.Error.NoMemory");
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	data.call_count = 0;
+	data.uids[0] = UID_USER2;
+	data.errs[0] = 0;
+	internal_error_user_change_process(UID_USER2, result_cb, &data, false,
+				-EINPROGRESS,
 				"org.freedesktop.DBus.Error.NoReply",
-				dbus_mode);
+				dbus_mode, 2, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_USER2);
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+	clean_dbus();
+
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+/* Test the error handling in the send_change_user_msg() */
+static void storage_test_error_user_change4()
+{
+	enum dbus_mode_t mode = DBUS_MODE_NONE; // send fails
+	gchar *test_path;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	struct user_cb_data_t data = {
+				.uids = { 0, 0 },
+				.errs = { -ECOMM, 0 },
+				};
+
+	test_path = setup_test_directory();
+	set_user_pw_dir_root(test_path);
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+
+	init_dbus(TRUE);
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_MAIN, &uid_callback), ==, 0);
+	g_assert_cmpint(__connman_storage_register_dbus(
+				STORAGE_DIR_TYPE_VPN, &uid_callback), ==, 0);
+
+	internal_error_user_change_process(UID_USER, result_cb, &data, true,
+				-ECOMM, NULL, mode, 1, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	clean_dbus();
+	init_dbus(TRUE);
+
+	data.call_count = 0;
+	internal_error_user_change_process(UID_USER, result_cb, &data, false,
+				-ECOMM, NULL, mode, 1, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
+
+	clean_dbus();
+	init_dbus(TRUE);
+	mode = dbus_mode;
+	clean_dbus(); // To cause error to happen in set notify cb
+
+	data.call_count = 0;
+	data.errs[0] = -ENOMEM;
+	internal_error_user_change_process(UID_USER, result_cb, &data, false,
+				-ENOMEM, NULL, mode, 1, NULL);
+
+	g_assert_cmpint(current_uid, ==, UID_ROOT);
 
 	__connman_storage_cleanup();
 	__connman_inotify_cleanup();
@@ -3429,6 +4717,7 @@ static void set_technology_powered(enum connman_service_type type,
 	}
 
 	dbus_message_unref(change_powered);
+	dbus_message_unref(reply);
 	g_free(dbus_path);
 }
 
@@ -3473,12 +4762,6 @@ static void storage_test_technology_callbacks1()
 
 	__connman_technology_init();
 
-	DBG("adding devices");
-	g_assert_cmpint(__connman_technology_add_device(&test_device1), ==,
-				-ENXIO);
-	g_assert_cmpint(__connman_technology_add_device(&test_device2), ==,
-				-ENXIO);
-
 	DBG("register drivers");
 	/*
 	 * Device register sets devices to enabled but does not enable tech.
@@ -3486,10 +4769,15 @@ static void storage_test_technology_callbacks1()
 	 */
 	g_assert_cmpint(connman_technology_driver_register(
 				&test_device1_driver), ==, 0);
-	g_assert_true(test_device1.enabled);
-
 	g_assert_cmpint(connman_technology_driver_register(
 				&test_device2_driver), ==, 0);
+
+
+	DBG("adding devices");
+	g_assert_cmpint(__connman_technology_add_device(&test_device1), ==, 0);
+	g_assert_true(test_device1.enabled);
+
+	g_assert_cmpint(__connman_technology_add_device(&test_device2), ==, 0);
 	g_assert_false(test_device2.enabled);
 
 	/* Set all powered and enabled */
@@ -3626,12 +4914,6 @@ static void storage_test_technology_callbacks2()
 
 	__connman_technology_init();
 
-	DBG("adding devices");
-	g_assert_cmpint(__connman_technology_add_device(&test_device1), ==,
-				-ENXIO);
-	g_assert_cmpint(__connman_technology_add_device(&test_device2), ==,
-				-ENXIO);
-
 	DBG("register drivers");
 	/*
 	 * Device register sets devices to enabled but does not enable tech.
@@ -3639,10 +4921,14 @@ static void storage_test_technology_callbacks2()
 	 */
 	g_assert_cmpint(connman_technology_driver_register(
 				&test_device1_driver), ==, 0);
-	g_assert_true(test_device1.enabled);
-
 	g_assert_cmpint(connman_technology_driver_register(
 				&test_device2_driver), ==, 0);
+
+	DBG("adding devices");
+	g_assert_cmpint(__connman_technology_add_device(&test_device1), ==, 0);
+	g_assert_true(test_device1.enabled);
+
+	g_assert_cmpint(__connman_technology_add_device(&test_device2), ==, 0);
 	g_assert_false(test_device2.enabled);
 
 	/* Set all powered and enabled */
@@ -3779,12 +5065,6 @@ static void storage_test_technology_callbacks3()
 
 	__connman_technology_init();
 
-	DBG("adding devices");
-	g_assert_cmpint(__connman_technology_add_device(&test_device1), ==,
-				-ENXIO);
-	g_assert_cmpint(__connman_technology_add_device(&test_device2), ==,
-				-ENXIO);
-
 	DBG("register drivers");
 	/*
 	 * Device register sets devices to enabled but does not enable tech.
@@ -3792,10 +5072,14 @@ static void storage_test_technology_callbacks3()
 	 */
 	g_assert_cmpint(connman_technology_driver_register(
 				&test_device1_driver), ==, 0);
-	g_assert_true(test_device1.enabled);
-
 	g_assert_cmpint(connman_technology_driver_register(
 				&test_device2_driver), ==, 0);
+
+	DBG("adding devices");
+	g_assert_cmpint(__connman_technology_add_device(&test_device1), ==, 0);
+	g_assert_true(test_device1.enabled);
+
+	g_assert_cmpint(__connman_technology_add_device(&test_device2), ==, 0);
 	g_assert_true(test_device2.enabled);
 
 	/* Set all powered and enabled */
@@ -3839,12 +5123,16 @@ static void storage_test_technology_callbacks3()
 	g_assert_cmpint(__connman_technology_remove_device(&test_device1), ==,
 				0);
 	connman_technology_driver_unregister(&test_device1_driver);
+	g_assert_cmpint(__connman_technology_remove_device(&test_device1), ==,
+				-ENXIO);
 
 	set_technology_powered(CONNMAN_SERVICE_TYPE_WIFI, false,
 				"net.connman.Error.AlreadyDisabled");
 	g_assert_cmpint(__connman_technology_remove_device(&test_device2), ==,
 				0);
 	connman_technology_driver_unregister(&test_device2_driver);
+	g_assert_cmpint(__connman_technology_remove_device(&test_device2), ==,
+				-ENXIO);
 
 	__connman_technology_cleanup();
 	__connman_storage_cleanup();
@@ -3880,6 +5168,7 @@ int main(int argc, char **argv)
 {
 	GOptionContext *context;
 	GError *error = NULL;
+	int err;
 
 	g_test_init(&argc, &argv, NULL);
 
@@ -3940,12 +5229,18 @@ int main(int argc, char **argv)
 				storage_test_user_change13);
 	g_test_add_func(TEST_PREFIX "/test_user_change14",
 				storage_test_user_change14);
-	g_test_add_func(TEST_PREFIX "/test_error_user_change1",
-				storage_test_error_user_change1);
-	g_test_add_func(TEST_PREFIX "/test_error_user_change2",
-				storage_test_error_user_change2);
-	g_test_add_func(TEST_PREFIX "/test_error_user_change3",
-				storage_test_error_user_change3);
+	g_test_add_func(TEST_PREFIX "/test_user_vpn_crash1",
+				storage_test_vpn_crash1);
+	g_test_add_func(TEST_PREFIX "/test_user_vpn_crash2",
+				storage_test_vpn_crash2);
+	g_test_add_func(TEST_PREFIX "/test_user_vpn_crash3",
+				storage_test_vpn_crash3);
+	g_test_add_func(TEST_PREFIX "/test_user_vpn_crash4",
+				storage_test_vpn_crash4);
+	g_test_add_func(TEST_PREFIX "/test_user_vpn_crash5",
+				storage_test_vpn_crash5);
+	g_test_add_func(TEST_PREFIX "/test_user_vpn_crash6",
+				storage_test_vpn_crash6);
 	g_test_add_func(TEST_PREFIX "/test_invalid_user_change1",
 				storage_test_invalid_user_change1);
 	g_test_add_func(TEST_PREFIX "/test_invalid_user_change2",
@@ -3954,6 +5249,18 @@ int main(int argc, char **argv)
 				storage_test_invalid_user_change3);
 	g_test_add_func(TEST_PREFIX "/test_invalid_user_change4",
 				storage_test_invalid_user_change4);
+	g_test_add_func(TEST_PREFIX "/test_dbus_error1",
+				storage_test_dbus_error1);
+	g_test_add_func(TEST_PREFIX "/test_dbus_error2",
+				storage_test_dbus_error2);
+	g_test_add_func(TEST_PREFIX "/test_error_user_change1",
+				storage_test_error_user_change1);
+	g_test_add_func(TEST_PREFIX "/test_error_user_change2",
+				storage_test_error_user_change2);
+	g_test_add_func(TEST_PREFIX "/test_error_user_change3",
+				storage_test_error_user_change3);
+	g_test_add_func(TEST_PREFIX "/test_error_user_change4",
+				storage_test_error_user_change4);
 	g_test_add_func(TEST_PREFIX "/test_technology_callbacks1",
 				storage_test_technology_callbacks1);
 	g_test_add_func(TEST_PREFIX "/test_technology_callbacks2",
@@ -3961,5 +5268,9 @@ int main(int argc, char **argv)
 	g_test_add_func(TEST_PREFIX "/test_technology_callbacks3",
 				storage_test_technology_callbacks3);
 
-	return g_test_run();
+	err = g_test_run();
+
+	__connman_log_cleanup(false);
+
+	return err;
 }
