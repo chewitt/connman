@@ -315,7 +315,8 @@ static void check_keys(GKeyFile *keyfile, const char *group,
 	g_strfreev(avail_keys);
 }
 
-static int load_config(struct vpn_config *config, char *path, enum what action)
+static int load_config(struct vpn_config *config, const char *path,
+							enum what action)
 {
 	GKeyFile *keyfile;
 	gsize length;
@@ -407,15 +408,15 @@ static bool validate_ident(const char *ident)
 	return true;
 }
 
-static char *get_dir(void)
+static const char *get_dir(void)
 {
-	return g_strdup_printf("%s", VPN_STORAGEDIR);
+	return USER_VPN_STORAGEDIR ? USER_VPN_STORAGEDIR : VPN_STORAGEDIR;
 }
 
 static int read_configs(void)
 {
 	GDir *dir;
-	char *path = get_dir();
+	const char *path = get_dir();
 
 	DBG("path %s", path);
 
@@ -455,8 +456,6 @@ static int read_configs(void)
 		g_dir_close(dir);
 	}
 
-	g_free(path);
-
 	return 0;
 }
 
@@ -493,7 +492,7 @@ static void config_notify_handler(struct inotify_event *event,
 
 	if (event->mask & (IN_MODIFY | IN_MOVED_TO)) {
 		struct vpn_config *config;
-		char *path = get_dir();
+		const char *path = get_dir();
 
 		config = g_hash_table_lookup(config_table, ident);
 		if (config) {
@@ -515,14 +514,12 @@ static void config_notify_handler(struct inotify_event *event,
 			if (config)
 				load_config(config, path, ADD);
 		}
-
-		g_free(path);
 	}
 }
 
 int __vpn_config_init(void)
 {
-	char *dir = get_dir();
+	const char *dir = get_dir();
 
 	DBG("");
 
@@ -531,22 +528,18 @@ int __vpn_config_init(void)
 
 	connman_inotify_register(dir, config_notify_handler, NULL, NULL);
 
-	g_free(dir);
-
 	return read_configs();
 }
 
 void __vpn_config_cleanup(void)
 {
-	char *dir = get_dir();
+	const char *dir = get_dir();
 
 	DBG("");
 
 	cleanup = true;
 
 	connman_inotify_unregister(dir, config_notify_handler, NULL);
-
-	g_free(dir);
 
 	g_hash_table_destroy(config_table);
 	config_table = NULL;
