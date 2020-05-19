@@ -177,7 +177,8 @@ struct connman_stats *__connman_stats_new(struct connman_service *service,
 	int err = 0;
 	struct connman_stats *stats = NULL;
 	const char *ident = connman_service_get_identifier(service);
-	char *dir = g_strconcat(STORAGEDIR, "/", ident, NULL);
+	char *dir = g_build_filename(connman_storage_dir_for(ident), ident,
+				NULL);
 
 	DBG("%s %d", ident, roaming);
 
@@ -210,7 +211,8 @@ struct connman_stats *__connman_stats_new_existing(
 	struct stats_file_contents contents;
 	const char* file = stats_file(roaming);
 	const char *ident = connman_service_get_identifier(service);
-	char *dir = g_strconcat(STORAGEDIR, "/", ident, NULL);
+	char *dir = g_build_filename(connman_storage_dir_for(ident), ident,
+				NULL);
 	char *path = g_strconcat(dir, "/", file, NULL);
 
 	if (stats_file_read(path, &contents)) {
@@ -225,8 +227,8 @@ struct connman_stats *__connman_stats_new_existing(
 
 static char *stats_path(const char *identifier, gboolean roaming)
 {
-	return g_strconcat(STORAGEDIR, G_DIR_SEPARATOR_S, identifier,
-			G_DIR_SEPARATOR_S, stats_file(roaming), NULL);
+	return g_build_filename(connman_storage_dir_for(identifier),
+				identifier, stats_file(roaming), NULL);
 }
 
 void __connman_stats_read(const char *identifier, gboolean roaming,
