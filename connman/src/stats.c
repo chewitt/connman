@@ -875,6 +875,8 @@ int __connman_stats_service_register(struct connman_service *service)
 {
 	struct stats_file *file;
 	char *name, *dir;
+	const char *ident;
+	const char *storagedir;
 	int err;
 
 	DBG("service %p", service);
@@ -890,8 +892,9 @@ int __connman_stats_service_register(struct connman_service *service)
 		return -EALREADY;
 	}
 
-	dir = g_strdup_printf("%s/%s", STORAGEDIR,
-				connman_service_get_identifier(service));
+	ident = connman_service_get_identifier(service);
+	storagedir = connman_storage_dir_for(ident);
+	dir = g_build_filename(storagedir, ident, NULL);
 
 	/* If the dir doesn't exist, create it */
 	if (!g_file_test(dir, G_FILE_TEST_IS_DIR)) {
@@ -907,10 +910,8 @@ int __connman_stats_service_register(struct connman_service *service)
 
 	g_free(dir);
 
-	name = g_strdup_printf("%s/%s/data", STORAGEDIR,
-				connman_service_get_identifier(service));
-	file->history_name = g_strdup_printf("%s/%s/history", STORAGEDIR,
-				connman_service_get_identifier(service));
+	name = g_build_filename(dir, "data", NULL);
+	file->history_name = g_build_filename(dir, "history", NULL);
 
 	/* TODO: Use a global config file instead of hard coded value. */
 	file->account_period_offset = 1;
