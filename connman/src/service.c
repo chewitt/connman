@@ -1210,11 +1210,13 @@ static int service_save(struct connman_service *service)
 	set_config_string(keyfile, service->identifier, PROP_ACCESS,
 					service_get_access(service));
 
-	str = g_date_time_format_iso8601(service->modified);
-	if (str) {
-		g_key_file_set_string(keyfile, service->identifier,
+	if (service->modified) {
+		str = g_date_time_format_iso8601(service->modified);
+		if (str) {
+			g_key_file_set_string(keyfile, service->identifier,
 							"Modified", str);
-		g_free(str);
+			g_free(str);
+		}
 	}
 
 	if (service->passphrase && strlen(service->passphrase) > 0)
