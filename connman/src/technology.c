@@ -32,6 +32,8 @@
 
 #include "connman.h"
 
+#define DELAYED_TIMEOUT 300
+
 static DBusConnection *connection;
 
 static GSList *technology_list = NULL;
@@ -46,6 +48,7 @@ static GHashTable *rfkill_list;
 static bool global_offlinemode;
 static unsigned int global_offlinemode_override; /* Technology bitmask */
 struct connman_access_tech_policy *tech_access_policy;
+static unsigned int enable_delayed_ids[MAX_CONNMAN_SERVICE_TYPES] = { 0 };
 
 struct connman_rfkill {
 	unsigned int index;
@@ -684,6 +687,38 @@ static gboolean technology_pending_reply(gpointer user_data)
 	return FALSE;
 }
 
+static int technology_send_pending_reply(
+					struct connman_technology *technology,
+					int error)
+{
+	DBusMessage *reply;
+	int err = -ECOMM;
+
+	if (!technology->pending_reply)
+		return -ENOENT;
+
+	if (!error) {
+		err = g_dbus_send_reply(connection, technology->pending_reply,
+					DBUS_TYPE_INVALID) ? 0 : -ECOMM;
+		goto out;
+	}
+
+	reply = __connman_error_failed(technology->pending_reply, error);
+	if (reply)
+		err = g_dbus_send_message(connection, reply) ? 0 : -ECOMM;
+
+out:
+	dbus_message_unref(technology->pending_reply);
+	technology->pending_reply = NULL;
+
+	if (technology->pending_timeout != 0) {
+		g_source_remove(technology->pending_timeout);
+		technology->pending_timeout = 0;
+	}
+
+	return err;
+}
+
 static int technology_affect_devices(struct connman_technology *technology,
 						bool enable_device)
 {
@@ -706,11 +741,6 @@ static int technology_affect_devices(struct connman_technology *technology,
 		else
 			err_dev = __connman_device_disable(device);
 
-		if (!technology->rfkill_driven) {
-			if (enable_device && err_dev == -EALREADY)
-				__connman_technology_enabled(technology->type);
-		}
-
 		if (err_dev < 0 && err_dev != -EALREADY)
 			err = err_dev;
 	}
@@ -725,15 +755,8 @@ static void powered_changed(struct connman_technology *technology)
 	if (!technology->dbus_registered)
 		return;
 
-	if (technology->pending_reply) {
-		g_dbus_send_reply(connection,
-				technology->pending_reply, DBUS_TYPE_INVALID);
-		dbus_message_unref(technology->pending_reply);
-		technology->pending_reply = NULL;
-
-		g_source_remove(technology->pending_timeout);
-		technology->pending_timeout = 0;
-	}
+	if (technology_send_pending_reply(technology, 0) == -ECOMM)
+		connman_warn("could not reply to pending request");
 
 	__sync_synchronize();
 	enabled = technology->enabled;
@@ -883,6 +906,100 @@ static int technology_disable(struct connman_technology *technology)
 	return err;
 }
 
+/*
+ * This function supports notifying about power change for both rfkill and
+ * non-rfkill technologies.
+ */
+static int technology_changed_state(struct connman_technology *technology,
+								bool on)
+{
+	if (on) {
+		if (technology->rfkill_driven) {
+			if (technology->tethering_persistent)
+				enable_tethering(technology);
+		}
+
+		return technology_enabled(technology);
+	} else {
+		if (!technology->rfkill_driven) {
+			GSList *list;
+
+			for (list = technology->device_list; list;
+						list = list->next) {
+				struct connman_device *device = list->data;
+
+				if (connman_device_get_powered(device))
+					return 0;
+			}
+		}
+
+		return technology_disabled(technology);
+	}
+}
+
+static gboolean enable_delayed(gpointer user_data)
+{
+	struct connman_technology *technology = user_data;
+	int err;
+
+	DBG("");
+
+	if (!technology || technology->enabled)
+		goto out;
+
+	err = technology_enable(technology);
+	switch (err) {
+	case -EBUSY:
+		/* Make sure the pending reply does not block and continue */
+		if (technology_send_pending_reply(technology, -ECANCELED) ==
+					-ECOMM)
+			connman_warn("could not reply to pending request");
+
+		return G_SOURCE_CONTINUE;
+	case -EINPROGRESS:
+		/* Keep in loop until enabled */
+		return G_SOURCE_CONTINUE;
+	case -EALREADY:
+		/*
+		 * Already enabled, nothing to do and the notify is already
+		 * sent prior to this, as enabled is toggled by
+		 * technology_enabled()/technology_disabled().
+		 */
+		break;
+	case 0:
+		if (technology_changed_state(technology, true))
+			connman_warn("technology %p state not notified",
+						technology);
+
+		break;
+	default:
+		break;
+	}
+
+out:
+	enable_delayed_ids[technology->type] = 0;
+	return G_SOURCE_REMOVE;
+}
+
+static int technology_init_enable_delayed(
+					struct connman_technology *technology)
+{
+	DBG("");
+
+	if (!technology)
+		return -EINVAL;
+
+	if (enable_delayed_ids[technology->type]) {
+		DBG("already in progress for type %d", technology->type);
+		return -EALREADY;
+	}
+
+	enable_delayed_ids[technology->type] = g_timeout_add(DELAYED_TIMEOUT,
+				enable_delayed, technology);
+
+	return 0;
+}
+
 static DBusMessage *set_powered(struct connman_technology *technology,
 				DBusMessage *msg, bool powered)
 {
@@ -902,6 +1019,9 @@ static DBusMessage *set_powered(struct connman_technology *technology,
 	if (err != -EBUSY) {
 		technology->enable_persistent = powered;
 		technology_save(technology);
+	} else if (powered && err == -EBUSY) {
+		technology_init_enable_delayed(technology);
+		err = -EINPROGRESS;
 	}
 
 make_reply:
@@ -1242,12 +1362,8 @@ static void technology_put(struct connman_technology *technology)
 
 	g_slist_free(technology->device_list);
 
-    if (technology->pending_reply) {
-        dbus_message_unref(technology->pending_reply);
-        technology->pending_reply = NULL;
-        g_source_remove(technology->pending_timeout);
-        technology->pending_timeout = 0;
-    }
+	if (technology_send_pending_reply(technology, -ECANCELED) == -ECOMM)
+		connman_warn("could not reply to pending request");
 
 	g_free(technology->path);
 	g_free(technology->regdom);
@@ -1670,26 +1786,49 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 	for (list = technology_list; list; list = list->next) {
 		struct connman_technology *technology = list->data;
 
-		if (offlinemode)
+		if (offlinemode) {
 			err = technology_disable(technology);
-		else {
-			if (technology->hardblocked)
-				continue;
+			continue;
+		}
 
-		if (!offlinemode && (technology->enable_persistent || 
-			technology->type == CONNMAN_SERVICE_TYPE_CELLULAR)) {
-				err = technology_enable(technology);
+		if (technology->hardblocked)
+			continue;
+
+		if (!offlinemode && (technology->enable_persistent ||
+					technology->type ==
+					CONNMAN_SERVICE_TYPE_CELLULAR)) {
+			err = technology_enable(technology);
+			switch (err) {
+			case -EINPROGRESS:
+			case -EALREADY:
+			case 0:
 				enabled_tech_count++;
+				break;
+			case -EBUSY:
+				technology_init_enable_delayed(technology);
+				break;
+			default:
+				break;
 			}
 		}
 	}
 
-	if (err == 0 || err == -EINPROGRESS || err == -EALREADY ||
-			(err == -EINVAL && enabled_tech_count == 0)) {
+	switch (err) {
+	case -EINVAL:
+		if (enabled_tech_count > 0)
+			break;
+
+	case -EINPROGRESS:
+		/* fall through */
+	case -EALREADY:
+		/* fall through */
+	case 0:
 		connman_technology_save_offlinemode();
 		__connman_notifier_offlinemode(offlinemode);
-	} else
+		break;
+	default:
 		global_offlinemode = connman_technology_load_offlinemode();
+	}
 
 	DBG("Clearing offlinemode override bitmask.");
 	global_offlinemode_override = 0;
@@ -1717,23 +1856,12 @@ void __connman_technology_set_connected(enum connman_service_type type,
 			DBUS_TYPE_BOOLEAN, &val);
 }
 
-bool __connman_technology_disable_all()
+bool __connman_technology_disable_all(void)
 {
 	GSList *list;
 	GSList *devlist;
-	GKeyFile *keyfile;
 	int err;
-
-	/*
-	 * If there is no keyfile present then none of the technologies are
-	 * enabled. Disabling of the technologies is skipped as all should be
-	 * off.
-	 */
-	keyfile = __connman_storage_load_global();
-	if (!keyfile) {
-		DBG("no keyfile found, all devices should be off.");
-		return false;
-	}
+	bool ret = true;
 
 	for (list = technology_list; list; list = list->next) {
 		struct connman_technology *technology = list->data;
@@ -1759,12 +1887,21 @@ bool __connman_technology_disable_all()
 		}
 
 		/* To make sure that all scan requests are replied */
-		reply_scan_pending(technology, -ECANCELED);
+		reply_scan_pending(technology, -EINTR);
+
+		/* Make sure there is no pending reply awaiting */
+		if (technology_send_pending_reply(technology, -ECANCELED) ==
+					-ECOMM)
+			connman_warn("could not reply to pending request");
 
 		err = technology_disable(technology);
 		if (!err) {
-			if (technology_disabled(technology))
-				DBG("tech %p already powered off", technology);
+			if (technology_changed_state(technology, false))
+				connman_warn("technology %p state change not "
+							"notified",
+							technology);
+		} else {
+			ret = false;
 		}
 
 		if (err != -EBUSY)
@@ -1773,9 +1910,7 @@ bool __connman_technology_disable_all()
 		DBG("result %s", err ? strerror(-err) : "ok");
 	}
 
-	g_key_file_unref(keyfile);
-
-	return true;
+	return ret;
 }
 
 bool __connman_technology_enable_from_config()
@@ -1831,6 +1966,7 @@ bool __connman_technology_enable_from_config()
 			DBG("technology %p/%s hardblocked, not set as %s",
 					technology, get_name(technology->type),
 					value ? "enabled" : "disabled");
+			technology->enable_persistent = value;
 			technology_save(technology);
 			continue;
 		}
@@ -1848,9 +1984,11 @@ bool __connman_technology_enable_from_config()
 
 			err = technology_disable(technology);
 			if (!err) {
-				if (technology_disabled(technology))
-					DBG("tech %p already powered off",
-								technology);
+				if (technology_changed_state(technology,
+							false))
+					connman_warn("technology %p state"
+							"change not notified",
+							technology);
 			}
 
 			DBG("tech %p/%s enabled set as disabled, result %s",
@@ -1879,12 +2017,25 @@ bool __connman_technology_enable_from_config()
 				continue;
 			}
 
-			err = technology_enable(technology);
-			if (!err) {
-				if (__connman_technology_enabled(
-							technology->type))
-					DBG("tech %p already powered on",
+			/*
+			 * In user change enabling of rfkill devices must be
+			 * delayed to avoid inconsistent state.
+			 */
+			if (technology->rfkill_driven) {
+				err = technology_init_enable_delayed(
+							technology);
+			} else {
+				err = technology_enable(technology);
+				if (!err) {
+					if (technology_changed_state(
+							technology, true))
+						connman_warn("tech %p state"
+							"change notify fail",
+							technology);
+				} else if (err == -EBUSY) {
+					technology_init_enable_delayed(
 								technology);
+				}
 			}
 
 			DBG("tech %p/%s disabled set as enabled, result %s",
@@ -2125,6 +2276,8 @@ int __connman_technology_init(void)
 
 void __connman_technology_cleanup(void)
 {
+	int i;
+
 	DBG("");
 
 	while (technology_list) {
@@ -2134,6 +2287,11 @@ void __connman_technology_cleanup(void)
 	}
 
 	g_hash_table_destroy(rfkill_list);
+
+	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++) {
+		if (enable_delayed_ids[i])
+			g_source_remove(enable_delayed_ids[i]);
+	}
 
 	dbus_connection_unref(connection);
 

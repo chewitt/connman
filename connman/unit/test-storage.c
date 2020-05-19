@@ -3446,7 +3446,7 @@ static void storage_test_technology_callbacks1()
 	__connman_inotify_init();
 
 	/* technology init will create empty settings file */
-	g_assert_false(__connman_technology_disable_all());
+	g_assert_true(__connman_technology_disable_all());
 	g_assert_false(__connman_technology_enable_from_config());
 
 	/* Create settings file */
@@ -3477,7 +3477,7 @@ static void storage_test_technology_callbacks1()
 	/* Set all powered and enabled */
 	set_technology_powered(CONNMAN_SERVICE_TYPE_CELLULAR, true, NULL);
 	g_assert_cmpint(__connman_technology_enabled(
-				CONNMAN_SERVICE_TYPE_CELLULAR), ==, -EALREADY);
+				CONNMAN_SERVICE_TYPE_CELLULAR), ==, 0);
 	g_assert_true(test_device1.enabled);
 
 	/* Another power on call causes AlreadyEnabled error */
@@ -3630,7 +3630,7 @@ static void storage_test_technology_callbacks2()
 	/* Set all powered and enabled */
 	set_technology_powered(CONNMAN_SERVICE_TYPE_CELLULAR, true, NULL);
 	g_assert_cmpint(__connman_technology_enabled(
-				CONNMAN_SERVICE_TYPE_CELLULAR), ==, -EALREADY);
+				CONNMAN_SERVICE_TYPE_CELLULAR), ==, 0);
 	g_assert_true(test_device1.enabled);
 
 	set_technology_powered(CONNMAN_SERVICE_TYPE_WIFI, true, NULL);
@@ -3783,12 +3783,12 @@ static void storage_test_technology_callbacks3()
 	/* Set all powered and enabled */
 	set_technology_powered(CONNMAN_SERVICE_TYPE_CELLULAR, true, NULL);
 	g_assert_cmpint(__connman_technology_enabled(
-				CONNMAN_SERVICE_TYPE_CELLULAR), ==, -EALREADY);
+				CONNMAN_SERVICE_TYPE_CELLULAR), ==, 0);
 	g_assert_true(test_device1.enabled);
 
 	set_technology_powered(CONNMAN_SERVICE_TYPE_WIFI, true, NULL);
 	g_assert_cmpint(__connman_technology_enabled(
-				CONNMAN_SERVICE_TYPE_WIFI), ==, -EALREADY);
+				CONNMAN_SERVICE_TYPE_WIFI), ==, 0);
 	g_assert_true(test_device2.enabled);
 
 	g_assert_false(__connman_technology_get_offlinemode());

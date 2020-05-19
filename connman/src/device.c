@@ -191,7 +191,7 @@ int __connman_device_enable(struct connman_device *device)
 		return -EBUSY;
 
 	if (device->powered_pending == PENDING_ENABLE)
-		return -EALREADY;
+		return -EINPROGRESS;
 
 	if (device->powered_pending == PENDING_NONE && device->powered)
 		return -EALREADY;
@@ -242,7 +242,7 @@ int __connman_device_disable(struct connman_device *device)
 		return -EBUSY;
 
 	if (device->powered_pending == PENDING_DISABLE)
-		return -EALREADY;
+		return -EINPROGRESS;
 
 	if (device->powered_pending == PENDING_NONE && !device->powered)
 		return -EALREADY;
@@ -782,7 +782,8 @@ static gboolean remove_unavailable_network(gpointer key, gpointer value,
 {
 	struct connman_network *network = value;
 
-	if (connman_network_get_connected(network))
+	if (connman_network_get_connected(network) ||
+			connman_network_get_connecting(network))
 		return FALSE;
 
 	if (connman_network_get_available(network))

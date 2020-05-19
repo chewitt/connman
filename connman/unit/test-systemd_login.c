@@ -293,6 +293,11 @@ out:
 	return storage_change_user_err1;
 }
 
+bool __connman_technology_disable_all(void)
+{
+	return true;
+}
+
 /* END STORAGE STUB */
 
 static void monitor_initialize(uid_t uid, enum sd_session_state initial_state,
