@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "src/shared/util.h"
 
