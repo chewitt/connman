@@ -66,7 +66,7 @@ struct vpn_data {
 struct vpn_driver_data {
 	const char *name;
 	const char *program;
-	struct vpn_driver *vpn_driver;
+	const struct vpn_driver *vpn_driver;
 	struct vpn_provider_driver provider_driver;
 };
 
@@ -768,7 +768,7 @@ static int vpn_route_env_parse(struct vpn_provider *provider, const char *key,
 	return 0;
 }
 
-int vpn_register(const char *name, struct vpn_driver *vpn_driver,
+int vpn_register(const char *name, const struct vpn_driver *vpn_driver,
 			const char *program)
 {
 	struct vpn_driver_data *data;
