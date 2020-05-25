@@ -136,38 +136,55 @@ static struct filter_data *filter_data_find(DBusConnection *connection)
 	return NULL;
 }
 
-static void format_rule(struct filter_data *data, char *rule, size_t size)
+static char *format_rule(struct filter_data *data)
 {
+	char *rule, *tmp;
 	const char *sender;
-	int offset;
 
-	offset = snprintf(rule, size, "type='signal'");
+	rule = g_strdup("type='signal'");
 	sender = data->name ? : data->owner;
 
-	if (sender)
-		offset += snprintf(rule + offset, size - offset,
-				",sender='%s'", sender);
-	if (data->path)
-		offset += snprintf(rule + offset, size - offset,
-				",path='%s'", data->path);
-	if (data->interface)
-		offset += snprintf(rule + offset, size - offset,
-				",interface='%s'", data->interface);
-	if (data->member)
-		offset += snprintf(rule + offset, size - offset,
-				",member='%s'", data->member);
-	if (data->argument)
-		snprintf(rule + offset, size - offset,
-				",arg0='%s'", data->argument);
+	if (sender) {
+		tmp = rule;
+		rule = g_strdup_printf("%s,sender='%s'", rule, sender);
+		g_free(tmp);
+	}
+
+	if (data->path) {
+		tmp = rule;
+		rule = g_strdup_printf("%s,path='%s'", rule, data->path);
+		g_free(tmp);
+	}
+
+	if (data->interface){
+		tmp = rule;
+		rule = g_strdup_printf("%s,interface='%s'", rule,
+				data->interface);
+		g_free(tmp);
+	}
+
+	if (data->member) {
+		tmp = rule;
+		rule = g_strdup_printf("%s,member='%s'", rule, data->member);
+		g_free(tmp);
+	}
+
+	if (data->argument) {
+		tmp = rule;
+		rule = g_strdup_printf("%s,arg0='%s'", rule, data->argument);
+		g_free(tmp);
+	}
+
+	return rule;
 }
 
 static gboolean add_match(struct filter_data *data,
 				DBusHandleMessageFunction filter)
 {
 	DBusError err;
-	char rule[DBUS_MAXIMUM_MATCH_RULE_LENGTH];
+	char *rule;
 
-	format_rule(data, rule, sizeof(rule));
+	rule = format_rule(data);
 	dbus_error_init(&err);
 
 	dbus_bus_add_match(data->connection, rule, &err);
@@ -175,21 +192,23 @@ static gboolean add_match(struct filter_data *data,
 		error("Adding match rule \"%s\" failed: %s", rule,
 				err.message);
 		dbus_error_free(&err);
+		g_free(rule);
 		return FALSE;
 	}
 
 	data->handle_func = filter;
 	data->registered = TRUE;
 
+	g_free(rule);
 	return TRUE;
 }
 
 static gboolean remove_match(struct filter_data *data)
 {
 	DBusError err;
-	char rule[DBUS_MAXIMUM_MATCH_RULE_LENGTH];
+	char *rule;
 
-	format_rule(data, rule, sizeof(rule));
+	rule = format_rule(data);
 
 	dbus_error_init(&err);
 
@@ -198,9 +217,11 @@ static gboolean remove_match(struct filter_data *data)
 		error("Removing owner match rule for %s failed: %s",
 				rule, err.message);
 		dbus_error_free(&err);
+		g_free(rule);
 		return FALSE;
 	}
 
+	g_free(rule);
 	return TRUE;
 }
 
