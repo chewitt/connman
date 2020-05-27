@@ -148,7 +148,7 @@ src_connmand_SOURCES += src/systemd_login.c
 endif
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-			@GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
+			@GIO_LIBS@ @GOBJECT_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
 			@IPHB_LIBS@ @LIBIPTC_LIBS@ @DBUSACCESS_LIBS@ -lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic \
@@ -263,7 +263,7 @@ else
 AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
-src_connmand_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
+src_connmand_CFLAGS = @DBUS_CFLAGS@ @GIO_CFLAGS@ @GOBJECT_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				@GNUTLS_CFLAGS@ @IPHB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				$(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
@@ -480,7 +480,7 @@ unit_test_sailfish_datacounter_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
 unit_test_sailfish_datacounter_LDADD = gdbus/libgdbus-internal.la \
-				@GLIBUTIL_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+	@GLIBUTIL_LIBS@ @GOBJECT_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_test_sailfish_datacounter_SOURCES = unit/test-sailfish_datacounter.c \
 	unit/test_timenotify.c src/sailfish_datacounter.c \
 	src/sailfish_datacounters_util.c src/inotify.c src/storage.c \
@@ -500,7 +500,7 @@ unit_test_sailfish_datacounters_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
 unit_test_sailfish_datacounters_LDADD = gdbus/libgdbus-internal.la \
-				@GLIBUTIL_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+	@GLIBUTIL_LIBS@ @GOBJECT_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_test_sailfish_datacounters_SOURCES = unit/test-sailfish_datacounters.c \
 	unit/test_timenotify.c src/sailfish_datacounters.c \
 	src/sailfish_datacounter.c src/sailfish_datacounters_util.c \
@@ -522,7 +522,7 @@ unit_test_sailfish_datahistory_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 	-Dgutil_time_notify_add_handler=test_time_notify_add_handler \
 	-Dgutil_time_notify_remove_handler=test_time_notify_remove_handler
 unit_test_sailfish_datahistory_LDADD = gdbus/libgdbus-internal.la \
-				@GLIBUTIL_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+	@GLIBUTIL_LIBS@ @GOBJECT_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 unit_test_sailfish_datahistory_SOURCES = unit/test-sailfish_datahistory.c \
 	unit/test_timenotify.c src/sailfish_datacounter.c \
 	src/sailfish_datacounters_util.c src/sailfish_datahistory.c \
