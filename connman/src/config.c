@@ -890,7 +890,8 @@ static int load_config(struct connman_config *config)
 	if (!load_service_from_keyfile(keyfile, config))
 		connman_warn("Config file %s/%s.config does not contain any "
 			"configuration that can be provisioned!",
-			STORAGEDIR, config->ident);
+			USER_STORAGEDIR ? USER_STORAGEDIR : STORAGEDIR,
+			config->ident);
 
 	g_key_file_unref(keyfile);
 
@@ -942,7 +943,8 @@ static int read_configs(void)
 
 	DBG("");
 
-	dir = g_dir_open(STORAGEDIR, 0, NULL);
+	dir = g_dir_open(USER_STORAGEDIR ? USER_STORAGEDIR : STORAGEDIR, 0,
+				NULL);
 	if (dir) {
 		const gchar *file;
 

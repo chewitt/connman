@@ -461,8 +461,9 @@ static void datacounter_autoreset_check(struct datacounter *self)
 
 static char *datacounter_file_path(const char *ident, const char *suffix)
 {
-	return g_strconcat(STORAGEDIR, G_DIR_SEPARATOR_S, ident,
-			G_DIR_SEPARATOR_S, COUNTER_FILE_PREFIX, suffix, NULL);
+	return g_strconcat(connman_storage_dir_for(ident),
+			G_DIR_SEPARATOR_S, ident, G_DIR_SEPARATOR_S,
+			COUNTER_FILE_PREFIX, suffix, NULL);
 }
 
 static gboolean datacounter_file_read(const char *path,

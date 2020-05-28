@@ -1578,6 +1578,15 @@ const char *connman_storage_user_vpn_dir(void)
 	return user_vpn_storage_dir;
 }
 
+const char *connman_storage_dir_for(const char *service_id)
+{
+	/* TODO perhaps always default to STORAGEDIR even with invalid ones */
+	if (!service_id || !*service_id)
+		return NULL;
+
+	return storagedir_for(service_id);
+}
+
 static char* build_filename(const char *dir,
 					enum connman_storage_dir_type type)
 {

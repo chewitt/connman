@@ -354,9 +354,11 @@ static gboolean datahistory_file_ensure_open(struct datahistory_file *self)
 static void datahistory_file_finish_init(struct datahistory *history)
 {
 	struct datahistory_file *self = DATAHISTORY_FILE(history);
+	const char *ident;
 
-	self->path = g_strconcat(STORAGEDIR, G_DIR_SEPARATOR_S,
-			history->counter->ident, G_DIR_SEPARATOR_S,
+	ident = history->counter->ident;
+	self->path = g_strconcat(connman_storage_dir_for(ident),
+			G_DIR_SEPARATOR_S, ident, G_DIR_SEPARATOR_S,
 			HISTORY_FILE_PREFIX, history->counter->name, ".",
 			history->type->name, NULL);
 	DBG("%s", self->path);

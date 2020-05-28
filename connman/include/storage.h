@@ -35,6 +35,7 @@ const char *connman_storage_dir(void);
 const char *connman_storage_vpn_dir(void);
 const char *connman_storage_user_dir(void);
 const char *connman_storage_user_vpn_dir(void);
+const char *connman_storage_dir_for(const char *service_id);
 
 void connman_storage_update_finalize_cb(
 				void (*cb) (uid_t uid, void *user_data),

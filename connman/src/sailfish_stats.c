@@ -200,7 +200,8 @@ struct connman_stats *__connman_stats_new(struct connman_service *service,
 							gboolean roaming)
 {
 	const char *ident = connman_service_get_identifier(service);
-	char *dir = g_build_filename(STORAGEDIR, ident, NULL);
+	char *dir = g_build_filename(connman_storage_dir_for(ident), ident,
+				NULL);
 
 	DBG("%s %d", ident, roaming);
 
