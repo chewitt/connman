@@ -262,6 +262,21 @@ gboolean g_dbus_send_message_with_reply(DBusConnection *connection,
 				timeout);
 }
 
+static guint watch_id = 123654798;
+
+guint g_dbus_add_service_watch(DBusConnection *connection, const char *name,
+				GDBusWatchFunction connect,
+				GDBusWatchFunction disconnect,
+				void *user_data, GDBusDestroyFunction destroy)
+{
+	return watch_id;
+}
+
+gboolean g_dbus_remove_watch(DBusConnection *connection, guint id)
+{
+	return id == watch_id;
+}
+
 // Replaces function from libdbusaccess/src/dbusaccess_policy.c
 // Needed to control permissions independent of reality
 DAPolicy* da_policy_new_full(const char* spec, const DA_ACTION* actions)

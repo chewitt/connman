@@ -320,6 +320,7 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 }
 
 static guint watch_id = 69;
+static guint service_watch_id = 123654798;
 
 guint g_dbus_add_signal_watch(DBusConnection *connection,
 				const char *sender, const char *path,
@@ -330,9 +331,17 @@ guint g_dbus_add_signal_watch(DBusConnection *connection,
 	return watch_id;
 }
 
+guint g_dbus_add_service_watch(DBusConnection *connection, const char *name,
+				GDBusWatchFunction connect,
+				GDBusWatchFunction disconnect,
+				void *user_data, GDBusDestroyFunction destroy)
+{
+	return service_watch_id;
+}
+
 gboolean g_dbus_remove_watch(DBusConnection *connection, guint id)
 {
-	return id == watch_id;
+	return id == watch_id || id == service_watch_id;
 }
 
 // device dummies

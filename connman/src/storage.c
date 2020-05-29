@@ -50,6 +50,9 @@
 			IN_CREATE | IN_DELETE | IN_MODIFY | IN_MOVED_FROM | \
 			IN_MOVED_TO | IN_OPEN)
 
+/* Delay for the delayed vpnd user change. */
+#define USER_CHANGE_DELAY 200
+
 struct storage_subdir {
 	gchar *name;
 	gboolean has_settings;
@@ -63,6 +66,7 @@ struct storage_dir_context {
 	gboolean only_unload;
 	GList *subdirs;
 	GList *user_subdirs;
+	uid_t current_uid;
 };
 
 static struct storage_dir_context storage = {
@@ -72,7 +76,8 @@ static struct storage_dir_context storage = {
 	.user_vpn_initialized = FALSE,
 	.only_unload = FALSE,
 	.subdirs = NULL,
-	.user_subdirs = NULL
+	.user_subdirs = NULL,
+	.current_uid = 0
 };
 
 struct keyfile_record {
@@ -82,10 +87,14 @@ struct keyfile_record {
 
 static GHashTable *keyfile_hash = NULL;
 static DBusConnection *connection = NULL;
+static DBusPendingCall *vpn_change_call = NULL;
 static const char *dbus_path = NULL;
 static const char *dbus_interface = NULL;
 static struct connman_storage_callbacks *cbs = NULL;
 struct connman_access_storage_policy *storage_access_policy = NULL;
+static guint vpnd_watch = 0;
+static bool send_vpnd_change_user = false;
+static guint delayed_user_change_id = 0;
 
 static void storage_dir_cleanup(const char *storagedir, int type);
 
@@ -2012,8 +2021,8 @@ struct change_user_data {
 
 static struct change_user_data *new_change_user_data(DBusMessage *msg,
 			connman_storage_change_user_result_cb_t cb,
-			void *user_cb_data, uid_t uid, const char *user,
-			const char *path, bool system_user, bool prepare_only)
+			void *user_cb_data, uid_t uid, const char *path,
+			bool system_user, bool prepare_only)
 {
 	struct change_user_data *data;
 
@@ -2048,14 +2057,106 @@ static void free_change_user_data(struct change_user_data *data)
 	g_free(data);
 }
 
+static void storage_change_uid(uid_t uid)
+{
+	storage.current_uid = uid;
+
+	if (cbs && cbs->uid_changed)
+		cbs->uid_changed(storage.current_uid);
+}
+
+static int send_change_user_msg(struct change_user_data *data);
+
+static gboolean send_delayed_user_change(gpointer user_data)
+{
+	struct change_user_data *data = user_data;
+	DBusMessage *reply;
+	int err;
+
+	DBG("");
+
+	/* Stop this if the user change has been already notified */
+	if (!send_vpnd_change_user) {
+		DBG("user change already notified, stopping");
+		goto out;
+	}
+
+	err = send_change_user_msg(data);
+	switch (err) {
+	case -EINPROGRESS:
+		DBG("sent user %u change to vpnd", data->uid);
+		goto out;
+	case -EBUSY:
+		DBG("pending call is still active, wait");
+		/*
+		 * EBUSY is reported if there is a pending call ongoing. In
+		 * such case reply to the pending request that change is in
+		 * progress to avoid potential sending of timeout. Callback is
+		 * eventually called in change_user_reply().
+		 */
+		if (data->pending) {
+			reply = __connman_error_in_progress(data->pending);
+			if (reply) {
+				g_dbus_send_message(connection, reply);
+				dbus_message_unref(data->pending);
+				data->pending = NULL;
+			}
+		}
+
+		return G_SOURCE_CONTINUE;
+	default:
+		connman_error("failed to send user change message, error %d",
+					err);
+
+		if (data->pending) {
+			reply = __connman_error_failed(data->pending, -err);
+			if (reply)
+				g_dbus_send_message(connection, reply);
+		}
+
+		if (data->result_cb)
+			data->result_cb(data->uid, err, data->user_cb_data);
+
+		break;
+	}
+
+	send_vpnd_change_user = false;
+	free_change_user_data(data);
+
+out:
+	delayed_user_change_id = 0;
+
+	return G_SOURCE_REMOVE;
+}
+
+static int init_delayed_user_change(gpointer user_data, guint timeout)
+{
+	DBG("");
+
+	if (delayed_user_change_id)
+		return -EALREADY;
+
+	delayed_user_change_id = g_timeout_add(timeout,
+				send_delayed_user_change, user_data);
+
+	return 0;
+}
+
 static void change_user_reply(DBusPendingCall *call, void *user_data)
 {
 	struct change_user_data *data;
 	DBusMessage *reply;
 	DBusError error;
 	int err = 0;
+	int delay = USER_CHANGE_DELAY;
 
 	data = user_data;
+
+	if (call != vpn_change_call) {
+		DBG("pending call not set or invalid (ongoing %p this %p)",
+					vpn_change_call, call);
+		return;
+	}
 
 	reply = dbus_pending_call_steal_reply(call);
 	if (!reply) {
@@ -2079,6 +2180,13 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 				g_str_has_suffix(error.name, ".TimedOut")) {
 			DBG("Timeout with D-Bus occurred");
 			err = -ETIMEDOUT;
+		} else if (g_str_has_suffix(error.name, ".UnknownMethod") ||
+				g_str_has_suffix(error.name, ".NoReply")) {
+			DBG("vpnd server not available, try later");
+			err = -ENONET;
+		} else if (g_str_has_suffix(error.name, ".LimitsExceeded")) {
+			DBG("D-Bus is congested, try later with double limit");
+			err = -EBUSY;
 		} else {
 			DBG("unknown error %s", error.name);
 			err = -ENOENT;
@@ -2089,8 +2197,38 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 
 	dbus_message_unref(reply);
 
-	if (err)
+	switch (err) {
+	case 0:
+	case -EALREADY:
+		/*
+		 * If connmand has crashed and tries to set vpnd to the same
+		 * user as the vpnd already had it is not an error. Just
+		 * continue as normal. Both D-Bus API and internal API handles
+		 the check for uid prior to this.
+		 */
+		break;
+	case -EBUSY:
+		/* D-Bus was congested, double delay */
+		delay += USER_CHANGE_DELAY;
+	case -ETIMEDOUT:
+		/* fall through */
+	case -ENONET:
+		if (!init_delayed_user_change(data, delay)) {
+			send_vpnd_change_user = true;
+			goto out_no_free;
+		}
+
+		/* Otherwise, fall though */
+	default:
 		goto err;
+	}
+
+	/*
+	 * Got a reply from vpnd with the same uid that is currently set =
+	 * vpnd has crashed and the current user was notified to it. No action.
+	 */
+	if (storage.current_uid == data->uid)
+		goto out;
 
 	/* Preparations are done prior to D-Bus message to vpnd */
 	if (!data->prepare_only) {
@@ -2099,6 +2237,8 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 		if (err)
 			goto err;
 	}
+
+	storage_change_uid(data->uid);
 
 	if (cbs && cbs->finalize)
 		cbs->finalize(data->uid, cbs->finalize_user_data);
@@ -2118,7 +2258,8 @@ err:
 	/* When preparing revert to root user if vpnd fails to change user. */
 	if (data->prepare_only) {
 		set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
-		data->uid = 0;
+		data->uid = geteuid();
+		storage_change_uid(data->uid);
 	}
 
 	if (!data->pending)
@@ -2141,23 +2282,31 @@ err:
 					strerror(-err));
 
 out:
-	dbus_pending_call_unref(call);
-
 	if (data->result_cb)
 		data->result_cb(data->uid, err, data->user_cb_data);
 
 	free_change_user_data(data);
+
+out_no_free:
+	dbus_pending_call_unref(vpn_change_call);
+	vpn_change_call = NULL;
 }
 
 static int send_change_user_msg(struct change_user_data *data)
 {
-	DBusPendingCall *call;
 	DBusMessage *msg;
 	dbus_uint32_t uid;
 	int err = -EINPROGRESS;
 
 	if (!data)
 		return -EINVAL;
+
+	if (vpn_change_call) {
+		DBG("user change call already in progress");
+		return -EBUSY;
+	}
+
+	DBG("user %u", data->uid);
 
 	msg = dbus_message_new_method_call(VPN_SERVICE, VPN_STORAGE_PATH,
 				VPN_STORAGE_INTERFACE,
@@ -2175,24 +2324,25 @@ static int send_change_user_msg(struct change_user_data *data)
 		goto out;
 	}
 
-	if (!g_dbus_send_message_with_reply(connection, msg, &call,
+	if (!g_dbus_send_message_with_reply(connection, msg, &vpn_change_call,
 				DBUS_TIMEOUT_USE_DEFAULT)) {
 		connman_error("Unable to call %s.%s()", VPN_STORAGE_INTERFACE,
 					VPN_STORAGE_CHANGE_USER);
-		err = -EPERM;
+		err = -ECOMM;
 		goto out;
 	}
 
-	if (!call) {
+	if (!vpn_change_call) {
 		err = -ECANCELED;
 		goto out;
 	}
 
-	if (!dbus_pending_call_set_notify(call, change_user_reply, data,
-				NULL)) {
+	if (!dbus_pending_call_set_notify(vpn_change_call, change_user_reply,
+				data, NULL)) {
 		connman_warn("Failed to set notify for change user request");
 		err = -ENOMEM;
-		dbus_pending_call_unref(call);
+		dbus_pending_call_unref(vpn_change_call);
+		vpn_change_call = NULL;
 	}
 
 out:
@@ -2228,7 +2378,7 @@ static DBusMessage *change_user(DBusConnection *conn,
 		DBusMessage *error_reply = NULL;
 		const char *sender = dbus_message_get_sender(msg);
 		/* Because of libdbus da_policy_check() use int as string */
-		char *userid = g_strdup_printf("%d", uid);
+		char *userid = g_strdup_printf("%u", uid);
 
 		switch (cbs->access_change_user(get_storage_access_policy(),
 					userid, sender,
@@ -2249,13 +2399,18 @@ static DBusMessage *change_user(DBusConnection *conn,
 			return error_reply;
 	}
 
+	if ((uid_t)uid == storage.current_uid) {
+		DBG("user %u already set", uid);
+		return __connman_error_already_enabled(msg);
+	}
+
 	/* No error set = invalid user */
 	pwd = check_user((uid_t)uid, &err, &system_user);
 	if (!pwd)
 		return __connman_error_failed(msg, err ? err : EINVAL);
 
-	user_data = new_change_user_data(msg, NULL, NULL, uid, pwd->pw_name,
-				pwd->pw_dir, system_user, false);
+	user_data = new_change_user_data(msg, NULL, NULL, uid, pwd->pw_dir,
+				system_user, false);
 
 	DBG("path \"%s\"", user_data->path);
 
@@ -2306,6 +2461,9 @@ static DBusMessage *change_user_vpn(DBusConnection *conn,
 		if (error_reply)
 			return error_reply;
 	}
+
+	if ((uid_t)uid == storage.current_uid)
+		return __connman_error_already_enabled(msg);
 
 	pwd = check_user((uid_t)uid, &err, &system_user);
 	if (!pwd)
@@ -2379,9 +2537,11 @@ int __connman_storage_change_user(uid_t uid,
 		return -EINVAL;
 	}
 
+	if (storage.current_uid == uid)
+		return -EALREADY;
+
 	user_data = new_change_user_data(NULL, cb, user_cb_data, uid,
-				pwd->pw_name, pwd->pw_dir, system_user,
-				prepare_only);
+				pwd->pw_dir, system_user, prepare_only);
 
 	DBG("path \"%s\"", user_data->path);
 
@@ -2406,19 +2566,98 @@ out:
 		 */
 		if (err != -EINPROGRESS) {
 			set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
-			uid = 0;
+			user_data->uid = geteuid();
 		}
 
 		/* Inform the caller twice when preparing */
 		if (user_data->result_cb)
 			user_data->result_cb(user_data->uid, err,
 						user_data->user_cb_data);
+
+		storage_change_uid(user_data->uid);
 	}
 
 	if (err != -EINPROGRESS)
 		free_change_user_data(user_data);
 
 	return err;
+}
+
+static void result_cb(uid_t uid, int err, void *user_data)
+{
+	if (err && err != -EALREADY) {
+		connman_error("changing uid %u to vpnd failed (err: %d), "
+				"reset to uid %u", storage.current_uid, err,
+				geteuid());
+		set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
+		storage_change_uid(geteuid());
+		return;
+	}
+
+	DBG("user %u changed to vpnd", storage.current_uid);
+}
+
+static void vpnd_created(DBusConnection *conn, void *user_data)
+{
+	struct change_user_data *data;
+	struct passwd *pwd;
+	bool system_user;
+	int err;
+
+	DBG("");
+
+	/* Send the user change only when vpnd was closed/crashed */
+	if (!send_vpnd_change_user)
+		return;
+
+	/* When user was not changed, only reset the flag */
+	if (storage.current_uid == geteuid())
+		goto out;
+
+	pwd = check_user(storage.current_uid, &err, &system_user);
+	if (!pwd) {
+		connman_warn("invalid current user %u", storage.current_uid);
+		goto out;
+	}
+
+	data = new_change_user_data(NULL, result_cb, NULL, storage.current_uid,
+				pwd->pw_dir, system_user, false);
+
+	err = send_change_user_msg(data);
+	switch (err) {
+	case -EINPROGRESS:
+		DBG("sent user %u change to vpnd", data->uid);
+		goto out; /* Success */
+	case -EBUSY:
+		DBG("ongoing pending call, delay user change");
+
+		/*
+		 * If vpnd crashes in between user change and comes up during
+		 * the timeout wait the user notify needs to be sent later to
+		 * vpn if there is a pending call waiting for reply.
+		 */
+		if (!init_delayed_user_change(data, USER_CHANGE_DELAY))
+			return;
+
+		goto free;
+	default:
+		connman_error("failed to send user change message, error: %d",
+					err);
+		goto free;
+	}
+
+free:
+	free_change_user_data(data);
+
+out:
+	send_vpnd_change_user = false;
+}
+
+static void vpnd_removed(DBusConnection *conn, void *user_data)
+{
+	DBG("");
+
+	send_vpnd_change_user = true;
 }
 
 static const GDBusMethodTable storage_methods[] = {
@@ -2463,6 +2702,9 @@ int __connman_storage_register_dbus(enum connman_storage_dir_type type,
 		methods = storage_methods;
 		dbus_interface = CONNMAN_STORAGE_INTERFACE;
 		dbus_path = CONNMAN_STORAGE_PATH;
+		vpnd_watch = g_dbus_add_service_watch(connection, VPN_SERVICE,
+					vpnd_created, vpnd_removed, NULL,
+					NULL);
 		break;
 	case STORAGE_DIR_TYPE_VPN:
 		methods = storage_methods_vpn;
@@ -2507,6 +2749,7 @@ int __connman_storage_init(const char *dir, mode_t dir_mode, mode_t file_mode)
 	vpn_storage_dir = build_filename(root, STORAGE_DIR_TYPE_VPN);
 	storage_dir_mode = dir_mode;
 	storage_file_mode = file_mode;
+	storage.current_uid = geteuid();
 	keyfile_init();
 
 	return 0;
@@ -2526,6 +2769,12 @@ void __connman_storage_cleanup(void)
 		storage_dir_cleanup(user_vpn_storage_dir,
 					STORAGE_DIR_TYPE_VPN |
 					STORAGE_DIR_TYPE_USER);
+
+	if (vpnd_watch)
+		g_dbus_remove_watch(connection, vpnd_watch);
+
+	if (delayed_user_change_id)
+		g_source_remove(delayed_user_change_id);
 
 	if (connection) {
 		if (dbus_path && dbus_interface) {

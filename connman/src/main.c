@@ -840,6 +840,7 @@ static struct connman_storage_callbacks storage_callbacks = {
 	.unload =		__connman_service_unload_services,
 	.load =			__connman_service_load_services,
 	.post =			__connman_technology_enable_from_config,
+	.uid_changed =		__connman_notifier_storage_uid_changed,
 	.access_policy_create =	__connman_access_storage_policy_create,
 	.access_change_user = 	__connman_access_storage_change_user,
 	.access_policy_free = 	__connman_access_storage_policy_free,

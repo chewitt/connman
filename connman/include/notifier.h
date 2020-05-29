@@ -59,9 +59,10 @@ struct connman_notifier {
 	void (*idle_state) (bool idle);
 	void (*tethering_changed) (struct connman_technology *tech, bool on);
 	void (*device_status_changed) (struct connman_device *device, bool on);
+	void (*storage_uid_changed) (uid_t uid);
 
 	/* Placeholders for future extensions */
-	void (*_reserved[9])(void);
+	void (*_reserved[8])(void);
 
 	/* api_level will remain zero (and ignored) until we run out of
 	 * the above placeholders. Hopefully, forever. */

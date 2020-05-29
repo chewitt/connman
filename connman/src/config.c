@@ -1035,6 +1035,30 @@ static void config_notify_handler(struct inotify_event *event,
 		g_hash_table_remove(config_table, ident);
 }
 
+static char *user_storage_dir = NULL;
+
+static void uid_changed(uid_t uid)
+{
+	if (user_storage_dir) {
+		connman_inotify_unregister(user_storage_dir,
+					config_notify_handler, NULL);
+		g_free(user_storage_dir);
+	}
+
+	/* If not set USER_STORAGEDIR is NULL */
+	user_storage_dir = g_strdup(USER_STORAGEDIR);
+
+	if (uid != geteuid())
+		connman_inotify_register(user_storage_dir,
+					config_notify_handler, NULL, NULL);
+}
+
+static struct connman_notifier config_notifier = {
+	.name			= "config",
+	.priority		= CONNMAN_NOTIFIER_PRIORITY_DEFAULT,
+	.storage_uid_changed	= uid_changed
+};
+
 int __connman_config_init(void)
 {
 	DBG("");
@@ -1043,6 +1067,7 @@ int __connman_config_init(void)
 						NULL, unregister_config);
 
 	connman_inotify_register(STORAGEDIR, config_notify_handler, NULL, NULL);
+	connman_notifier_register(&config_notifier);
 
 	return read_configs();
 }
@@ -1053,7 +1078,15 @@ void __connman_config_cleanup(void)
 
 	cleanup = true;
 
+	connman_notifier_unregister(&config_notifier);
+
 	connman_inotify_unregister(STORAGEDIR, config_notify_handler, NULL);
+
+	if (user_storage_dir) {
+		connman_inotify_unregister(user_storage_dir,
+					config_notify_handler, NULL);
+		g_free(user_storage_dir);
+	}
 
 	g_hash_table_destroy(config_table);
 	config_table = NULL;
