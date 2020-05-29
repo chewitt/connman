@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2015-2017 Jolla Ltd. All rights reserved.
- *  Contact: Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2015-2020 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,6 +19,7 @@
 
 #include <gsupplicant_interface.h>
 #include <gutil_history.h>
+#include <gutil_macros.h>
 #include <mce_display.h>
 
 #define SIGNALPOLL_HISTORY_SIZE  (10)  /* Number of history entries */
@@ -31,21 +32,32 @@ enum signalpoll_display_events {
 	DISPLAY_EVENT_COUNT
 };
 
-struct signalpoll_priv {
+typedef struct signalpoll_object {
+	GObject object;
+	struct signalpoll pub;          /* Public part */
 	GSupplicantInterface *iface;    /* Interface we are polling */
 	GCancellable *pending;          /* To cancel the D-Bus call */
 	guint timer_id;                 /* Timer ID */
-	GUtilIntHistory *history;       /* Signal strength history */
+	GUtilIntHistory *history;       /* RSSI history */
 	MceDisplay *display;
 	gulong display_event_id[DISPLAY_EVENT_COUNT];
 	signalpoll_rssi_to_strength_func fn_strength;
-};
+} SignalPoll;
 
 typedef GObjectClass SignalPollClass;
 G_DEFINE_TYPE(SignalPoll, signalpoll, G_TYPE_OBJECT)
 #define SIGNALPOLL_TYPE (signalpoll_get_type())
 #define SIGNALPOLL(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), \
         SIGNALPOLL_TYPE, SignalPoll))
+
+typedef struct signalpoll_closure {
+	GCClosure cclosure;
+	signalpoll_event_func func;
+	void *user_data;
+} SignalPollClosure;
+
+#define signalpoll_closure_new() ((SignalPollClosure*) \
+    g_closure_new_simple(sizeof(SignalPollClosure), NULL))
 
 enum signalpoll_signal {
 	SIGNAL_AVERAGE_CHANGED,
@@ -56,15 +68,25 @@ enum signalpoll_signal {
 
 static guint signalpoll_signals[SIGNAL_COUNT];
 
-static void signalpoll_update(struct signalpoll *self, guint8 strength)
+static inline SignalPoll *signalpoll_cast(struct signalpoll *poll)
 {
-	struct signalpoll_priv *priv = self->priv;
-	/* It's actually a median but it doesn't really matter */
-	guint average = gutil_int_history_add(priv-> history, strength);
+	return poll ? SIGNALPOLL(G_CAST(poll,SignalPoll,pub)) : NULL;
+}
 
-	DBG("%u", average);
-	if (self->average != average) {
-		self->average = average;
+static void signalpoll_closure_cb(SignalPoll *self, SignalPollClosure *closure)
+{
+	closure->func(&self->pub, closure->user_data);
+}
+
+static void signalpoll_update(SignalPoll *self, int rssi)
+{
+	const int average_rssi = gutil_int_history_add(self->history, rssi);
+	struct signalpoll *pub = &self->pub;
+
+	DBG("%d (%u%%)", average_rssi, self->fn_strength(average_rssi));
+	if (pub->average_rssi != average_rssi) {
+		pub->average_rssi = average_rssi;
+		pub->average = self->fn_strength(average_rssi);
 		g_signal_emit(self, signalpoll_signals
 					[SIGNAL_AVERAGE_CHANGED], 0);
 	}
@@ -73,32 +95,29 @@ static void signalpoll_update(struct signalpoll *self, guint8 strength)
 static void signalpoll_done(GSupplicantInterface *iface, GCancellable *cancel,
 	const GError *error, const GSupplicantSignalPoll *poll, void *data)
 {
-	struct signalpoll *self = SIGNALPOLL(data);
-	struct signalpoll_priv *priv = self->priv;
+	SignalPoll *self = SIGNALPOLL(data);
 
-	priv->pending = NULL;
+	self->pending = NULL;
 	if (poll) {
 		DBG("rssi %d linkspeed %d noise %d frequency %u", poll->rssi,
 			poll->linkspeed, poll->noise, poll->frequency);
 		if (poll->rssi > 1000 || poll->rssi < -1000) {
 			DBG("ignoring bogus rssi value");
 		} else {
-			signalpoll_update(self, priv->fn_strength(poll->rssi));
+			signalpoll_update(self, poll->rssi);
 		}
 	} else {
 		DBG("error %s", error ? error->message : "????");
 	}
 }
 
-static void signalpoll_poll(struct signalpoll *self)
+static void signalpoll_poll(SignalPoll *self)
 {
-	struct signalpoll_priv *priv = self->priv;
-
-	if (priv->pending) {
+	if (self->pending) {
 		DBG("SignalPoll is already pending");
-		g_cancellable_cancel(priv->pending);
+		g_cancellable_cancel(self->pending);
 	}
-	priv->pending = gsupplicant_interface_signal_poll(priv->iface,
+	self->pending = gsupplicant_interface_signal_poll(self->iface,
 						signalpoll_done, self);
 }
 
@@ -114,25 +133,23 @@ static gboolean signalpoll_display_on(MceDisplay *display)
 				display->state != MCE_DISPLAY_STATE_OFF;
 }
 
-static void signalpoll_check(struct signalpoll *self)
+static void signalpoll_check(SignalPoll *self)
 {
-	struct signalpoll_priv *priv = self->priv;
-
-	if (signalpoll_display_on(priv->display)) {
+	if (signalpoll_display_on(self->display)) {
 		/* Need polling */
-		if (!priv->timer_id) {
+		if (!self->timer_id) {
 			DBG("starting poll timer");
-			priv->timer_id =
+			self->timer_id =
 				g_timeout_add_seconds(SIGNALPOLL_INTERVAL_SECS,
 						signalpoll_poll_timer, self);
 			signalpoll_poll(self);
 		}
 	} else {
 		/* Stop poll timer */
-		if (priv->timer_id) {
+		if (self->timer_id) {
 			DBG("stopping poll timer");
-			g_source_remove(priv->timer_id);
-			priv->timer_id = 0;
+			g_source_remove(self->timer_id);
+			self->timer_id = 0;
 		}
 	}
 }
@@ -146,93 +163,98 @@ struct signalpoll *signalpoll_new(GSupplicantInterface *iface,
 					signalpoll_rssi_to_strength_func fn)
 {
 	if (iface && fn) {
-		struct signalpoll *self = g_object_new(SIGNALPOLL_TYPE, NULL);
-		struct signalpoll_priv *priv = self->priv;
+		SignalPoll *self = g_object_new(SIGNALPOLL_TYPE, NULL);
 
-		priv->fn_strength = fn;
-		priv->iface = gsupplicant_interface_ref(iface);
+		self->fn_strength = fn;
+		self->iface = gsupplicant_interface_ref(iface);
 		signalpoll_check(self);
-		return self;
+		return &self->pub;
 	}
 	return NULL;
 }
 
-struct signalpoll *signalpoll_ref(struct signalpoll *self)
+struct signalpoll *signalpoll_ref(struct signalpoll *poll)
 {
+	SignalPoll *self = signalpoll_cast(poll);
+
 	if (self) {
-		g_object_ref(SIGNALPOLL(self));
-		return self;
+		g_object_ref(self);
+		return &self->pub;
 	}
 	return NULL;
 }
 
-void signalpoll_unref(struct signalpoll *self)
+void signalpoll_unref(struct signalpoll *poll)
 {
+	SignalPoll *self = signalpoll_cast(poll);
+
 	if (self) {
-		g_object_unref(SIGNALPOLL(self));
+		g_object_unref(self);
 	}
 }
 
-gulong signalpoll_add_average_changed_handler(struct signalpoll *self,
-				signalpoll_event_func fn, void *data)
+gulong signalpoll_add_average_changed_handler(struct signalpoll *poll,
+				signalpoll_event_func fn, void *user_data)
 {
-	return self && fn ? g_signal_connect(self,
-		SIGNAL_AVERAGE_CHANGED_NAME, G_CALLBACK(fn), data) : 0;
+	SignalPoll *self = signalpoll_cast(poll);
+
+	if (self && fn) {
+		SignalPollClosure *closure = signalpoll_closure_new();
+		GCClosure *cc = &closure->cclosure;
+
+		cc->closure.data = closure;
+		cc->callback = G_CALLBACK(signalpoll_closure_cb);
+		closure->func = fn;
+		closure->user_data = user_data;
+		return g_signal_connect_closure_by_id(self, signalpoll_signals
+			[SIGNAL_AVERAGE_CHANGED], 0, &cc->closure, FALSE);
+	}
+	return 0;
 }
 
-void signalpoll_remove_handler(struct signalpoll *self, gulong id)
+void signalpoll_remove_handler(struct signalpoll *poll, gulong id)
 {
+	SignalPoll *self = signalpoll_cast(poll);
+
 	if (self && id) {
 		g_signal_handler_disconnect(self, id);
 	}
 }
 
-static void signalpoll_init(struct signalpoll *self)
+static void signalpoll_init(SignalPoll *self)
 {
-	struct signalpoll_priv *priv = G_TYPE_INSTANCE_GET_PRIVATE(self,
-			SIGNALPOLL_TYPE, struct signalpoll_priv);
-
-	self->priv = priv;
-	priv->history = gutil_int_history_new(SIGNALPOLL_HISTORY_SIZE,
+	self->history = gutil_int_history_new(SIGNALPOLL_HISTORY_SIZE,
 				SIGNALPOLL_HISTORY_SECS * GUTIL_HISTORY_SEC);
-	priv->display = mce_display_new();
-	priv->display_event_id[DISPLAY_EVENT_VALID] =
-		mce_display_add_valid_changed_handler(priv->display,
+	self->display = mce_display_new();
+	self->display_event_id[DISPLAY_EVENT_VALID] =
+		mce_display_add_valid_changed_handler(self->display,
 				signalpoll_display_event, self);
-	priv->display_event_id[DISPLAY_EVENT_STATE] =
-		mce_display_add_state_changed_handler(priv->display,
+	self->display_event_id[DISPLAY_EVENT_STATE] =
+		mce_display_add_state_changed_handler(self->display,
 				signalpoll_display_event, self);
 }
 
 static void signalpoll_finalize(GObject *object)
 {
-	struct signalpoll *self = SIGNALPOLL(object);
-	struct signalpoll_priv *priv = self->priv;
+	SignalPoll *self = SIGNALPOLL(object);
 
-	if (priv->timer_id) {
-		g_source_remove(priv->timer_id);
+	if (self->timer_id) {
+		g_source_remove(self->timer_id);
 	}
-	if (priv->pending) {
-		g_cancellable_cancel(priv->pending);
+	if (self->pending) {
+		g_cancellable_cancel(self->pending);
 	}
-	gsupplicant_interface_unref(priv->iface);
-	mce_display_remove_handlers(priv->display, priv->display_event_id,
-				G_N_ELEMENTS(priv->display_event_id));
-	mce_display_unref(priv->display);
-	gutil_int_history_unref(priv->history);
+	gsupplicant_interface_unref(self->iface);
+	mce_display_remove_all_handlers(self->display, self->display_event_id);
+	mce_display_unref(self->display);
+	gutil_int_history_unref(self->history);
 	G_OBJECT_CLASS(signalpoll_parent_class)->finalize(object);
 }
 
 static void signalpoll_class_init(SignalPollClass *klass)
 {
-	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	object_class->finalize = signalpoll_finalize;
-
-	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-	g_type_class_add_private(klass, sizeof(struct signalpoll_priv));
-	G_GNUC_END_IGNORE_DEPRECATIONS
-
-        signalpoll_signals[SIGNAL_AVERAGE_CHANGED] =
+	klass->finalize = signalpoll_finalize;
+	signalpoll_signals[SIGNAL_AVERAGE_CHANGED] =
 		g_signal_new(SIGNAL_AVERAGE_CHANGED_NAME,
 			G_OBJECT_CLASS_TYPE(klass), G_SIGNAL_RUN_FIRST,
 			0, NULL, NULL, NULL, G_TYPE_NONE, 0);

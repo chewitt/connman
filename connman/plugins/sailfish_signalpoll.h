@@ -1,8 +1,8 @@
 /*
  *  Connection Manager
  *
- *  Copyright (C) 2015-2018 Jolla Ltd. All rights reserved.
- *  Contact: Slava Monich <slava.monich@jolla.com>
+ *  Copyright (C) 2015-2020 Jolla Ltd. All rights reserved.
+ *  Copyright (C) 2020 Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,15 +19,10 @@
 
 #include <gsupplicant_types.h>
 
-#include <glib-object.h>
-
-typedef struct signalpoll_priv SignalPollPriv;
-
-typedef struct signalpoll {
-	GObject object;
-	SignalPollPriv* priv;
-	guint average;
-} SignalPoll;
+struct signalpoll {
+	int average_rssi;   /* dBm */
+	guint average;      /* Percents */
+};
 
 typedef guint (*signalpoll_rssi_to_strength_func)(int rssi);
 typedef void (*signalpoll_event_func)(struct signalpoll *poll, void *data);
