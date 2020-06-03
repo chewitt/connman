@@ -22,6 +22,7 @@
 #ifndef __CONNMAN_STORAGE_H
 #define __CONNMAN_STORAGE_H
 
+#include <sys/types.h>
 #include <glib.h>
 
 #ifdef __cplusplus

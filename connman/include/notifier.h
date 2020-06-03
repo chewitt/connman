@@ -22,6 +22,8 @@
 #ifndef __CONNMAN_NOTIFIER_H
 #define __CONNMAN_NOTIFIER_H
 
+#include <sys/types.h>
+
 #include <connman/service.h>
 #include <connman/ipconfig.h>
 #include <connman/technology.h>
