@@ -57,7 +57,7 @@ struct vpn_driver {
 			enum vpn_provider_route_type *type);
 };
 
-int vpn_register(const char *name, struct vpn_driver *driver,
+int vpn_register(const char *name, const struct vpn_driver *driver,
 			const char *program);
 void vpn_unregister(const char *provider_name);
 void vpn_died(struct connman_task *task, int exit_code, void *user_data);

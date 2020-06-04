@@ -236,6 +236,31 @@ fi
 AM_CONDITIONAL(PPTP, test "${enable_pptp}" != "no")
 AM_CONDITIONAL(PPTP_BUILTIN, test "${enable_pptp}" = "builtin")
 
+AC_ARG_WITH(openfortivpn, AC_HELP_STRING([--with-openfortivpn=PROGRAM],
+        [specify location of openfortivpn binary]), [path_openfortivpn=${withval}])
+
+AC_ARG_ENABLE(openfortivpn,
+        AC_HELP_STRING([--enable-openfortivpn], [enable openfortivpn support]),
+                        [enable_openfortivpn=${enableval}], [enable_openfortivpn="no"])
+if (test "${enable_openfortivpn}" != "no"); then
+        if (test -z "${path_pppd}"); then
+                AC_PATH_PROG(PPPD, [pppd], [/usr/sbin/pppd], $PATH:/sbin:/usr/sbin)
+        else
+                PPPD="${path_pppd}"
+                AC_SUBST(PPPD)
+        fi
+        AC_CHECK_HEADERS(pppd/pppd.h, dummy=yes,
+                        AC_MSG_ERROR(ppp header files are required))
+        if (test -z "${path_openfortivpn}"); then
+                AC_PATH_PROG(OPENFORTIVPN, [openfortivpn], [/usr/bin/openfortivpn], $PATH:/sbin:/usr/sbin)
+        else
+                PPTP="${path_openfortivpn}"
+                AC_SUBST(OPENFORTIVPN)
+        fi
+fi
+AM_CONDITIONAL(OPENFORTIVPN, test "${enable_openfortivpn}" != "no")
+AM_CONDITIONAL(OPENFORTIVPN_BUILTIN, test "${enable_openfortivpn}" = "builtin")
+
 AC_ARG_ENABLE(sailfish-vpn-access,
     AC_HELP_STRING([--enable-sailfish-vpn-access], [enable Sailfish vpn access control plugin]),
         [enable_sailfish_vpn_access=${enableval}], [enable_sailfish_vpn_access="no"])
