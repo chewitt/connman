@@ -652,6 +652,11 @@ static void wifi_bss_destroy(gpointer value)
 	wifi_bss_free(value);
 }
 
+static void wifi_bss_clear_net(gpointer value)
+{
+	((struct wifi_bss *)value)->net = NULL;
+}
+
 static gboolean wifi_bss_ident_update(struct wifi_bss *bss_data)
 {
 	if (bss_data) {
@@ -1757,7 +1762,7 @@ static void wifi_network_delete(struct wifi_network *net)
 	connman_network_unref(net->network);
 	gsupplicant_bss_unref(net->connecting_to);
 	gsupplicant_bss_unref(net->current_bss);
-	g_slist_free(net->bss_list);
+	g_slist_free_full(net->bss_list, wifi_bss_clear_net);
 	g_free(net->ident);
 	g_free(net->last_passphrase);
 	g_slice_free(struct wifi_network, net);
