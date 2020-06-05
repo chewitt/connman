@@ -231,7 +231,7 @@ cp -a %{SOURCE2} %{buildroot}/%{_lib}/systemd/system/connman.service.d/
 
 mkdir -p %{buildroot}/%{_docdir}/%{name}-%{version}
 install -m0644 -t %{buildroot}/%{_docdir}/%{name}-%{version} \
-        AUTHORS ChangeLog README
+        AUTHORS ChangeLog README doc/*.txt
 
 %preun
 if [ "$1" -eq 0 ]; then

@@ -1365,10 +1365,10 @@ bool connman_device_has_status_changed_to(struct connman_device *device,
 
 #define CHAINS_GEN4 3
 #define CHAINS_MANGLE_GEN4 5
-#define RULES_GEN4 (CHAINS_GEN4 + 78 + CHAINS_MANGLE_GEN4 + 5)
+#define RULES_GEN4 (CHAINS_GEN4 + 95 + CHAINS_MANGLE_GEN4 + 5)
 #define CHAINS_GEN6 3
 #define CHAINS_MANGLE_GEN6 5
-#define RULES_GEN6 (CHAINS_GEN6 + 77 + CHAINS_MANGLE_GEN6 + 5)
+#define RULES_GEN6 (CHAINS_GEN6 + 93 + CHAINS_MANGLE_GEN6 + 5)
 #define RULES_ETH 17
 #define RULES_CEL 4
 #define RULES_TETH 7
@@ -1389,6 +1389,10 @@ static const char *general_input[] = {
 		"-p all -j ACCEPT",
 		"-p udplite -j DROP",
 		"-p gre -j ACCEPT",
+		/* Protocol names are case-insesitive */
+		"-p TCP -j ACCEPT",
+		"-p TcP -j ACCEPT",
+		"-p tCp -j ACCEPT",
 		/* Port switches with protocols */
 		"-p tcp -m tcp --dport 80 -j ACCEPT",
 		"-p udp -m udp --sport 81 -j DROP",
@@ -1434,7 +1438,9 @@ static const char *general_input[] = {
 		"#-p sctp --dport 69 -j REJECT",
 		/* owner match - should work in INPUT with NETFILTER_XT_MATCH_QTAGUID */
 		"-m owner --uid-owner 0 -j LOG",
+		"-m owner --uid-owner root -j LOG",
 		"-m owner --gid-owner 0-499 -j LOG",
+		"-m owner --gid-owner root -j LOG",
 		/* rpfilter */
 		"-m rpfilter --loose -j LOG",
 		"-m rpfilter --validmark -j LOG",
@@ -1442,6 +1448,23 @@ static const char *general_input[] = {
 		"-m rpfilter --invert -j DROP",
 		"-p udp -m rpfilter --invert -j DROP",
 		"-m rpfilter --loose --validmark --accept-local -j LOG",
+		/* multiple -m matches on commandline */
+		"-p ah -m ah ! --ahspi 12 -m ah ! --ahspi 14 -j DROP",
+		"-m ttl ! --ttl-eq 60 -m ttl ! --ttl-eq 80 -j LOG",
+		"-p esp -m esp ! --espspi 14 -m esp ! --espspi 18 -j ACCEPT",
+		"-p dccp -m dccp ! --dport 8188 -m dccp ! --dport 8288 -j DROP",
+		"-p sctp -m sctp ! --dport 8188 -m sctp ! --dport 8288 -j DROP",
+		"-p tcp -m tcp ! --dport 8188 -m tcp ! --dport 8288 -j DROP",
+		"-p udp -m udp ! --dport 8188 -m udp ! --dport 8288 -j DROP",
+		"-p tcp -m ecn ! --ecn-ip-ect 0 -m ecn ! --ecn-ip-ect 3 "
+								"-j ACCEPT",
+		"-p icmp -m icmp ! --icmp-type 8/0 -m icmp ! --icmp-type 12 "
+								"-j ACCEPT",
+		"-p ipv6-icmp -m ipv6-icmp ! --icmpv6-type 128/0 -m ipv6-icmp "
+						"! --icmpv6-type 64/0 -j DROP",
+		"-m conntrack ! --ctproto 6 -m conntrack ! --ctproto 8 "
+								"-j ACCEPT",
+		"-m owner ! --uid-owner root -m owner ! --uid-owner 22 -j LOG",
 		NULL
 };
 static const char *general_output[] = {
@@ -1467,6 +1490,7 @@ static const char *general_output[] = {
 		"-m owner --uid-owner 0-499 -j ACCEPT",
 		"-m owner --uid-owner 100-100 -j ACCEPT",
 		"-m owner --gid-owner 0 -j DROP",
+		"-m owner --gid-owner 1024 -j DROP",
 		"-m owner --socket-exists -j LOG",
 		NULL
 };
@@ -1665,8 +1689,8 @@ static const char *general_icmpv6[] = {
 	NULL
 };
 
-#define RULES_OPTIONS4 73 // +1 for chain
-#define RULES_OPTIONS6 70 // +1 for chain
+#define RULES_OPTIONS4 76 // +1 for chain
+#define RULES_OPTIONS6 72 // +1 for chain
 
 static const char *general_options[] = {
 	/* AH and ESP options */
@@ -1699,6 +1723,7 @@ static const char *general_options[] = {
 	"-p tcp -m ttl --ttl-eq 10 -j DROP",
 	"-p tcp -m ttl --ttl-lt 20 -j DROP",
 	"-p tcp -m ttl --ttl-gt 30 -j DROP",
+	"-m ttl --ttl-gt 10 -m ttl --ttl-lt 30 -j ACCEPT",
 	/* dccp options */
 	"-p dccp -m dccp --dccp-types REQUEST -j ACCEPT",
 	"-p dccp -m dccp --dccp-types REQUEST,RESPONSE,DATA,ACK,DATAACK,"
@@ -1726,6 +1751,7 @@ static const char *general_options[] = {
 	"-m conntrack --ctexpire 21:33 -j ACCEPT",
 	"-m conntrack --ctdir ORIGINAL -j DROP",
 	"-m conntrack --ctdir REPLY -j DROP",
+	"-p 10 -m conntrack --ctorigsrcport 40 -j ACCEPT",
 	/* mark options */
 	"-m mark --mark 1 -j ACCEPT",
 	"-m mark --mark 0x01 -j DROP",
@@ -1758,11 +1784,13 @@ static const char *general_options[] = {
 	"-p tcp -m rpfilter --invert -j DROP",
 	"-p udp -m rpfilter --invert -j DROP",
 	"-p udplite -m rpfilter --invert -j DROP",
+	/* special correct options to trigger some coverage tests */
+	"-p tcp -m tcp ! --tcp-option 1 -m tcp ! --tcp-option 2 -j ACCEPT",
 	NULL
 };
 
 #define RULES_OPTIONS_ADDR4 23 // +1 chain
-#define RULES_OPTIONS_ADDR6 15 // +1 chain
+#define RULES_OPTIONS_ADDR6 16 // +1 chain
 
 static const char *general_options_address4[] = {
 	/* Address options IPv4 */
@@ -1809,6 +1837,8 @@ static const char *general_options_address6[] = {
 	"-m iprange --src-range fe80::3:2-fe80::4:1 -j LOG",
 	"-m iprange --src-range fe80::2-fe80::10:ff -j ACCEPT",
 	"-m iprange --dst-range fe80::11:00-fe80::12:ff -j ACCEPT",
+	/* IPv6 specific option in ah */
+	"-p ah -m ah --ahlen 289 -j ACCEPT", /* IPv6 only */
 	NULL
 };
 
@@ -2012,6 +2042,101 @@ static const char *invalid_general_options[] = {
 	"-m iprange --dst-range fe80::12:ff-fe80::11:00 -j ACCEPT",
 	"-m iprange --dst-range 1.1.1.1-fe80::11:00 -j ACCEPT",
 	"-m iprange --dst-range fe80::12:ff-2.2.2.2 -j ACCEPT",
+	/* special incorrect options to trigger some coverage tests */
+	"-p tcp ! -j ACCEPT",
+	"--source 192.168.0.1/101 -j ACCEPT",
+	"-m owner --uid-owner 0-184467440737095516167 -j DROP",
+	"-m owner --uid-owner 184467440737095516166-184467440737095516167 -j DROP",
+	"-i verylonginterface0 -j ACCEPT",
+	"-p icmp -m icmp --icmp-type 25513 -j DROP",
+	"-p tcp -m tcp --dport 40: -j ACCEPT",
+	"-m mark --mark 1/ -j ACCEPT",
+	"-p tcp -m multiport -m multiport --dport 80 -j ACCEPT",
+	"-m nonexistent -j ACCEPT",
+	/* special set of special cases - empty strings in options */
+	"-p tcp -m tcp --dport '' -j ACCEPT",
+	"-p tcp -m tcp --sport '' -j ACCEPT",
+	"-p tcp -m multiport --sports '' -j ACCEPT",
+	"-p tcp -m multiport --dports '' -j ACCEPT",
+	"-p tcp -m multiport --ports '' -j ACCEPT",
+	"-p tcp -m multiport --sports , -j ACCEPT",
+	"-p tcp -m multiport --dports , -j ACCEPT",
+	"-p tcp -m multiport --ports , -j ACCEPT",
+	"-p tcp -m multiport --sports :, -j ACCEPT",
+	"-p tcp -m multiport --dports ,: -j ACCEPT",
+	"-p tcp -m multiport --ports , -j ACCEPT",
+	"-p tcp -m tcp --tcp-flags '' '' -j ACCEPT",
+	"-p tcp -m tcp --tcp-option '' -j ACCEPT",
+	"-p tcp -m tcp --tcp-option '' -j ACCEPT",
+	"-m mark --mark '' -j ACCEPT",
+	"-m mark --mark / -j ACCEPT",
+	"-m mark --mark 2/ -j ACCEPT",
+	"-m mark --mark /2 -j ACCEPT",
+	"-m conntrack --ctstate '' -j ACCEPT",
+	"-m conntrack --ctproto '' -j ACCEPT",
+	"-m conntrack --ctorigsrc '' -j ACCEPT",
+	"-m conntrack --ctorigsrc / -j ACCEPT",
+	"-m conntrack --ctorigsrc 1.1.1.1/ -j ACCEPT",
+	"-m conntrack --ctorigsrc /16 -j ACCEPT",
+	"-m conntrack --ctorigdst '' -j ACCEPT",
+	"-m conntrack --ctreplsrc '' -j ACCEPT",
+	"-m conntrack --ctrepldst '' -j ACCEPT",
+	"-m conntrack --ctorigsrcport '' -j ACCEPT",
+	"-m conntrack --ctorigdstport '' -j ACCEPT",
+	"-m conntrack --ctreplsrcport '' -j ACCEPT",
+	"-m conntrack --ctrepldstport '' -j ACCEPT",
+	"-m conntrack --ctstatus '' -j ACCEPT",
+	"-m conntrack --ctexpire '' -j ACCEPT",
+	"-m conntrack --ctexpire : -j ACCEPT",
+	"-m conntrack --ctexpire 1: -j ACCEPT",
+	"-m conntrack --ctexpire :2 -j ACCEPT",
+	"-m conntrack --ctdir '' -j ACCEPT",
+	"-m ttl --ttl-eq '' -j ACCEPT",
+	"-m ttl --ttl-lt '' -j ACCEPT",
+	"-m ttl --ttl-gt '' -j ACCEPT",
+	"-m pkttype --pkt-type '' -j ACCEPT",
+	"-m limit --limit '' -j ACCEPT",
+	"-m limit --limit / -j ACCEPT",
+	"-m limit --limit-burst '' -j ACCEPT",
+	"-m ecn --ecn-ip-ect '' -j ACCEPT",
+	"-p ah -m ah --ahspi '' -j ACCEPT",
+	"-p ah -m ah --ahspi : -j ACCEPT",
+	"-p ah -m ah --ahspi 2: -j ACCEPT",
+	"-p ah -m ah --ahspi :2 -j ACCEPT",
+	"-p ah -m ah --ahlen '' -j ACCEPT",
+	"-p esp -m esp --espspi '' -j ACCEPT",
+	"-p esp -m esp --espspi : -j ACCEPT",
+	"-p mh -m mh --mh-type '' -j ACCEPT",
+	"-p mh -m mh --mh-type : -j ACCEPT",
+	"-p sctp -m sctp --chunk-types '' '' -j ACCEPT",
+	"-p icmp -m icmp --icmp-type '' -j ACCEPT",
+	"-p icmp -m icmp --icmp-type / -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type '' -j ACCEPT",
+	"-p icmpv6 -m icmpv6 --icmpv6-type / -j ACCEPT",
+	"-p dccp -m dccp --dccp-types '' -j ACCEPT",
+	"-p dccp -m dccp --dccp-types , -j ACCEPT",
+	"-p dccp -m dccp --dccp-types ,, -j ACCEPT",
+	"-p dccp -m dccp --dccp-option '' -j ACCEPT",
+	"-m owner --uid-owner '' -j ACCEPT",
+	"-m owner --uid-owner - -j ACCEPT",
+	"-m owner --gid-owner '' -j ACCEPT",
+	"-m owner --gid-owner - -j ACCEPT",
+	"-m iprange --src-range '' -j ACCEPT",
+	"-m iprange --src-range - -j ACCEPT",
+	"-m iprange --dst-range '' -j ACCEPT",
+	"-m iprange --dst-range - -j ACCEPT",
+	"-i '' -j ACCEPT",
+	"-i + -j ACCEPT",
+	"-o '' -j ACCEPT",
+	"-o + -j ACCEPT",
+	"-p '' -j ACCEPT",
+	"-s '' -j ACCEPT",
+	"-s / -j ACCEPT",
+	"-d '' -j ACCEPT",
+	"-d / -j ACCEPT",
+	"-m '' -j ACCEPT",
+	"-j ''",
+	"--goto ''",
 	NULL
 };
 

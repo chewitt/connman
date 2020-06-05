@@ -104,8 +104,19 @@ for the CHAIN with given PROTOCOL.
 Rule formatting and exceptions
 ==============================
 
-Rules follow iptables rule format, for reference see:
+Rules follow iptables rule format in general, with some notable exceptions, for
+reference see:
 https://www.frozentux.net/iptables-tutorial/iptables-tutorial.html
+
+The most notable exceptions are:
+1. -p protocol does NOT imply -m protocol. -p protocol only implies the
+   protocol in the IP header. So e.g. to add a http port opening, you MUST
+   use -m tcp:
+   "IPv4.INPUT.RULES = -p tcp -m tcp --dport 80 -j ACCEPT"
+2. The order is stricter - if a match relies on a specific protocol, -p must
+   be specified before -m on the commandline.
+3. No command abbrievations are allowed - it is not possible to use --dest as
+   short for --destination.
 
 Rules are separated with semicolons (;). All rules for a key must be on one
 line.
@@ -116,23 +127,24 @@ there are missing/invalid values the rule is ignored. Negations in rules are
 supported as with iptables command.
 
 Each rule:
- - Has to have one target (-j|--jump TARGET) or goto (-g|--goto) which is the
+ - Must have one target (-j|--jump TARGET) or goto (-g|--goto) which is the
    bare minimum of the rule
- - Can have 0...1 protocol matches (-p|--protocol protocol)
- - Can have 0...2 match speficiers (-m|--match match),
-   - E.g., to allow one attempt per second to telnet:
-     -p udp -m udp --dport 23 -m limit --limit 1/s --limit-burst 1 -j ACCEPT
- - Can have
-   - 0...2 port switches with a protocol modifier (-m|--match protocol):
-     --destination-port, --dport, --source-port, --sport 
-   - 0...1 port switches with multiport modifier (-m|--match multiport):
-     --destination-ports, --dports, --source-ports, --sports, --port, --ports,
-     --destination-port, --dport, --source-port, --sport
- - Can have 0...2 destination specifiers (same direction cannot be used twice)
-   --source, --src, -s, --destination, --dst, -d
- - Can have 0...2 interface switches in [General] section (same direction cannot
-   be used twice):
-   --in-interface, -i, --out-interface, -o
+   - E.g., to allow all traffic:
+     -j ACCEPT
+ - Can have 1 protocol selector (-p|--protocol protocol)
+   - E.g., to block all ICMP traffic:
+     -p icmp -j DROP
+ - Can have an address specifier for each of traffic directions:
+   --source/-s, --destination/-d
+   - E.g. to block all traffic to Google's public DNS servers:
+     -d 8.8.8.8 -d DROP
+ - Can have an interface switch for each directions in [General] section:
+   --in-interface/-i, --out-interface/-o
+ - Can have match speficiers (-m|--match match), restrictions apply per match.
+   - E.g., to allow one attempt per second:
+     -m limit --limit 1/s --limit-burst 1 -j ACCEPT
+ - Any match that requires a specific set of options must include them after
+   the -m match for the rule to be approved.
 
 Rules can be commented out with hash tag (#) as first character. Commented rules
 are simply ignored. For example:
@@ -145,28 +157,78 @@ Will discard the first --dport 23 rule and use the second --dport 24 rule.
 The targets (-j TARGET) are the same as with default iptables: ACCEPT, DROP,
 REJECT, LOG and QUEUE.
 
-Protocols (-p protocol) are the same as with iptables: tcp, udp, udplite, icmp,
-icmpv6, ipv6-icmp, esp, ah, sctp, mh, dccp and the special keyword all. These
-can be given in numeric format as well.
+Protocols (-p protocol) are the same as with iptables. One can use any protocol
+name that is resolvable through /etc/protocols, or use numerical values
+directly. As an exception, protocol names "icmpv6", "ipv6-mh", "mh" and "all"
+are also allowed.
 
 Following switches are disabled and if a rule contains any of them the rule will
 be ignored:
 
- - All chain modifiers, since rules are added to managed chains, all chain
-   modifiers are disabled: --append, -A, --delete, -D, --delete-chain, -X, 
-   --flush, -F, --insert, -I, --new-chain, -N, --policy, -P, --rename-chain, -E,
-   --replace, -R, --zero, -Z
- - Destination speficiers for DNAT are disabled : --to-destination,
+ - All chain modifiers are disabled: --append, -A, --delete, -D, --delete-chain,
+   -X, --flush, -F, --insert, -I, --new-chain, -N, --policy, -P, --rename-chain,
+   -E, --replace, -R, --zero, -Z
+ - Destination speficiers for DNAT are disabled: --to-destination,
    --from-destination
  - Fragment: -f, --fragment
  - IP family options: --ipv4, -4, --ipv6, -6
- - Some matches (with -m) are disabled (cause crash or commit errors):
-   - IPv4: comment, state, recent, sctp, dccp, mh, hashlimit,
-     icmpv6, ipv6-icmp
-   - IPv6: comment, state, recent, ttl, sctp, dccp, mh,
-     hashlimit, frag, icmp
  - Interface specifiers are not allowed in tethering or service type sections:
    --in-interface, -i, --out-interface, -o
+ - Any match that is not supported by syntax parser will make the rule invalid.
+   See the next section for a list of supported matches. Note that ipv6-specific
+   matches are not supported in ipv4 and vice-versa.
+
+ - Any match that is not supported by syntax parser is disabled. See next
+   section for a list of supported matches. Note that ipv6-specific matches
+   are not supported in ipv4 and vice-versa.
+
+Match specific options
+======================
+
+Currently supported matches are:
+ - ah
+ - conntrack
+ - dccp
+ - ecn
+ - esp
+ - helper
+ - icmp
+ - icmp6, icmpv6, ipv6-icmp
+ - iprange
+ - limit
+ - mark
+ - mh
+ - multiport
+ - owner
+ - pkttype
+ - rpfilter
+ - sctp
+ - tcp
+ - ttl
+ - udp
+
+For match-specific options, please see "iptables -m $match --help".
+
+Port matches (--dport and/or --sport) are supported with -m protocol that
+supports ports. These are:
+ - tcp
+ - udp
+ - dccp
+ - sctp
+
+Only one --dport and only one --sport is allowed.
+
+Multiport match requires a protocol that has ports. These are:
+ - tcp
+ - udp
+ - udplite
+ - dccp
+ - sctp
+
+Multiport match supports only one option, either --sports, or --dports.
+However, it is possible to use multiple -m multiport specifiers to match both
+directions, e.g.:
+  -p tcp -m multiport --dports 80 -m multiport --sports 1024:65535 -j ACCEPT
 
 General section [General]
 =========================

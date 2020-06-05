@@ -286,7 +286,7 @@ static bool is_valid_port_or_service_range(const char *protocol,
 
 	/* Range can have only two set */
 	if (g_strv_length(tokens) == 2) {
-		for (i = 0; i < 2 && tokens[i]; i++) {
+		for (i = 0; i < 2; i++) {
 			if (!is_valid_port_or_service(protocol, tokens[i],
 						&ports[i])) {
 				DBG("invalid port/service %s in %s", tokens[i],
@@ -659,6 +659,7 @@ static bool handle_ports(struct validator_data *data, gchar **args)
 	struct protoent *p;
 	char *protoname = NULL;
 	gchar **tokens = NULL;
+	int token_count;
 
 	 /* In iptables ports are separated with commas, ranges with colon. */
 	const char delimeter[] = ",";
@@ -674,7 +675,11 @@ static bool handle_ports(struct validator_data *data, gchar **args)
 	if (!tokens)
 		return false;
 
-	for (i = 0; tokens[i]; i++) {
+	token_count = g_strv_length(tokens);
+	if (token_count < 1)
+		ret = false;
+
+	for (i = 0; i < token_count; i++) {
 		/*
 		 * If ':' exists it is a range. Check that only one ':' exists
 		 * and the port range is specified correctly
@@ -1571,9 +1576,7 @@ static void clean_match_options(struct validator_data *data, gchar *match)
 	int i;
 
 	for (i = 0; known_matches[i].match_name; i++) {
-		if (!g_strcmp0(known_matches[i].match_name, match) &&
-			known_matches[i].family_dep == data->family) {
-
+		if (!g_strcmp0(known_matches[i].match_name, match)) {
 			remove_unique_ids_from_invoked(data,
 					 known_matches[i].opts_enabled);
 		}
