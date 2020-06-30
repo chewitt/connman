@@ -677,6 +677,7 @@ static void add_connection(const char *path, DBusMessageIter *properties,
 		DBusMessageIter entry, value;
 		const char *key;
 		char *str;
+		dbus_bool_t value_bool;
 
 		dbus_message_iter_recurse(properties, &entry);
 		dbus_message_iter_get_basic(&entry, &key);
@@ -699,10 +700,12 @@ static void add_connection(const char *path, DBusMessageIter *properties,
 			dbus_message_iter_get_basic(&value, &str);
 			data->type = g_strdup(str);
 		} else if (g_str_equal(key, "Immutable")) {
-			dbus_bool_t immutable;
-
-			dbus_message_iter_get_basic(&value, &immutable);
-			data->immutable = immutable;
+			dbus_message_iter_get_basic(&value, &value_bool);
+			data->immutable = value_bool;
+		} else if (g_str_equal(key, "SplitRouting")) {
+			dbus_message_iter_get_basic(&value, &value_bool);
+			connman_provider_set_split_routing(data->provider,
+						value_bool);
 		} else if (g_str_equal(key, "Host")) {
 			dbus_message_iter_get_basic(&value, &str);
 			data->host = g_strdup(str);
@@ -1890,10 +1893,15 @@ static gboolean property_changed(DBusConnection *conn,
 		g_free(data->domain);
 		data->domain = g_strdup(str);
 		connman_provider_set_domain(data->provider, data->domain);
+	} else if (g_str_equal(key, "SplitRouting")) {
+		dbus_bool_t split_routing;
+		dbus_message_iter_get_basic(&value, &split_routing);
+		connman_provider_set_split_routing(data->provider,
+					split_routing);
 	} else if (g_str_equal(key, "DefaultRoute")) {
 		dbus_message_iter_get_basic(&value, &str);
-		g_hash_table_replace(data->setting_strings,
-				g_strdup(key), g_strdup(str));
+		connman_provider_set_split_routing(data->provider,
+					!g_strcmp0(str, "false"));
 	}
 
 	if (ip_set && err == 0) {

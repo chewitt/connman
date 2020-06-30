@@ -784,7 +784,8 @@ static void unset_vpn_dependency(struct connman_service *vpn_service)
 	vpn_service->depends_on = NULL;
 }
 
-static void set_split_routing(struct connman_service *service, bool value)
+void __connman_service_set_split_routing(struct connman_service *service,
+			bool value)
 {
 	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 		return;
@@ -842,9 +843,10 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	case CONNMAN_SERVICE_TYPE_VPN:
-		set_split_routing(service, g_key_file_get_boolean(keyfile,
-							service->identifier,
-							"SplitRouting", NULL));
+		__connman_service_set_split_routing(service,
+						g_key_file_get_boolean(keyfile,
+						service->identifier,
+						"SplitRouting", NULL));
 
 		/* fall through */
 	case CONNMAN_SERVICE_TYPE_WIFI:
@@ -887,9 +889,10 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 	case CONNMAN_SERVICE_TYPE_P2P:
 		break;
 	case CONNMAN_SERVICE_TYPE_VPN:
-		set_split_routing(service, g_key_file_get_boolean(keyfile,
-							service->identifier,
-							"SplitRouting", NULL));
+		__connman_service_set_split_routing(service,
+						g_key_file_get_boolean(keyfile,
+						service->identifier,
+						"SplitRouting", NULL));
 
 		autoconnect = g_key_file_get_boolean(keyfile,
 				service->identifier, "AutoConnect", &error);
@@ -1927,7 +1930,7 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
-struct connman_service *get_connected_default_route_service()
+static struct connman_service *get_connected_default_service()
 {
 	GList *iter;
 
@@ -1936,8 +1939,8 @@ struct connman_service *get_connected_default_route_service()
 	for (iter = service_list; iter; iter = iter->next) {
 		service = iter->data;
 
-		if (__connman_service_is_default_route(service) &&
-			is_connected(service))
+		if (!__connman_service_is_split_routing(service) &&
+					is_connected(service))
 			return service;
 	}
 
@@ -1980,11 +1983,11 @@ static void default_changed(void)
 
 	/* If new service is NULL try to get a connected service. */
 	if (!service) {
-		service = get_connected_default_route_service();
-		DBG("got new connected default route %p", service);
+		service = get_connected_default_service();
+		DBG("got new connected default %p", service);
 
 		if (service == current_default) {
-			DBG("new connected default route == current_default");
+			DBG("new connected default == current_default");
 			return;
 		}
 	}
@@ -3490,7 +3493,7 @@ int __connman_service_get_index(struct connman_service *service)
 }
 
 GSList *__connman_service_get_depending_vpn_index(
-	struct connman_service *service)
+					struct connman_service *service)
 {
 	int index = -1;
 	GSList *index_list = NULL;
@@ -3506,22 +3509,26 @@ GSList *__connman_service_get_depending_vpn_index(
 
 		/*
 		 * Add the index of the VPN to the list of indexes if the VPN
-		 * uses service as transport service and is not being used as
-		 * default route. This way dnsproxy can forward messages to the
-		 * DNS servers reported by a VPN not acting as default route
-		 * for all traffic.
+		 * uses service as transport service and is not being split
+		 * routed. This way dnsproxy can forward messages to the DNS
+		 * servers reported by a split routed VPN for all traffic.
 		 */
-		if (vpn->type == CONNMAN_SERVICE_TYPE_VPN &&
-			vpn->depends_on == service &&
-			(is_connecting(service) || is_connected(service)) &&
-			!__connman_service_is_default_route(vpn)) {
-			
-			index = connman_provider_get_index(vpn->provider);
+		if (vpn->type != CONNMAN_SERVICE_TYPE_VPN ||
+					vpn->depends_on != service)
+			continue;
 
-			if (index > 0)
-				index_list = g_slist_append(index_list,
+		if (!(is_connecting(service) || is_connected(service)))
+			continue;
+
+		if (!__connman_service_is_split_routing(vpn))
+			continue;
+
+		index = connman_provider_get_index(vpn->provider);
+		if (index <= 0)
+			continue;
+
+		index_list = g_slist_append(index_list,
 					GINT_TO_POINTER(index));
-		}
 	}
 
 out:
@@ -3704,14 +3711,6 @@ void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 	proxy_changed(service);
 
 	__connman_notifier_proxy_changed(service);
-}
-
-bool __connman_service_is_default_route(struct connman_service *service)
-{
-	if (!service)
-		return true;
-
-	return __connman_provider_is_default_route(service->provider);
 }
 
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service)
@@ -6029,11 +6028,11 @@ static DBusMessage *move_service(DBusConnection *conn,
 			return __connman_error_invalid_service(msg);
 		}
 
-		set_split_routing(target, true);
+		__connman_service_set_split_routing(target, true);
 	} else
-		set_split_routing(target, false);
+		__connman_service_set_split_routing(target, false);
 
-	set_split_routing(service, false);
+	__connman_service_set_split_routing(service, false);
 
 	target4 = __connman_ipconfig_get_method(target->ipconfig_ipv4);
 	target6 = __connman_ipconfig_get_method(target->ipconfig_ipv6);
@@ -6691,30 +6690,30 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	if (a_connected && b_connected) {
 		int preference;
 
-		if (__connman_service_is_default_route(service_a) &&
-			!__connman_service_is_default_route(service_b))
+		if (!__connman_service_is_split_routing(service_a) &&
+				__connman_service_is_split_routing(service_b))
 			return -1;
 
-		if (!__connman_service_is_default_route(service_a) &&
-			__connman_service_is_default_route(service_b))
+		if (__connman_service_is_split_routing(service_a) &&
+				!__connman_service_is_split_routing(service_b))
 			return 1;
 
 		if (service_a->type == CONNMAN_SERVICE_TYPE_VPN &&
-			service_b->type != CONNMAN_SERVICE_TYPE_VPN &&
-			service_a->depends_on &&
-			service_a->depends_on != service_b &&
-			is_connected(service_a->depends_on)) {
+				service_b->type != CONNMAN_SERVICE_TYPE_VPN &&
+				service_a->depends_on &&
+				service_a->depends_on != service_b &&
+				is_connected(service_a->depends_on)) {
 			return service_compare(service_a->depends_on,
-				service_b);
+								service_b);
 		}
 
 		if (service_b->type == CONNMAN_SERVICE_TYPE_VPN &&
-			service_a->type != CONNMAN_SERVICE_TYPE_VPN &&
-			service_b->depends_on &&
-			service_b->depends_on != service_a &&
-			is_connected(service_b->depends_on)) {
+				service_a->type != CONNMAN_SERVICE_TYPE_VPN &&
+				service_b->depends_on &&
+				service_b->depends_on != service_a &&
+				is_connected(service_b->depends_on)) {
 			return service_compare(service_a,
-				service_b->depends_on);
+							service_b->depends_on);
 		}
 
 		/* Set as -1, 0 or 1, return value if preferred list is used */

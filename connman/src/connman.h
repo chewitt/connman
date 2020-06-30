@@ -747,7 +747,6 @@ void __connman_ipv6pd_cleanup(void);
 
 #include <connman/provider.h>
 
-bool __connman_provider_is_default_route(struct connman_provider *provider);
 bool __connman_provider_check_routes(struct connman_provider *provider);
 int __connman_provider_append_user_route(struct connman_provider *provider,
 			int family, const char *network, const char *netmask);
@@ -889,6 +888,8 @@ void __connman_service_set_pac(struct connman_service *service,
 bool __connman_service_is_hidden(struct connman_service *service);
 bool __connman_service_is_split_routing(struct connman_service *service);
 bool __connman_service_index_is_split_routing(int index);
+void __connman_service_set_split_routing(struct connman_service *service,
+						bool split_routing);
 int __connman_service_get_index(struct connman_service *service);
 GSList *__connman_service_get_depending_vpn_index(
 		struct connman_service *service);
@@ -901,7 +902,6 @@ void __connman_service_set_domainname(struct connman_service *service,
 const char *__connman_service_get_nameserver(struct connman_service *service);
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url);
-bool __connman_service_is_default_route(struct connman_service *service);
 
 void __connman_service_set_identity(struct connman_service *service,
 					const char *identity);
