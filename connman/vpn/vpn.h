@@ -114,10 +114,12 @@ int __vpn_rtnl_send(const void *buf, size_t len);
 
 int __vpn_config_init(void);
 void __vpn_config_cleanup(void);
-char *__vpn_config_get_string(GKeyFile *key_file,
-        const char *group_name, const char *key, GError **error);
-char **__vpn_config_get_string_list(GKeyFile *key_file,
-        const char *group_name, const char *key, gsize *length, GError **error);
+char *__vpn_config_get_string(GKeyFile *key_file, const char *group_name,
+					const char *key, GError **error);
+char **__vpn_config_get_string_list(GKeyFile *key_file, const char *group_name,
+			const char *key, gsize *length, GError **error);
+bool __vpn_config_get_boolean(GKeyFile *key_file, const char *group_name,
+			const char *key, GError **error, bool default_value);
 
 #ifndef VPN_STATEDIR
 #define VPN_STATEDIR vpn_settings_get_state_dir()
