@@ -130,7 +130,14 @@ Properties	string State [readonly]
 			configured externally via a configuration file.
 
 			The only valid operation are Connect(), Disconnect()
-                        and GetProperties()
+			and GetProperties()
+
+		boolean SplitRouting
+
+			This value reflects the split routing setting on
+			connmand side. By default, this value is omitted and
+			defaults to false. The value needs to be explicitly
+			set to true for VPN to be split routed.
 
 		int Index [readonly]
 
