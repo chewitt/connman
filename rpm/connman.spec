@@ -2,7 +2,6 @@ Name:       connman
 Summary:    Connection Manager
 Version:    1.32
 Release:    1
-Group:      Communications/ConnMan
 License:    GPLv2
 URL:        http://connman.net/
 Source0:    %{name}-%{version}.tar.bz2
@@ -48,6 +47,7 @@ BuildRequires:  pkgconfig(libgsupplicant) >= 1.0.17
 BuildRequires:  ppp-devel
 BuildRequires:  libtool
 BuildRequires:  usb-moded-devel >= 0.86.0+mer31
+BuildRequires:  systemd
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -55,7 +55,6 @@ within embedded devices running the Linux operating system.
 
 %package wait-online
 Summary:    Wait for network to be configured by ConnMan
-Group:      Communications/ConnMan
 
 %description wait-online
 A systemd service that can be enabled so that the system waits until a
@@ -63,14 +62,12 @@ network connection is established before reaching network-online.target.
 
 %package devel
 Summary:    Development files for Connection Manager
-Group:      Development/Libraries
 
 %description devel
 connman-devel contains development files for use with connman.
 
 %package test
 Summary:    Test Scripts for Connection Manager
-Group:      Development/Tools
 Requires:   %{name} = %{version}-%{release}
 Requires:   dbus-python
 Requires:   pygobject2
@@ -80,7 +77,6 @@ Scripts for testing Connman and its functionality.
 
 %package tools
 Summary:    Development tools for Connection Manager
-Group:      Development/Tools
 Requires:   %{name} = %{version}-%{release}
 
 %description tools
@@ -88,7 +84,6 @@ Programs for debugging Connman
 
 %package configs-mer
 Summary:    Package to provide default configs for connman
-Group:      Development/Tools
 Requires:   %{name} = %{version}-%{release}
 Provides:   connman-configs
 
@@ -98,7 +93,6 @@ FallbackTimeservers.
 
 %package doc
 Summary:    Documentation for %{name}
-Group:      Documentation
 Requires:   %{name} = %{version}-%{release}
 Obsoletes:  %{name}-docs
 
@@ -201,11 +195,11 @@ This package provides OpenFortiNet VPN plugin for connman.
     --enable-sailfish-counters \
     --enable-globalproxy \
     --disable-gadget \
-    --with-systemdunitdir=/%{_lib}/systemd/system \
+    --with-systemdunitdir=%{_unitdir} \
     --enable-systemd \
-    --with-tmpfilesdir=%{_libdir}/tmpfiles.d
+    --with-tmpfilesdir=%{_prefix}/lib/tmpfiles.d
 
-make %{?_smp_mflags}
+%make_build
 
 %check
 make check
@@ -223,11 +217,11 @@ cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
 mkdir -p %{buildroot}%{_sysconfdir}/connman/
 cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/connman/
 
-mkdir -p %{buildroot}/%{_lib}/systemd/system/network.target.wants
-ln -s ../connman.service %{buildroot}/%{_lib}/systemd/system/network.target.wants/connman.service
+mkdir -p %{buildroot}/%{_unitdir}/network.target.wants
+ln -s ../connman.service %{buildroot}/%{_unitdir}/network.target.wants/connman.service
 
-mkdir -p %{buildroot}/%{_lib}/systemd/system/connman.service.d
-cp -a %{SOURCE2} %{buildroot}/%{_lib}/systemd/system/connman.service.d/
+mkdir -p %{buildroot}/%{_unitdir}/connman.service.d
+cp -a %{SOURCE2} %{buildroot}/%{_unitdir}/connman.service.d/
 
 mkdir -p %{buildroot}/%{_docdir}/%{name}-%{version}
 install -m0644 -t %{buildroot}/%{_docdir}/%{name}-%{version} \
@@ -275,17 +269,17 @@ systemctl daemon-reload || :
 %{_sbindir}/connmand
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/plugins-vpn
-%{_libdir}/tmpfiles.d/connman_resolvconf.conf
+%{_prefix}/lib/tmpfiles.d/connman_resolvconf.conf
 %config %{_sysconfdir}/dbus-1/system.d/*.conf
-/%{_lib}/systemd/system/connman.service
-/%{_lib}/systemd/system/network.target.wants/connman.service
-/%{_lib}/systemd/system/connman-vpn.service
-/%{_lib}/systemd/system/connman.service.d
+%{_unitdir}/connman.service
+%{_unitdir}/network.target.wants/connman.service
+%{_unitdir}/connman-vpn.service
+%{_unitdir}/connman.service.d
 /%{_datadir}/dbus-1/system-services/net.connman.vpn.service
 
 %files wait-online
 %{_sbindir}/connmand-wait-online
-/%{_lib}/systemd/system/connman-wait-online.service
+%{_unitdir}/connman-wait-online.service
 
 %files devel
 %defattr(-,root,root,-)
