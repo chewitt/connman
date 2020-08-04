@@ -3364,7 +3364,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 					break;
 
 				if (invert)
-					ctx->ip->invflags |= IP6T_INV_DSTIP;
+					ctx->ipv6->invflags |= IP6T_INV_DSTIP;
 			}
 			
 			break;
