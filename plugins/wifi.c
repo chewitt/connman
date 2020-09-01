@@ -74,6 +74,7 @@
 #define P2P_LISTEN_PERIOD 500
 #define P2P_LISTEN_INTERVAL 2000
 
+#define ASSOC_STATUS_AUTH_TIMEOUT 16
 #define ASSOC_STATUS_NO_CLIENT 17
 #define LOAD_SHAPING_MAX_RETRIES 3
 
@@ -2422,7 +2423,9 @@ static bool handle_4way_handshake_failure(GSupplicantInterface *interface,
 {
 	struct connman_service *service;
 
-	if (wifi->state != G_SUPPLICANT_STATE_4WAY_HANDSHAKE)
+	if ((wifi->state != G_SUPPLICANT_STATE_4WAY_HANDSHAKE) &&
+			!((wifi->state == G_SUPPLICANT_STATE_ASSOCIATING) &&
+				(wifi->assoc_code == ASSOC_STATUS_AUTH_TIMEOUT)))
 		return false;
 
 	if (wifi->connected)
