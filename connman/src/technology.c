@@ -483,7 +483,7 @@ static void technology_load(struct connman_technology *technology)
 		return;
 	}
 
-	if (!technology_load_values(technology, keyfile))
+	if (technology_load_values(technology, keyfile))
 		DBG("Cannot load technology %p/%s keyfile %p", technology,
 					get_name(technology->type), keyfile);
 
@@ -1972,8 +1972,13 @@ bool __connman_technology_enable_from_config()
 	for (list = technology_list; list; list = list->next) {
 		struct connman_technology *technology = list->data;
 
-		if (!technology_load_values(technology, keyfile))
+		if (technology_load_values(technology, keyfile)) {
+			DBG("Cannot load technology %p/%s keyfile %p",
+						technology,
+						get_name(technology->type),
+						keyfile);
 			continue;
+		}
 
 		if (technology->rfkill_driven && technology->hardblocked) {
 			DBG("technology %p/%s hardblocked, not set as %s",
