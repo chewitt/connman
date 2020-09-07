@@ -417,12 +417,58 @@ static void free_rfkill(gpointer data)
 	g_free(rfkill);
 }
 
+static int technology_load_values(struct connman_technology *technology,
+							GKeyFile *keyfile)
+{
+	GError *error = NULL;
+	const char *identifier;
+	bool enable;
+	bool need_saving = false;
+
+	if (!technology || !keyfile)
+		return -EINVAL;
+
+	identifier = get_name(technology->type);
+	if (!identifier)
+		return -ENOENT;
+
+	enable = g_key_file_get_boolean(keyfile, identifier, "Enable", &error);
+	if (!error) {
+		technology->enable_persistent = enable;
+	} else {
+		if (technology->type == CONNMAN_SERVICE_TYPE_ETHERNET)
+			technology->enable_persistent = true;
+		else
+			technology->enable_persistent = false;
+
+		need_saving = true;
+		g_clear_error(&error);
+	}
+
+	enable = g_key_file_get_boolean(keyfile, identifier,
+					"Tethering", &error);
+	if (!error) {
+		technology->tethering_persistent = enable;
+	} else {
+		need_saving = true;
+		g_clear_error(&error);
+	}
+
+	technology->tethering_ident = g_key_file_get_string(keyfile,
+				identifier, "Tethering.Identifier", NULL);
+
+	technology->tethering_passphrase = g_key_file_get_string(keyfile,
+				identifier, "Tethering.Passphrase", NULL);
+
+	if (need_saving)
+		technology_save(technology);
+
+	return 0;
+}
+
 static void technology_load(struct connman_technology *technology)
 {
 	GKeyFile *keyfile;
-	gchar *identifier;
-	GError *error = NULL;
-	bool enable, need_saving = false;
 
 	DBG("technology %p", technology);
 
@@ -437,42 +483,9 @@ static void technology_load(struct connman_technology *technology)
 		return;
 	}
 
-	identifier = g_strdup_printf("%s", get_name(technology->type));
-	if (!identifier)
-		goto done;
-
-	enable = g_key_file_get_boolean(keyfile, identifier, "Enable", &error);
-	if (!error)
-		technology->enable_persistent = enable;
-	else {
-		if (technology->type == CONNMAN_SERVICE_TYPE_ETHERNET)
-			technology->enable_persistent = true;
-		else
-			technology->enable_persistent = false;
-
-		need_saving = true;
-		g_clear_error(&error);
-	}
-
-	enable = g_key_file_get_boolean(keyfile, identifier,
-					"Tethering", &error);
-	if (!error)
-		technology->tethering_persistent = enable;
-	else {
-		need_saving = true;
-		g_clear_error(&error);
-	}
-
-	if (need_saving)
-		technology_save(technology);
-
-	technology->tethering_ident = g_key_file_get_string(keyfile,
-				identifier, "Tethering.Identifier", NULL);
-
-	technology->tethering_passphrase = g_key_file_get_string(keyfile,
-				identifier, "Tethering.Passphrase", NULL);
-done:
-	g_free(identifier);
+	if (!technology_load_values(technology, keyfile))
+		DBG("Cannot load technology %p/%s keyfile %p", technology,
+					get_name(technology->type), keyfile);
 
 	g_key_file_unref(keyfile);
 
@@ -1907,6 +1920,16 @@ bool __connman_technology_disable_all(void)
 		if (err != -EBUSY)
 			technology->enable_persistent = false;
 
+		/*
+		 * technology_disable() will disable tethering, clean
+		 * ident and passphrase here.
+		 */
+		g_free(technology->tethering_ident);
+		technology->tethering_ident = NULL;
+
+		g_free(technology->tethering_passphrase);
+		technology->tethering_passphrase = NULL;
+
 		DBG("result %s", err ? strerror(-err) : "ok");
 	}
 
@@ -1918,9 +1941,7 @@ bool __connman_technology_enable_from_config()
 	GSList *list;
 	GKeyFile *keyfile;
 	GError *error = NULL;
-	const char *identifier;
 	bool offlinemode = false;
-	bool value;
 	int err;
 
 	keyfile = __connman_storage_load_global();
@@ -1951,31 +1972,25 @@ bool __connman_technology_enable_from_config()
 	for (list = technology_list; list; list = list->next) {
 		struct connman_technology *technology = list->data;
 
-		identifier = get_name(technology->type);
-		if (!identifier)
+		if (!technology_load_values(technology, keyfile))
 			continue;
-
-		value = g_key_file_get_boolean(keyfile, identifier,
-					"Enable", &error);
-		if (error) {
-			value = false;
-			g_clear_error(&error);
-		}
 
 		if (technology->rfkill_driven && technology->hardblocked) {
 			DBG("technology %p/%s hardblocked, not set as %s",
-					technology, get_name(technology->type),
-					value ? "enabled" : "disabled");
-			technology->enable_persistent = value;
+						technology,
+						get_name(technology->type),
+						technology->enable_persistent ?
+						"enabled" : "disabled");
 			technology_save(technology);
 			continue;
 		}
 
 		DBG("technology %p/%s set as %s", technology,
 					get_name(technology->type),
-					value ? "enabled" : "disabled");
+					technology->enable_persistent ?
+					"enabled" : "disabled");
 
-		if (!value) {
+		if (!technology->enable_persistent) {
 			if (!technology->enabled) {
 				DBG("tech %p/%s already disabled", technology,
 						get_name(technology->type));
@@ -2005,9 +2020,6 @@ bool __connman_technology_enable_from_config()
 				DBG("tech %p/%s not enabled in offlinemode",
 						technology,
 						get_name(technology->type));
-
-				technology->enable_persistent = value;
-
 				continue;
 			}
 
@@ -2043,9 +2055,6 @@ bool __connman_technology_enable_from_config()
 						get_name(technology->type),
 						err ? strerror(-err) : "ok");
 		}
-
-		if (err != -EBUSY)
-			technology->enable_persistent = value;
 
 		technology_save(technology);
 	}
