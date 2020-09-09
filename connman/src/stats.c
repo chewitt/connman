@@ -908,10 +908,10 @@ int __connman_stats_service_register(struct connman_service *service)
 		}
 	}
 
-	g_free(dir);
-
 	name = g_build_filename(dir, "data", NULL);
 	file->history_name = g_build_filename(dir, "history", NULL);
+
+	g_free(dir);
 
 	/* TODO: Use a global config file instead of hard coded value. */
 	file->account_period_offset = 1;
