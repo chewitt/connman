@@ -170,9 +170,14 @@ const char *connman_provider_get_string(struct connman_provider *provider,
 	return NULL;
 }
 
-bool __connman_provider_is_default_route(struct connman_provider *provider)
+void connman_provider_set_split_routing(struct connman_provider *provider,
+							bool split_routing)
 {
-	return connman_provider_get_string(provider, NULL) ? false : true;
+	if (!provider || !provider->vpn_service)
+		return;
+
+	__connman_service_set_split_routing(provider->vpn_service,
+				split_routing);
 }
 
 /* EOD - end of dummies */
@@ -268,15 +273,17 @@ static void setup_network_or_provider(struct connman_service *service)
 	if (type != CONNMAN_NETWORK_TYPE_UNKNOWN)
 		service->network = connman_network_create(ident, type);
 
-	if (service->type == CONNMAN_SERVICE_TYPE_VPN)
+	if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
 		service->provider = connman_provider_get(ident);
+		service->provider->vpn_service = service;
+	}
 
 	g_free(ident);
 }
 
 static void add_service_type(enum connman_service_type type,
-	enum connman_service_state state, bool default_route,
-	uint8_t signal_str)
+			enum connman_service_state state, bool split_routing,
+			uint8_t signal_str)
 {
 	char *ident = NULL;
 	struct connman_service *service = NULL;
@@ -290,21 +297,19 @@ static void add_service_type(enum connman_service_type type,
 	setup_network_or_provider(service);
 	
 	if (type == CONNMAN_SERVICE_TYPE_VPN) {
-		if (state == CONNMAN_SERVICE_STATE_READY) {
-			service->depends_on =
-				get_connected_default_route_service();
-		}
+		if (state == CONNMAN_SERVICE_STATE_READY)
+			service->depends_on = get_connected_default_service();
+
 		service->order = 10;
-	
-		if (!default_route && service->provider) {
-			connman_provider_set_string(service->provider,
-				"DefaultRoute", "false");
-		}
+
+		if (service->provider)
+			connman_provider_set_split_routing(service->provider,
+						split_routing);
 	}
-	
+
 	service_list = g_list_insert_sorted(service_list, service,
-		service_compare);
-	
+							service_compare);
+
 	g_free(ident);
 }
 
@@ -315,27 +320,28 @@ static void add_services()
 	uint8_t strength = 0;
 
 	for (type = 1; type <= CONNMAN_SERVICE_TYPE_P2P; type++) {
-		for (state = 1; state <= CONNMAN_SERVICE_STATE_FAILURE; state++) {
+		for (state = 1; state <= CONNMAN_SERVICE_STATE_FAILURE;
+								state++) {
 
 			/*
 			 * Apparently P2P, GPS, SYSTEM nor VPN do not have
 			 * online check. TODO check this.
 			 */
 			if ((type == CONNMAN_SERVICE_TYPE_VPN ||
-				type == CONNMAN_SERVICE_TYPE_P2P ||
-				type == CONNMAN_SERVICE_TYPE_GPS ||
-				type == CONNMAN_SERVICE_TYPE_SYSTEM) &&
-				state == CONNMAN_SERVICE_STATE_ONLINE)
+					type == CONNMAN_SERVICE_TYPE_P2P ||
+					type == CONNMAN_SERVICE_TYPE_GPS ||
+					type == CONNMAN_SERVICE_TYPE_SYSTEM) &&
+					state == CONNMAN_SERVICE_STATE_ONLINE)
 				continue;
 
 			if (type == CONNMAN_SERVICE_TYPE_WIFI &&
-				(state == CONNMAN_SERVICE_STATE_READY ||
-				state == CONNMAN_SERVICE_STATE_ONLINE))
+					(state == CONNMAN_SERVICE_STATE_READY ||
+					state == CONNMAN_SERVICE_STATE_ONLINE))
 				strength = (int)state + 70;
 			else
 				strength = 0;
 
-			add_service_type(type, state, true, strength);
+			add_service_type(type, state, false, strength);
 		}
 	}
 }
@@ -346,15 +352,13 @@ static void print_test_service(struct connman_service *service, void *user_data)
 		return;
 
 	printf("%p %-56s %-3d %-6s %-10s %-16s %-12s %u\n",
-		service,
-		service->identifier,
-		service->order,
-		is_connected(service) ? "true" : "false",
-		is_available(service) ? "available" : "non-avail",
-		state2string(service->state),
-		__connman_service_is_default_route(service) ?
-			"default" : "non-default",
-		service->strength);
+			service, service->identifier, service->order,
+			is_connected(service) ? "true" : "false",
+			is_available(service) ? "available" : "non-avail",
+			state2string(service->state),
+			__connman_service_is_split_routing(service) ?
+					"split routed" : "default",
+			service->strength);
 }
 
 static void print_services()
@@ -418,11 +422,11 @@ static void test_service_sort_full_positive()
 	add_services();
 
 	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
-		false, 0);
+		true, 0);
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_ONLINE, true, 60);
+		CONNMAN_SERVICE_STATE_ONLINE, false, 60);
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_ONLINE, true, 85);
+		CONNMAN_SERVICE_STATE_ONLINE, false, 85);
 
 	service_list = g_list_sort(service_list, service_compare);
 
@@ -445,7 +449,7 @@ static void test_service_sort_full_positive()
 			a->state == CONNMAN_SERVICE_STATE_READY) {
 
 			/* VPN as default should be on top */
-			if (__connman_service_is_default_route(a))
+			if (!__connman_service_is_split_routing(a))
 				g_assert(a == service_list->data);
 			else
 				g_assert(a != service_list->data);
@@ -509,14 +513,14 @@ void test_service_sort_with_preferred_list()
 	preferred_list = list;
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_ONLINE, true, 85);
+		CONNMAN_SERVICE_STATE_ONLINE, false, 85);
 
 	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
-		false, 0);
+				true, 0);
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_READY, true, 60);
+				CONNMAN_SERVICE_STATE_READY, false, 60);
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_IDLE, true, 0);
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
 
 	service_list = g_list_sort(service_list, service_compare);
 
@@ -587,20 +591,70 @@ int rmdir_r(const gchar* path)
 	} else {
 		return -1;
 	}
-
 }
+
+static void cleanup_test_directory(gchar *test_path)
+{
+	gint access_mode = R_OK|W_OK|X_OK;
+
+	if (g_file_test(test_path, G_FILE_TEST_IS_DIR)) {
+		g_assert(!access(test_path, access_mode));
+		rmdir_r(test_path);
+	}
+}
+
+static gchar *option_debug = NULL;
+
+static bool parse_debug(const char *key, const char *value,
+					gpointer user_data, GError **error)
+{
+	if (value)
+		option_debug = g_strdup(value);
+	else
+		option_debug = g_strdup("*");
+
+	return true;
+}
+
+static GOptionEntry options[] = {
+	{ "debug", 'd', G_OPTION_FLAG_OPTIONAL_ARG,
+				G_OPTION_ARG_CALLBACK, parse_debug,
+				"Specify debug options to enable", "DEBUG" },
+	{ NULL },
+};
 
 int main(int argc, char **argv)
 {
+	GOptionContext *context;
+	GError *error = NULL;
 	int ret;
 	char* test_dir = g_dir_make_tmp("test_service_XXXXXX", NULL);
+
+	context = g_option_context_new(NULL);
+	g_option_context_add_main_entries(context, options, NULL);
+
+	if (!g_option_context_parse(context, &argc, &argv, &error)) {
+		if (error) {
+			g_printerr("%s\n", error->message);
+			g_error_free(error);
+		} else {
+			g_printerr("An unknown error occurred\n");
+		}
+
+		return 1;
+	}
+
+	g_option_context_free(context);
 
 	g_test_init(&argc, &argv, NULL);
 
 	__connman_log_init("test-service", g_test_verbose() ? "*" : NULL,
 			FALSE, FALSE, "test-service", CONNMAN_VERSION);
 	__connman_storage_init(test_dir, 0755, 0644);
-	mkdir(STORAGEDIR, 0755);
+	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
+				__connman_storage_dir_mode()), ==, 0);
+	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR,
+				__connman_storage_dir_mode()), ==, 0);
 
 	g_test_add_func("/service/service_sort_full_positive",
 		test_service_sort_full_positive);
@@ -616,7 +670,7 @@ int main(int argc, char **argv)
 	ret = g_test_run();
 	__connman_log_cleanup(FALSE);
 	__connman_storage_cleanup();
-	rmdir_r(test_dir);
+	cleanup_test_directory(test_dir);
 	g_free(test_dir);
 
 	return ret;

@@ -52,7 +52,8 @@ struct connman_provider {
 void __connman_provider_append_properties(struct connman_provider *provider,
 							DBusMessageIter *iter)
 {
-	const char *host, *domain, *type, *defaultroute;
+	const char *host, *domain, *type;
+	bool split_routing = false;
 
 	if (!provider->driver || !provider->driver->get_property)
 		return;
@@ -60,7 +61,10 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 	host = provider->driver->get_property(provider, "Host");
 	domain = provider->driver->get_property(provider, "Domain");
 	type = provider->driver->get_property(provider, "Type");
-	defaultroute = provider->driver->get_property(provider, "DefaultRoute");
+
+	if (provider->vpn_service)
+		split_routing = __connman_service_is_split_routing(
+					provider->vpn_service);
 
 	if (host)
 		connman_dbus_dict_append_basic(iter, "Host",
@@ -74,10 +78,8 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 		connman_dbus_dict_append_basic(iter, "Type", DBUS_TYPE_STRING,
 						 &type);
 
-	if (defaultroute)
-		connman_dbus_dict_append_basic(iter, "DefaultRoute",
-						DBUS_TYPE_STRING,
-						&defaultroute);
+	connman_dbus_dict_append_basic(iter, "SplitRouting",
+					DBUS_TYPE_BOOLEAN, &split_routing);
 }
 
 struct connman_provider *
@@ -463,26 +465,6 @@ const char *connman_provider_get_string(struct connman_provider *provider,
 	return NULL;
 }
 
-bool __connman_provider_is_default_route(struct connman_provider *provider)
-{
-	const char* default_route = NULL;
-
-	if (!provider)
-		return true;
-
-	default_route = connman_provider_get_string(provider, "DefaultRoute");
-	
-	DBG("DefaultRoute:%s", default_route);
-
-	if (!default_route)
-		return true;
-
-	if (g_ascii_strcasecmp(default_route, "true") != 0)
-		return false;
-
-	return true;
-}
-
 bool
 __connman_provider_check_routes(struct connman_provider *provider)
 {
@@ -635,6 +617,16 @@ void connman_provider_set_autoconnect(struct connman_provider *provider,
 	/* Save VPN service if autoconnect value changes */
 	if (connman_service_set_autoconnect(provider->vpn_service, flag))
 		__connman_service_save(provider->vpn_service);
+}
+
+void connman_provider_set_split_routing(struct connman_provider *provider,
+							bool split_routing)
+{
+	if (!provider || !provider->vpn_service)
+		return;
+
+	__connman_service_set_split_routing(provider->vpn_service,
+				split_routing);
 }
 
 static void unregister_provider(gpointer data)

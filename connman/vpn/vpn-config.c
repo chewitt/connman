@@ -574,3 +574,15 @@ char **__vpn_config_get_string_list(GKeyFile *key_file,
 
 	return strlist;
 }
+
+bool __vpn_config_get_boolean(GKeyFile *key_file, const char *group_name,
+			const char *key, GError **error, bool default_value)
+{
+	bool val;
+
+	val = g_key_file_get_boolean(key_file, group_name, key, error);
+	if (error)
+		return default_value;
+
+	return val;
+}

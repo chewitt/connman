@@ -143,19 +143,9 @@ static void get_gateway_cb(const char *gateway, int index, void *user_data)
 	struct gateway_data *data;
 	struct get_gateway_params *params = user_data;
 	int family;
-	
-	struct connman_service *service;
 
 	if (index < 0)
 		goto out;
-		
-	service = __connman_service_lookup_from_index(params->vpn_index);
-	
-	if (!__connman_service_is_default_route(service)) {
-		DBG("Not setting gateway config of non default service %s",
-			service ? connman_service_get_identifier(service) : "");
-		goto out;
-	}
 
 	DBG("phy index %d phy gw %s vpn index %d vpn gw %s", index, gateway,
 		params->vpn_index, params->vpn_gateway);
@@ -871,13 +861,6 @@ int __connman_connection_gateway_add(struct connman_service *service,
 
 		set_vpn_routes(new_gateway, service, gateway, type, peer,
 							active_gateway);
-
-		if (!__connman_service_is_default_route(service)) {
-			DBG("Not adding gateways for non default VPN %s",
-				service ? connman_service_get_identifier(service) :
-				"");
-			goto done;
-		}
 	} else {
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
 					new_gateway->ipv4_gateway)
