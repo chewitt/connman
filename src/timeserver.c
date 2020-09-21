@@ -365,13 +365,12 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 	g_resolv_flush_nameservers(resolv);
 
 	nameservers = connman_service_get_nameservers(service);
-	if (!nameservers)
-		return -EINVAL;
+	if (nameservers) {
+		for (i = 0; nameservers[i]; i++)
+			g_resolv_add_nameserver(resolv, nameservers[i], 53, 0);
 
-	for (i = 0; nameservers[i]; i++)
-		g_resolv_add_nameserver(resolv, nameservers[i], 53, 0);
-
-	g_strfreev(nameservers);
+		g_strfreev(nameservers);
+	}
 
 	g_slist_free_full(timeservers_list, g_free);
 
