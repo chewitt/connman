@@ -87,6 +87,7 @@ struct connection_data {
 	char *domain;
 	char **nameservers;
 	bool immutable;
+	bool default_route_set;
 
 	GHashTable *server_routes;
 	GHashTable *user_routes;
@@ -713,10 +714,6 @@ static void add_connection(const char *path, DBusMessageIter *properties,
 		} else if (g_str_equal(key, "Immutable")) {
 			dbus_message_iter_get_basic(&value, &value_bool);
 			data->immutable = value_bool;
-		} else if (g_str_equal(key, "SplitRouting")) {
-			dbus_message_iter_get_basic(&value, &value_bool);
-			connman_provider_set_split_routing(data->provider,
-						value_bool);
 		} else if (g_str_equal(key, "Host")) {
 			dbus_message_iter_get_basic(&value, &str);
 			data->host = g_strdup(str);
@@ -1050,6 +1047,7 @@ static int disconnect_provider(struct connection_data *data)
 
 	g_free(data->service_ident);
 	data->service_ident = NULL;
+	data->default_route_set = false;
 
 	connman_provider_set_state(data->provider,
 					CONNMAN_PROVIDER_STATE_DISCONNECT);
@@ -1504,6 +1502,17 @@ static void set_route(struct connection_data *data, struct vpn_route *route)
 		return;
 	}
 
+	DBG("set route provider %p %s/%s/%s", data->provider,
+						route->network, route->gateway,
+						route->netmask);
+
+	/* Do not add default route for split routed VPNs.*/
+	if (connman_provider_is_split_routing(data->provider) &&
+				connman_inet_is_default_route(route->family,
+					route->network, route->gateway,
+					route->netmask))
+		return;
+
 	if (route->family == AF_INET6) {
 		unsigned char prefix_len = atoi(route->netmask);
 
@@ -1516,6 +1525,130 @@ static void set_route(struct connection_data *data, struct vpn_route *route)
 						route->gateway,
 						route->netmask);
 	}
+
+	if (connman_inet_is_default_route(route->family, route->network,
+					route->gateway, route->netmask))
+		data->default_route_set = true;
+}
+
+static int save_route(GHashTable *routes, int family, const char *network,
+			const char *netmask, const char *gateway);
+
+static int add_network_route(struct connection_data *data)
+{
+	char *network = NULL;
+	char *gateway = NULL;
+	char *netmask = NULL;
+	int family;
+	int err;
+
+	if (!data)
+		return -EINVAL;
+
+	family = connman_provider_get_family(data->provider);
+	switch (family) {
+	case PF_INET:
+		err = connman_inet_get_route_addresses(data->index, &network,
+					&netmask, &gateway);
+		break;
+	case PF_INET6:
+		err = connman_inet_ipv6_get_route_addresses(data->index,
+					&network, &netmask, &gateway);
+		break;
+	default:
+		connman_error("invalid protocol family %d", family);
+		return -EINVAL;
+	}
+
+	DBG("network %s gateway %s netmask %s for provider %p",
+						network, gateway, netmask,
+						data->provider);
+
+	if (err) {
+		connman_error("cannot get network/gateway/netmask for %p",
+							data->provider);
+		goto out;
+	}
+
+	err = save_route(data->server_routes, family, network, netmask,
+				gateway);
+	if (err) {
+		connman_warn("failed to add network route for provider"
+					"%p", data->provider);
+		goto out;
+	}
+
+	struct vpn_route route = { family, network, netmask, gateway };
+	set_route(data, &route);
+
+out:
+	g_free(network);
+	g_free(gateway);
+	g_free(netmask);
+
+	return 0;
+}
+
+static bool is_valid_route_table(struct connman_provider *provider,
+							GHashTable *table)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+	struct vpn_route *route;
+	size_t table_size;
+
+	if (!table)
+		return false;
+
+	table_size = g_hash_table_size(table);
+
+	/* Non-split routed may have only the default route */
+	if (table_size > 0 && !connman_provider_is_split_routing(provider))
+		return true;
+
+	/* Split routed has more than the default route */
+	if (table_size > 1)
+		return true;
+
+	/*
+	 * Only one route for split routed VPN, which should not be the
+	 * default route.
+	 */
+	g_hash_table_iter_init(&iter, table);
+	if (!g_hash_table_iter_next(&iter, &key, &value)) /* First and only */
+		return false;
+
+	route = value;
+	if (!route)
+		return false;
+
+	DBG("check route %d %s/%s/%s", route->family, route->network,
+					route->gateway, route->netmask);
+
+	if (!connman_inet_is_default_route(route->family, route->network,
+				route->gateway, route->netmask))
+		return true;
+
+	return false;
+}
+
+static bool check_routes(struct connman_provider *provider)
+{
+	struct connection_data *data;;
+
+	DBG("provider %p", provider);
+
+	data = connman_provider_get_data(provider);
+	if (!data)
+		return false;
+
+	if (is_valid_route_table(provider, data->user_routes))
+		return true;
+
+	if (is_valid_route_table(provider, data->server_routes))
+		return true;
+
+	return false;
 }
 
 static int set_routes(struct connman_provider *provider,
@@ -1547,28 +1680,30 @@ static int set_routes(struct connman_provider *provider,
 			set_route(data, value);
 	}
 
+	/* If non-split routed VPN does not have a default route, add it */
+	if (!connman_provider_is_split_routing(provider) &&
+						!data->default_route_set) {
+		int family = connman_provider_get_family(provider);
+		gchar *ipaddr_any = family == AF_INET6 ?
+							"::" : "0.0.0.0";
+		struct vpn_route def_route = {family, ipaddr_any, ipaddr_any,
+									NULL};
+
+		set_route(data, &def_route);
+	}
+
+	/* Split routed VPN must have at least one route to the network */
+	if (connman_provider_is_split_routing(provider) &&
+						!check_routes(provider)) {
+		int err = add_network_route(data);
+		if (err) {
+			connman_warn("cannot add network route provider %p",
+								provider);
+			return err;
+		}
+	}
+
 	return 0;
-}
-
-static bool check_routes(struct connman_provider *provider)
-{
-	struct connection_data *data;
-
-	DBG("provider %p", provider);
-
-	data = connman_provider_get_data(provider);
-	if (!data)
-		return false;
-
-	if (data->user_routes &&
-			g_hash_table_size(data->user_routes) > 0)
-		return true;
-
-	if (data->server_routes &&
-			g_hash_table_size(data->server_routes) > 0)
-		return true;
-
-	return false;
 }
 
 static struct connman_provider_driver provider_driver = {
@@ -1747,10 +1882,50 @@ static int save_route(GHashTable *routes, int family, const char *network,
 		route->gateway = g_strdup(gateway);
 
 		g_hash_table_replace(routes, key, route);
-	} else
+	} else {
 		g_free(key);
+		return -EALREADY;
+	}
 
 	return 0;
+}
+
+static void change_provider_split_routing(struct connman_provider *provider,
+							bool split_routing)
+{
+	struct connection_data *data;
+	int err;
+
+	if (!provider)
+		return;
+
+	if (connman_provider_is_split_routing(provider) == split_routing)
+		return;
+
+	data = connman_provider_get_data(provider);
+	if (split_routing && data && provider_is_connected(data) &&
+						!check_routes(provider)) {
+		err = add_network_route(data);
+		if (err) {
+			connman_warn("cannot add network route provider %p",
+								provider);
+			return;
+		}
+	}
+
+	err = connman_provider_set_split_routing(provider, split_routing);
+	switch (err) {
+	case 0:
+		/* fall through */
+	case -EALREADY:
+		break;
+	case -EINVAL:
+		/* fall through */
+	case -EOPNOTSUPP:
+		connman_warn("cannot change split routing %d", err);
+	default:
+		break;
+	}
 }
 
 static int read_route_dict(GHashTable *routes, DBusMessageIter *dicts)
@@ -1932,12 +2107,11 @@ static gboolean property_changed(DBusConnection *conn,
 	} else if (g_str_equal(key, "SplitRouting")) {
 		dbus_bool_t split_routing;
 		dbus_message_iter_get_basic(&value, &split_routing);
-		connman_provider_set_split_routing(data->provider,
-					split_routing);
+		change_provider_split_routing(data->provider, split_routing);
 	} else if (g_str_equal(key, "DefaultRoute")) {
 		dbus_message_iter_get_basic(&value, &str);
-		connman_provider_set_split_routing(data->provider,
-					!g_strcmp0(str, "false"));
+		change_provider_split_routing(data->provider,
+						!g_strcmp0(str, "false"));
 	}
 
 	if (ip_set && err == 0) {
@@ -2026,6 +2200,10 @@ static void vpn_disconnect_check_provider(struct connection_data *data)
 		if (!vpn_is_valid_transport(service)) {
 			connman_provider_disconnect(data->provider);
 		}
+
+		/* VPN moved to be split routed, default route is not set */
+		if (connman_provider_is_split_routing(data->provider))
+			data->default_route_set = false;
 	}
 }
 
