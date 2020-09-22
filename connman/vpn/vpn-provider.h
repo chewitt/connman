@@ -89,7 +89,8 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 							const char *key);
 int vpn_provider_set_boolean(struct vpn_provider *provider, const char *key,
-							bool value);
+							bool value,
+							bool force_change);
 bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
 							bool default_value);
 
