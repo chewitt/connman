@@ -619,6 +619,14 @@ void connman_provider_set_autoconnect(struct connman_provider *provider,
 		__connman_service_save(provider->vpn_service);
 }
 
+bool connman_provider_is_split_routing(struct connman_provider *provider)
+{
+	if (!provider || !provider->vpn_service)
+		return false;
+
+	return __connman_service_is_split_routing(provider->vpn_service);
+}
+
 void connman_provider_set_split_routing(struct connman_provider *provider,
 							bool split_routing)
 {
@@ -627,6 +635,14 @@ void connman_provider_set_split_routing(struct connman_provider *provider,
 
 	__connman_service_set_split_routing(provider->vpn_service,
 				split_routing);
+}
+
+int connman_provider_get_family(struct connman_provider *provider)
+{
+	if (!provider)
+		return PF_UNSPEC;
+
+	return provider->family;
 }
 
 static void unregister_provider(gpointer data)
