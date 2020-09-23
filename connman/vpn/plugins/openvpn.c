@@ -52,7 +52,6 @@
 #include "../vpn-agent.h"
 
 #include "vpn.h"
-#include "../vpn.h"
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
