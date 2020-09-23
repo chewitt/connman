@@ -1,14 +1,12 @@
 #!/usr/bin/python
 
+from gi.repository import GLib
+
 import sys
-import gobject
-import string
 
 import dbus
 import dbus.service
 import dbus.mainloop.glib
-
-import glib
 
 import traceback
 
@@ -293,11 +291,11 @@ def main():
 	app_path = sys.argv[2]
 	bus = dbus.SessionBus()
 
-	app_name = "com.example.SessionApplication.%s" % (string.strip(app_path, "/"))
+	app_name = "com.example.SessionApplication.%s" % (str.strip(app_path, "/"))
 
 	if sys.argv[1] == "run":
 		name = dbus.service.BusName(app_name, bus)
-		mainloop = gobject.MainLoop()
+		mainloop = GLib.MainLoop()
 
 		app = SessionApplication(bus, app_path, mainloop)
 

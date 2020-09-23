@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import gobject
+from gi.repository import GLib
 
 import dbus
 import dbus.mainloop.glib
@@ -102,5 +102,5 @@ if __name__ == '__main__':
 				signal_name="PropertyChanged",
 				path_keyword="path")
 
-	mainloop = gobject.MainLoop()
+	mainloop = GLib.MainLoop()
 	mainloop.run()

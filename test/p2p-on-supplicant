@@ -3,10 +3,9 @@
 from os import O_NONBLOCK
 from sys import stdin, stdout, exit, version_info, argv
 from fcntl import fcntl, F_GETFL, F_SETFL
-import glib
+from gi.repository import GLib
 import dbus
 import dbus.mainloop.glib
-import gobject
 import argparse
 
 WPA_NAME='fi.w1.wpa_supplicant1'
@@ -32,7 +31,7 @@ class InputLine:
         flags = fcntl(stdin.fileno(), F_GETFL)
         flags |= O_NONBLOCK
         fcntl(stdin.fileno(), F_SETFL, flags)
-        glib.io_add_watch(stdin, glib.IO_IN, self.input_cb)
+        GLib.io_add_watch(stdin, GLib.IO_IN, self.input_cb)
 
         self.prompt()
 
@@ -42,7 +41,7 @@ class InputLine:
         stdout.flush()
 
     def input_cb(self, fd, event):
-        if event != glib.IO_IN:
+        if event != GLib.IO_IN:
             return
 
         self.line += fd.read();
@@ -610,10 +609,6 @@ def build_args(parser):
     return command
 
 def main():
-    if version_info.major != 2:
-        print('You need to run this under Python 2.x')
-        exit(1)
-
     parser = argparse.ArgumentParser(description='Connman P2P Test')
 
     command_list = build_args(parser)
@@ -634,7 +629,7 @@ def main():
 
     bus = dbus.SystemBus()
 
-    mainloop = gobject.MainLoop()
+    mainloop = GLib.MainLoop()
 
     wpa_s = Wpa_s(bus, args.ifname, args.command + params)
 
