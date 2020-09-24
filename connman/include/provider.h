@@ -115,7 +115,7 @@ bool connman_provider_get_autoconnect(struct connman_provider *provider);
 void connman_provider_set_autoconnect(struct connman_provider *provider,
 								bool flag);
 bool connman_provider_is_split_routing(struct connman_provider *provider);
-void connman_provider_set_split_routing(struct connman_provider *provider,
+int connman_provider_set_split_routing(struct connman_provider *provider,
 							bool split_routing);
 int connman_provider_get_family(struct connman_provider *provider);
 
