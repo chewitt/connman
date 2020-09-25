@@ -30,7 +30,6 @@ BuildRequires:	pkgconfig(libiptc)
 BuildRequires:  pkgconfig(glib-2.0) >= 2.62
 BuildRequires:  pkgconfig(gthread-2.0) >= 2.16
 BuildRequires:  pkgconfig(dbus-1) >= 1.4
-BuildRequires:  pkgconfig(gnutls)
 BuildRequires:  openconnect
 BuildRequires:  pkgconfig(openconnect) > 4
 BuildRequires:  openvpn
@@ -195,6 +194,7 @@ This package provides OpenFortiNet VPN plugin for connman.
     --enable-sailfish-counters \
     --enable-globalproxy \
     --disable-gadget \
+    --disable-wispr \
     --with-systemdunitdir=%{_unitdir} \
     --enable-systemd \
     --with-tmpfilesdir=%{_prefix}/lib/tmpfiles.d
@@ -212,7 +212,6 @@ mkdir -p %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/stats-tool %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/*-test %{buildroot}%{_libdir}/%{name}/tools
 cp -a tools/iptables-unit %{buildroot}%{_libdir}/%{name}/tools
-cp -a tools/wispr %{buildroot}%{_libdir}/%{name}/tools
 
 mkdir -p %{buildroot}%{_sysconfdir}/connman/
 cp -a %{SOURCE1} %{buildroot}%{_sysconfdir}/connman/
