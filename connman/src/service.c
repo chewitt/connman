@@ -1964,7 +1964,9 @@ static void print_service_list_debug()
 	};
 
 	if (debug_desc.flags && CONNMAN_DEBUG_FLAG_PRINT) {
+		DBG("<start>");
 		__connman_service_foreach(print_service, NULL);
+		DBG("<end>");
 	}
 }
 
@@ -5994,27 +5996,22 @@ static void switch_default_service(struct connman_service *default_service,
 
 static void service_schedule_changed(void);
 
-static DBusMessage *move_service(DBusConnection *conn,
-					DBusMessage *msg, void *user_data,
-								bool before)
+int __connman_service_move(struct connman_service *service,
+				struct connman_service *target, bool before)
 {
-	struct connman_service *service = user_data;
-	struct connman_service *target;
-	const char *path;
 	enum connman_ipconfig_method target4, target6;
 	enum connman_ipconfig_method service4, service6;
 
 	DBG("service %p", service);
 
-	dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
-							DBUS_TYPE_INVALID);
+	if (!service)
+		return -EINVAL;
 
 	if (!service->favorite)
-		return __connman_error_not_supported(msg);
+		return -EOPNOTSUPP;
 
-	target = find_service(path);
 	if (!target || !target->favorite || target == service)
-		return __connman_error_invalid_service(msg);
+		return -EINVAL;
 
 	if (target->type == CONNMAN_SERVICE_TYPE_VPN) {
 		/*
@@ -6025,12 +6022,13 @@ static DBusMessage *move_service(DBusConnection *conn,
 			DBG("Cannot move service. "
 				"No routes defined for provider %s",
 				__connman_provider_get_ident(target->provider));
-			return __connman_error_invalid_service(msg);
+			return -EINVAL;
 		}
 
 		__connman_service_set_split_routing(target, true);
-	} else
+	} else {
 		__connman_service_set_split_routing(target, false);
+	}
 
 	__connman_service_set_split_routing(service, false);
 
@@ -6055,7 +6053,7 @@ static DBusMessage *move_service(DBusConnection *conn,
 		if (service6 != CONNMAN_IPCONFIG_METHOD_OFF) {
 			if (!check_suitable_state(target->state_ipv6,
 							service->state_ipv6))
-				return __connman_error_invalid_service(msg);
+				return -EINVAL;
 		}
 	}
 
@@ -6063,7 +6061,7 @@ static DBusMessage *move_service(DBusConnection *conn,
 		if (service4 != CONNMAN_IPCONFIG_METHOD_OFF) {
 			if (!check_suitable_state(target->state_ipv4,
 							service->state_ipv4))
-				return __connman_error_invalid_service(msg);
+				return -EINVAL;
 		}
 	}
 
@@ -6071,7 +6069,7 @@ static DBusMessage *move_service(DBusConnection *conn,
 		if (target6 != CONNMAN_IPCONFIG_METHOD_OFF) {
 			if (!check_suitable_state(target->state_ipv6,
 							service->state_ipv6))
-				return __connman_error_invalid_service(msg);
+				return -EINVAL;
 		}
 	}
 
@@ -6079,7 +6077,7 @@ static DBusMessage *move_service(DBusConnection *conn,
 		if (target4 != CONNMAN_IPCONFIG_METHOD_OFF) {
 			if (!check_suitable_state(target->state_ipv4,
 							service->state_ipv4))
-				return __connman_error_invalid_service(msg);
+				return -EINVAL;
 		}
 	}
 
@@ -6101,6 +6099,39 @@ static DBusMessage *move_service(DBusConnection *conn,
 	__connman_connection_update_gateway();
 
 	service_schedule_changed();
+
+	return 0;
+}
+
+static DBusMessage *move_service(DBusConnection *conn,
+					DBusMessage *msg, void *user_data,
+								bool before)
+{
+	struct connman_service *service = user_data;
+	struct connman_service *target;
+	const char *path;
+	int err;
+
+	DBG("service %p", service);
+
+	dbus_message_get_args(msg, NULL, DBUS_TYPE_OBJECT_PATH, &path,
+							DBUS_TYPE_INVALID);
+
+	target = find_service(path);
+
+	err = __connman_service_move(service, target, before);
+	switch (err) {
+	case 0:
+		break;
+	case -EINVAL:
+		return __connman_error_invalid_service(msg);
+	case -EOPNOTSUPP:
+		return __connman_error_not_supported(msg);
+	default:
+		connman_warn("unsupported error code %d in move_service()",
+									err);
+		break;
+	}
 
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
