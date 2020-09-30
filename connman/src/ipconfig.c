@@ -2082,6 +2082,9 @@ int __connman_ipconfig_enable(struct connman_ipconfig *ipconfig)
 		connman_ipaddress_clear(ipdevice->config_ipv4->system);
 
 		__connman_ipconfig_unref(ipdevice->config_ipv4);
+
+		g_free(ipdevice->ipv4_gateway);
+		ipdevice->ipv4_gateway = NULL;
 	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
@@ -2092,6 +2095,9 @@ int __connman_ipconfig_enable(struct connman_ipconfig *ipconfig)
 		connman_ipaddress_clear(ipdevice->config_ipv6->system);
 
 		__connman_ipconfig_unref(ipdevice->config_ipv6);
+
+		g_free(ipdevice->ipv6_gateway);
+		ipdevice->ipv6_gateway = NULL;
 	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
@@ -2156,6 +2162,10 @@ int __connman_ipconfig_disable(struct connman_ipconfig *ipconfig)
 		connman_ipaddress_clear(ipdevice->config_ipv4->system);
 		__connman_ipconfig_unref(ipdevice->config_ipv4);
 		ipdevice->config_ipv4 = NULL;
+
+		g_free(ipdevice->ipv4_gateway);
+		ipdevice->ipv4_gateway = NULL;
+
 		return 0;
 	}
 
@@ -2165,6 +2175,10 @@ int __connman_ipconfig_disable(struct connman_ipconfig *ipconfig)
 		connman_ipaddress_clear(ipdevice->config_ipv6->system);
 		__connman_ipconfig_unref(ipdevice->config_ipv6);
 		ipdevice->config_ipv6 = NULL;
+
+		g_free(ipdevice->ipv6_gateway);
+		ipdevice->ipv6_gateway = NULL;
+
 		return 0;
 	}
 
