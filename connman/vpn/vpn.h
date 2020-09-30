@@ -147,12 +147,11 @@ const char * vpn_settings_get_binary_user(struct vpn_plugin_data *data);
 const char * vpn_settings_get_binary_group(struct vpn_plugin_data *data);
 char ** vpn_settings_get_binary_supplementary_groups(
 	struct vpn_plugin_data *data);
+bool vpn_settings_is_system_user(const char *user);
 
-GKeyFile *__vpn_settings_load_config(const char *file);
-char *__vpn_settings_get_string(GKeyFile *config, const char *group,
-		const char *key);
-char **__vpn_settings_get_string_list(GKeyFile *config,
-		const char *group, const char *key);
+struct passwd *vpn_util_get_passwd(const char *username);
+struct group *vpn_util_get_group(const char *groupname);
+int vpn_util_create_path(const char *path, uid_t uid, gid_t grp, int mode);
 
 #include "access.h"
 

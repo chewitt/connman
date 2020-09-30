@@ -131,34 +131,10 @@ void __vpn_settings_set_binary_user_override(uid_t uid, void *user_data)
 	connman_vpn_settings.binary_user_override = g_strdup(pwd->pw_name);
 }
 
-static bool is_string_digits(const char *str)
-{
-	int i;
-
-	if (!str || !*str)
-		return false;
-
-	for (i = 0; str[i]; i++) {
-		if (!g_ascii_isdigit(str[i]))
-			return false;
-	}
-
-	return true;
-}
-
-static uid_t get_user_uid(const char *username)
-{
-	if (!username)
-		return 0;
-
-	return (uid_t)g_ascii_strtoull(username, NULL, 10);
-}
-
-static bool is_system_user(const char *user)
+bool vpn_settings_is_system_user(const char *user)
 {
 	struct passwd *pwd;
 	struct passwd *system_pwd;
-	uid_t uid;
 	int i;
 
 	/*
@@ -170,18 +146,11 @@ static bool is_system_user(const char *user)
 
 	DBG("check user \"%s\"", user);
 
-	/* If user is given as uid as string use getpwuid() */
-	if (is_string_digits(user)) {
-		uid = get_user_uid(user);
-		pwd = getpwuid(uid);
-	} else {
-		pwd = getpwnam(user);
-	}
-
 	/*
 	 * Ignore errors if no entry was found. Treat as system user to
 	 * prevent using an invalid override.
 	 */
+	pwd = vpn_util_get_passwd(user);
 	if (!pwd)
 		return true;
 
@@ -203,13 +172,7 @@ static bool is_system_user(const char *user)
 		const char *system_user =
 				connman_vpn_settings.system_binary_users[i];
 
-		if (is_string_digits(system_user)) {
-			uid_t system_uid = get_user_uid(system_user);
-			system_pwd = getpwuid(system_uid);
-		} else {
-			system_pwd = getpwnam(system_user);
-		}
-
+		system_pwd = vpn_util_get_passwd(system_user);
 		if (!system_pwd)
 			continue;
 
@@ -234,7 +197,7 @@ const char *vpn_settings_get_binary_user(struct vpn_plugin_data *data)
 	 * override configured  system user.
 	 */
 	if (connman_vpn_settings.binary_user_override &&
-				!is_system_user(binary_user))
+				!vpn_settings_is_system_user(binary_user))
 		binary_user = connman_vpn_settings.binary_user_override;
 
 	return binary_user;
