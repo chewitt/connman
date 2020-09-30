@@ -326,6 +326,9 @@ struct connman_storage_callbacks {
 	/* Callback to check if connman-vpnd storage user change is allowed */
 	bool (*vpn_access_change_user) (const char *sender, const char *arg,
 				bool default_access);
+
+	/* Callback to return the dbus name of the peer (e.g., connman/vpnd) */
+	const char* (*get_peer_dbus_name) (void);
 };
 
 typedef void (*connman_storage_change_user_result_cb_t)(uid_t uid, int err,

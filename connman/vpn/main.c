@@ -186,6 +186,7 @@ static struct connman_storage_callbacks storage_callbacks = {
 	.load =				vpn_provider_load_providers,
 	.finalize = 			__vpn_settings_set_binary_user_override,
 	.vpn_access_change_user = 	vpn_access_change_user,
+	.get_peer_dbus_name =		__vpn_provider_get_connman_dbus_name,
 };
 
 int main(int argc, char *argv[])
