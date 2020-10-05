@@ -51,6 +51,8 @@ typedef struct sd_login_monitor {
 	enum sd_session_state state;
 	uid_t uid;
 	bool is_remote;
+	bool is_ready;
+	int is_ready_timeouts;
 } sd_login_monitor;
 
 static sd_login_monitor *monitor = NULL;
@@ -89,6 +91,15 @@ int sd_seat_get_active(const char *seat, char **session, uid_t *uid)
 	if (!monitor)
 		return -1;
 
+	if (!monitor->is_ready) {
+		if (!monitor->is_ready_timeouts--)
+			monitor->is_ready = true;
+		else
+			DBG("ready timeout, left %d", monitor->is_ready_timeouts);
+
+		return -ENOENT;
+	}
+
 	if (g_strcmp0(monitor->seat, seat))
 		return -1;
 
@@ -117,6 +128,8 @@ int sd_session_is_remote(const char *session)
 /* Get state from UID. Possible states: offline, lingering, online, active, closing */
 int sd_uid_get_state(uid_t uid, char **state)
 {
+	char *temp_state;
+
 	DBG("");
 
 	if (!monitor)
@@ -124,14 +137,16 @@ int sd_uid_get_state(uid_t uid, char **state)
 
 	g_assert(state);
 	g_assert_cmpint((int)uid, ==, (int)monitor->uid);
+	temp_state = state2string(monitor->state);
 
-	DBG("state for %u is %d:%s", monitor->uid, monitor->state,
-				state2string(monitor->state));
+	DBG("state for %u is %d:%s", monitor->uid, monitor->state, temp_state);
 
-	if (monitor->state == SD_SESSION_STATE_NULL)
+	if (monitor->state == SD_SESSION_STATE_NULL) {
+		g_free(temp_state);
 		return -1;
+	}
 
-	*state = state2string(monitor->state);
+	*state = temp_state;
 
 	return 0;
 }
@@ -158,6 +173,7 @@ int sd_login_monitor_new(const char *category, sd_login_monitor** ret)
 		monitor->seat = g_strdup("seat0");
 		monitor->session = g_strdup("c0");
 		monitor->state = SD_SESSION_STATE_INIT;
+		monitor->is_ready = true;
 	}
 
 	*ret = monitor;
@@ -585,6 +601,7 @@ static void systemd_login_test_basic5()
 	g_assert_null(monitor);
 
 	g_main_loop_unref(mainloop);
+	test_connman_log_hook_clean();
 }
 
 /* User change with uid 1000 set to be lingering */
@@ -610,6 +627,7 @@ static void systemd_login_test_basic6()
 	g_assert_null(monitor);
 
 	g_main_loop_unref(mainloop);
+	test_connman_log_hook_clean();
 }
 
 /* User change with uid 1000 set to be opening */
@@ -684,6 +702,35 @@ static void systemd_login_test_basic9()
 	__systemd_login_cleanup();
 	g_assert_null(monitor);
 	
+	g_main_loop_unref(mainloop);
+}
+
+/* Monitor first reports once that it is not ready then succeeds */
+static void systemd_login_test_basic10()
+{
+	GMainLoop *mainloop;
+
+	storage_initialize(-EINPROGRESS, 0);
+	monitor_initialize(1000, SD_SESSION_STATE_ACTIVE, NULL, 0);
+
+	/* Simulate the case when session is not ready yet */
+	monitor->is_ready = false;
+	monitor->is_ready_timeouts = 2;
+
+	mainloop = g_main_loop_new(NULL, FALSE);
+
+	g_assert_cmpint(__systemd_login_init(), ==, 0);
+
+	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
+			TRUE, 0, 1), ==, 0);
+
+	g_assert_null(last_err_log);
+	g_assert_null(last_warn_log);
+	g_assert_null(last_info_log);
+
+	__systemd_login_cleanup();
+	g_assert_null(monitor);
+
 	g_main_loop_unref(mainloop);
 }
 
@@ -839,7 +886,7 @@ static void systemd_login_test_full3()
 }
 
 /*
- * sStart with user 0, then change to 1000 with systemd login notify, and then
+ * Start with user 0, then change to 1000 with systemd login notify, and then
  * to 1001. Do additional callback at the end from storage.
  */
 static void systemd_login_test_full4()
@@ -907,8 +954,8 @@ static void systemd_login_test_error1()
 
 	g_assert_null(last_err_log);
 	g_assert_cmpstr(last_warn_log, ==,
-				"failed to get active session and/or user "
-				"for seat seat0");
+				"err -1 failed to get active session and/or "
+				"user for seat seat0");
 	g_assert_null(last_info_log);
 
 	__systemd_login_cleanup();
@@ -960,7 +1007,8 @@ static void systemd_login_test_error3()
 
 	g_assert_null(last_err_log);
 	g_assert_cmpstr(last_warn_log, ==,
-				"failed to get state for uid 1000 session c0");
+				"err -1 failed to get state for uid 1000 "
+				"session c0");
 	g_assert_null(last_info_log);
 
 	__systemd_login_cleanup();
@@ -1237,6 +1285,8 @@ int main(int argc, char **argv)
 				systemd_login_test_basic8);
 	g_test_add_func(TEST_PREFIX "/test_basic9",
 				systemd_login_test_basic9);
+	g_test_add_func(TEST_PREFIX "/test_basic10",
+				systemd_login_test_basic10);
 	g_test_add_func(TEST_PREFIX "/test_full1",
 				systemd_login_test_full1);
 	g_test_add_func(TEST_PREFIX "/test_full2",
