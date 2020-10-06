@@ -428,8 +428,12 @@ static enum sd_session_state get_session_state(const char *state)
 	return SD_SESSION_UNDEF;
 }
 
-static bool get_session_uid_and_state(uid_t *uid,
-			enum sd_session_state *session_state)
+/*
+ * This may report -ENOENT, which is not necessarily an error but an indication
+ * that the session is not ready yet, which must be handled by caller.
+ */
+static int get_session_uid_and_state(uid_t *uid,
+					enum sd_session_state *session_state)
 {
 	char *session = NULL;
 	char *state = NULL;
@@ -442,25 +446,31 @@ static bool get_session_uid_and_state(uid_t *uid,
 
 	err = sd_seat_get_active(DEFAULT_SEAT, &session, uid);
 	if (err < 0) {
-		connman_warn("failed to get active session and/or user for "
-					"seat %s", DEFAULT_SEAT);
+		/* No not regard -ENOENT as error, session is not ready yet */
+		if (err != -ENOENT)
+			connman_warn("err %d failed to get active session "
+						"and/or user for seat %s", err,
+						DEFAULT_SEAT);
+
 		goto out;
 	}
 
 	if (!session) {
 		DBG("no session");
+		err = -EINVAL;
 		goto out;
 	}
 
 	if (sd_session_is_remote(session) == 1) {
 		DBG("ignore remote session %s", session);
+		err = -EREMOTE;
 		goto out;
 	}
 
 	err = sd_uid_get_state(*uid, &state);
 	if (err < 0) {
-		connman_warn("failed to get state for uid %d session %s",
-					*uid, session);
+		connman_warn("err %d failed to get state for uid %d "
+					"session %s", err, *uid, session);
 		goto out;
 	}
 
@@ -470,7 +480,10 @@ out:
 	g_free(session);
 	g_free(state);
 
-	return *session_state != SD_SESSION_UNDEF && *uid != 0;
+	if (err)
+		return err;
+
+	return (*session_state != SD_SESSION_UNDEF && *uid != 0) ? 0 : -EINVAL;
 }
 
 static int init_delayed_status_check(struct systemd_login_data *login_data);
@@ -570,9 +583,17 @@ static int check_session_status(struct systemd_login_data *login_data)
 		return -EINVAL;
 	}
 
-	if (!get_session_uid_and_state(&uid, &state)) {
+	err = get_session_uid_and_state(&uid, &state);
+	switch (err) {
+	case 0:
+		break;
+	case -ENOENT:
+		/* Session is not proabably ready yet */
+		DBG("session not ready yet");
+		goto out;
+	default:
 		DBG("failed to get uid %u and/or state %d", uid, state);
-		err = -ENOENT;
+		err = -EINVAL;
 		goto out;
 	}
 
@@ -725,9 +746,18 @@ static gboolean delayed_status_check(gpointer user_data)
 	}
 
 	err = do_session_status_check(login_data);
-	if (err && err != -EINPROGRESS)
+	switch (err) {
+	case 0:
+		break;
+	case -EINPROGRESS:
+		break;
+	case -ENOENT:
+		/* Session is not ready yet, keep in loop */
+		return G_SOURCE_CONTINUE;
+	default:
 		DBG("failed to check session status: %d:%s", err,
 					strerror(-err));
+	}
 
 	login_data->delayed_status_check_id = 0;
 	return G_SOURCE_REMOVE;

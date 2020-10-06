@@ -47,6 +47,8 @@ BuildRequires:  ppp-devel
 BuildRequires:  libtool
 BuildRequires:  usb-moded-devel >= 0.86.0+mer31
 BuildRequires:  systemd
+BuildRequires:  libglibutil-devel
+BuildRequires:  libdbusaccess-devel
 
 %description
 Connection Manager provides a daemon for managing Internet connections
