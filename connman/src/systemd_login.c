@@ -826,7 +826,7 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 		return -EINVAL;
 	}
 
-	if (condition && G_IO_IN) {
+	if (condition & G_IO_IN) {
 		err = init_delayed_status_check(login_data);
 		if (err && err != -EINPROGRESS)
 			DBG("failed to check session status");
@@ -834,7 +834,7 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 		if (sd_login_monitor_flush(login_data->login_monitor) < 0)
 			connman_warn("failed to flush systemd login monitor");
 
-	} else if (condition && G_IO_ERR) {
+	} else if (condition & G_IO_ERR) {
 		DBG("iochannel error, closing");
 
 		/* Clean the id to avoid double removal before closing */
