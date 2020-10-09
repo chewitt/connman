@@ -53,7 +53,7 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 							DBusMessageIter *iter)
 {
 	const char *host, *domain, *type;
-	bool split_routing = false;
+	dbus_bool_t split_routing = false;
 
 	if (!provider->driver || !provider->driver->get_property)
 		return;
