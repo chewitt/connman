@@ -59,6 +59,14 @@ struct wireguard_info {
 	int reresolve_id;
 };
 
+struct sockaddr_u {
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sin;
+		struct sockaddr_in6 sin6;
+	};
+};
+
 static int parse_key(const char *str, wg_key key)
 {
 	unsigned char *buf;
@@ -126,7 +134,7 @@ static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer)
 	return 0;
 }
 
-static int parse_endpoint(const char *host, const char *port, struct sockaddr *addr)
+static int parse_endpoint(const char *host, const char *port, struct sockaddr_u *addr)
 {
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
@@ -246,24 +254,17 @@ static char *get_ifname(void)
 	return NULL;
 }
 
-static bool sockaddr_cmp_addr(struct sockaddr *a, struct sockaddr *b)
+static bool sockaddr_cmp_addr(struct sockaddr_u *a, struct sockaddr_u *b)
 {
-	if (a->sa_family != b->sa_family)
+	if (a->sa.sa_family != b->sa.sa_family)
 		return false;
 
-	if (a->sa_family == AF_INET) {
-		struct sockaddr_in *a4 = (struct sockaddr_in *)a;
-		struct sockaddr_in *b4 = (struct sockaddr_in *)b;
-
-		return !memcmp(a4, b4, sizeof(struct sockaddr_in));
-	} else if (a->sa_family == AF_INET6) {
-		struct sockaddr_in6 *a6 = (struct sockaddr_in6 *)a;
-		struct sockaddr_in6 *b6 = (struct sockaddr_in6 *)b;
-
-		return !memcmp(a6->sin6_addr.s6_addr,
-				b6->sin6_addr.s6_addr,
-				sizeof(a6->sin6_addr.s6_addr));
-	}
+	if (a->sa.sa_family == AF_INET)
+		return !memcmp(&a->sin, &b->sin, sizeof(struct sockaddr_in));
+	else if (a->sa.sa_family == AF_INET6)
+		return !memcmp(a->sin6.sin6_addr.s6_addr,
+				b->sin6.sin6_addr.s6_addr,
+				sizeof(a->sin6.sin6_addr.s6_addr));
 
 	return false;
 }
@@ -271,8 +272,8 @@ static bool sockaddr_cmp_addr(struct sockaddr *a, struct sockaddr *b)
 static gboolean wg_dns_reresolve_cb(gpointer user_data)
 {
 	struct wireguard_info *info = user_data;
+	struct sockaddr_u addr;
 	int err;
-	struct sockaddr addr;
 
 	DBG("");
 
@@ -281,14 +282,15 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 	if (err)
 		return TRUE;
 
-	if (sockaddr_cmp_addr(&addr, &info->peer.endpoint.addr))
+	if (sockaddr_cmp_addr(&addr,
+			(struct sockaddr_u *)&info->peer.endpoint.addr))
 		return TRUE;
 
-	if (addr.sa_family == AF_INET)
-		memcpy(&info->peer.endpoint.addr, &addr,
+	if (addr.sa.sa_family == AF_INET)
+		memcpy(&info->peer.endpoint.addr, &addr.sin,
 			sizeof(info->peer.endpoint.addr4));
 	else
-		memcpy(&info->peer.endpoint.addr, &addr,
+		memcpy(&info->peer.endpoint.addr, &addr.sin6,
 			sizeof(info->peer.endpoint.addr6));
 
 	DBG("Endpoint address has changed, udpate WireGuard device");
@@ -382,7 +384,8 @@ static int wg_connect(struct vpn_provider *provider,
 		option = "51820";
 
 	gateway = vpn_provider_get_string(provider, "Host");
-	err = parse_endpoint(gateway, option, &info->peer.endpoint.addr);
+	err = parse_endpoint(gateway, option,
+			(struct sockaddr_u *)&info->peer.endpoint.addr);
 	if (err)
 		goto done;
 
