@@ -84,6 +84,9 @@ struct {
 	{ "OpenVPN.ConfigFile", "--config", 1 },
 	{ "OpenVPN.DeviceType", NULL, 1 },
 	{ "OpenVPN.Verb", "--verb", 1 },
+	{ "OpenVPN.Ping", "--ping", 1},
+	{ "OpenVPN.PingExit", "--ping-exit", 1},
+	{ "OpenVPN.RemapUsr1", "--remap-usr1", 1},
 };
 
 struct ov_private_data {
@@ -497,16 +500,13 @@ static int run_connect(struct ov_private_data *data,
 	connman_task_add_argument(task, "--ifconfig-noexec", NULL);
 
 	/*
-	 * Disable client restarts because we can't handle this at the
-	 * moment. The problem is that when OpenVPN decides to switch
+	 * Disable client restarts with TCP because we can't handle this at
+	 * the moment. The problem is that when OpenVPN decides to switch
 	 * from CONNECTED state to RECONNECTING and then to RESOLVE,
 	 * it is not possible to do a DNS lookup. The DNS server is
 	 * not accessable through the tunnel anymore and so we end up
 	 * trying to resolve the OpenVPN servers address.
-	 */
-	connman_task_add_argument(task, "--ping-restart", "0");
-
-	/*
+	 *
 	 * Disable connetion retrying when OpenVPN is connected over TCP.
 	 * With TCP OpenVPN attempts to handle reconnection silently without
 	 * reporting the error back when establishing a connection or
@@ -516,8 +516,24 @@ static int run_connect(struct ov_private_data *data,
 	 * including DNS.
 	*/
 	option = vpn_provider_get_string(provider, "OpenVPN.Proto");
-	if (option && g_str_has_prefix(option, "tcp"))
+	if (option && g_str_has_prefix(option, "tcp")) {
+		option = vpn_provider_get_string(provider, "OpenVPN.PingExit");
+		if (!option)
+			connman_task_add_argument(task, "--ping-restart", "0");
+
 		connman_task_add_argument(task, "--connect-retry-max", "1");
+	/* Apply defaults for --ping and --ping-exit only with UDP protocol. */
+	} else {
+		/* Apply default of 10 second interval for ping if omitted. */
+		option = vpn_provider_get_string(provider, "OpenVPN.Ping");
+		if (!option)
+			connman_task_add_argument(task, "--ping", "10");
+
+		/* Apply default of 60 seconds for ping exit if omitted. */
+		option = vpn_provider_get_string(provider, "OpenVPN.PingExit");
+		if (!option)
+			connman_task_add_argument(task, "--ping-exit", "60");
+	}
 
 	err = connman_task_run(task, ov_died, data, NULL, NULL, NULL);
 	if (err < 0) {
