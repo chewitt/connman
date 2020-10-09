@@ -252,7 +252,7 @@ static int load_provider(GKeyFile *keyfile, const char *group,
 
 		DBG("provider identifier %s", id);
 	} else {
-		DBG("invalid values host %s domain %s", host, domain);
+		DBG("invalid configuration: no host specified");
 		err = -EINVAL;
 		goto err;
 	}
