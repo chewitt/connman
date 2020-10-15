@@ -323,7 +323,7 @@ noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
 	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access \
-	unit/test-storage unit/test-systemd_login
+	unit/test-storage unit/test-systemd_login unit/test-vpn-util
 
 if TEST_COVERAGE
 COVERAGE_OPT = --coverage
@@ -357,6 +357,11 @@ unit_test_vpn_settings_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
 				vpn/vpn-settings.c src/log.c vpn/vpn-util.c
 unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
+
+unit_test_vpn_util_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
+unit_test_vpn_util_SOURCES = unit/test-vpn-util.c src/log.c vpn/vpn-util.c \
+				$(backtrace_sources)
+unit_test_vpn_util_LDADD = @GLIB_LIBS@ -ldl
 
 unit_test_service_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
@@ -453,7 +458,7 @@ TESTS = unit/test-access unit/test-vpn_access unit/test-ippool \
 	unit/test-sailfish_iptables_ext unit/test-service \
 	unit/test-globalproxy unit/test-firewall unit/test-iptables \
 	unit/test-device unit/test-sailfish_vpn_access unit/test-storage \
-	unit/test-systemd_login
+	unit/test-systemd_login unit/test-vpn-util
 
 if SAILFISH_WAKEUP_TIMER
 unit_test_sailfish_wakeup_timer_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
