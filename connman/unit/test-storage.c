@@ -3217,6 +3217,7 @@ static void storage_test_user_change14()
 	gchar *test_path;
 	mode_t m_dir = 0700;
 	mode_t m_file = 0600;
+	struct connman_storage_callbacks *callbacks;
 	struct user_cb_data_t data = {
 				.uids = { UID_USER, 0 },
 				.errs = { 0, 0 },
@@ -3226,6 +3227,11 @@ static void storage_test_user_change14()
 				.errs = { 0, 0 },
 				};
 
+	/* connman_storage_update_finalize_cb modifies the contents of the *
+	 * registered callbacks list. To make the test idempotent, we copy *
+	 * the finalize_callback struct to a new address.                  */
+	callbacks = g_memdup(&finalize_callback,
+				sizeof(struct connman_storage_callbacks));
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
 	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
@@ -3235,10 +3241,10 @@ static void storage_test_user_change14()
 
 	__connman_inotify_init();
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_MAIN, &finalize_callback),
+				STORAGE_DIR_TYPE_MAIN, callbacks),
 				==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
-				STORAGE_DIR_TYPE_VPN, &finalize_callback),
+				STORAGE_DIR_TYPE_VPN, callbacks),
 				==, 0);
 
 	internal_user_change_process(UID_USER, result_cb, &data, false,
@@ -3296,6 +3302,9 @@ static void storage_test_user_change14()
 
 	cleanup_test_directory(test_path);
 	g_free(test_path);
+	g_free(callbacks);
+	finalize_cb1_call_count = 0;
+	finalize_cb2_call_count = 0;
 }
 
 /* Total wait of 0.120s */
