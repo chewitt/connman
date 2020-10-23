@@ -717,8 +717,6 @@ static bool tethering_create(const char *path,
 	const char *method;
 	bool result;
 
-	DBG("path %s bridge %s", path, bridge);
-
 	if (!bridge) {
 		g_free(tethering);
 		return false;
@@ -729,6 +727,8 @@ static bool tethering_create(const char *path,
 		g_free(tethering);
 		return false;
 	}
+
+	DBG("path %s bridge %s", path, bridge);
 
 	tethering->technology = technology;
 	tethering->bridge = g_strdup(bridge);
