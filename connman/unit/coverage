@@ -23,7 +23,8 @@ test-vpn-settings \
 test-vpn_access \
 test-sailfish_vpn_access \
 test-storage \
-test-systemd_login"
+test-systemd_login \
+test-vpn-util"
 
 pushd `dirname $0` > /dev/null
 TEST_DIR="$PWD"
