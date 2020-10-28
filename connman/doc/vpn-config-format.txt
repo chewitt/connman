@@ -57,8 +57,12 @@ OpenConnect VPN supports following options (see openconnect(8) for details):
  OpenConnect.ClientCert --certificate      Client certificate file, needed
                                            by web authentication when AuthType
                                            is set as "publickey" (O)
- VPN.MTU                --mtu              Request MTU from server as the MTU
-                                           of the tunnel (O)
+ OpenConnect.MTU        --base-mtu         Indicate MTU as the path MTU between
+                                           client and server on the unencrypted
+                                           network. Newer servers will
+                                           automatically calculate the MTU to
+                                           be used on the tunnel from this
+                                           value. (O)
  OpenConnect.Cookie     --cookie-on-stdin  Cookie received as a result of the
                                            web authentication. As the cookie
                                            lifetime can be very limited, it
@@ -125,6 +129,11 @@ OpenConnect VPN supports following options (see openconnect(8) for details):
  OpenConnect.UserPrivateKey --sslkey       SSL private key file needed by web
                                            authentication when AuthType is set
                                            as "publickey" (O)
+ OpenConnect.ForceDPD   --force-dpd        Force use of Dead Peer Detection.
+                                           When set, this is forced to be used
+                                           as the minimum DPD interval for CSTP
+                                           and DTLS, even when the server
+                                           doesn't request it.
 
 The VPN agent will be contacted to supply the information based on the
 authentication type as follows:
