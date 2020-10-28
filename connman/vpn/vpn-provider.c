@@ -117,6 +117,7 @@ static guint connman_service_watch;
 
 static bool connman_online = false;
 static bool state_query_completed = false;
+static char *connman_dbus_name = NULL;
 
 static void append_properties(DBusMessageIter *iter,
 				struct vpn_provider *provider);
@@ -3597,6 +3598,7 @@ static void get_connman_state_reply(DBusPendingCall *call, void *user_data)
 
 	const char *key;
 	const char *str;
+	const char *sender_name;
 
 	DBG("");
 
@@ -3626,6 +3628,19 @@ static void get_connman_state_reply(DBusPendingCall *call, void *user_data)
 							"expected \"%s\"",
 			dbus_message_get_signature(reply), signature);
 		goto done;
+	}
+
+	sender_name = dbus_message_get_sender(reply);
+
+	if (!connman_dbus_name) {
+		connman_dbus_name = g_strdup(sender_name);
+		DBG("Got connman dbus sender name: %s", connman_dbus_name);
+	} else {
+		if (g_strcmp0(connman_dbus_name, sender_name)) {
+			connman_error("D-Bus state reply from %s, expected %s",
+					connman_dbus_name, sender_name);
+			goto done;
+		}
 	}
 
 	if (!dbus_message_iter_init(reply, &array))
@@ -3752,6 +3767,15 @@ static void connman_service_watch_disconnected(DBusConnection *conn,
 
 	/* Set state query variable to initial state */
 	state_query_completed = false;
+
+	/* Drop the D-Bus connection name */
+	g_free(connman_dbus_name);
+	connman_dbus_name = NULL;
+}
+
+const char *__vpn_provider_get_connman_dbus_name()
+{
+	return connman_dbus_name;
 }
 
 int __vpn_provider_init(bool do_routes)
@@ -3812,4 +3836,7 @@ void __vpn_provider_cleanup(void)
 	g_dbus_remove_watch(connection, connman_signal_watch);
 
 	dbus_connection_unref(connection);
+
+	g_free(connman_dbus_name);
+	connman_dbus_name = NULL;
 }
