@@ -2547,9 +2547,6 @@ static void interface_state(GSupplicantInterface *interface)
 
 		/* See table 8-36 Reason codes in IEEE Std 802.11 */
 		switch (wifi->disconnect_code) {
-		case 1: /* Unspecified reason */
-			/* Let's assume it's because we got blocked */
-
 		case 6: /* Class 2 frame received from nonauthenticated STA */
 			connman_network_set_error(network,
 						CONNMAN_NETWORK_ERROR_BLOCKED);
