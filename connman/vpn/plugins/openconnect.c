@@ -79,7 +79,8 @@ struct {
 	{ "OpenConnect.ServerCert", "--servercert", 1, 1, OPT_STRING},
 	{ "OpenConnect.Usergroup", "--usergroup", 1, 1, OPT_STRING},
 	{ "OpenConnect.UserPrivateKey", NULL, 1, 0, OPT_STRING},
-	{ "VPN.MTU", "--base-mtu", 1, 1, OPT_STRING},
+	{ "OpenConnect.ForceDPD", "--force-dpd", 1, 1, OPT_STRING},
+	{ "OpenConnect.MTU", "--base-mtu", 1, 1, OPT_STRING},
 };
 
 enum oc_connect_type {
