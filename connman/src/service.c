@@ -751,8 +751,20 @@ static void set_vpn_dependency(struct connman_service *vpn_service)
 	}
 
 	switch (service->type) {
+	case CONNMAN_SERVICE_TYPE_VPN:
+		if (__connman_service_is_split_routing(service)) {
+			DBG("VPN as transport cannot be split routed");
+			return;
+		}
+
+		if (!__connman_service_is_split_routing(vpn_service)) {
+			DBG("non-split routed VPNs cannot depend on another");
+			return;
+		}
 	case CONNMAN_SERVICE_TYPE_WIFI:
+		/* fall through */
 	case CONNMAN_SERVICE_TYPE_CELLULAR:
+		/* fall through */
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
 		break;
 	default:
@@ -6729,8 +6741,8 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	gint strength;
 
 	/* Compare availability first */
-        const gboolean a_available = is_available(service_a);
-        const gboolean b_available = is_available(service_b);
+	const gboolean a_available = is_available(service_a);
+	const gboolean b_available = is_available(service_b);
 
 	if (a_available && !b_available)
 		return -1;
@@ -6744,14 +6756,6 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 
 	if (a_connected && b_connected) {
 		int preference;
-
-		if (!__connman_service_is_split_routing(service_a) &&
-				__connman_service_is_split_routing(service_b))
-			return -1;
-
-		if (__connman_service_is_split_routing(service_a) &&
-				!__connman_service_is_split_routing(service_b))
-			return 1;
 
 		if (service_a->type == CONNMAN_SERVICE_TYPE_VPN &&
 				service_b->type != CONNMAN_SERVICE_TYPE_VPN &&
@@ -6771,10 +6775,13 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 							service_b->depends_on);
 		}
 
-		/* Set as -1, 0 or 1, return value if preferred list is used */
-		preference = service_preferred_over(service_a, service_b);
-		if (preference)
-			return preference;
+		if (state_a == state_b) {
+			/* Return value only if preferred list is used. */
+			preference = service_preferred_over(service_a,
+						service_b);
+			if (preference)
+				return preference;
+		}
 
 		if (service_a->order > service_b->order)
 			return -1;
@@ -6798,9 +6805,24 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 		if (b_connected)
 			return 1;
 
-		if (is_connecting(service_a))
+		if (is_connecting(service_a)) {
+			if (is_connecting(service_b))
+				goto statecmp;
+
 			return -1;
-		if (is_connecting(service_b))
+		}
+
+		if (is_connecting(service_b)) {
+			if (is_connecting(service_a))
+				goto statecmp;
+
+			return 1;
+		}
+
+statecmp:
+		if (state_a > state_b)
+			return -1;
+		if (state_a < state_b)
 			return 1;
 	}
 
