@@ -61,24 +61,62 @@ int __connman_private_network_request(DBusMessage *msg, const char *owner)
 	return 0;
 }
 
+unsigned int ptr = 0x12345678;
+GHashTable *dbus_path_data = NULL;
+
+dbus_bool_t dbus_connection_register_object_path(DBusConnection *connection,
+			const char *path, const DBusObjectPathVTable *vtable,
+			void *user_data)
+{
+	g_hash_table_replace(dbus_path_data, g_strdup(path), user_data);
+
+	return true;
+}
+
+dbus_bool_t dbus_connection_get_object_path_data (DBusConnection *connection,
+					const char *path, void **data_p)
+{
+	void *user_data;
+
+	user_data = g_hash_table_lookup(dbus_path_data, path);
+	if (!user_data)
+		return false;
+
+	*data_p = user_data;
+	return true;
+}
+
+DBusConnection* dbus_connection_ref(DBusConnection *connection)
+{
+	return (DBusConnection*)&ptr;
+}
+
 void dbus_connection_unref(DBusConnection *connection) { return; }
 
 struct connman_provider {
-	int refcount;
-	bool immutable;
+	char *name;
 	struct connman_service *vpn_service;
 	int index;
 	char *identifier;
-	int family;
-	struct connman_provider_driver *driver;
-	void *driver_data;
 };
 
-int connman_provider_get_index(struct connman_provider *provider) { return -1; }
+int connman_provider_get_index(struct connman_provider *provider)
+{
+	return provider ? provider->index : -1;
+}
+
 int __connman_provider_create_and_connect(DBusMessage *msg) { return 0; }
 int connman_provider_disconnect(struct connman_provider *provider) { return 0; }
+
 void connman_provider_unref_debug(struct connman_provider *provider,
-	const char *file, int line, const char *caller) { return; }
+	const char *file, int line, const char *caller)
+{
+	g_assert(provider);
+	g_free(provider->identifier);
+	g_free(provider->name);
+	g_free(provider);
+}
+
 int __connman_provider_remove_by_path(const char *path) { return 0; }
 
 struct connman_provider *
@@ -110,19 +148,25 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 	return;
 }
 
+static int provider_count = 0;
+
 static struct connman_provider *provider_new(void)
 {
 	struct connman_provider *provider;
 
 	provider = g_try_new0(struct connman_provider, 1);
-	if (!provider)
+	if (!provider) {
+		DBG("failed to create provider");
 		return NULL;
+	}
 
-	provider->index = 0;
+	provider->index = provider_count;
 	provider->identifier = NULL;
 
 	return provider;
 }
+
+
 
 struct connman_provider *connman_provider_get(const char *identifier)
 {
@@ -135,50 +179,76 @@ struct connman_provider *connman_provider_get(const char *identifier)
 	DBG("provider %p", provider);
 
 	provider->identifier = g_strdup(identifier);
+	provider->name = g_strdup_printf("VPN%d", ++provider_count);
 
 	return provider;
-}
-
-GList *non_default_providers = NULL;
-const char *false_string = "false";
-
-int connman_provider_set_string(struct connman_provider *provider,
-					const char *key, const char *value)
-{
-	if (g_str_equal("DefaultRoute", key) &&
-		g_str_equal("false", value)) {
-		non_default_providers = g_list_append(non_default_providers,
-						provider);
-	}
-
-	return 0;
 }
 
 const char *connman_provider_get_string(struct connman_provider *provider,
 					const char *key)
 {
-	GList *iter = NULL;
-	struct connman_provider *found = NULL;
+	g_assert(provider);
+	g_assert(key);
+	g_assert_cmpstr(key, ==, "Name");
 
-	for (iter = non_default_providers ; iter ; iter = iter->next) {
-		found = iter->data;
-
-		if (found == provider)
-			return false_string;
-	}
-
-	return NULL;
+	return provider->name;
 }
 
-void connman_provider_set_split_routing(struct connman_provider *provider,
-							bool split_routing)
+//typedef struct connman_stats;
+int ptr2 = 0x87654321;
+
+struct connman_stats *__connman_stats_new(struct connman_service *service,
+							gboolean roaming)
 {
-	if (!provider || !provider->vpn_service)
-		return;
-
-	__connman_service_set_split_routing(provider->vpn_service,
-				split_routing);
+	g_assert(service);
+	return (struct connman_stats*)&ptr2;
 }
+
+void __connman_stats_free(struct connman_stats *stats) { return; }
+void __connman_stats_reset(struct connman_stats *stats)  { return; }
+void __connman_stats_set_index(struct connman_stats *stats, int index)
+{
+	return;
+}
+
+gboolean __connman_stats_update(struct connman_stats *stats,
+				const struct connman_stats_data *data)
+{
+	return TRUE;
+}
+
+void __connman_stats_rebase(struct connman_stats *stats,
+				const struct connman_stats_data *data)
+{
+	return;
+}
+
+void __connman_stats_get(struct connman_stats *stats,
+				struct connman_stats_data *data)
+{
+	return;
+}
+
+void __connman_stats_read(const char *identifier, gboolean roaming,
+				struct connman_stats_data *data)
+{
+	return;
+}
+
+void __connman_stats_clear(const char *identifier, gboolean roaming)
+{
+	return;
+}
+
+int __connman_wispr_start(struct connman_service *service,
+					enum connman_ipconfig_type type)
+{
+	return 0;
+}
+
+void __connman_wispr_stop(struct connman_service *service) { return; }
+
+
 
 /* EOD - end of dummies */
 
@@ -300,11 +370,7 @@ static void add_service_type(enum connman_service_type type,
 		if (state == CONNMAN_SERVICE_STATE_READY)
 			service->depends_on = get_connected_default_service();
 
-		service->order = 10;
-
-		if (service->provider)
-			connman_provider_set_split_routing(service->provider,
-						split_routing);
+		__connman_service_set_split_routing(service, split_routing);
 	}
 
 	service_list = g_list_insert_sorted(service_list, service,
@@ -365,7 +431,7 @@ static void print_services()
 {
 	static struct connman_debug_desc debug_desc CONNMAN_DEBUG_ATTR = {
 		.file = __FILE__,
-		.flags = CONNMAN_DEBUG_FLAG_PRINT
+		.flags = CONNMAN_DEBUG_FLAG_DEFAULT
 	};
 
 	if (debug_desc.flags && CONNMAN_DEBUG_FLAG_PRINT) {
@@ -377,7 +443,30 @@ static void print_services()
 static bool check_preferred_type_order(struct connman_service *a,
 	struct connman_service *b)
 {
-	// TODO use order in preferred list
+	unsigned int a_pref_order = G_MAXUINT;
+	unsigned int b_pref_order = G_MAXUINT;
+	int i;
+
+	DBG("%p vs %p", a, b);
+
+	if (is_connected(a) && is_connected(b)) {
+		if (a->type == CONNMAN_SERVICE_TYPE_VPN && is_connected(a))
+			return true;
+
+		if (b->type == CONNMAN_SERVICE_TYPE_VPN && is_connected(b))
+			return true;
+
+		for (i = 0 ; preferred_list[i] != 0; i++) {
+			if (preferred_list[i] == a->type)
+				a_pref_order = i;
+
+			if (preferred_list[i] == b->type)
+				b_pref_order = i;
+		}
+
+		return a_pref_order <= b_pref_order;
+	}
+
 	return true;
 }
 
@@ -413,24 +502,13 @@ static bool check_type_order(struct connman_service *a,
 	return a_type_order >= b_type_order;
 }
 
-static void test_service_sort_full_positive()
+static void service_order_check(bool(*order_cb)(struct connman_service *a,
+						struct connman_service *b))
 {
-	GList *iter = NULL, *iter_next = NULL;
-	struct connman_service *a = NULL, *b = NULL;
-
-	ident_counter = 0;
-	add_services();
-
-	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
-		true, 0);
-	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_ONLINE, false, 60);
-	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
-		CONNMAN_SERVICE_STATE_ONLINE, false, 85);
-
-	service_list = g_list_sort(service_list, service_compare);
-
-	print_services();
+	GList *iter;
+	GList *iter_next;
+	struct connman_service *a;
+	struct connman_service *b;
 
 	for (iter = service_list ; iter ; iter = iter->next) {
 		iter_next = iter->next;
@@ -442,12 +520,10 @@ static void test_service_sort_full_positive()
 		a = iter->data;
 		b = iter_next->data;
 
-		/* For debugging */
 		DBG("T: %s vs. %s", a->identifier, b->identifier);
 
 		if (a->type == CONNMAN_SERVICE_TYPE_VPN &&
-			a->state == CONNMAN_SERVICE_STATE_READY) {
-
+				a->state == CONNMAN_SERVICE_STATE_READY) {
 			/* VPN as default should be on top */
 			if (!__connman_service_is_split_routing(a))
 				g_assert(a == service_list->data);
@@ -456,45 +532,105 @@ static void test_service_sort_full_positive()
 
 			/*
 			 * State of the transport service of VPN has to be
-			 * equal or greater than the service below
+			 * equal or greater than the service below, both of
+			 * which need to be connected for state comparison to
+			 * to work.
 			 */
-			if(a->depends_on)
-				g_assert(a->depends_on->state >= b->state);
-
-		} else if (b->type == CONNMAN_SERVICE_TYPE_VPN &&
-			b->state == CONNMAN_SERVICE_STATE_READY) {
-
-			g_assert(a->state >= b->state);
-
-		} else {
-			if (a->type != b->type) {
-				if (a->state == b->state) {
-					g_assert(a->order >= b->order);
-					g_assert(check_type_order(a,b));
-				} else {
-					/*
-					 * TODO: some items are not sorted
-					 * properly, this will fail with gps
-					 * in configuration state put too low
-					 */
-					//g_assert(a->state >= b->state);
-				}
-			} else {
-				/* For Wifi, check strength */
-				if (a->type == CONNMAN_SERVICE_TYPE_WIFI &&
-					b->type == CONNMAN_SERVICE_TYPE_WIFI)
-					g_assert(a->strength >= b->strength);
-
-				g_assert(a->state >= b->state);
+			if(a->depends_on && is_connected(a) &&
+						is_connected(b)) {
+				/* Both are VPNs */
+				if (b->depends_on)
+					g_assert(a->depends_on->state >=
+							b->depends_on->state);
+				/* Check order only if b is transport */
+				else
+					g_assert_true(order_cb(a,b));
 			}
-		}
-	}
 
+			continue;
+		}
+
+		if (b->type == CONNMAN_SERVICE_TYPE_VPN &&
+				b->state == CONNMAN_SERVICE_STATE_READY) {
+			g_assert(a->state >= b->state);
+			continue;
+		}
+
+		/* For Wifi, check strength */
+		if (a->type == CONNMAN_SERVICE_TYPE_WIFI &&
+				b->type ==
+				CONNMAN_SERVICE_TYPE_WIFI)
+			g_assert(a->strength >= b->strength);
+
+		if (a->state == b->state) {
+			g_assert(a->order >= b->order);
+			g_assert_true(order_cb(a,b));
+			continue;
+		}
+
+		/*
+		 * If a is connected and b is connected or not, a
+		 * should be on top.
+		 */
+		if (is_connected(a)) {
+			if (is_connected(b) || (is_connecting(b)))
+				g_assert(a->state >= b->state);
+			else
+				g_assert(is_available(a) && !is_available(b));
+
+			continue;
+		}
+
+		/* Non-conn. must not be on top of connected.*/
+		g_assert_false(is_connected(b));
+
+		/* configuration & association */
+		if (is_connecting(a) && is_connecting(b)) {
+			g_assert(a->state >= b->state);
+			continue;
+		}
+
+		/* Connected or connecting should not be on top of
+		 * not-connected or not connecting.
+		 */
+		g_assert_false(is_connecting(b));
+
+		/*
+		 * If both are not connected the state should be
+		 * orderd.
+		 */
+		if (!is_connecting(a))
+			g_assert(a->state >= b->state);
+	}
+}
+
+static void service_free_wrapper(void *data, void *user_data)
+{
+	g_assert(data);
+	service_free(data);
+}
+
+static void clean_service_list()
+{
+	g_list_foreach(service_list, service_free_wrapper, NULL);
 	g_list_free(service_list);
 	service_list = NULL;
 }
 
-void test_service_sort_with_preferred_list()
+static void test_service_sort_full_positive()
+{
+	ident_counter = 0;
+	add_services();
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_type_order);
+
+	clean_service_list();
+}
+
+void test_service_sort_with_preferred_list1()
 {
 	unsigned int list[] = {
 		CONNMAN_SERVICE_TYPE_BLUETOOTH,
@@ -502,64 +638,264 @@ void test_service_sort_with_preferred_list()
 		CONNMAN_SERVICE_TYPE_CELLULAR,
 		CONNMAN_SERVICE_TYPE_UNKNOWN,
 	};
-	GList *iter = NULL, *iter_next = NULL;
-	struct connman_service *a = NULL, *b = NULL;
-	
-	ident_counter = 0;
 
-	if (preferred_list)
-		g_free(preferred_list);
-	
+	ident_counter = 0;
 	preferred_list = list;
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
 		CONNMAN_SERVICE_STATE_ONLINE, false, 85);
-
-	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
-				true, 0);
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
 				CONNMAN_SERVICE_STATE_READY, false, 60);
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
 				CONNMAN_SERVICE_STATE_IDLE, false, 0);
 
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_READY, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_BLUETOOTH,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
 	service_list = g_list_sort(service_list, service_compare);
 
 	print_services();
-	
-	for (iter = service_list ; iter ; iter = iter->next) {
-		iter_next = iter->next;
+	service_order_check(check_preferred_type_order);
 
-		/* iter is the last item */
-		if (!iter_next)
-			continue;
-
-		a = iter->data;
-		b = iter_next->data;
-		
-		if (a->state == b->state) {
-			g_assert(check_preferred_type_order(a,b));
-		} else {
-			g_assert(check_preferred_type_order(a,b));
-		}
-	}
+	clean_service_list();
 }
 
-/* TODO */
+void test_service_sort_with_preferred_list2()
+{
+	/* By default eth > wifi > cellular, reverse order */
+	unsigned int list[] = {
+		CONNMAN_SERVICE_TYPE_BLUETOOTH,
+		CONNMAN_SERVICE_TYPE_CELLULAR,
+		CONNMAN_SERVICE_TYPE_WIFI,
+		CONNMAN_SERVICE_TYPE_ETHERNET,
+		CONNMAN_SERVICE_TYPE_UNKNOWN,
+	};
+
+	ident_counter = 0;
+	preferred_list = list;
+
+	add_services();
+
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+		CONNMAN_SERVICE_STATE_ONLINE, false,50);
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_READY, false, 45);
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_READY, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_BLUETOOTH,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_preferred_type_order);
+
+	clean_service_list();
+}
+
 void test_service_sort_without_preferred_list()
 {
-	return;
+	ident_counter = 0;
+	add_services();
+
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_ONLINE, false,50);
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_READY, false, 45);
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_READY, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_BLUETOOTH,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_type_order);
+
+	clean_service_list();
 }
 
-/* TODO */
 void test_service_sort_vpn_default()
 {
-	return;
+	ident_counter = 0;
+
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_ONLINE, false,50);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+
+	/* Add both non-split routed (default) and split routed */
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_READY, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_READY, true, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_FAILURE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_DISCONNECT, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_type_order);
+
+	clean_service_list();
 }
 
-/* TODO */
-void test_service_sort_vpn_non_default()
+void test_service_sort_vpn_default_preferred_list()
 {
-	return;
+	unsigned int list[] = {
+		CONNMAN_SERVICE_TYPE_BLUETOOTH,
+		CONNMAN_SERVICE_TYPE_CELLULAR,
+		CONNMAN_SERVICE_TYPE_WIFI,
+		CONNMAN_SERVICE_TYPE_ETHERNET,
+		CONNMAN_SERVICE_TYPE_UNKNOWN,
+	};
+
+	ident_counter = 0;
+	preferred_list = list;
+
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 50);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_READY, false, 45);
+
+	/* Add both non-split routed (default) and split routed */
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_READY, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_READY, true, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_FAILURE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_DISCONNECT, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_IDLE, false, 0);
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_preferred_type_order);
+
+	clean_service_list();
+}
+
+void test_service_sort_vpn_split()
+{
+	ident_counter = 0;
+
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
+				true, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_FAILURE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_DISCONNECT,
+				false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_IDLE,
+				false, 0);
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_type_order);
+
+	clean_service_list();
+}
+
+void test_service_sort_vpn_split_preferred_list()
+{
+	unsigned int list[] = {
+		CONNMAN_SERVICE_TYPE_BLUETOOTH,
+		CONNMAN_SERVICE_TYPE_CELLULAR,
+		CONNMAN_SERVICE_TYPE_WIFI,
+		CONNMAN_SERVICE_TYPE_ETHERNET,
+		CONNMAN_SERVICE_TYPE_UNKNOWN,
+	};
+
+	ident_counter = 0;
+	preferred_list = list;
+
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 50);
+	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
+				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
+				CONNMAN_SERVICE_STATE_READY, false, 45);
+
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_READY,
+				true, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_FAILURE, false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN,
+				CONNMAN_SERVICE_STATE_DISCONNECT,
+				false, 0);
+	add_service_type(CONNMAN_SERVICE_TYPE_VPN, CONNMAN_SERVICE_STATE_IDLE,
+				false, 0);
+
+	service_list = g_list_sort(service_list, service_compare);
+
+	print_services();
+	service_order_check(check_preferred_type_order);
+
+	clean_service_list();
+}
+
+
+void test_service_sort_single_tech_types()
+{
+	ident_counter = 0;
+	enum connman_service_type type;
+	enum connman_service_state state;
+
+	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+				type < MAX_CONNMAN_SERVICE_TYPES; type++) {
+		for (state = CONNMAN_SERVICE_STATE_UNKNOWN + 1;
+					state <= CONNMAN_SERVICE_STATE_FAILURE;
+					state++) {
+			if (type == CONNMAN_SERVICE_TYPE_VPN &&
+					state == CONNMAN_SERVICE_STATE_ONLINE)
+				continue;
+
+			add_service_type(type, state, false, 0);
+		}
+
+		service_list = g_list_sort(service_list, service_compare);
+
+		print_services();
+		service_order_check(check_type_order);
+
+		clean_service_list();
+	}
 }
 
 int rmdir_r(const gchar* path)
@@ -628,7 +964,7 @@ int main(int argc, char **argv)
 	GOptionContext *context;
 	GError *error = NULL;
 	int ret;
-	char* test_dir = g_dir_make_tmp("test_service_XXXXXX", NULL);
+	char* test_dir = g_dir_make_tmp("connman_test_service_XXXXXX", NULL);
 
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
@@ -648,30 +984,52 @@ int main(int argc, char **argv)
 
 	g_test_init(&argc, &argv, NULL);
 
-	__connman_log_init("test-service", g_test_verbose() ? "*" : NULL,
-			FALSE, FALSE, "test-service", CONNMAN_VERSION);
+	__connman_log_init(argv[0], option_debug, false, false,
+				"Unit Tests Connection Manager",
+				CONNMAN_VERSION);
+
 	__connman_storage_init(test_dir, 0755, 0644);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
+	g_assert_cmpint(__connman_notifier_init(), ==, 0);
+
+	connection = (DBusConnection*)&ptr;
+	dbus_path_data = g_hash_table_new(g_str_hash, g_str_equal);
+	services_notify = g_new0(struct _services_notify, 1);
+	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
 
 	g_test_add_func("/service/service_sort_full_positive",
-		test_service_sort_full_positive);
-	g_test_add_func("/service/service_sort_with_preferred",
-		test_service_sort_with_preferred_list);
+				test_service_sort_full_positive);
+	g_test_add_func("/service/service_sort_with_preferred1",
+			test_service_sort_with_preferred_list1);
+	g_test_add_func("/service/service_sort_with_preferred2",
+				test_service_sort_with_preferred_list2);
 	g_test_add_func("/service/service_sort_without_preferred",
-		test_service_sort_without_preferred_list);
+				test_service_sort_without_preferred_list);
 	g_test_add_func("/service/service_sort_vpn_default",
-		test_service_sort_vpn_default);
-	g_test_add_func("/service/service_sort_vpn_non_default",
-		test_service_sort_vpn_non_default);
+				test_service_sort_vpn_default);
+	g_test_add_func("/service/service_sort_vpn_default_preferred_list",
+				test_service_sort_vpn_default_preferred_list);
+	g_test_add_func("/service/service_sort_vpn_split",
+				test_service_sort_vpn_split);
+	g_test_add_func("/service/service_sort_vpn_split_preferred_list",
+				test_service_sort_vpn_split_preferred_list);
+	g_test_add_func("/service/service_sort_single_tech_types",
+				test_service_sort_single_tech_types);
 
 	ret = g_test_run();
-	__connman_log_cleanup(FALSE);
+
+	g_hash_table_destroy(services_notify->add);
+	if (dbus_path_data)
+		g_hash_table_destroy(dbus_path_data);
+
+	__connman_notifier_cleanup();
 	__connman_storage_cleanup();
 	cleanup_test_directory(test_dir);
 	g_free(test_dir);
+	__connman_log_cleanup(FALSE);
 
 	return ret;
 }
