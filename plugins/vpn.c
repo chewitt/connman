@@ -94,6 +94,7 @@ struct connection_data {
 
 	GResolv *resolv;
 	guint resolv_id;
+	guint remove_resolv_id;
 };
 
 static int set_string(struct connman_provider *provider,
@@ -171,10 +172,15 @@ static char *get_ident(const char *path)
 
 static void cancel_host_resolv(struct connection_data *data)
 {
-	if (data->resolv_id != 0)
+
+	if (data->remove_resolv_id)
+		g_source_remove(data->remove_resolv_id);
+
+	if (data->resolv && data->resolv_id)
 		g_resolv_cancel_lookup(data->resolv, data->resolv_id);
 
 	data->resolv_id = 0;
+	data->remove_resolv_id = 0;
 
 	g_resolv_unref(data->resolv);
 	data->resolv = NULL;
@@ -206,7 +212,7 @@ static void resolv_result(GResolvResultStatus status,
 	 * We cannot unref the resolver here as resolv struct is manipulated
 	 * by gresolv.c after we return from this callback.
 	 */
-	g_idle_add(remove_resolv, data);
+	data->remove_resolv_id = g_idle_add(remove_resolv, data);
 
 	data->resolv_id = 0;
 }
