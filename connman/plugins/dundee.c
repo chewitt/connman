@@ -488,7 +488,7 @@ static void extract_settings(DBusMessageIter *array,
 	if (index < 0)
 		goto out;
 
-	info->address = connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV4);
+	info->address = connman_ipaddress_alloc(AF_INET);
 	if (!info->address)
 		goto out;
 

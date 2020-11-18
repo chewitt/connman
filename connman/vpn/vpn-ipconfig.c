@@ -211,7 +211,7 @@ int __vpn_ipconfig_address_add(struct vpn_ipconfig *ipconfig, int family)
 
 	if (family == AF_INET)
 		return connman_inet_set_address(ipconfig->index,
-						ipconfig->address);
+							ipconfig->address);
 	else if (family == AF_INET6)
 		return connman_inet_set_ipv6_address(ipconfig->index,
 							ipconfig->address);
@@ -282,7 +282,10 @@ static struct vpn_ipconfig *create_ipv6config(int index)
 		return NULL;
 	}
 
+	connman_ipaddress_set_p2p(ipv6config->address, true);
+
 	ipv6config->system = connman_ipaddress_alloc(AF_INET6);
+	connman_ipaddress_set_p2p(ipv6config->system, true);
 
 	DBG("ipconfig %p", ipv6config);
 
@@ -314,7 +317,10 @@ struct vpn_ipconfig *__vpn_ipconfig_create(int index, int family)
 		return NULL;
 	}
 
+	connman_ipaddress_set_p2p(ipconfig->address, true);
+
 	ipconfig->system = connman_ipaddress_alloc(AF_INET);
+	connman_ipaddress_set_p2p(ipconfig->system, true);
 
 	DBG("ipconfig %p", ipconfig);
 

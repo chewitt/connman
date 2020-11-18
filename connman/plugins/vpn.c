@@ -439,6 +439,7 @@ static int extract_ip(DBusMessageIter *array, int family,
 	}
 
 	connman_ipaddress_set_peer(data->ip, peer);
+	connman_ipaddress_set_p2p(data->ip, true);
 
 	return 0;
 }
