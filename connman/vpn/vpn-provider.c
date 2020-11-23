@@ -3554,12 +3554,9 @@ static gboolean connman_property_changed(DBusConnection *conn,
 				void *user_data)
 {
 	DBusMessageIter iter, value;
-	
 	const char *key;
-	const char *str;
-	
-	const char *signature =	DBUS_TYPE_STRING_AS_STRING
-		DBUS_TYPE_VARIANT_AS_STRING;
+	const char *signature = DBUS_TYPE_STRING_AS_STRING
+				DBUS_TYPE_VARIANT_AS_STRING;
 
 	if (!dbus_message_has_signature(message, signature)) {
 		connman_error("vpn connman property signature \"%s\" "
@@ -3578,12 +3575,16 @@ static gboolean connman_property_changed(DBusConnection *conn,
 
 	DBG("key %s", key);
 
-	if (g_ascii_strcasecmp(key, "State") == 0 &&
-		dbus_message_iter_get_arg_type(&value) == DBUS_TYPE_STRING) {
+	if (g_str_equal(key, "State")) {
+		const char *str;
+
+		if (dbus_message_iter_get_arg_type(&value) != DBUS_TYPE_STRING)
+			return TRUE;
+
 		dbus_message_iter_get_basic(&value, &str);
 		set_state(str);
 	}
-	
+
 	return TRUE;
 }
 
