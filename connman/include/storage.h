@@ -24,6 +24,7 @@
 
 #include <sys/types.h>
 #include <glib.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,6 +42,7 @@ const char *connman_storage_dir_for(const char *service_id);
 void connman_storage_update_finalize_cb(
 				void (*cb) (uid_t uid, void *user_data),
 				void *user_data);
+bool connman_storage_user_change_in_progress();
 
 #ifdef __cplusplus
 }
