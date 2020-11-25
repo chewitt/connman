@@ -1674,6 +1674,16 @@ static gboolean connection_added(DBusConnection *conn, DBusMessage *message,
 		return TRUE;
 	}
 
+	/*
+	 * If storage has not completed the user change paths may not be set
+	 * yet and loading of a VPN service results in treating it as a new
+	 * service, ignoring values in settings file.
+	 */
+	if (connman_storage_user_change_in_progress()) {
+		connman_info("user change in progress, ignore add signal");
+		return TRUE;
+	}
+
 	DBG("");
 
 	if (!dbus_message_iter_init(message, &iter))
@@ -2022,6 +2032,8 @@ static void vpn_service_state_changed(struct connman_service *service,
 
 static void vpn_finalize(uid_t uid, void *user_data)
 {
+	DBG("");
+
 	if (get_connections(user_data) != -EINPROGRESS)
 		connman_warn("cannot retrieve VPN connections");
 }
