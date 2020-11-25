@@ -2245,9 +2245,6 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 
 	storage_change_uid(data->uid);
 
-	if (cbs && cbs->finalize)
-		cbs->finalize(data->uid, cbs->finalize_user_data);
-
 	if (data->pending) {
 		if (!g_dbus_send_reply(connection, data->pending,
 					DBUS_TYPE_INVALID))
@@ -2287,6 +2284,9 @@ err:
 					strerror(-err));
 
 out:
+	if (cbs && cbs->finalize)
+		cbs->finalize(data->uid, cbs->finalize_user_data);
+
 	if (data->result_cb)
 		data->result_cb(data->uid, err, data->user_cb_data);
 
@@ -2687,7 +2687,6 @@ static const GDBusMethodTable storage_methods[] = {
 	{ },
 };
 
-
 static const GDBusMethodTable storage_methods_vpn[] = {
 	{ GDBUS_ASYNC_METHOD(VPN_STORAGE_CHANGE_USER,
 				GDBUS_ARGS({ "uid", "u" }),
@@ -2759,6 +2758,11 @@ void connman_storage_update_finalize_cb(
 
 	cbs->finalize = cb;
 	cbs->finalize_user_data = user_data;
+}
+
+bool connman_storage_user_change_in_progress()
+{
+	return vpn_change_call ? true : false;
 }
 
 int __connman_storage_init(const char *dir, mode_t dir_mode, mode_t file_mode)
