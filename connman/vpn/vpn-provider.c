@@ -3336,6 +3336,12 @@ void vpn_provider_driver_unregister(struct vpn_provider_driver *driver)
 				provider->driver->type == driver->type &&
 				g_strcmp0(provider->driver->name,
 							driver->name) == 0) {
+			/*
+			 * Cancel VPN agent request to avoid segfault at
+			 * shutdown as the callback, if set can point to a
+			 * function in the plugin that is to be removed.
+			 */
+			connman_agent_cancel(provider);
 			provider->driver = NULL;
 		}
 	}
