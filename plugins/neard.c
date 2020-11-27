@@ -499,7 +499,7 @@ static void register_agent_cb(DBusPendingCall *pending, void *user_data)
 	DBusMessage *reply;
 
 	if (!dbus_pending_call_get_completed(pending))
-		return;
+		goto out;
 
 	register_call = NULL;
 
