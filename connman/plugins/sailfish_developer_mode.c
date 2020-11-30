@@ -388,11 +388,11 @@ static void get_usb_moded_state_reply(DBusPendingCall *call, void *user_data)
 
 	/*
 	 * A theoretical chance that call notify is called without receiving a
-	 * reply. No change must be done, just return.
+	 * reply. Possibly a timeout, we need to free the call.
 	 */
 	if (!dbus_pending_call_get_completed(call)) {
 		DBG("pending call notify called but no reply received yet");
-		return;
+		goto done;
 	}
 
 	reply = dbus_pending_call_steal_reply(call);

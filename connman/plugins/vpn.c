@@ -96,6 +96,7 @@ struct connection_data {
 
 	GResolv *resolv;
 	guint resolv_id;
+	guint remove_resolv_id;
 };
 
 static int set_string(struct connman_provider *provider,
@@ -173,10 +174,15 @@ static char *get_ident(const char *path)
 
 static void cancel_host_resolv(struct connection_data *data)
 {
-	if (data->resolv_id != 0)
+
+	if (data->remove_resolv_id)
+		g_source_remove(data->remove_resolv_id);
+
+	if (data->resolv && data->resolv_id)
 		g_resolv_cancel_lookup(data->resolv, data->resolv_id);
 
 	data->resolv_id = 0;
+	data->remove_resolv_id = 0;
 
 	g_resolv_unref(data->resolv);
 	data->resolv = NULL;
@@ -208,7 +214,7 @@ static void resolv_result(GResolvResultStatus status,
 	 * We cannot unref the resolver here as resolv struct is manipulated
 	 * by gresolv.c after we return from this callback.
 	 */
-	g_timeout_add_seconds(0, remove_resolv, data);
+	data->remove_resolv_id = g_timeout_add(0, remove_resolv, data);
 
 	data->resolv_id = 0;
 }
@@ -498,8 +504,12 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 	struct connection_data *data = user_data;
 	struct config_create_data *cb_data = data->cb_data;
 
-	if (!dbus_pending_call_get_completed(call))
-		return;
+	DBG("");
+
+	if (!dbus_pending_call_get_completed(call)) {
+		connman_warn("vpn connect reply pending call incomplete");
+		goto out;
+	}
 
 	if (call != data->call) {
 		connman_error("invalid call %p to VPN connect_reply data %p "
@@ -786,12 +796,16 @@ static void get_connections_reply(DBusPendingCall *call, void *user_data)
 		DBUS_DICT_ENTRY_END_CHAR_AS_STRING
 		DBUS_STRUCT_END_CHAR_AS_STRING;
 
-	if (!dbus_pending_call_get_completed(call))
-		return;
-
 	DBG("");
 
+	if (!dbus_pending_call_get_completed(call)) {
+		connman_warn("get connections reply pending call incomplete");
+		goto out;
+	}
+
 	reply = dbus_pending_call_steal_reply(call);
+	if (!reply)
+		goto out;
 
 	dbus_error_init(&error);
 
@@ -831,6 +845,7 @@ static void get_connections_reply(DBusPendingCall *call, void *user_data)
 done:
 	dbus_message_unref(reply);
 
+out:
 	dbus_pending_call_unref(call);
 }
 
@@ -878,12 +893,16 @@ static void remove_connection_reply(DBusPendingCall *call, void *user_data)
 	DBusMessage *reply;
 	DBusError error;
 
-	if (!dbus_pending_call_get_completed(call))
-		return;
-
 	DBG("");
 
+	if (!dbus_pending_call_get_completed(call)) {
+		connman_warn("remove connection reply pending call incomplete");
+		goto out;
+	}
+
 	reply = dbus_pending_call_steal_reply(call);
+	if (!reply)
+		goto out;
 
 	dbus_error_init(&error);
 
@@ -901,6 +920,7 @@ static void remove_connection_reply(DBusPendingCall *call, void *user_data)
 
 	dbus_message_unref(reply);
 
+out:
 	dbus_pending_call_unref(call);
 }
 
@@ -1072,12 +1092,16 @@ static void configuration_create_reply(DBusPendingCall *call, void *user_data)
 	struct connection_data *data;
 	struct config_create_data *cb_data = user_data;
 
-	if (!dbus_pending_call_get_completed(call))
-		return;
-
 	DBG("user %p", cb_data);
 
+	if (!dbus_pending_call_get_completed(call)) {
+		connman_warn("configuration create reply pending call incomplete");
+		goto out;
+	}
+
 	reply = dbus_pending_call_steal_reply(call);
+	if (!reply)
+		goto out;
 
 	dbus_error_init(&error);
 
@@ -1131,6 +1155,7 @@ static void configuration_create_reply(DBusPendingCall *call, void *user_data)
 done:
 	dbus_message_unref(reply);
 
+out:
 	dbus_pending_call_unref(call);
 }
 

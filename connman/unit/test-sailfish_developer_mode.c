@@ -1699,12 +1699,6 @@ static void developer_mode_plugin_test_dbus_error7()
 	g_assert(sent_message == old_msg);
 	g_assert_cmpint(test_device1.refcount, ==, 1);
 
-	/* Let pending call to complete, notification is done */
-	set_dbus_config(DBUS_CONFIG_UNSET);
-	call_dbus_pending_notify();
-	g_assert(notify_status == NOTIFY_TRUE);
-	g_assert_cmpint(test_device1.refcount, ==, 1);
-
 	__connman_builtin_sailfish_developer_mode.exit();
 
 	g_assert_cmpint(test_device1.refcount, ==, 0);
