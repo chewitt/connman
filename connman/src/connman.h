@@ -170,7 +170,8 @@ int __connman_inet_modify_address(int cmd, int flags, int index, int family,
 				const char *address,
 				const char *peer,
 				unsigned char prefixlen,
-				const char *broadcast);
+				const char *broadcast,
+				bool is_p2p);
 int __connman_inet_get_interface_address(int index, int family, void *address);
 int __connman_inet_get_interface_ll_address(int index, int family, void *address);
 int __connman_inet_get_interface_mac_address(int index, uint8_t *mac_address);
@@ -383,6 +384,7 @@ struct connman_ipaddress {
 	char *peer;
 	char *broadcast;
 	char *gateway;
+	bool is_p2p; /* P2P connection or VPN, broadcast is excluded. */
 };
 
 struct connman_ipconfig_ops {
@@ -598,6 +600,7 @@ int __connman_connection_gateway_add(struct connman_service *service,
 void __connman_connection_gateway_remove(struct connman_service *service,
 					enum connman_ipconfig_type type);
 int __connman_connection_get_vpn_index(int phy_index);
+int __connman_connection_get_vpn_phy_index(int vpn_index);
 
 bool __connman_connection_update_gateway(void);
 
@@ -774,6 +777,8 @@ int __connman_service_init(void);
 void __connman_service_cleanup(void);
 void __connman_service_unload_services(gchar **services, int len);
 void __connman_service_load_services(void);
+int __connman_service_move(struct connman_service *service,
+				struct connman_service *target, bool before);
 int __connman_service_load_modifiable(struct connman_service *service);
 
 void __connman_service_list_struct(DBusMessageIter *iter);
@@ -893,6 +898,7 @@ bool __connman_service_is_split_routing(struct connman_service *service);
 bool __connman_service_index_is_split_routing(int index);
 void __connman_service_set_split_routing(struct connman_service *service,
 						bool split_routing);
+void __connman_service_split_routing_changed(struct connman_service *service);
 int __connman_service_get_index(struct connman_service *service);
 GSList *__connman_service_get_depending_vpn_index(
 		struct connman_service *service);

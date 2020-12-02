@@ -378,12 +378,11 @@ unit_test_service_SOURCES = $(backtrace_sources) $(gdhcp_sources) \
 				src/proxy.c src/utsname.c src/timeserver.c \
 				src/rfkill.c src/storage.c src/dbus.c \
 				src/config.c src/technology.c src/counter.c \
-				src/ntp.c src/wpad.c src/wispr.c \
-				src/dnsproxy.c src/6to4.c src/ippool.c \
-				src/ipaddress.c src/inotify.c src/ipv6pd.c \
-				src/peer.c src/peer_service.c src/machine.c \
-				src/util.c src/wakeup_timer.c \
-				src/jolla-stats.c src/access.c
+				src/ntp.c src/wpad.c src/dnsproxy.c \
+				src/6to4.c src/ippool.c src/ipaddress.c \
+				src/inotify.c src/ipv6pd.c src/peer.c \
+				src/peer_service.c src/machine.c src/util.c \
+				src/wakeup_timer.c src/access.c
 unit_test_service_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
 				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ -lresolv \
 				-ldl

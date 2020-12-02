@@ -508,7 +508,7 @@ static GString *modem_configure_ipv4(struct connman_network *network,
 {
 	if (config->method == OFONO_CONNCTX_METHOD_STATIC && config->address) {
 		struct connman_ipaddress *ipaddr =
-			connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV4);
+					connman_ipaddress_alloc(AF_INET);
 		connman_ipaddress_set_ipv4(ipaddr, config->address,
 					config->netmask, config->gateway);
 		connman_network_set_ipv4_method(network,
@@ -530,7 +530,7 @@ static GString *modem_configure_ipv6(struct connman_network *network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
 	} else if (config->address) {
 		struct connman_ipaddress *ipaddr =
-			connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV6);
+					connman_ipaddress_alloc(AF_INET6);
 		connman_ipaddress_set_ipv6(ipaddr, config->address,
 					config->prefix, config->gateway);
 		connman_network_set_ipv6_method(network,

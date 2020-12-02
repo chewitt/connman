@@ -122,7 +122,8 @@ int __connman_bridge_enable(const char *name, const char *ip_address,
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET,
-				ip_address, NULL, prefix_len, broadcast);
+				ip_address, NULL, prefix_len, broadcast,
+				false);
 	if (err < 0)
 		return err;
 

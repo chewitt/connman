@@ -154,7 +154,7 @@ static int start_dhcp_server(struct connman_peer *peer)
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET,
-				gateway, NULL, prefixlen, broadcast);
+				gateway, NULL, prefixlen, broadcast, true);
 	if (err < 0)
 		goto error;
 

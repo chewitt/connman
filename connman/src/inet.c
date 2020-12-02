@@ -80,7 +80,8 @@ int __connman_inet_modify_address(int cmd, int flags,
 				const char *address,
 				const char *peer,
 				unsigned char prefixlen,
-				const char *broadcast)
+				const char *broadcast,
+				bool is_p2p)
 {
 	uint8_t request[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
 			NLMSG_ALIGN(sizeof(struct ifaddrmsg)) +
@@ -95,8 +96,9 @@ int __connman_inet_modify_address(int cmd, int flags,
 	int sk, err;
 
 	DBG("cmd %#x flags %#x index %d family %d address %s peer %s "
-		"prefixlen %hhu broadcast %s", cmd, flags, index, family,
-		address, peer, prefixlen, broadcast);
+		"prefixlen %hhu broadcast %s p2p %s", cmd, flags, index,
+		family, address, peer, prefixlen, broadcast,
+		is_p2p ? "true" : "false");
 
 	if (!address)
 		return -EINVAL;
@@ -123,12 +125,6 @@ int __connman_inet_modify_address(int cmd, int flags,
 		if (inet_pton(AF_INET, address, &ipv4_addr) < 1)
 			return -1;
 
-		if (broadcast)
-			inet_pton(AF_INET, broadcast, &ipv4_bcast);
-		else
-			ipv4_bcast.s_addr = ipv4_addr.s_addr |
-				htonl(0xfffffffflu >> prefixlen);
-
 		if (peer) {
 			if (inet_pton(AF_INET, peer, &ipv4_dest) < 1)
 				return -1;
@@ -150,14 +146,25 @@ int __connman_inet_modify_address(int cmd, int flags,
 		if (err < 0)
 			return err;
 
-		err = __connman_inet_rtnl_addattr_l(header,
-						sizeof(request),
-						IFA_BROADCAST,
-						&ipv4_bcast,
-						sizeof(ipv4_bcast));
-		if (err < 0)
-			return err;
+		/*
+		 * Broadcast address must not be added for P2P / VPN as
+		 * getifaddrs() cannot interpret destination address.
+		 */
+		if (!is_p2p) {
+			if (broadcast)
+				inet_pton(AF_INET, broadcast, &ipv4_bcast);
+			else
+				ipv4_bcast.s_addr = ipv4_addr.s_addr |
+					htonl(0xfffffffflu >> prefixlen);
 
+			err = __connman_inet_rtnl_addattr_l(header,
+							sizeof(request),
+							IFA_BROADCAST,
+							&ipv4_bcast,
+							sizeof(ipv4_bcast));
+			if (err < 0)
+				return err;
+		}
 	} else if (family == AF_INET6) {
 		if (inet_pton(AF_INET6, address, &ipv6_addr) < 1)
 			return -1;
@@ -190,13 +197,46 @@ done:
 	return err;
 }
 
+static bool is_addr_unspec(int family, struct sockaddr *addr)
+{
+	struct sockaddr_in *in4;
+	struct sockaddr_in6 *in6;
+
+	switch (family) {
+	case AF_INET:
+		in4 = (struct sockaddr_in*) addr;
+		return in4->sin_addr.s_addr == INADDR_ANY;
+	case AF_INET6:
+		in6 = (struct sockaddr_in6*) addr;
+		return IN6_IS_ADDR_UNSPECIFIED(&in6->sin6_addr);
+	default:
+		return false;
+	}
+}
+
+static bool is_addr_ll(int family, struct sockaddr *addr)
+{
+	struct sockaddr_in *in4;
+	struct sockaddr_in6 *in6;
+
+	switch (family) {
+	case AF_INET:
+		in4 = (struct sockaddr_in*) addr;
+		return (in4->sin_addr.s_addr & IN_CLASSB_NET) ==
+					((in_addr_t) htonl(0xa9fe0000));
+	case AF_INET6:
+		in6 = (struct sockaddr_in6*) addr;
+		return IN6_IS_ADDR_LINKLOCAL(&in6->sin6_addr);
+	default:
+		return false;
+	}
+}
+
 bool __connman_inet_is_any_addr(const char *address, int family)
 {
 	bool ret = false;
 	struct addrinfo hints;
 	struct addrinfo *result = NULL;
-	struct sockaddr_in6 *in6 = NULL;
-	struct sockaddr_in *in4 = NULL;
 
 	if (!address || !*address)
 		goto out;
@@ -209,14 +249,7 @@ bool __connman_inet_is_any_addr(const char *address, int family)
 		goto out;
 
 	if (result) {
-		if (result->ai_family == AF_INET6) {
-			in6 = (struct sockaddr_in6*)result->ai_addr;
-			ret = IN6_IS_ADDR_UNSPECIFIED(&in6->sin6_addr);
-		} else if (result->ai_family == AF_INET) {
-			in4 = (struct sockaddr_in*)result->ai_addr;
-			ret = in4->sin_addr.s_addr == INADDR_ANY;
-		}
-
+		ret = is_addr_unspec(result->ai_family, result->ai_addr);
 		freeaddrinfo(result);
 	}
 
@@ -380,18 +413,20 @@ int connman_inet_set_ipv6_address(int index,
 	int err;
 	unsigned char prefix_len;
 	const char *address;
+	bool is_p2p;
 
 	if (!ipaddress->local)
 		return 0;
 
 	prefix_len = ipaddress->prefixlen;
 	address = ipaddress->local;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET6,
-				address, NULL, prefix_len, NULL);
+				address, NULL, prefix_len, NULL, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -405,6 +440,7 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	int err;
 	unsigned char prefix_len;
 	const char *address, *broadcast, *peer;
+	bool is_p2p;
 
 	if (!ipaddress->local)
 		return -1;
@@ -413,12 +449,13 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	address = ipaddress->local;
 	broadcast = ipaddress->broadcast;
 	peer = ipaddress->peer;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET,
-				address, peer, prefix_len, broadcast);
+				address, peer, prefix_len, broadcast, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -427,10 +464,17 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	return 0;
 }
 
-int connman_inet_clear_ipv6_address(int index, const char *address,
-							int prefix_len)
+int connman_inet_clear_ipv6_address(int index,
+					struct connman_ipaddress *ipaddress)
 {
 	int err;
+	int prefix_len;
+	const char *address;
+	bool is_p2p;
+
+	address = ipaddress->local;
+	prefix_len = ipaddress->prefixlen;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
@@ -438,7 +482,7 @@ int connman_inet_clear_ipv6_address(int index, const char *address,
 		return -EINVAL;
 
 	err = __connman_inet_modify_address(RTM_DELADDR, 0, index, AF_INET6,
-				address, NULL, prefix_len, NULL);
+				address, NULL, prefix_len, NULL, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -452,11 +496,13 @@ int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
 	int err;
 	unsigned char prefix_len;
 	const char *address, *broadcast, *peer;
+	bool is_p2p;
 
 	prefix_len = ipaddress->prefixlen;
 	address = ipaddress->local;
 	broadcast = ipaddress->broadcast;
 	peer = ipaddress->peer;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d peer %s broadcast %s", index,
 		address, prefix_len, peer, broadcast);
@@ -465,7 +511,7 @@ int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
 		return -EINVAL;
 
 	err = __connman_inet_modify_address(RTM_DELADDR, 0, index, AF_INET,
-				address, peer, prefix_len, broadcast);
+				address, peer, prefix_len, broadcast, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -1037,54 +1083,161 @@ out:
 	return err;
 }
 
+#define ADDR_TYPE_MAX 4
+
+struct interface_address {
+	int index;
+	int family;
+	bool allow_unspec;
+	 /* Applies only to ADDR_TYPE_IPADDR in ipaddrs */
+	bool require_ll;
+	/* Real types must be in_addr for AF_INET and in6_addr for AF_INET6 */
+	void *ipaddrs[ADDR_TYPE_MAX];
+};
+
+enum ipaddr_type {
+	ADDR_TYPE_IPADDR = 0,
+	ADDR_TYPE_NETMASK,
+	ADDR_TYPE_BRDADDR,
+	ADDR_TYPE_DSTADDR
+};
+
+static int get_interface_addresses(struct interface_address *if_addr)
+{
+	struct ifaddrs *ifaddr;
+	struct ifaddrs *ifa;
+	struct sockaddr *addrs[ADDR_TYPE_MAX] = { 0 };
+	struct sockaddr_in *addr_in;
+	struct sockaddr_in6 *addr_in6;
+	char name[IF_NAMESIZE] = { 0 };
+	size_t len;
+	int err = -ENOENT;
+	int i;
+
+	if (!if_addr)
+		return -EINVAL;
+
+	if (!if_indextoname(if_addr->index, name))
+		return -EINVAL;
+
+	DBG("index %d interface %s", if_addr->index, name);
+
+	if (getifaddrs(&ifaddr) < 0) {
+		connman_error("Cannot get addresses err %d/%s", errno,
+							strerror(errno));
+		return -errno;
+	}
+
+	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		if (!ifa->ifa_addr)
+			continue;
+
+		if (g_strcmp0(ifa->ifa_name, name) ||
+					ifa->ifa_addr->sa_family !=
+						if_addr->family)
+			continue;
+
+
+		if (if_addr->ipaddrs[ADDR_TYPE_IPADDR]) {
+			if (!if_addr->allow_unspec && is_addr_unspec(
+						if_addr->family,
+						ifa->ifa_addr))
+				continue;
+
+			if (if_addr->require_ll && !is_addr_ll(if_addr->family,
+						ifa->ifa_addr))
+				continue;
+
+			addrs[ADDR_TYPE_IPADDR] = ifa->ifa_addr;
+		}
+
+		if (if_addr->ipaddrs[ADDR_TYPE_NETMASK]) {
+			if (!if_addr->allow_unspec && is_addr_unspec(
+						if_addr->family,
+						ifa->ifa_netmask))
+				continue;
+
+			addrs[ADDR_TYPE_NETMASK] = ifa->ifa_netmask;
+		}
+
+		if (if_addr->ipaddrs[ADDR_TYPE_BRDADDR] &&
+					(ifa->ifa_flags & IFF_BROADCAST)) {
+			if (!if_addr->allow_unspec && is_addr_unspec(
+						if_addr->family,
+						ifa->ifa_ifu.ifu_broadaddr))
+				continue;
+
+			addrs[ADDR_TYPE_BRDADDR] = ifa->ifa_ifu.ifu_broadaddr;
+		}
+
+		if (if_addr->ipaddrs[ADDR_TYPE_DSTADDR] &&
+					(ifa->ifa_flags & IFF_POINTOPOINT)) {
+			if (!if_addr->allow_unspec && is_addr_unspec(
+						if_addr->family,
+						ifa->ifa_ifu.ifu_dstaddr))
+				continue;
+
+			addrs[ADDR_TYPE_DSTADDR] = ifa->ifa_ifu.ifu_dstaddr;
+		}
+
+		err = 0;
+
+		break;
+	}
+
+	if (err)
+		goto out;
+
+	for (i = 0; i < ADDR_TYPE_MAX; i++) {
+		if (!addrs[i])
+			continue;
+
+		switch (if_addr->family) {
+		case AF_INET:
+			len = sizeof(struct in_addr);
+			addr_in = (struct sockaddr_in*) addrs[i];
+			memcpy(if_addr->ipaddrs[i], &addr_in->sin_addr, len);
+			break;
+		case AF_INET6:
+			len = sizeof(struct in6_addr);
+			addr_in6 = (struct sockaddr_in6*) addrs[i];
+			memcpy(if_addr->ipaddrs[i], &addr_in6->sin6_addr, len);
+			break;
+		default:
+			err = -EINVAL;
+			break;
+		}
+	}
+
+out:
+	freeifaddrs(ifaddr);
+	return err;
+}
+
 bool connman_inet_compare_subnet(int index, const char *host)
 {
-	struct ifreq ifr;
-	struct in_addr _host_addr;
-	in_addr_t host_addr, netmask_addr, if_addr;
-	struct sockaddr_in *netmask, *addr;
-	int sk;
+	struct interface_address if_addr = { 0 };
+	struct in_addr iaddr = { 0 };
+	struct in_addr imask = { 0 };
+	struct in_addr haddr = { 0 };
 
 	DBG("host %s", host);
 
 	if (!host)
 		return false;
 
-	if (inet_aton(host, &_host_addr) == 0)
-		return -1;
-	host_addr = _host_addr.s_addr;
-
-	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-	if (sk < 0)
+	if (inet_pton(AF_INET, host, &haddr) <= 0)
 		return false;
 
-	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_ifindex = index;
+	if_addr.index = index;
+	if_addr.family = AF_INET;
+	if_addr.ipaddrs[ADDR_TYPE_IPADDR] = &iaddr;
+	if_addr.ipaddrs[ADDR_TYPE_NETMASK] = &imask;
 
-	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0) {
-		close(sk);
+	if (get_interface_addresses(&if_addr))
 		return false;
-	}
 
-	if (ioctl(sk, SIOCGIFNETMASK, &ifr) < 0) {
-		close(sk);
-		return false;
-	}
-
-	netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
-	netmask_addr = netmask->sin_addr.s_addr;
-
-	if (ioctl(sk, SIOCGIFADDR, &ifr) < 0) {
-		close(sk);
-		return false;
-	}
-
-	close(sk);
-
-	addr = (struct sockaddr_in *)&ifr.ifr_addr;
-	if_addr = addr->sin_addr.s_addr;
-
-	return ((if_addr & netmask_addr) == (host_addr & netmask_addr));
+	return (iaddr.s_addr & imask.s_addr) == (haddr.s_addr & imask.s_addr);
 }
 
 static bool mem_mask_equal(const void *a, const void *b,
@@ -1105,47 +1258,23 @@ static bool mem_mask_equal(const void *a, const void *b,
 
 bool connman_inet_compare_ipv6_subnet(int index, const char *host)
 {
-	struct ifaddrs *ifaddr, *ifa;
-	bool rv = false;
-	char name[IF_NAMESIZE];
-	struct in6_addr haddr;
+	struct interface_address addr = { 0 };
+	struct in6_addr iaddr = { 0 };
+	struct in6_addr imask = { 0 };
+	struct in6_addr haddr = { 0 };
 
 	if (inet_pton(AF_INET6, host, &haddr) <= 0)
 		return false;
 
-	if (!if_indextoname(index, name))
+	addr.index = index;
+	addr.family = AF_INET6;
+	addr.ipaddrs[ADDR_TYPE_IPADDR] = &iaddr;
+	addr.ipaddrs[ADDR_TYPE_NETMASK] = &imask;
+
+	if (get_interface_addresses(&addr))
 		return false;
 
-	DBG("index %d interface %s", index, name);
-
-	if (getifaddrs(&ifaddr) < 0) {
-		DBG("Cannot get addresses err %d/%s", errno, strerror(errno));
-		return false;
-	}
-
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		struct sockaddr_in6 *iaddr;
-		struct sockaddr_in6 *imask;
-
-		if (!ifa->ifa_addr)
-			continue;
-
-		if (strncmp(ifa->ifa_name, name, IF_NAMESIZE) != 0 ||
-					ifa->ifa_addr->sa_family != AF_INET6)
-			continue;
-
-		iaddr = (struct sockaddr_in6 *)ifa->ifa_addr;
-		imask = (struct sockaddr_in6 *)ifa->ifa_netmask;
-
-		rv = mem_mask_equal(&iaddr->sin6_addr, &haddr,
-					&imask->sin6_addr,
-					sizeof(haddr));
-		goto out;
-	}
-
-out:
-	freeifaddrs(ifaddr);
-	return rv;
+	return mem_mask_equal(&iaddr, &haddr, &imask, sizeof(haddr));
 }
 
 int connman_inet_remove_from_bridge(int index, const char *bridge)
@@ -2118,98 +2247,156 @@ GSList *__connman_inet_ipv6_get_prefixes(struct nd_router_advert *hdr,
 	return prefixes;
 }
 
-static int get_dest_addr(int family, int index, char *buf, int len)
-{
-	struct ifreq ifr;
-	void *addr;
-	int sk;
-
-	sk = socket(family, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-	if (sk < 0)
-		return -errno;
-
-	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_ifindex = index;
-
-	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0) {
-		DBG("SIOCGIFNAME (%d/%s)", errno, strerror(errno));
-		close(sk);
-		return -errno;
-	}
-
-	if (ioctl(sk, SIOCGIFFLAGS, &ifr) < 0) {
-		DBG("SIOCGIFFLAGS (%d/%s)", errno, strerror(errno));
-		close(sk);
-		return -errno;
-	}
-
-	if ((ifr.ifr_flags & IFF_POINTOPOINT) == 0) {
-		close(sk);
-		errno = EINVAL;
-		return -errno;
-	}
-
-	DBG("index %d %s", index, ifr.ifr_name);
-
-	if (ioctl(sk, SIOCGIFDSTADDR, &ifr) < 0) {
-		connman_error("Get destination address failed (%s)",
-							strerror(errno));
-		close(sk);
-		return -errno;
-	}
-
-	close(sk);
-
-	switch (family) {
-	case AF_INET:
-		addr = &((struct sockaddr_in *)&ifr.ifr_dstaddr)->sin_addr;
-		break;
-	case AF_INET6:
-		addr = &((struct sockaddr_in6 *)&ifr.ifr_dstaddr)->sin6_addr;
-		break;
-	default:
-		errno = EINVAL;
-		return -errno;
-	}
-
-	if (!inet_ntop(family, addr, buf, len)) {
-		DBG("error %d/%s", errno, strerror(errno));
-		return -errno;
-	}
-
-	return 0;
-}
-
 int connman_inet_get_dest_addr(int index, char **dest)
 {
-	char addr[INET_ADDRSTRLEN];
-	int ret;
+	struct interface_address if_addr = { 0 };
+	struct in_addr dstaddr = { 0 };
+	char buf[INET_ADDRSTRLEN] = { 0 };
+	int err;
 
-	ret = get_dest_addr(PF_INET, index, addr, INET_ADDRSTRLEN);
-	if (ret < 0)
-		return ret;
+	if (!dest)
+		return -EINVAL;
 
-	*dest = g_strdup(addr);
+	if_addr.index = index;
+	if_addr.family = AF_INET;
+	if_addr.allow_unspec = true;
+	if_addr.ipaddrs[ADDR_TYPE_DSTADDR] = &dstaddr;
+
+	err = get_interface_addresses(&if_addr);
+	if (err)
+		return err;
+
+	if (inet_ntop(AF_INET, &dstaddr, buf, INET_ADDRSTRLEN))
+		*dest = g_strdup(buf);
 
 	DBG("destination %s", *dest);
 
-	return 0;
+	return *dest && **dest ? 0 : -ENOENT;
 }
 
 int connman_inet_ipv6_get_dest_addr(int index, char **dest)
 {
-	char addr[INET6_ADDRSTRLEN];
-	int ret;
+	struct interface_address if_addr = { 0 };
+	struct in_addr dstaddr = { 0 };
+	char buf[INET6_ADDRSTRLEN] = { 0 };
+	int err;
 
-	ret = get_dest_addr(PF_INET6, index, addr, INET6_ADDRSTRLEN);
-	if (ret < 0)
-		return ret;
+	if (!dest)
+		return -EINVAL;
 
-	*dest = g_strdup(addr);
+	if_addr.index = index;
+	if_addr.family = AF_INET6;
+	if_addr.allow_unspec = true;
+	if_addr.ipaddrs[ADDR_TYPE_DSTADDR] = &dstaddr;
+
+	err = get_interface_addresses(&if_addr);
+	if (err)
+		return err;
+
+	if (inet_ntop(AF_INET6, &dstaddr, buf, INET6_ADDRSTRLEN))
+		*dest = g_strdup(buf);
 
 	DBG("destination %s", *dest);
 
-	return 0;
+	return *dest && **dest ? 0 : -ENOENT;
+}
+
+/* destination is optional */
+int connman_inet_get_route_addresses(int index, char **network, char **netmask,
+							char **destination)
+{
+	struct interface_address if_addr = { 0 };
+	struct in_addr addr = { 0 };
+	struct in_addr mask = { 0 };
+	struct in_addr dest = { 0 };
+	struct in_addr nw_addr = { 0 };
+	char buf[INET_ADDRSTRLEN] = { 0 };
+	int err;
+
+	if (!network || !netmask)
+		return -EINVAL;
+
+	if_addr.index = index;
+	if_addr.family = AF_INET;
+	if_addr.ipaddrs[ADDR_TYPE_IPADDR] = &addr;
+	if_addr.ipaddrs[ADDR_TYPE_NETMASK] = &mask;
+	if_addr.ipaddrs[ADDR_TYPE_DSTADDR] = &dest;
+
+	err = get_interface_addresses(&if_addr);
+	if (err)
+		return err;
+
+	nw_addr.s_addr = (addr.s_addr & mask.s_addr);
+
+	if (inet_ntop(AF_INET, &nw_addr, buf, INET_ADDRSTRLEN))
+		*network = g_strdup(buf);
+
+	memset(&buf, 0, INET_ADDRSTRLEN);
+
+	if (inet_ntop(AF_INET, &mask, buf, INET_ADDRSTRLEN))
+		*netmask = g_strdup(buf);
+
+	if (destination) {
+		memset(&buf, 0, INET_ADDRSTRLEN);
+
+		if (inet_ntop(AF_INET, &dest, buf, INET_ADDRSTRLEN))
+			*destination = g_strdup(buf);
+	}
+
+	DBG("network %s netmask %s destination %s", *network, *netmask,
+				destination ? *destination : NULL);
+
+	return *network && **network && *netmask && **netmask ? 0 : -ENOENT;
+}
+
+int connman_inet_ipv6_get_route_addresses(int index, char **network,
+					char **netmask, char **destination)
+{
+	struct interface_address if_addr = { 0 };
+	struct in6_addr addr = { 0 };
+	struct in6_addr mask = { 0 };
+	struct in6_addr dest = { 0 };
+	struct in6_addr nw_addr  = { 0 };
+	char buf[INET6_ADDRSTRLEN] = { 0 };
+	int err;
+
+	if (!network)
+		return -EINVAL;
+
+	if_addr.index = index;
+	if_addr.family = AF_INET6;
+	if_addr.ipaddrs[ADDR_TYPE_IPADDR] = &addr;
+	if_addr.ipaddrs[ADDR_TYPE_NETMASK] = &mask;
+	if_addr.ipaddrs[ADDR_TYPE_DSTADDR] = &dest;
+
+	err = get_interface_addresses(&if_addr);
+	if (err)
+		return err;
+
+	ipv6_addr_set(&nw_addr, addr.s6_addr32[0] & mask.s6_addr32[0],
+				addr.s6_addr32[1] & mask.s6_addr32[1],
+				addr.s6_addr32[2] & mask.s6_addr32[2],
+				addr.s6_addr32[3] & mask.s6_addr32[3]);
+
+	if (inet_ntop(AF_INET6, &nw_addr, buf, INET6_ADDRSTRLEN))
+		*network = g_strdup(buf);
+
+	memset(&buf, 0, INET6_ADDRSTRLEN);
+
+	if (inet_ntop(AF_INET6, &mask, buf, INET6_ADDRSTRLEN))
+		*netmask = g_strdup(buf);
+
+	if (destination) {
+		memset(&buf, 0, INET6_ADDRSTRLEN);
+
+		if (inet_ntop(AF_INET6, &dest, buf, INET6_ADDRSTRLEN))
+			*destination = g_strdup(buf);
+	}
+
+	DBG("network %s netmask %s destination %s", *network, *netmask,
+				destination ? *destination : NULL);
+
+	return *network && **network && *netmask && **netmask ? 0 : -ENOENT;
 }
 
 int __connman_inet_rtnl_open(struct __connman_inet_rtnl_handle *rth)
@@ -2797,58 +2984,30 @@ bool connman_inet_is_ipv6_supported()
 	return true;
 }
 
+/*
+ * Omits checking of the gateway matching the actual gateway IP since both
+ * connmand and vpnd use inet.c, getting the route is via ipconfig and ipconfig
+ * is different for both. Gateway is left here for possible future use.
+ *
+ * Gateway can be NULL and connection.c then assigns 0.0.0.0 address or ::,
+ * depending on IP family.
+ */
+bool connman_inet_is_default_route(int family, const char *host,
+				const char *gateway, const char *netmask)
+{
+	return __connman_inet_is_any_addr(host, family) &&
+				__connman_inet_is_any_addr(netmask, family);
+}
+
 int __connman_inet_get_interface_address(int index, int family, void *address)
 {
-	struct ifaddrs *ifaddr, *ifa;
-	int err = -ENOENT;
-	char name[IF_NAMESIZE];
+	struct interface_address if_addr = { 0 };
 
-	if (!if_indextoname(index, name))
-		return -EINVAL;
+	if_addr.index = index;
+	if_addr.family = family;
+	if_addr.ipaddrs[ADDR_TYPE_IPADDR] = address;
 
-	DBG("index %d interface %s", index, name);
-
-	if (getifaddrs(&ifaddr) < 0) {
-		err = -errno;
-		DBG("Cannot get addresses err %d/%s", err, strerror(-err));
-		return err;
-	}
-
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!ifa->ifa_addr)
-			continue;
-
-		if (strncmp(ifa->ifa_name, name, IF_NAMESIZE) == 0 &&
-					ifa->ifa_addr->sa_family == family) {
-			if (family == AF_INET) {
-				struct sockaddr_in *in4 = (struct sockaddr_in *)
-					ifa->ifa_addr;
-				if (in4->sin_addr.s_addr == INADDR_ANY)
-					continue;
-				memcpy(address, &in4->sin_addr,
-							sizeof(struct in_addr));
-			} else if (family == AF_INET6) {
-				struct sockaddr_in6 *in6 =
-					(struct sockaddr_in6 *)ifa->ifa_addr;
-				if (memcmp(&in6->sin6_addr, &in6addr_any,
-						sizeof(struct in6_addr)) == 0)
-					continue;
-				memcpy(address, &in6->sin6_addr,
-						sizeof(struct in6_addr));
-
-			} else {
-				err = -EINVAL;
-				goto out;
-			}
-
-			err = 0;
-			break;
-		}
-	}
-
-out:
-	freeifaddrs(ifaddr);
-	return err;
+	return get_interface_addresses(&if_addr);
 }
 
 int __connman_inet_get_interface_mac_address(int index, uint8_t *mac_address)
@@ -3026,61 +3185,14 @@ int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
 int __connman_inet_get_interface_ll_address(int index, int family,
 								void *address)
 {
-	struct ifaddrs *ifaddr, *ifa;
-	int err = -ENOENT;
-	char name[IF_NAMESIZE];
+	struct interface_address if_addr = { 0 };
 
-	if (!if_indextoname(index, name))
-		return -EINVAL;
+	if_addr.index = index;
+	if_addr.family = family;
+	if_addr.require_ll = true;
+	if_addr.ipaddrs[ADDR_TYPE_IPADDR] = address;
 
-	DBG("index %d interface %s", index, name);
-
-	if (getifaddrs(&ifaddr) < 0) {
-		err = -errno;
-		DBG("Cannot get addresses err %d/%s", err, strerror(-err));
-		return err;
-	}
-
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!ifa->ifa_addr)
-			continue;
-
-		if (strncmp(ifa->ifa_name, name, IF_NAMESIZE) == 0 &&
-					ifa->ifa_addr->sa_family == family) {
-			if (family == AF_INET) {
-				struct sockaddr_in *in4 = (struct sockaddr_in *)
-					ifa->ifa_addr;
-				if (in4->sin_addr.s_addr == INADDR_ANY)
-					continue;
-				if ((in4->sin_addr.s_addr & IN_CLASSB_NET) !=
-						((in_addr_t) 0xa9fe0000))
-					continue;
-				memcpy(address, &in4->sin_addr,
-							sizeof(struct in_addr));
-			} else if (family == AF_INET6) {
-				struct sockaddr_in6 *in6 =
-					(struct sockaddr_in6 *)ifa->ifa_addr;
-				if (memcmp(&in6->sin6_addr, &in6addr_any,
-						sizeof(struct in6_addr)) == 0)
-					continue;
-				if (!IN6_IS_ADDR_LINKLOCAL(&in6->sin6_addr))
-					continue;
-
-				memcpy(address, &in6->sin6_addr,
-						sizeof(struct in6_addr));
-			} else {
-				err = -EINVAL;
-				goto out;
-			}
-
-			err = 0;
-			break;
-		}
-	}
-
-out:
-	freeifaddrs(ifaddr);
-	return err;
+	return get_interface_addresses(&if_addr);
 }
 
 int __connman_inet_get_address_netmask(int ifindex,
