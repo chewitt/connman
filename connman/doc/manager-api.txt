@@ -305,3 +305,21 @@ Properties	string State [readonly]
 			and does not affect ConnMan in any way.
 
 			The default value is false.
+
+		string Ipv4StatusUrl [readonly]
+
+			The IPv4 network status check URL which has been
+			configured for the device. This URL may be used by
+			applications who wish to check whether the device
+			currently has open Internet access (as opposed to
+			begin connected to a wireless network requiring a
+			Captive Portal login, or otherwise restricted network).
+
+		string Ipv6StatusUrl [readonly]
+
+			The IPv6 network status check URL which has been
+			configured for the device. This URL may be used by
+			applications who wish to check whether the device
+			currently has open Internet access (as opposed to
+			begin connected to a wireless network requiring a
+			Captive Portal login, or otherwise restricted network).

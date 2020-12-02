@@ -63,6 +63,8 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	dbus_bool_t offlinemode;
 	dbus_uint32_t uint32_value;
 	const char *str;
+	const char *ipv4_status_url;
+	const char *ipv6_status_url;
 
 	DBG("conn %p", conn);
 
@@ -90,6 +92,14 @@ static DBusMessage *get_properties(DBusConnection *conn,
 	connman_dbus_dict_append_basic(&dict, "InputRequestTimeout",
 					DBUS_TYPE_UINT32,
 					&uint32_value);
+
+	ipv4_status_url = connman_option_get_string(CONF_STATUS_URL_IPV4);
+	connman_dbus_dict_append_basic(&dict, "Ipv4StatusUrl",
+						DBUS_TYPE_STRING, &ipv4_status_url);
+
+	ipv6_status_url = connman_option_get_string(CONF_STATUS_URL_IPV6);
+	connman_dbus_dict_append_basic(&dict, "Ipv6StatusUrl",
+						DBUS_TYPE_STRING, &ipv6_status_url);
 
 	connman_dbus_dict_close(&array, &dict);
 
