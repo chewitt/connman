@@ -5669,14 +5669,18 @@ static void request_input_cb(struct connman_service *service,
 		goto done;
 	}
 
-	if (service->hidden && name_len > 0 && name_len <= 32) {
-		device = connman_network_get_device(service->network);
-		security = connman_network_get_string(service->network,
-							"WiFi.Security");
-		err = __connman_device_request_hidden_scan(device,
-						name, name_len,
-						identity, passphrase,
-						security, user_data);
+	if (service->hidden) {
+		if (name_len > 0 && name_len <= 32) {
+			device = connman_network_get_device(service->network);
+			security = connman_network_get_string(service->network,
+								"WiFi.Security");
+			err = __connman_device_request_hidden_scan(device,
+								name, name_len,
+								identity, passphrase,
+								security, user_data);
+		} else {
+			err = -EINVAL;
+		}
 		if (err < 0)
 			__connman_service_return_error(service,	-err,
 							user_data);
