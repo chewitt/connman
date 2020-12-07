@@ -2148,9 +2148,11 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 	DBusMessage *reply;
 	DBusError error;
 	int err = 0;
-	int delay = USER_CHANGE_DELAY;
+	unsigned int delay = USER_CHANGE_DELAY;
 
 	data = user_data;
+
+	DBG("");
 
 	if (call != vpn_change_call) {
 		DBG("pending call not set or invalid (ongoing %p this %p)",
@@ -2213,18 +2215,26 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 	case -EBUSY:
 		/* D-Bus was congested, double delay */
 		delay += USER_CHANGE_DELAY;
+
+		/* fall through */
 	case -ETIMEDOUT:
-		/* fall through */
 	case -ENOTCONN:
-		/* fall through */
 	case -ENONET:
 		if (!init_delayed_user_change(data, delay)) {
 			send_vpnd_change_user = true;
 			goto out_no_free;
 		}
 
-		/* Otherwise, fall though */
+		/*
+		 * Delayed user change already in progress. Reply the result if
+		 * changed via D-Bus, don't revert user.
+		 */
+		goto delayed;
 	default:
+		/*
+		 * Invalid user, permission denied or any other error reverts
+		 * to root user.
+		 */
 		goto err;
 	}
 
@@ -2264,14 +2274,15 @@ err:
 		storage_change_uid(data->uid);
 	}
 
+delayed:
 	if (!data->pending)
 		goto out;
 
-	switch (-err) {
-	case EALREADY:
+	switch (err) {
+	case -EALREADY:
 		reply = __connman_error_already_enabled(data->pending);
 		break;
-	case ENOENT:
+	case -ENOENT:
 		reply = __connman_error_not_found(data->pending);
 		break;
 	default:
@@ -2612,7 +2623,6 @@ static void result_cb(uid_t uid, int err, void *user_data)
 				geteuid());
 		set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
 		storage_change_uid(geteuid());
-		return;
 	}
 
 	DBG("user %u changed to vpnd", storage.current_uid);
