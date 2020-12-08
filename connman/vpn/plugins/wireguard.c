@@ -212,6 +212,8 @@ static int parse_address(const char *address, const char *gateway,
 		err = -EINVAL;
 	}
 
+	connman_ipaddress_set_p2p(*ipaddress, true);
+
 	g_strfreev(tokens);
 	if (err)
 		connman_ipaddress_free(*ipaddress);
