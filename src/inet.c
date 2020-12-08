@@ -2835,6 +2835,21 @@ bool connman_inet_is_ipv6_supported()
 	return true;
 }
 
+/*
+ * Omits checking of the gateway matching the actual gateway IP since both
+ * connmand and vpnd use inet.c, getting the route is via ipconfig and ipconfig
+ * is different for both. Gateway is left here for possible future use.
+ *
+ * Gateway can be NULL and connection.c then assigns 0.0.0.0 address or ::,
+ * depending on IP family.
+ */
+bool connman_inet_is_default_route(int family, const char *host,
+				const char *gateway, const char *netmask)
+{
+	return __connman_inet_is_any_addr(host, family) &&
+				__connman_inet_is_any_addr(netmask, family);
+}
+
 int __connman_inet_get_interface_address(int index, int family, void *address)
 {
 	struct ifaddrs *ifaddr, *ifa;

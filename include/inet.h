@@ -78,6 +78,8 @@ int connman_inet_ipv6_get_dest_addr(int index, char **dest);
 int connman_inet_check_ipaddress(const char *host);
 bool connman_inet_check_hostname(const char *ptr, size_t len);
 bool connman_inet_is_ipv6_supported();
+bool connman_inet_is_default_route(int family, const char *host,
+				const char *gateway, const char *netmask);
 
 #ifdef __cplusplus
 }
