@@ -81,6 +81,12 @@ bool connman_inet_is_ipv6_supported();
 bool connman_inet_is_default_route(int family, const char *host,
 				const char *gateway, const char *netmask);
 
+int connman_inet_get_route_addresses(int index, char **network, char **netmask,
+							char **destination);
+int connman_inet_ipv6_get_route_addresses(int index, char **network,
+							char **netmask,
+							char **destination);
+
 #ifdef __cplusplus
 }
 #endif
