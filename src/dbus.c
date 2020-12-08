@@ -246,9 +246,7 @@ dbus_bool_t connman_dbus_property_changed_basic(const char *path,
 	dbus_message_iter_init_append(signal, &iter);
 	connman_dbus_property_append_basic(&iter, key, type, val);
 
-	g_dbus_send_message(connection, signal);
-
-	return TRUE;
+	return g_dbus_send_message(connection, signal);
 }
 
 dbus_bool_t connman_dbus_property_changed_dict(const char *path,
@@ -268,9 +266,7 @@ dbus_bool_t connman_dbus_property_changed_dict(const char *path,
 	dbus_message_iter_init_append(signal, &iter);
 	connman_dbus_property_append_dict(&iter, key, function, user_data);
 
-	g_dbus_send_message(connection, signal);
-
-	return TRUE;
+	return g_dbus_send_message(connection, signal);
 }
 
 dbus_bool_t connman_dbus_property_changed_array(const char *path,
@@ -291,9 +287,7 @@ dbus_bool_t connman_dbus_property_changed_array(const char *path,
 	connman_dbus_property_append_array(&iter, key, type,
 						function, user_data);
 
-	g_dbus_send_message(connection, signal);
-
-	return TRUE;
+	return g_dbus_send_message(connection, signal);
 }
 
 dbus_bool_t connman_dbus_setting_changed_basic(const char *owner,
@@ -319,9 +313,7 @@ dbus_bool_t connman_dbus_setting_changed_basic(const char *owner,
 
 	connman_dbus_dict_close(&array, &dict);
 
-	g_dbus_send_message(connection, msg);
-
-	return TRUE;
+	return g_dbus_send_message(connection, msg);
 }
 
 dbus_bool_t connman_dbus_setting_changed_dict(const char *owner,
@@ -348,9 +340,7 @@ dbus_bool_t connman_dbus_setting_changed_dict(const char *owner,
 
 	connman_dbus_dict_close(&array, &dict);
 
-	g_dbus_send_message(connection, msg);
-
-	return TRUE;
+	return g_dbus_send_message(connection, msg);
 }
 
 dbus_bool_t connman_dbus_setting_changed_array(const char *owner,
@@ -377,9 +367,7 @@ dbus_bool_t connman_dbus_setting_changed_array(const char *owner,
 
 	connman_dbus_dict_close(&array, &dict);
 
-	g_dbus_send_message(connection, msg);
-
-	return TRUE;
+	return g_dbus_send_message(connection, msg);
 }
 
 dbus_bool_t __connman_dbus_append_objpath_dict_array(DBusMessage *msg,
