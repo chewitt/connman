@@ -367,6 +367,24 @@ static enum connman_service_proxy_method string2proxymethod(const char *method)
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 }
 
+void __connman_service_split_routing_changed(struct connman_service *service)
+{
+	dbus_bool_t split_routing;
+
+	if (!service->path)
+		return;
+
+	if (!allow_property_changed(service))
+		return;
+
+	split_routing = service->do_split_routing;
+	if (!connman_dbus_property_changed_basic(service->path,
+				CONNMAN_SERVICE_INTERFACE, "SplitRouting",
+					DBUS_TYPE_BOOLEAN, &split_routing))
+		connman_warn("cannot send SplitRouting property change on %s",
+					service->identifier);
+}
+
 void __connman_service_set_split_routing(struct connman_service *service,
 								bool value)
 {
@@ -379,6 +397,12 @@ void __connman_service_set_split_routing(struct connman_service *service,
 		service->order = 0;
 	else
 		service->order = 10;
+
+	/*
+	 * In order to make sure the value is propagated also when loading the
+	 * VPN service signal the value regardless of the value change.
+	 */
+	__connman_service_split_routing_changed(service);
 }
 
 int __connman_service_load_modifiable(struct connman_service *service)
