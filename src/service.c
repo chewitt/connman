@@ -6871,13 +6871,13 @@ static int service_register(struct connman_service *service)
 
 	DBG("path %s", service->path);
 
-	if (__connman_config_provision_service(service) < 0)
-		service_load(service);
-
 	g_dbus_register_interface(connection, service->path,
 					CONNMAN_SERVICE_INTERFACE,
 					service_methods, service_signals,
 							NULL, service, NULL);
+
+	if (__connman_config_provision_service(service) < 0)
+		service_load(service);
 
 	service_list_sort();
 
