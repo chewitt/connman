@@ -502,6 +502,7 @@ int __connman_connection_gateway_add(struct connman_service *service,
 void __connman_connection_gateway_remove(struct connman_service *service,
 					enum connman_ipconfig_type type);
 int __connman_connection_get_vpn_index(int phy_index);
+int __connman_connection_get_vpn_phy_index(int vpn_index);
 
 bool __connman_connection_update_gateway(void);
 

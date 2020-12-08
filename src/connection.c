@@ -1066,6 +1066,29 @@ int __connman_connection_get_vpn_index(int phy_index)
 	return -1;
 }
 
+int __connman_connection_get_vpn_phy_index(int vpn_index)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+
+	g_hash_table_iter_init(&iter, gateway_hash);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct gateway_data *data = value;
+
+		if (data->index != vpn_index)
+			continue;
+
+		if (data->ipv4_gateway)
+			return data->ipv4_gateway->vpn_phy_index;
+
+		if (data->ipv6_gateway)
+			return data->ipv6_gateway->vpn_phy_index;
+	}
+
+	return -1;
+}
+
 int __connman_connection_init(void)
 {
 	int err;
