@@ -129,7 +129,6 @@ static gchar *option_plugin = NULL;
 static gchar *option_noplugin = NULL;
 static bool option_detach = true;
 static bool option_version = false;
-static bool option_routes = false;
 
 static bool parse_debug(const char *key, const char *value,
 					gpointer user_data, GError **error)
@@ -156,8 +155,6 @@ static GOptionEntry options[] = {
 	{ "nodaemon", 'n', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_detach,
 				"Don't fork daemon to background" },
-	{ "routes", 'r', 0, G_OPTION_ARG_NONE, &option_routes,
-				"Create/delete VPN routes" },
 	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
 				"Show version information and exit" },
 	{ NULL },
@@ -259,7 +256,7 @@ int main(int argc, char *argv[])
 
 	__connman_inotify_init();
 	__connman_agent_init();
-	__vpn_provider_init(option_routes);
+	__vpn_provider_init();
 	__vpn_manager_init();
 	__vpn_ipconfig_init();
 	__vpn_rtnl_init();

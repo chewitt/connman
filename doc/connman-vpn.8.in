@@ -19,7 +19,6 @@ ConnMan-VPN \- VPN management daemon
 .RB [\| \-P
 .IR plugin [,...]\|]
 .RB [\| \-n \|]
-.RB [\| \-r \|]
 .SH DESCRIPTION
 The \fIConnMan-VPN\fP provides a daemon for managing vpn connections together
 with \fBconnmand\fP(8). The Connection Manager is designed to be slim and to
@@ -54,9 +53,6 @@ present, then only debug prints from that source file are printed. Example:
 .BR \-n ", " \-\-nodaemon
 Do not daemonize. This is useful for debugging, and directs log output to
 the controlling terminal in addition to syslog.
-.TP
-.BR \-r ", " \-\-routes
-Manage VPN routes instead of telling \fBconnmand\fP(8) to do it.
 .SH SEE ALSO
 .BR connmanctl (1), \ connman-vpn.conf (5), \c
 .BR \ connman-vpn-provider.config (5), \ connmand (8)

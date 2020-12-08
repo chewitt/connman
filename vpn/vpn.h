@@ -96,7 +96,7 @@ int __vpn_provider_disconnect(struct vpn_provider *provider);
 int __vpn_provider_remove(const char *path);
 int __vpn_provider_delete(struct vpn_provider *provider);
 void __vpn_provider_cleanup(void);
-int __vpn_provider_init(bool handle_routes);
+int __vpn_provider_init();
 
 #include "vpn-rtnl.h"
 

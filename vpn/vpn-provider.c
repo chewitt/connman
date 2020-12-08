@@ -44,7 +44,6 @@ static DBusConnection *connection;
 static GHashTable *provider_hash;
 static GSList *driver_list;
 static int configuration_count;
-static bool handle_routes;
 
 struct vpn_route {
 	int family;
@@ -366,22 +365,8 @@ static void set_user_networks(struct vpn_provider *provider, GSList *networks)
 static void del_routes(struct vpn_provider *provider)
 {
 	GHashTableIter hash;
-	gpointer value, key;
 
 	g_hash_table_iter_init(&hash, provider->user_routes);
-	while (handle_routes && g_hash_table_iter_next(&hash,
-						&key, &value)) {
-		struct vpn_route *route = value;
-		if (route->family == AF_INET6) {
-			unsigned char prefixlen = atoi(route->netmask);
-			connman_inet_del_ipv6_network_route(provider->index,
-							route->network,
-							prefixlen);
-		} else
-			connman_inet_del_host_route(provider->index,
-						route->network);
-	}
-
 	g_hash_table_remove_all(provider->user_routes);
 	g_slist_free_full(provider->user_networks, free_route);
 	provider->user_networks = NULL;
@@ -500,10 +485,7 @@ static int set_provider_property(struct vpn_provider *provider,
 		del_routes(provider);
 		provider->user_networks = networks;
 		set_user_networks(provider, provider->user_networks);
-
-		if (!handle_routes)
-			send_routes(provider, provider->user_routes,
-						"UserRoutes");
+		send_routes(provider, provider->user_routes, "UserRoutes");
 	} else {
 		const char *str;
 
@@ -702,8 +684,7 @@ static DBusMessage *clear_property(DBusConnection *conn, DBusMessage *msg,
 
 		del_routes(provider);
 
-		if (!handle_routes)
-			send_routes(provider, provider->user_routes, name);
+		send_routes(provider, provider->user_routes, name);
 	} else if (vpn_provider_get_string(provider, name)) {
 		err = vpn_provider_set_string(provider, name, NULL);
 		switch (err) {
@@ -1007,18 +988,17 @@ static int provider_load_from_keyfile(struct vpn_provider *provider,
 						&num_user_networks,
 						NULL);
 				provider->user_networks = get_routes(networks);
-
 			} else {
 				value = __vpn_config_get_string(keyfile,
 							provider->identifier,
 							key, NULL);
-				vpn_provider_set_string(provider, key,
-							value);
+				vpn_provider_set_string(provider, key, value);
 				g_free(value);
 			}
 		}
 		idx += 1;
 	}
+
 	g_strfreev(settings);
 	g_strfreev(networks);
 
@@ -1135,6 +1115,7 @@ static int vpn_provider_save(struct vpn_provider *provider)
 			"Host", provider->host);
 	g_key_file_set_string(keyfile, provider->identifier,
 			"VPN.Domain", provider->domain);
+
 	if (provider->user_networks) {
 		gchar **networks;
 		gsize network_count;
@@ -1806,55 +1787,6 @@ static void connection_added_signal(struct vpn_provider *provider)
 	dbus_message_unref(signal);
 }
 
-static bool check_host(char **hosts, char *host)
-{
-	int i;
-
-	if (!hosts)
-		return false;
-
-	for (i = 0; hosts[i]; i++) {
-		if (g_strcmp0(hosts[i], host) == 0)
-			return true;
-	}
-
-	return false;
-}
-
-static void provider_append_routes(gpointer key, gpointer value,
-					gpointer user_data)
-{
-	struct vpn_route *route = value;
-	struct vpn_provider *provider = user_data;
-	int index = provider->index;
-
-	if (!handle_routes)
-		return;
-
-	/*
-	 * If the VPN administrator/user has given a route to
-	 * VPN server, then we must discard that because the
-	 * server cannot be contacted via VPN tunnel.
-	 */
-	if (check_host(provider->host_ip, route->network)) {
-		DBG("Discarding VPN route to %s via %s at index %d",
-			route->network, route->gateway, index);
-		return;
-	}
-
-	if (route->family == AF_INET6) {
-		unsigned char prefix_len = atoi(route->netmask);
-
-		connman_inet_add_ipv6_network_route(index, route->network,
-							route->gateway,
-							prefix_len);
-	} else {
-		connman_inet_add_network_route(index, route->network,
-						route->gateway,
-						route->netmask);
-	}
-}
-
 static int set_connected(struct vpn_provider *provider,
 					bool connected)
 {
@@ -1871,18 +1803,8 @@ static int set_connected(struct vpn_provider *provider,
 
 		__vpn_ipconfig_address_add(ipconfig, provider->family);
 
-		if (handle_routes)
-			__vpn_ipconfig_gateway_add(ipconfig, provider->family);
-
 		provider_indicate_state(provider,
 					VPN_PROVIDER_STATE_READY);
-
-		g_hash_table_foreach(provider->routes, provider_append_routes,
-					provider);
-
-		g_hash_table_foreach(provider->user_routes,
-					provider_append_routes, provider);
-
 	} else {
 		provider_indicate_state(provider,
 					VPN_PROVIDER_STATE_DISCONNECT);
@@ -2921,11 +2843,8 @@ int vpn_provider_append_route(struct vpn_provider *provider,
 		break;
 	}
 
-	if (!handle_routes) {
-		if (route->netmask && route->gateway &&
-							route->network)
-			provider_schedule_changed(provider);
-	}
+	if (route->netmask && route->gateway && route->network)
+		provider_schedule_changed(provider);
 
 	return 0;
 }
@@ -3158,13 +3077,11 @@ static void remove_unprovisioned_providers(void)
 	g_strfreev(providers);
 }
 
-int __vpn_provider_init(bool do_routes)
+int __vpn_provider_init(void)
 {
 	int err;
 
 	DBG("");
-
-	handle_routes = do_routes;
 
 	err = connman_agent_driver_register(&agent_driver);
 	if (err < 0) {
