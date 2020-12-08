@@ -784,6 +784,8 @@ void __connman_service_set_pac(struct connman_service *service,
 bool __connman_service_is_hidden(struct connman_service *service);
 bool __connman_service_is_split_routing(struct connman_service *service);
 bool __connman_service_index_is_split_routing(int index);
+void __connman_service_set_split_routing(struct connman_service *service,
+						bool split_routing);
 int __connman_service_get_index(struct connman_service *service);
 void __connman_service_set_hidden(struct connman_service *service);
 void __connman_service_set_hostname(struct connman_service *service,
