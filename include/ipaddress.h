@@ -22,6 +22,8 @@
 #ifndef __CONNMAN_IPADDRESS_H
 #define __CONNMAN_IPADDRESS_H
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,6 +38,8 @@ struct connman_ipaddress;
 
 unsigned char connman_ipaddress_calc_netmask_len(const char *netmask);
 struct connman_ipaddress *connman_ipaddress_alloc(int family);
+void connman_ipaddress_set_p2p(struct connman_ipaddress *ipaddress,
+				bool value);
 void connman_ipaddress_free(struct connman_ipaddress *ipaddress);
 int connman_ipaddress_set_ipv4(struct connman_ipaddress *ipaddress,
 				const char *address, const char *netmask,

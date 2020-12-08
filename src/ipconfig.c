@@ -696,6 +696,25 @@ static inline gint check_duplicate_address(gconstpointer a, gconstpointer b)
 	return g_strcmp0(addr1->local, addr2->local);
 }
 
+static bool is_index_p2p_service(int index)
+{
+	struct connman_service *service;
+	enum connman_service_type type;
+
+	service = __connman_service_lookup_from_index(index);
+	if (!service)
+		return false;
+
+	type = connman_service_get_type(service);
+	switch (type) {
+	case CONNMAN_SERVICE_TYPE_P2P:
+	case CONNMAN_SERVICE_TYPE_VPN:
+		return true;
+	default:
+		return false;
+	}
+}
+
 int __connman_ipconfig_newaddr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address)
 {
@@ -717,6 +736,9 @@ int __connman_ipconfig_newaddr(int index, int family, const char *label,
 
 	ipaddress->prefixlen = prefixlen;
 	ipaddress->local = g_strdup(address);
+
+	if (is_index_p2p_service(index))
+		connman_ipaddress_set_p2p(ipaddress, true);
 
 	if (g_slist_find_custom(ipdevice->address_list, ipaddress,
 					check_duplicate_address)) {
@@ -1186,6 +1208,15 @@ void __connman_ipconfig_set_prefixlen(struct connman_ipconfig *ipconfig,
 	ipconfig->address->prefixlen = prefixlen;
 }
 
+static void ipconfig_set_p2p(int index, struct connman_ipconfig *ipconfig)
+{
+	if (!is_index_p2p_service(index))
+		return;
+
+	connman_ipaddress_set_p2p(ipconfig->address, true);
+	connman_ipaddress_set_p2p(ipconfig->system, true);
+}
+
 static struct connman_ipconfig *create_ipv6config(int index)
 {
 	struct connman_ipconfig *ipv6config;
@@ -1216,6 +1247,8 @@ static struct connman_ipconfig *create_ipv6config(int index)
 	}
 
 	ipv6config->system = connman_ipaddress_alloc(AF_INET6);
+
+	ipconfig_set_p2p(index, ipv6config);
 
 	DBG("ipconfig %p index %d method %s", ipv6config, index,
 		__connman_ipconfig_method2string(ipv6config->method));
@@ -1254,6 +1287,8 @@ struct connman_ipconfig *__connman_ipconfig_create(int index,
 	}
 
 	ipconfig->system = connman_ipaddress_alloc(AF_INET);
+
+	ipconfig_set_p2p(index, ipconfig);
 
 	DBG("ipconfig %p index %d", ipconfig, index);
 
@@ -1451,10 +1486,8 @@ int __connman_ipconfig_address_unset(struct connman_ipconfig *ipconfig)
 			err = connman_inet_clear_address(ipconfig->index,
 							ipconfig->address);
 		else if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6)
-			err = connman_inet_clear_ipv6_address(
-						ipconfig->index,
-						ipconfig->address->local,
-						ipconfig->address->prefixlen);
+			err = connman_inet_clear_ipv6_address(ipconfig->index,
+							ipconfig->address);
 		else
 			err = -EINVAL;
 

@@ -357,6 +357,8 @@ static int oc_notify(DBusMessage *msg, struct vpn_provider *provider)
 	else
 		connman_ipaddress_set_ipv6(ipaddress, addressv6,
 						prefix_len, gateway);
+
+	connman_ipaddress_set_p2p(ipaddress, true);
 	vpn_provider_set_ipaddress(provider, ipaddress);
 	vpn_provider_set_domain(provider, domain);
 

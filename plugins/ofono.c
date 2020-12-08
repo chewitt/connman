@@ -910,7 +910,7 @@ static void extract_ipv4_settings(DBusMessageIter *array,
 	if (context->ipv4_method != CONNMAN_IPCONFIG_METHOD_FIXED)
 		goto out;
 
-	context->ipv4_address = connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV4);
+	context->ipv4_address = connman_ipaddress_alloc(AF_INET);
 	if (!context->ipv4_address) {
 		context->index = -1;
 		goto out;
@@ -998,7 +998,7 @@ static void extract_ipv6_settings(DBusMessageIter *array,
 	context->ipv6_method = CONNMAN_IPCONFIG_METHOD_AUTO;
 
 	context->ipv6_address =
-		connman_ipaddress_alloc(CONNMAN_IPCONFIG_TYPE_IPV6);
+		connman_ipaddress_alloc(AF_INET6);
 	if (!context->ipv6_address)
 		goto out;
 

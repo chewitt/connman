@@ -207,6 +207,7 @@ static int pptp_notify(DBusMessage *msg, struct vpn_provider *provider)
 		connman_ipaddress_set_ipv4(ipaddress, addressv4, netmask,
 					gateway);
 
+	connman_ipaddress_set_p2p(ipaddress, true);
 	vpn_provider_set_ipaddress(provider, ipaddress);
 	vpn_provider_set_nameservers(provider, nameservers);
 

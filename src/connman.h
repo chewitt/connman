@@ -159,7 +159,8 @@ int __connman_inet_modify_address(int cmd, int flags, int index, int family,
 				const char *address,
 				const char *peer,
 				unsigned char prefixlen,
-				const char *broadcast);
+				const char *broadcast,
+				bool is_p2p);
 int __connman_inet_get_interface_address(int index, int family, void *address);
 int __connman_inet_get_interface_ll_address(int index, int family, void *address);
 int __connman_inet_get_interface_mac_address(int index, uint8_t *mac_address);
@@ -302,6 +303,7 @@ struct connman_ipaddress {
 	char *peer;
 	char *broadcast;
 	char *gateway;
+	bool is_p2p; /* P2P connection or VPN, broadcast is excluded. */
 };
 
 struct connman_ipconfig_ops {

@@ -79,7 +79,8 @@ int __connman_inet_modify_address(int cmd, int flags,
 				const char *address,
 				const char *peer,
 				unsigned char prefixlen,
-				const char *broadcast)
+				const char *broadcast,
+				bool is_p2p)
 {
 	uint8_t request[NLMSG_ALIGN(sizeof(struct nlmsghdr)) +
 			NLMSG_ALIGN(sizeof(struct ifaddrmsg)) +
@@ -94,8 +95,9 @@ int __connman_inet_modify_address(int cmd, int flags,
 	int sk, err;
 
 	DBG("cmd %#x flags %#x index %d family %d address %s peer %s "
-		"prefixlen %hhu broadcast %s", cmd, flags, index, family,
-		address, peer, prefixlen, broadcast);
+		"prefixlen %hhu broadcast %s p2p %s", cmd, flags, index,
+		family, address, peer, prefixlen, broadcast,
+		is_p2p ? "true" : "false");
 
 	if (!address)
 		return -EINVAL;
@@ -122,12 +124,6 @@ int __connman_inet_modify_address(int cmd, int flags,
 		if (inet_pton(AF_INET, address, &ipv4_addr) < 1)
 			return -1;
 
-		if (broadcast)
-			inet_pton(AF_INET, broadcast, &ipv4_bcast);
-		else
-			ipv4_bcast.s_addr = ipv4_addr.s_addr |
-				htonl(0xfffffffflu >> prefixlen);
-
 		if (peer) {
 			if (inet_pton(AF_INET, peer, &ipv4_dest) < 1)
 				return -1;
@@ -149,14 +145,25 @@ int __connman_inet_modify_address(int cmd, int flags,
 		if (err < 0)
 			return err;
 
-		err = __connman_inet_rtnl_addattr_l(header,
-						sizeof(request),
-						IFA_BROADCAST,
-						&ipv4_bcast,
-						sizeof(ipv4_bcast));
-		if (err < 0)
-			return err;
+		/*
+		 * Broadcast address must not be added for P2P / VPN as
+		 * getifaddrs() cannot interpret destination address.
+		 */
+		if (!is_p2p) {
+			if (broadcast)
+				inet_pton(AF_INET, broadcast, &ipv4_bcast);
+			else
+				ipv4_bcast.s_addr = ipv4_addr.s_addr |
+					htonl(0xfffffffflu >> prefixlen);
 
+			err = __connman_inet_rtnl_addattr_l(header,
+							sizeof(request),
+							IFA_BROADCAST,
+							&ipv4_bcast,
+							sizeof(ipv4_bcast));
+			if (err < 0)
+				return err;
+		}
 	} else if (family == AF_INET6) {
 		if (inet_pton(AF_INET6, address, &ipv6_addr) < 1)
 			return -1;
@@ -435,18 +442,20 @@ int connman_inet_set_ipv6_address(int index,
 	int err;
 	unsigned char prefix_len;
 	const char *address;
+	bool is_p2p;
 
 	if (!ipaddress->local)
 		return 0;
 
 	prefix_len = ipaddress->prefixlen;
 	address = ipaddress->local;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET6,
-				address, NULL, prefix_len, NULL);
+				address, NULL, prefix_len, NULL, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -460,6 +469,7 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	int err;
 	unsigned char prefix_len;
 	const char *address, *broadcast, *peer;
+	bool is_p2p;
 
 	if (!ipaddress->local)
 		return -1;
@@ -468,12 +478,13 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	address = ipaddress->local;
 	broadcast = ipaddress->broadcast;
 	peer = ipaddress->peer;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
 	err = __connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, index, AF_INET,
-				address, peer, prefix_len, broadcast);
+				address, peer, prefix_len, broadcast, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -482,10 +493,17 @@ int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
 	return 0;
 }
 
-int connman_inet_clear_ipv6_address(int index, const char *address,
-							int prefix_len)
+int connman_inet_clear_ipv6_address(int index,
+					struct connman_ipaddress *ipaddress)
 {
 	int err;
+	int prefix_len;
+	const char *address;
+	bool is_p2p;
+
+	address = ipaddress->local;
+	prefix_len = ipaddress->prefixlen;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d", index, address, prefix_len);
 
@@ -493,7 +511,7 @@ int connman_inet_clear_ipv6_address(int index, const char *address,
 		return -EINVAL;
 
 	err = __connman_inet_modify_address(RTM_DELADDR, 0, index, AF_INET6,
-				address, NULL, prefix_len, NULL);
+				address, NULL, prefix_len, NULL, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;
@@ -507,11 +525,13 @@ int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
 	int err;
 	unsigned char prefix_len;
 	const char *address, *broadcast, *peer;
+	bool is_p2p;
 
 	prefix_len = ipaddress->prefixlen;
 	address = ipaddress->local;
 	broadcast = ipaddress->broadcast;
 	peer = ipaddress->peer;
+	is_p2p = ipaddress->is_p2p;
 
 	DBG("index %d address %s prefix_len %d peer %s broadcast %s", index,
 		address, prefix_len, peer, broadcast);
@@ -520,7 +540,7 @@ int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
 		return -EINVAL;
 
 	err = __connman_inet_modify_address(RTM_DELADDR, 0, index, AF_INET,
-				address, peer, prefix_len, broadcast);
+				address, peer, prefix_len, broadcast, is_p2p);
 	if (err < 0) {
 		connman_error("%s: %s", __func__, strerror(-err));
 		return err;

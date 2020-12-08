@@ -386,7 +386,8 @@ static void setup_tun_interface(unsigned int flags, unsigned change,
 
 	if ((__connman_inet_modify_address(RTM_NEWADDR,
 				NLM_F_REPLACE | NLM_F_ACK, pn->index, AF_INET,
-				server_ip, peer_ip, prefixlen, NULL)) < 0) {
+				server_ip, peer_ip, prefixlen, NULL, true))
+				< 0) {
 		DBG("address setting failed");
 		return;
 	}

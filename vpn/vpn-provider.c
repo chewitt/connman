@@ -3068,7 +3068,7 @@ void vpn_provider_clear_address(struct vpn_provider *provider, int family)
 			DBG("ipv6 %s/%d", address, len);
 
 			connman_inet_clear_ipv6_address(provider->index,
-							address, len);
+						provider->prev_ipv6_addr);
 
 			connman_ipaddress_free(provider->prev_ipv6_addr);
 			provider->prev_ipv6_addr = NULL;
