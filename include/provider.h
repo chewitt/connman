@@ -113,6 +113,10 @@ int connman_provider_set_nameservers(struct connman_provider *provider,
 					char * const *nameservers);
 void connman_provider_set_autoconnect(struct connman_provider *provider,
 								bool flag);
+bool connman_provider_is_split_routing(struct connman_provider *provider);
+int connman_provider_set_split_routing(struct connman_provider *provider,
+							bool split_routing);
+int connman_provider_get_family(struct connman_provider *provider);
 
 const char *connman_provider_get_driver_name(struct connman_provider *provider);
 const char *connman_provider_get_save_group(struct connman_provider *provider);

@@ -53,6 +53,7 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 							DBusMessageIter *iter)
 {
 	const char *host, *domain, *type;
+	dbus_bool_t split_routing;
 
 	if (!provider->driver || !provider->driver->get_property)
 		return;
@@ -72,6 +73,12 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 	if (type)
 		connman_dbus_dict_append_basic(iter, "Type", DBUS_TYPE_STRING,
 						 &type);
+
+	if (provider->vpn_service) {
+		split_routing = connman_provider_is_split_routing(provider);
+		connman_dbus_dict_append_basic(iter, "SplitRouting",
+					DBUS_TYPE_BOOLEAN, &split_routing);
+	}
 }
 
 struct connman_provider *
@@ -595,6 +602,100 @@ void connman_provider_set_autoconnect(struct connman_provider *provider,
 	/* Save VPN service if autoconnect value changes */
 	if (connman_service_set_autoconnect(provider->vpn_service, flag))
 		__connman_service_save(provider->vpn_service);
+}
+
+bool connman_provider_is_split_routing(struct connman_provider *provider)
+{
+	if (!provider || !provider->vpn_service)
+		return false;
+
+	return __connman_service_is_split_routing(provider->vpn_service);
+}
+
+int connman_provider_set_split_routing(struct connman_provider *provider,
+							bool split_routing)
+{
+	struct connman_service *service;
+	enum connman_ipconfig_type type;
+	int service_index;
+	int vpn_index;
+	bool service_split_routing;
+	int err = 0;
+
+	DBG("");
+
+	if (!provider || !provider->vpn_service)
+		return -EINVAL;
+
+	service_split_routing = __connman_service_is_split_routing(
+				provider->vpn_service);
+
+	if (service_split_routing == split_routing) {
+		DBG("split_routing already set %s",
+					split_routing ? "true" : "false");
+		return -EALREADY;
+	}
+
+	switch (provider->family) {
+	case AF_INET:
+		type = CONNMAN_IPCONFIG_TYPE_IPV4;
+		break;
+	case AF_INET6:
+		type = CONNMAN_IPCONFIG_TYPE_IPV6;
+		break;
+	case AF_UNSPEC:
+		type = CONNMAN_IPCONFIG_TYPE_ALL;
+		break;
+	default:
+		type = CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+	}
+
+	if (!__connman_service_is_connected_state(provider->vpn_service,
+								type)) {
+		DBG("%p VPN not connected", provider->vpn_service);
+		goto save;
+	}
+
+	vpn_index = __connman_service_get_index(provider->vpn_service);
+	service_index = __connman_connection_get_vpn_phy_index(vpn_index);
+	service = __connman_service_lookup_from_index(service_index);
+	if (!service)
+		goto save;
+
+	if (split_routing)
+		err = __connman_service_move(service, provider->vpn_service,
+					true);
+	else
+		err = __connman_service_move(provider->vpn_service, service,
+					true);
+
+	if (err) {
+		connman_warn("cannot move service %p and VPN %p error %d",
+					service, provider->vpn_service, err);
+
+		/*
+		 * In case of error notify vpnd about the current split routing
+		 * state.
+		 */
+		__connman_service_split_routing_changed(provider->vpn_service);
+		goto out;
+	}
+
+save:
+	__connman_service_set_split_routing(provider->vpn_service,
+								split_routing);
+	__connman_service_save(provider->vpn_service);
+
+out:
+	return err;
+}
+
+int connman_provider_get_family(struct connman_provider *provider)
+{
+	if (!provider)
+		return AF_UNSPEC;
+
+	return provider->family;
 }
 
 static void unregister_provider(gpointer data)
