@@ -991,6 +991,7 @@ int __connman_wispr_start(struct connman_service *service,
 
 void __connman_wispr_stop(struct connman_service *service)
 {
+	struct connman_wispr_portal *wispr_portal;
 	int index;
 
 	DBG("service %p", service);
@@ -1002,7 +1003,22 @@ void __connman_wispr_stop(struct connman_service *service)
 	if (index < 0)
 		return;
 
-	g_hash_table_remove(wispr_portal_list, GINT_TO_POINTER(index));
+	wispr_portal = g_hash_table_lookup(wispr_portal_list,
+					GINT_TO_POINTER(index));
+	if (!wispr_portal)
+		return;
+
+	if (wispr_portal->ipv4_context) {
+		if (service == wispr_portal->ipv4_context->service)
+			g_hash_table_remove(wispr_portal_list,
+					GINT_TO_POINTER(index));
+	}
+
+	if (wispr_portal->ipv6_context) {
+		if (service == wispr_portal->ipv6_context->service)
+			g_hash_table_remove(wispr_portal_list,
+					GINT_TO_POINTER(index));
+	}
 }
 
 int __connman_wispr_init(void)
