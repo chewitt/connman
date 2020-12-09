@@ -2152,8 +2152,6 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 
 	data = user_data;
 
-	DBG("");
-
 	if (call != vpn_change_call) {
 		DBG("pending call not set or invalid (ongoing %p this %p)",
 					vpn_change_call, call);
@@ -2615,17 +2613,31 @@ out:
 	return err;
 }
 
+/*
+ * This gets called after processing the reply. In case there was a delayed
+ * ongoing user change in progress the real error, EBUSY, ETIMEDOUT, ENOTCONN
+ * or ENONET is returned which do not require further actions.
+ */
 static void result_cb(uid_t uid, int err, void *user_data)
 {
-	if (err && err != -EALREADY) {
+	switch (err) {
+	case 0:
+	case -EALREADY:
+		DBG("user %u changed to vpnd", uid);
+		break;
+	case -EBUSY:
+	case -ETIMEDOUT:
+	case -ENOTCONN:
+	case -ENONET:
+		DBG("user change to %u is in progress", uid);
+		break;
+	default:
 		connman_error("changing uid %u to vpnd failed (err: %d), "
-				"reset to uid %u", storage.current_uid, err,
-				geteuid());
+				"reset to uid %u", uid, err, geteuid());
 		set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
 		storage_change_uid(geteuid());
+		break;
 	}
-
-	DBG("user %u changed to vpnd", storage.current_uid);
 }
 
 static void vpnd_created(DBusConnection *conn, void *user_data)
