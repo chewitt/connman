@@ -450,7 +450,7 @@ static char *create_pid_path(const char *user, const char *group)
 	if (!user || !*user)
 		return NULL;
 
-	if (vpn_settings_is_system_user(user))
+	if (vpn_settings_get_user_type(user) != VPN_SETTINGS_USER_TYPE_REGULAR)
 		return NULL;
 
 	pwd = vpn_util_get_passwd(user);

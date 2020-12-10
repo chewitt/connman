@@ -131,7 +131,7 @@ void __vpn_settings_set_binary_user_override(uid_t uid, void *user_data)
 	connman_vpn_settings.binary_user_override = g_strdup(pwd->pw_name);
 }
 
-bool vpn_settings_is_system_user(const char *user)
+enum vpn_settings_user_type vpn_settings_get_user_type(const char *user)
 {
 	struct passwd *pwd;
 	struct passwd *system_pwd;
@@ -142,33 +142,25 @@ bool vpn_settings_is_system_user(const char *user)
 	 * case after the override is reset.
 	 */
 	if (!user)
-		return true;
+		return VPN_SETTINGS_USER_TYPE_NOT_SET;
 
 	DBG("check user \"%s\"", user);
 
 	/*
-	 * Ignore errors if no entry was found. Treat as system user to
-	 * prevent using an invalid override.
+	 * Ignore errors if no entry was found. When the user cannot be
+	 * resolved user = NOT_FOUND.
 	 */
 	pwd = vpn_util_get_passwd(user);
 	if (!pwd)
-		return true;
+		return VPN_SETTINGS_USER_TYPE_NOT_FOUND;
 
-	if (!connman_vpn_settings.system_binary_users) {
-		DBG("no binary users set");
-
-		/*
-		 * Check if the user is root, or the uid equals to process
-		 * effective uid.
-		 */
-		return !pwd->pw_uid || pwd->pw_uid == geteuid();
-	}
-
-	/* Root set as user or the effective user id */
+	/* Check if the user is root, or the uid equals to process's euid */
 	if (!pwd->pw_uid || pwd->pw_uid == geteuid())
-		return true;
+		return VPN_SETTINGS_USER_TYPE_SYSTEM;
 
-	for (i = 0; connman_vpn_settings.system_binary_users[i]; i++) {
+	for (i = 0; connman_vpn_settings.system_binary_users &&
+				connman_vpn_settings.system_binary_users[i];
+				i++) {
 		const char *system_user =
 				connman_vpn_settings.system_binary_users[i];
 
@@ -177,14 +169,15 @@ bool vpn_settings_is_system_user(const char *user)
 			continue;
 
 		if (pwd->pw_uid == system_pwd->pw_uid)
-			return true;
+			return VPN_SETTINGS_USER_TYPE_SYSTEM;
 	}
 
-	return false;
+	return VPN_SETTINGS_USER_TYPE_REGULAR;
 }
 
 const char *vpn_settings_get_binary_user(struct vpn_plugin_data *data)
 {
+	enum vpn_settings_user_type user_type;
 	const char *binary_user;
 
 	if (data && data->binary_user)
@@ -192,13 +185,33 @@ const char *vpn_settings_get_binary_user(struct vpn_plugin_data *data)
 	else
 		binary_user = connman_vpn_settings.binary_user;
 
+	user_type = vpn_settings_get_user_type(binary_user);
+	switch (user_type) {
 	/*
-	 * Use overridden user instead configured one if set, but don't
-	 * override configured  system user.
+	 * If the user is not set do not allow to use override as this will
+	 * default to using root user.
 	 */
-	if (connman_vpn_settings.binary_user_override &&
-				!vpn_settings_is_system_user(binary_user))
-		binary_user = connman_vpn_settings.binary_user_override;
+	case VPN_SETTINGS_USER_TYPE_NOT_SET:
+		return NULL;
+	/*
+	 * User not found on the system, if no override return NULL. Return
+	 * override if set, otherwise use the binary user in config.
+	 */
+	case VPN_SETTINGS_USER_TYPE_NOT_FOUND:
+		if (!connman_vpn_settings.binary_user_override)
+			return NULL;
+
+		/* fall through */
+	/* Return override user if it is set to override other user */
+	case VPN_SETTINGS_USER_TYPE_REGULAR:
+		if (connman_vpn_settings.binary_user_override)
+			return connman_vpn_settings.binary_user_override;
+
+		break;
+	/* System user cannot be overridden */
+	case VPN_SETTINGS_USER_TYPE_SYSTEM:
+		break;
+	}
 
 	return binary_user;
 }
