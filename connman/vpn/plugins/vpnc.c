@@ -676,8 +676,10 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 
 	DBG("provider %p", data->provider);
 
-	if (!reply)
+	if (!reply) {
+		err = ENOENT;
 		goto err;
+	}
 
 	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
 				data->task, data->cb, data->user_data);
@@ -688,8 +690,10 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 		return;
 	}
 
-	if (!vpn_agent_check_reply_has_dict(reply))
+	if (!vpn_agent_check_reply_has_dict(reply)) {
+		err = ENOENT;
 		goto err;
+	}
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -744,8 +748,12 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 		dbus_message_iter_next(&dict);
 	}
 
-	if (!secret || !username || !password)
+	if (!secret || !username || !password) {
+		vpn_provider_indicate_error(data->provider,
+					VPN_PROVIDER_ERROR_AUTH_FAILED);
+		err = EACCES;
 		goto err;
+	}
 
 	err = run_connect(data);
 	if (err != -EINPROGRESS)
@@ -754,7 +762,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	return;
 
 err:
-	vc_connect_done(data, EACCES);
+	vc_connect_done(data, err);
 }
 
 static int request_input_credentials(struct vc_private_data *data,
