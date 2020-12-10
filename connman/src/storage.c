@@ -2148,7 +2148,7 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 	DBusMessage *reply;
 	DBusError error;
 	int err = 0;
-	int delay = USER_CHANGE_DELAY;
+	unsigned int delay = USER_CHANGE_DELAY;
 
 	data = user_data;
 
@@ -2213,18 +2213,26 @@ static void change_user_reply(DBusPendingCall *call, void *user_data)
 	case -EBUSY:
 		/* D-Bus was congested, double delay */
 		delay += USER_CHANGE_DELAY;
+
+		/* fall through */
 	case -ETIMEDOUT:
-		/* fall through */
 	case -ENOTCONN:
-		/* fall through */
 	case -ENONET:
 		if (!init_delayed_user_change(data, delay)) {
 			send_vpnd_change_user = true;
 			goto out_no_free;
 		}
 
-		/* Otherwise, fall though */
+		/*
+		 * Delayed user change already in progress. Reply the result if
+		 * changed via D-Bus, don't revert user.
+		 */
+		goto delayed;
 	default:
+		/*
+		 * Invalid user, permission denied or any other error reverts
+		 * to root user.
+		 */
 		goto err;
 	}
 
@@ -2264,14 +2272,15 @@ err:
 		storage_change_uid(data->uid);
 	}
 
+delayed:
 	if (!data->pending)
 		goto out;
 
-	switch (-err) {
-	case EALREADY:
+	switch (err) {
+	case -EALREADY:
 		reply = __connman_error_already_enabled(data->pending);
 		break;
-	case ENOENT:
+	case -ENOENT:
 		reply = __connman_error_not_found(data->pending);
 		break;
 	default:
@@ -2604,18 +2613,31 @@ out:
 	return err;
 }
 
+/*
+ * This gets called after processing the reply. In case there was a delayed
+ * ongoing user change in progress the real error, EBUSY, ETIMEDOUT, ENOTCONN
+ * or ENONET is returned which do not require further actions.
+ */
 static void result_cb(uid_t uid, int err, void *user_data)
 {
-	if (err && err != -EALREADY) {
+	switch (err) {
+	case 0:
+	case -EALREADY:
+		DBG("user %u changed to vpnd", uid);
+		break;
+	case -EBUSY:
+	case -ETIMEDOUT:
+	case -ENOTCONN:
+	case -ENONET:
+		DBG("user change to %u is in progress", uid);
+		break;
+	default:
 		connman_error("changing uid %u to vpnd failed (err: %d), "
-				"reset to uid %u", storage.current_uid, err,
-				geteuid());
+				"reset to uid %u", uid, err, geteuid());
 		set_user_dir(NULL, STORAGE_DIR_TYPE_MAIN, false);
 		storage_change_uid(geteuid());
-		return;
+		break;
 	}
-
-	DBG("user %u changed to vpnd", storage.current_uid);
 }
 
 static void vpnd_created(DBusConnection *conn, void *user_data)

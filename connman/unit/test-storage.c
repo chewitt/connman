@@ -3483,9 +3483,30 @@ static void storage_test_vpn_crash1()
 	g_free(test_path);
 }
 
-/* Send user change, then crash vpnd */
+struct vpn_error_data {
+	const char *errorname;
+	uid_t uid;
+	int events;
+};
+
+/*
+ * Send user change, then crash vpnd. Check with different errors that the
+ * user is not changed in wrong cases back to root. Also test that all actions
+ * will result in a delayed user change, which will get a faked OK reply.
+ */
 static void storage_test_vpn_crash2()
 {
+	struct vpn_error_data vpn_data[] = {
+			/* These 4 will initiate delayed user change */
+			{"net.connman.Error.Timeout", UID_USER, 1},
+			{"net.connman.Error.NotConnected", UID_USER, 1},
+			{"net.connman.Error.NoReply", UID_USER, 1},
+			{"net.connman.Error.UnknownMethod", UID_USER, 1},
+			/* No new call is to be made */
+			{"net.connman.Error.AlreadyEnabled",UID_USER, 0},
+			/* An "other" error, caused by fs access error etc. */
+			{"net.connman.Error.Failed", UID_ROOT, 0},
+	};
 	GMainLoop *mainloop;
 	gchar *test_path;
 	mode_t m_dir = 0700;
@@ -3493,6 +3514,7 @@ static void storage_test_vpn_crash2()
 	DBusConnection *connection;
 	DBusMessage *reply;
 	DBusError error;
+	unsigned int i;
 
 	mainloop = g_main_loop_new(NULL, FALSE);
 	test_path = setup_test_directory();
@@ -3526,33 +3548,52 @@ static void storage_test_vpn_crash2()
 	clean_dbus();
 	init_dbus(TRUE);
 
-	/* vpnd crashed */
-	disconnect_watch(connection, NULL);
+	for (i = 0; i < G_N_ELEMENTS(vpn_data); i++) {
+		DBG("iterate %d", i);
 
-	/* vpnd started, send_change_user_msg() is used */
-	connect_watch(connection, NULL);
+		/* vpnd crashed */
+		disconnect_watch(connection, NULL);
 
-	/* Fake error as reply, failed can result from any of mkdir errors. */
-	reply = create_dbus_error(last_message, "net.connman.Error.Failed");
-	g_assert(reply);
-	set_reply_error(reply);
+		/* vpnd started, send_change_user_msg() is used */
+		connect_watch(connection, NULL);
 
-	/* Call the pending callback */
-	DBG("call connmand pending call notify");
-	last_pending_function(last_pending_call, last_pending_function_data);
+		/* Fake error as reply */
+		reply = create_dbus_error(last_message, vpn_data[i].errorname);
+		g_assert(reply);
+		set_reply_error(reply);
 
-	/* User is reset to root in case the error is unknown */
-	g_assert_cmpint(current_uid, ==, UID_ROOT);
+		/* Call the pending callback */
+		DBG("call connmand pending call notify");
+		last_pending_function(last_pending_call,
+						last_pending_function_data);
 
-	/* No events in main loop either */
-	g_assert_cmpint(iterate_main_context(g_main_loop_get_context(mainloop),
-				FALSE, 1), ==, 0);
+		/* User is reset to root in case the error is unknown */
+		g_assert_cmpint(current_uid, ==, vpn_data[i].uid);
 
-	g_assert(last_reply_error);
-	g_assert_null(last_reply);
+		/* Different errors result in different amount of events */
+		g_assert_cmpint(iterate_main_context(
+					g_main_loop_get_context(mainloop),
+					FALSE, 1), ==, vpn_data[i].events);
 
-	clean_dbus();
-	init_dbus(TRUE);
+		g_assert(last_reply_error);
+		g_assert_null(last_reply);
+
+		if (vpn_data[i].events) {
+			/* Fake reply */
+			reply = g_dbus_create_reply(last_message,
+							DBUS_TYPE_INVALID);
+			g_assert(reply);
+			set_reply(reply);
+
+			/* Call the pending callback to handle event */
+			DBG("call connmand pending call notify");
+			last_pending_function(last_pending_call,
+						last_pending_function_data);
+		}
+
+		clean_dbus();
+		init_dbus(TRUE);
+	}
 
 	/* vpnd crashed for second time */
 	disconnect_watch(connection, NULL);
