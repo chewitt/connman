@@ -37,7 +37,7 @@ struct vpn_ipconfig;
 struct connman_ipaddress *__vpn_ipconfig_get_address(struct vpn_ipconfig *ipconfig);
 unsigned short __vpn_ipconfig_get_type_from_index(int index);
 unsigned int __vpn_ipconfig_get_flags_from_index(int index);
-void __vpn_ipconfig_foreach(void (*function) (int index,
+void vpn_ipconfig_foreach(void (*function) (int index,
 				    void *user_data), void *user_data);
 void __vpn_ipconfig_set_local(struct vpn_ipconfig *ipconfig,
 							const char *address);
