@@ -2931,7 +2931,7 @@ static int parse_ip_and_mask(const char *str, struct in_addr *ip,
 	if (!tokens)
 		return -1;
 
-	if (!inet_pton(AF_INET, tokens[0], ip)) {
+	if (inet_pton(AF_INET, tokens[0], ip) != 1) {
 		err = -1;
 		goto out;
 	}
@@ -2972,7 +2972,7 @@ static int parse_ipv6_and_mask(const char *str, struct in6_addr *ip,
 	if (!tokens)
 		return -1;
 
-	if (!inet_pton(AF_INET6, tokens[0], ip)) {
+	if (inet_pton(AF_INET6, tokens[0], ip) != 1) {
 		err = -1;
 		goto out;
 	}

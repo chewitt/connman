@@ -106,7 +106,7 @@ static void setlinkdns_append(DBusMessageIter *iter, void *user_data)
 
 		if (type == AF_INET) {
 			result = inet_pton(type, server, ipv4_bytes);
-			if (!result) {
+			if (result != 1) {
 				DBG("Failed to parse IPv4 address: %s",
 						server);
 				return;
@@ -128,7 +128,7 @@ static void setlinkdns_append(DBusMessageIter *iter, void *user_data)
 					&byte_array);
 		} else if (type == AF_INET6) {
 			result = inet_pton(type, server, ipv6_bytes);
-			if (!result) {
+			if (result != 1) {
 				DBG("Failed to parse IPv6 address: %s", server);
 				return;
 			}

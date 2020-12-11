@@ -121,11 +121,11 @@ int __connman_inet_modify_address(int cmd, int flags,
 	ifaddrmsg->ifa_index = index;
 
 	if (family == AF_INET) {
-		if (inet_pton(AF_INET, address, &ipv4_addr) < 1)
+		if (inet_pton(AF_INET, address, &ipv4_addr) != 1)
 			return -1;
 
 		if (peer) {
-			if (inet_pton(AF_INET, peer, &ipv4_dest) < 1)
+			if (inet_pton(AF_INET, peer, &ipv4_dest) != 1)
 				return -1;
 
 			err = __connman_inet_rtnl_addattr_l(header,
@@ -165,7 +165,7 @@ int __connman_inet_modify_address(int cmd, int flags,
 				return err;
 		}
 	} else if (family == AF_INET6) {
-		if (inet_pton(AF_INET6, address, &ipv6_addr) < 1)
+		if (inet_pton(AF_INET6, address, &ipv6_addr) != 1)
 			return -1;
 
 		err = __connman_inet_rtnl_addattr_l(header,
@@ -707,7 +707,7 @@ int connman_inet_del_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_dst_len = prefix_len;
 
-	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 0) {
+	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) != 1) {
 		err = -errno;
 		goto out;
 	}
@@ -757,7 +757,7 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_dst_len = prefix_len;
 
-	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 0) {
+	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) != 1) {
 		err = -errno;
 		goto out;
 	}
@@ -773,7 +773,7 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 	 */
 
 	if (gateway && !__connman_inet_is_any_addr(gateway, AF_INET6) &&
-		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) > 0)
+		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) == 1)
 		rt.rtmsg_flags |= RTF_GATEWAY;
 
 	rt.rtmsg_metric = 1;
@@ -816,7 +816,7 @@ int connman_inet_clear_ipv6_gateway_address(int index, const char *gateway)
 
 	memset(&rt, 0, sizeof(rt));
 
-	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) < 0) {
+	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) != 1) {
 		err = -errno;
 		goto out;
 	}
@@ -1255,7 +1255,7 @@ bool connman_inet_compare_subnet(int index, const char *host)
 	if (!host)
 		return false;
 
-	if (inet_pton(AF_INET, host, &haddr) <= 0)
+	if (inet_pton(AF_INET, host, &haddr) != 1)
 		return false;
 
 	if_addr.index = index;
@@ -1292,7 +1292,7 @@ bool connman_inet_compare_ipv6_subnet(int index, const char *host)
 	struct in6_addr imask = { 0 };
 	struct in6_addr haddr = { 0 };
 
-	if (inet_pton(AF_INET6, host, &haddr) <= 0)
+	if (inet_pton(AF_INET6, host, &haddr) != 1)
 		return false;
 
 	addr.index = index;
@@ -3179,7 +3179,7 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 
 	ret = inet_pton(family, dst ? dst : gateway, buf);
 	g_free(dst);
-	if (ret <= 0)
+	if (ret != 1)
 		return -EINVAL;
 
 	memset(&rth, 0, sizeof(rth));
@@ -3415,7 +3415,7 @@ static int get_nfs_server_ip(const char *cmdline_file, const char *pnp_file,
 	addrstr[len] = '\0';
 
 	err = inet_pton(AF_INET, addrstr, addr);
-	if (err <= 0) {
+	if (err != 1) {
 		connman_error("%s: Cannot convert to numeric addr \"%s\"\n",
 				__func__, addrstr);
 		err = -1;
