@@ -184,7 +184,7 @@ int vpn_rtnl_register(struct vpn_rtnl *rtnl)
 	rtnl_list = g_slist_insert_sorted(rtnl_list, rtnl,
 							compare_priority);
 
-	__vpn_ipconfig_foreach(trigger_rtnl, rtnl);
+	vpn_ipconfig_foreach(trigger_rtnl, rtnl);
 
 	return 0;
 }

@@ -245,7 +245,7 @@ static char *get_ifname(void)
 	for (i = 0; i < 256; i++) {
 		data.ifname = g_strdup_printf("wg%d", i);
 		data.found = false;
-		__vpn_ipconfig_foreach(ifname_check_cb, &data);
+		vpn_ipconfig_foreach(ifname_check_cb, &data);
 
 		if (!data.found)
 			return data.ifname;

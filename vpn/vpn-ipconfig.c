@@ -108,7 +108,7 @@ unsigned int __vpn_ipconfig_get_flags_from_index(int index)
 	return ipdevice->flags;
 }
 
-void __vpn_ipconfig_foreach(void (*function) (int index,
+void vpn_ipconfig_foreach(void (*function) (int index,
 					void *user_data), void *user_data)
 {
 	GList *list, *keys;
