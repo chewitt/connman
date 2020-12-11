@@ -105,7 +105,7 @@ static bool check_ipv6_address(const char *address)
 		return false;
 
 	err = inet_pton(AF_INET6, address, buf);
-	if (err > 0)
+	if (err == 1)
 		return true;
 
 	return false;
