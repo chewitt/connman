@@ -1523,32 +1523,29 @@ static int save_route(GHashTable *routes, int family, const char *network,
 
 static int add_network_route(struct connection_data *data)
 {
-	char *network = NULL;
-	char *gateway = NULL;
-	char *netmask = NULL;
-	int family;
+	struct vpn_route rt = { 0, };
 	int err;
 
 	if (!data)
 		return -EINVAL;
 
-	family = connman_provider_get_family(data->provider);
-	switch (family) {
+	rt.family = connman_provider_get_family(data->provider);
+	switch (rt.family) {
 	case PF_INET:
-		err = connman_inet_get_route_addresses(data->index, &network,
-					&netmask, &gateway);
+		err = connman_inet_get_route_addresses(data->index,
+					&rt.network, &rt.netmask, &rt.gateway);
 		break;
 	case PF_INET6:
 		err = connman_inet_ipv6_get_route_addresses(data->index,
-					&network, &netmask, &gateway);
+					&rt.network, &rt.netmask, &rt.gateway);
 		break;
 	default:
-		connman_error("invalid protocol family %d", family);
+		connman_error("invalid protocol family %d", rt.family);
 		return -EINVAL;
 	}
 
 	DBG("network %s gateway %s netmask %s for provider %p",
-						network, gateway, netmask,
+						rt.network, rt.gateway, rt.netmask,
 						data->provider);
 
 	if (err) {
@@ -1557,21 +1554,20 @@ static int add_network_route(struct connection_data *data)
 		goto out;
 	}
 
-	err = save_route(data->server_routes, family, network, netmask,
-				gateway);
+	err = save_route(data->server_routes, rt.family, rt.network, rt.netmask,
+				rt.gateway);
 	if (err) {
 		connman_warn("failed to add network route for provider"
 					"%p", data->provider);
 		goto out;
 	}
 
-	struct vpn_route route = { family, network, netmask, gateway };
-	set_route(data, &route);
+	set_route(data, &rt);
 
 out:
-	g_free(network);
-	g_free(gateway);
-	g_free(netmask);
+	g_free(rt.network);
+	g_free(rt.netmask);
+	g_free(rt.gateway);
 
 	return 0;
 }
