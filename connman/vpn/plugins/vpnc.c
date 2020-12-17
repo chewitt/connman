@@ -755,8 +755,9 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 		goto err;
 	}
 
-	err = run_connect(data);
-	if (err != -EINPROGRESS)
+	/* vpn_provider.c:connect_cb() expects positive errors */
+	err = -run_connect(data);
+	if (err != EINPROGRESS)
 		goto err;
 
 	return;
