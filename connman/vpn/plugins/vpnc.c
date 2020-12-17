@@ -450,7 +450,7 @@ static char *create_pid_path(const char *user, const char *group)
 	if (!user || !*user)
 		return NULL;
 
-	if (vpn_settings_is_system_user(user))
+	if (vpn_settings_get_user_type(user) != VPN_SETTINGS_USER_TYPE_REGULAR)
 		return NULL;
 
 	pwd = vpn_util_get_passwd(user);
@@ -755,8 +755,9 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 		goto err;
 	}
 
-	err = run_connect(data);
-	if (err != -EINPROGRESS)
+	/* vpn_provider.c:connect_cb() expects positive errors */
+	err = -run_connect(data);
+	if (err != EINPROGRESS)
 		goto err;
 
 	return;

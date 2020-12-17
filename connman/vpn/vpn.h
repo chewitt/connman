@@ -148,7 +148,15 @@ const char * vpn_settings_get_binary_user(struct vpn_plugin_data *data);
 const char * vpn_settings_get_binary_group(struct vpn_plugin_data *data);
 char ** vpn_settings_get_binary_supplementary_groups(
 	struct vpn_plugin_data *data);
-bool vpn_settings_is_system_user(const char *user);
+
+enum vpn_settings_user_type {
+	VPN_SETTINGS_USER_TYPE_NOT_SET = 0,
+	VPN_SETTINGS_USER_TYPE_NOT_FOUND,
+	VPN_SETTINGS_USER_TYPE_REGULAR,
+	VPN_SETTINGS_USER_TYPE_SYSTEM,
+};
+
+enum vpn_settings_user_type vpn_settings_get_user_type(const char *user);
 
 struct passwd *vpn_util_get_passwd(const char *username);
 struct group *vpn_util_get_group(const char *groupname);
