@@ -15,7 +15,6 @@ RestartSec=1
 # Jolla Sandboxing
 PrivateTmp=true
 ProtectHome=false
-PrivateUsers=true
 ProtectControlGroups=true
 DevicePolicy=closed
 DeviceAllow=/dev/net/tun rw
