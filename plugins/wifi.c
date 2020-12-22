@@ -753,13 +753,14 @@ static void wifi_newlink(unsigned flags, unsigned change, void *user_data)
 	}
 
 	if ((wifi->flags & IFF_LOWER_UP) != (flags & IFF_LOWER_UP)) {
-		if (flags & IFF_LOWER_UP) {
+		if (flags & IFF_LOWER_UP)
 			DBG("carrier on");
-
-			handle_tethering(wifi);
-		} else
+		else
 			DBG("carrier off");
 	}
+
+	if (flags & IFF_LOWER_UP)
+		handle_tethering(wifi);
 
 	wifi->flags = flags;
 }
