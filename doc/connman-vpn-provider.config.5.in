@@ -105,7 +105,7 @@ MTU of the tunnel.
 .B OpenVPN.NSCertType=client \fR|\fB server
 Peer certificate type, either \fBclient\fP or \fBserver\fP.
 .TP
-.BI OpenVPN.Protocol= protocol
+.BI OpenVPN.Proto= protocol
 Use \fIprotocol\fP.
 .TP
 .BI OpenVPN.Port= port
