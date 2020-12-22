@@ -68,6 +68,7 @@
 #define BGSCAN_DEFAULT "simple:30:-65:300"
 #define AUTOSCAN_EXPONENTIAL "exponential:3:300"
 #define AUTOSCAN_SINGLE "single:3"
+#define SCAN_MAX_DURATION 10
 
 #define P2P_FIND_TIMEOUT 30
 #define P2P_CONNECTION_TIMEOUT 100
@@ -1526,6 +1527,8 @@ static void interface_create_callback(int result,
 							void *user_data)
 {
 	struct wifi_data *wifi = user_data;
+	char *bgscan_range_max;
+	long value;
 
 	DBG("result %d ifname %s, wifi %p", result,
 				g_supplicant_interface_get_ifname(interface),
@@ -1540,6 +1543,24 @@ static void interface_create_callback(int result,
 	if (g_supplicant_interface_get_ready(interface)) {
 		wifi->interface_ready = true;
 		finalize_interface_creation(wifi);
+	}
+
+	/*
+	 * Set the BSS expiration age to match the long scanning
+	 * interval to avoid the loss of unconnected networks between
+	 * two scans.
+	 */
+	bgscan_range_max = strrchr(BGSCAN_DEFAULT, ':');
+	if (!bgscan_range_max || strlen(bgscan_range_max) < 1)
+		return;
+
+	value = strtol(bgscan_range_max + 1, NULL, 10);
+	if (value <= 0 || errno == ERANGE)
+		return;
+
+	if (g_supplicant_interface_set_bss_expiration_age(interface,
+					value + SCAN_MAX_DURATION) < 0) {
+		connman_warn("Failed to set bss expiration age");
 	}
 }
 
