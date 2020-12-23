@@ -3751,9 +3751,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		service_save(service);
 		timeservers_configuration_changed(service);
-
-		if (service == connman_service_get_default())
-			__connman_timeserver_sync(service);
+		__connman_timeserver_conf_update(service);
 
 	} else if (g_str_equal(name, "Domains.Configuration")) {
 		DBusMessageIter entry;

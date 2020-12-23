@@ -451,7 +451,8 @@ char **__connman_timeserver_system_get();
 GSList *__connman_timeserver_add_list(GSList *server_list,
 		const char *timeserver);
 GSList *__connman_timeserver_get_all(struct connman_service *service);
-int __connman_timeserver_sync(struct connman_service *service);
+void __connman_timeserver_sync(struct connman_service *service);
+void __connman_timeserver_conf_update(struct connman_service *service);
 
 enum __connman_dhcpv6_status {
 	CONNMAN_DHCPV6_STATUS_FAIL     = 0,

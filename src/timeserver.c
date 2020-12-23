@@ -272,6 +272,7 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 
 static gboolean ts_recheck(gpointer user_data)
 {
+	struct connman_service *service;
 	GSList *ts;
 
 	ts = __connman_timeserver_get_all(connman_service_get_default());
@@ -287,7 +288,8 @@ static gboolean ts_recheck(gpointer user_data)
 
 		g_slist_free_full(ts, g_free);
 
-		__connman_timeserver_sync(NULL);
+		service = connman_service_get_default();
+		__connman_timeserver_sync(service);
 
 		return FALSE;
 	}
@@ -327,29 +329,14 @@ static void ts_recheck_enable(void)
 			NULL);
 }
 
-/*
- * This function must be called every time the default service changes, the
- * service timeserver(s) or gateway changes or the global timeserver(s) changes.
- */
-int __connman_timeserver_sync(struct connman_service *default_service)
+static void ts_reset(struct connman_service *service)
 {
-	struct connman_service *service;
 	char **nameservers;
 	int i;
 
-	if (default_service)
-		service = default_service;
-	else
-		service = connman_service_get_default();
-
-	if (!service)
-		return -EINVAL;
-
-	if (service == ts_service)
-		return -EALREADY;
-
 	if (!resolv)
-		return 0;
+		return;
+
 	/*
 	 * Before we start creating the new timeserver list we must stop
 	 * any ongoing ntp query and server resolution.
@@ -380,16 +367,31 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 
 	if (!timeservers_list) {
 		DBG("No timeservers set.");
-		return 0;
+		return;
 	}
 
 	ts_recheck_enable();
 
 	ts_service = service;
 	timeserver_sync_start();
-
-	return 0;
 }
+
+void __connman_timeserver_sync(struct connman_service *service)
+{
+	if (!service || service == ts_service)
+		return;
+
+	ts_reset(service);
+}
+
+void __connman_timeserver_conf_update(struct connman_service *service)
+{
+	if (!service || service != ts_service)
+		return;
+
+	ts_reset(service);
+}
+
 
 static int timeserver_start(struct connman_service *service)
 {
@@ -430,7 +432,9 @@ static int timeserver_start(struct connman_service *service)
 		g_strfreev(nameservers);
 	}
 
-	return __connman_timeserver_sync(service);
+	__connman_timeserver_sync(service);
+
+	return 0;
 }
 
 static void timeserver_stop(void)
@@ -457,9 +461,12 @@ static void timeserver_stop(void)
 
 int __connman_timeserver_system_set(char **servers)
 {
+	struct connman_service *service;
+
 	save_timeservers(servers);
 
-	__connman_timeserver_sync(NULL);
+	service = connman_service_get_default();
+	__connman_timeserver_conf_update(service);
 
 	return 0;
 }
