@@ -53,8 +53,12 @@ struct connman_ipconfig {
 	struct connman_ipaddress *system;
 
 	int ipv6_privacy_config;
+	int ipv6_accept_ra_config;
+	int ipv6_autoconf_config;
 	char *last_dhcp_address;
 	char **last_dhcpv6_prefixes;
+
+	bool ipv6_force_disabled;
 };
 
 struct connman_ipdevice {
@@ -166,90 +170,121 @@ static const char *scope2str(unsigned char scope)
 	return "";
 }
 
-static bool get_ipv6_state(gchar *ifname)
+#define PROC_IPV4_CONF_PREFIX "/proc/sys/net/ipv4/conf"
+#define PROC_IPV6_CONF_PREFIX "/proc/sys/net/ipv6/conf"
+
+static int read_conf_value(const char *prefix, const char *ifname,
+					const char *suffix, int *value)
 {
-	int disabled;
 	gchar *path;
 	FILE *f;
-	bool enabled = false;
+	int err;
 
-	if (!ifname)
-		path = g_strdup("/proc/sys/net/ipv6/conf/all/disable_ipv6");
-	else
-		path = g_strdup_printf(
-			"/proc/sys/net/ipv6/conf/%s/disable_ipv6", ifname);
-
+	path = g_build_filename(prefix, ifname ? ifname : "all", suffix, NULL);
 	if (!path)
-		return enabled;
+		return -ENOMEM;
 
+	errno = 0;
 	f = fopen(path, "r");
+	if (!f) {
+		err = -errno;
+	} else {
+		errno = 0; /* Avoid stale errno values with fscanf */
+
+		err = fscanf(f, "%d", value);
+		if (err <= 0 && errno)
+			err = -errno;
+
+		fclose(f);
+	}
+
+	if (err <= 0)
+		connman_error("failed to read %s", path);
 
 	g_free(path);
 
-	if (f) {
-		if (fscanf(f, "%d", &disabled) > 0)
-			enabled = !disabled;
+	return err;
+}
+
+static int read_ipv4_conf_value(const char *ifname, const char *suffix,
+								int *value)
+{
+	return read_conf_value(PROC_IPV4_CONF_PREFIX, ifname, suffix, value);
+}
+
+static int read_ipv6_conf_value(const char *ifname, const char *suffix,
+								int *value)
+{
+	return read_conf_value(PROC_IPV6_CONF_PREFIX, ifname, suffix, value);
+}
+
+static int write_conf_value(const char *prefix, const char *ifname,
+					const char *suffix, int value) {
+	gchar *path;
+	FILE *f;
+	int rval;
+
+	path = g_build_filename(prefix, ifname ? ifname : "all", suffix, NULL);
+	if (!path)
+		return -ENOMEM;
+
+	f = fopen(path, "r+");
+	if (!f) {
+		rval = -errno;
+	} else {
+		rval = fprintf(f, "%d", value);
 		fclose(f);
 	}
+
+	if (rval <= 0)
+		connman_error("failed to set %s value %d", path, value);
+
+	g_free(path);
+
+	return rval;
+}
+
+static int write_ipv4_conf_value(const char *ifname, const char *suffix,
+								int value)
+{
+	return write_conf_value(PROC_IPV4_CONF_PREFIX, ifname, suffix, value);
+}
+
+static int write_ipv6_conf_value(const char *ifname, const char *suffix,
+								int value)
+{
+	return write_conf_value(PROC_IPV6_CONF_PREFIX, ifname, suffix, value);
+}
+
+static bool get_ipv6_state(gchar *ifname)
+{
+	int disabled;
+	bool enabled = false;
+
+	if (read_ipv6_conf_value(ifname, "disable_ipv6", &disabled) > 0)
+		enabled = !disabled;
 
 	return enabled;
 }
 
-static void set_ipv6_state(gchar *ifname, bool enable)
+static int set_ipv6_state(gchar *ifname, bool enable)
 {
-	gchar *path;
-	FILE *f;
+	int disabled = enable ? 0 : 1;
 
-	if (!ifname)
-		path = g_strdup("/proc/sys/net/ipv6/conf/all/disable_ipv6");
-	else
-		path = g_strdup_printf(
-			"/proc/sys/net/ipv6/conf/%s/disable_ipv6", ifname);
+	DBG("%s %d", ifname, disabled);
 
-	if (!path)
-		return;
-
-	f = fopen(path, "r+");
-
-	g_free(path);
-
-	if (!f)
-		return;
-
-	if (!enable)
-		fprintf(f, "1");
-	else
-		fprintf(f, "0");
-
-	fclose(f);
+	return write_ipv6_conf_value(ifname, "disable_ipv6", disabled);
 }
 
 static int get_ipv6_privacy(gchar *ifname)
 {
-	gchar *path;
-	FILE *f;
 	int value;
 
 	if (!ifname)
 		return 0;
 
-	path = g_strdup_printf("/proc/sys/net/ipv6/conf/%s/use_tempaddr",
-								ifname);
-
-	if (!path)
-		return 0;
-
-	f = fopen(path, "r");
-
-	g_free(path);
-
-	if (!f)
-		return 0;
-
-	if (fscanf(f, "%d", &value) <= 0)
+	if (read_ipv6_conf_value(ifname, "use_tempaddr", &value) < 0)
 		value = 0;
-
-	fclose(f);
 
 	return value;
 }
@@ -257,62 +292,93 @@ static int get_ipv6_privacy(gchar *ifname)
 /* Enable the IPv6 privacy extension for stateless address autoconfiguration.
  * The privacy extension is described in RFC 3041 and RFC 4941
  */
-static void set_ipv6_privacy(gchar *ifname, int value)
+static int set_ipv6_privacy(gchar *ifname, int value)
 {
-	gchar *path;
-	FILE *f;
-
 	if (!ifname)
-		return;
-
-	path = g_strdup_printf("/proc/sys/net/ipv6/conf/%s/use_tempaddr",
-								ifname);
-
-	if (!path)
-		return;
+		return -EINVAL;
 
 	if (value < 0)
 		value = 0;
 
-	f = fopen(path, "r+");
-
-	g_free(path);
-
-	if (!f)
-		return;
-
-	fprintf(f, "%d", value);
-	fclose(f);
+	return write_ipv6_conf_value(ifname, "use_tempaddr", value);
 }
 
-static int get_rp_filter(void)
+static bool get_ipv6_autoconf(gchar *ifname)
 {
-	FILE *f;
-	int value = -EINVAL, tmp;
+	int value;
 
-	f = fopen("/proc/sys/net/ipv4/conf/all/rp_filter", "r");
+	if (read_ipv6_conf_value(ifname, "autoconf", &value) < 0)
+		value = 0;
 
-	if (f) {
-		if (fscanf(f, "%d", &tmp) == 1)
-			value = tmp;
-		fclose(f);
-	}
+	return value == 1;
+}
+
+static int set_ipv6_autoconf(gchar *ifname, bool enable)
+{
+	int value = enable ? 1 : 0;
+
+	DBG("%s %d", ifname, enable);
+
+	return write_ipv6_conf_value(ifname, "autoconf", value);
+}
+
+static int get_ipv6_accept_ra(gchar *ifname)
+{
+	int value;
+
+	if (read_ipv6_conf_value(ifname, "accept_ra", &value) < 0)
+		value = 0;
 
 	return value;
 }
 
-static void set_rp_filter(int value)
+static int set_ipv6_accept_ra(gchar *ifname, int value)
 {
-	FILE *f;
+	/*
+	 * 0 = disabled, 1 = accept if forwarding is disabled, 2 = accept and
+	 * overrule forwarding.
+	 */
+	switch (value) {
+	case -1:
+		value = 0;
+		/* fall through */
+	case 0:
+	case 1:
+	case 2:
+		break;
+	default:
+		return -EINVAL;
+	}
 
-	f = fopen("/proc/sys/net/ipv4/conf/all/rp_filter", "r+");
+	return write_ipv6_conf_value(ifname, "accept_ra", value);
+}
 
-	if (!f)
-		return;
+static int get_rp_filter(void)
+{
+	int value;
 
-	fprintf(f, "%d", value);
+	if (read_ipv4_conf_value(NULL, "rp_filter", &value) < 0)
+		value = -EINVAL;
 
-	fclose(f);
+	return value;
+}
+
+static int set_rp_filter(int value)
+{
+	/* 0 = no validation, 1 = strict mode, 2 = loose mode */
+	switch (value) {
+	case -1:
+		value = 0;
+		/* fall through */
+	case 0:
+	case 1:
+	case 2:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return write_ipv4_conf_value(NULL, "rp_filter", value);
 }
 
 int __connman_ipconfig_set_rp_filter()
@@ -354,6 +420,13 @@ bool __connman_ipconfig_ipv6_is_enabled(struct connman_ipconfig *ipconfig)
 	bool ret;
 
 	if (!ipconfig)
+		return false;
+
+	/*
+	 * Return forced value since kernel can enable LL address for IPv6
+	 * for handling ICMPv6.
+	 */
+	if (ipconfig->ipv6_force_disabled)
 		return false;
 
 	ipdevice = g_hash_table_lookup(ipdevice_hash,
@@ -1165,6 +1238,8 @@ static struct connman_ipconfig *create_ipv6config(int index)
 
 	ipv6config->index = index;
 	ipv6config->type = CONNMAN_IPCONFIG_TYPE_IPV6;
+	ipv6config->ipv6_autoconf_config = -1;
+	ipv6config->ipv6_accept_ra_config = -1;
 
 	if (!is_ipv6_supported)
 		ipv6config->method = CONNMAN_IPCONFIG_METHOD_OFF;
@@ -1517,7 +1592,7 @@ char **__connman_ipconfig_get_dhcpv6_prefixes(struct connman_ipconfig *ipconfig)
 	return ipconfig->last_dhcpv6_prefixes;
 }
 
-static void disable_ipv6(struct connman_ipconfig *ipconfig)
+static int disable_ipv6(struct connman_ipconfig *ipconfig, bool forced)
 {
 	struct connman_ipdevice *ipdevice;
 	char *ifname;
@@ -1527,16 +1602,31 @@ static void disable_ipv6(struct connman_ipconfig *ipconfig)
 	ipdevice = g_hash_table_lookup(ipdevice_hash,
 					GINT_TO_POINTER(ipconfig->index));
 	if (!ipdevice)
-		return;
+		return -EINVAL;
+
+	DBG("%p forced %s force_disabled %s", ipconfig, forced ? "yes" : "no",
+				ipconfig->ipv6_force_disabled ? "yes" : "no");
 
 	ifname = connman_inet_ifname(ipconfig->index);
 
 	set_ipv6_state(ifname, false);
 
+	if (forced) {
+		ipconfig->ipv6_autoconf_config = get_ipv6_autoconf(ifname);
+		set_ipv6_autoconf(ifname, false);
+
+		ipconfig->ipv6_accept_ra_config = get_ipv6_accept_ra(ifname);
+		set_ipv6_accept_ra(ifname, 0);
+
+		ipconfig->ipv6_force_disabled = true;
+	}
+
 	g_free(ifname);
+
+	return 0;
 }
 
-static void enable_ipv6(struct connman_ipconfig *ipconfig)
+static int enable_ipv6(struct connman_ipconfig *ipconfig, bool forced)
 {
 	struct connman_ipdevice *ipdevice;
 	char *ifname;
@@ -1546,7 +1636,15 @@ static void enable_ipv6(struct connman_ipconfig *ipconfig)
 	ipdevice = g_hash_table_lookup(ipdevice_hash,
 					GINT_TO_POINTER(ipconfig->index));
 	if (!ipdevice)
-		return;
+		return -EINVAL;
+
+	DBG("%p forced %s force_disabled %s", ipconfig, forced ? "yes" : "no",
+				ipconfig->ipv6_force_disabled ? "yes" : "no");
+
+	if (!is_ipv6_supported || (ipconfig->ipv6_force_disabled && !forced))
+		return -EOPNOTSUPP;
+
+	ipconfig->ipv6_force_disabled = false;
 
 	ifname = connman_inet_ifname(ipconfig->index);
 
@@ -1555,23 +1653,51 @@ static void enable_ipv6(struct connman_ipconfig *ipconfig)
 
 	set_ipv6_state(ifname, true);
 
+	if (forced) {
+		/* Unset (-1) or previously on (1), (re-)enable autoconf. */
+		if (ipconfig->ipv6_autoconf_config)
+			set_ipv6_autoconf(ifname, true);
+
+		/*
+		 * We're enabling IPv6 by force so RAs must be accepted at
+		 * least by following the forwarding.
+		 */
+		set_ipv6_accept_ra(ifname,
+					ipconfig->ipv6_accept_ra_config > 0 ?
+					ipconfig->ipv6_accept_ra_config : 1);
+	}
+
 	g_free(ifname);
+
+	return 0;
 }
 
-void __connman_ipconfig_enable_ipv6(struct connman_ipconfig *ipconfig)
+int __connman_ipconfig_enable_ipv6(struct connman_ipconfig *ipconfig,
+							bool forced)
+{
+	if (!ipconfig || ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
+		return -EINVAL;
+
+	return enable_ipv6(ipconfig, forced);
+}
+
+void __connman_ipconfig_disable_ipv6(struct connman_ipconfig *ipconfig,
+							bool forced)
 {
 	if (!ipconfig || ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
 		return;
 
-	enable_ipv6(ipconfig);
+	disable_ipv6(ipconfig, forced);
 }
 
-void __connman_ipconfig_disable_ipv6(struct connman_ipconfig *ipconfig)
+int __connman_ipconfig_set_ipv6_support(bool enable)
 {
-	if (!ipconfig || ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
-		return;
+	if (set_ipv6_state(NULL, enable) != 1)
+		return -EIO;
 
-	disable_ipv6(ipconfig);
+	is_ipv6_supported = enable ? connman_inet_is_ipv6_supported() : false;
+
+	return 0;
 }
 
 bool __connman_ipconfig_is_usable(struct connman_ipconfig *ipconfig)
@@ -1600,6 +1726,7 @@ int __connman_ipconfig_enable(struct connman_ipconfig *ipconfig)
 	bool lower_up = false, lower_down = false;
 	enum connman_ipconfig_type type;
 	char *ifname;
+	int err;
 
 	DBG("ipconfig %p", ipconfig);
 
@@ -1647,7 +1774,9 @@ int __connman_ipconfig_enable(struct connman_ipconfig *ipconfig)
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
 		ipdevice->config_ipv6 = __connman_ipconfig_ref(ipconfig);
 
-		enable_ipv6(ipdevice->config_ipv6);
+		err = enable_ipv6(ipdevice->config_ipv6, false);
+		if (err)
+			return err;
 	}
 	ipconfig_list = g_list_append(ipconfig_list, ipconfig);
 
@@ -1809,9 +1938,7 @@ int __connman_ipconfig_ipv6_set_privacy(struct connman_ipconfig *ipconfig,
 
 	ipconfig->ipv6_privacy_config = privacy;
 
-	enable_ipv6(ipconfig);
-
-	return 0;
+	return enable_ipv6(ipconfig, false);
 }
 
 void __connman_ipconfig_append_ipv4(struct connman_ipconfig *ipconfig,
