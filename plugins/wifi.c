@@ -167,6 +167,11 @@ struct wifi_data {
 	int assoc_code;
 };
 
+struct disconnect_data {
+	struct wifi_data *wifi;
+	struct connman_network *network;
+};
+
 static GList *iface_list = NULL;
 
 static GList *pending_wifi_device = NULL;
@@ -2243,18 +2248,30 @@ static int network_connect(struct connman_network *network)
 static void disconnect_callback(int result, GSupplicantInterface *interface,
 								void *user_data)
 {
-	struct wifi_data *wifi = user_data;
+	struct disconnect_data *dd = user_data;
+	struct connman_network *network = dd->network;
+	struct wifi_data *wifi = dd->wifi;
 
-	DBG("result %d supplicant interface %p wifi %p",
-			result, interface, wifi);
+	g_free(dd);
+
+	DBG("result %d supplicant interface %p wifi %p networks: current %p "
+		"pending %p disconnected %p", result, interface, wifi,
+		wifi->network, wifi->pending_network, network);
 
 	if (result == -ECONNABORTED) {
 		DBG("wifi interface no longer available");
 		return;
 	}
 
-	if (wifi->network && wifi->network != wifi->pending_network)
-		connman_network_set_connected(wifi->network, false);
+	connman_network_set_connected(network, false);
+
+	if (network != wifi->network) {
+		if (network == wifi->pending_network)
+			wifi->pending_network = NULL;
+		DBG("current wifi network has changed since disconnection");
+		return;
+	}
+
 	wifi->network = NULL;
 
 	wifi->disconnecting = false;
@@ -2271,6 +2288,7 @@ static void disconnect_callback(int result, GSupplicantInterface *interface,
 static int network_disconnect(struct connman_network *network)
 {
 	struct connman_device *device = connman_network_get_device(network);
+	struct disconnect_data *dd;
 	struct wifi_data *wifi;
 	int err;
 
@@ -2287,10 +2305,16 @@ static int network_disconnect(struct connman_network *network)
 
 	wifi->disconnecting = true;
 
+	dd = g_malloc0(sizeof(*dd));
+	dd->wifi = wifi;
+	dd->network = network;
+
 	err = g_supplicant_interface_disconnect(wifi->interface,
-						disconnect_callback, wifi);
-	if (err < 0)
+						disconnect_callback, dd);
+	if (err < 0) {
 		wifi->disconnecting = false;
+		g_free(dd);
+	}
 
 	return err;
 }
@@ -2398,6 +2422,7 @@ static bool handle_wps_completion(GSupplicantInterface *interface,
 	if (wps) {
 		const unsigned char *ssid, *wps_ssid;
 		unsigned int ssid_len, wps_ssid_len;
+		struct disconnect_data *dd;
 		const char *wps_key;
 
 		/* Checking if we got associated with requested
@@ -2410,9 +2435,13 @@ static bool handle_wps_completion(GSupplicantInterface *interface,
 
 		if (!wps_ssid || wps_ssid_len != ssid_len ||
 				memcmp(ssid, wps_ssid, ssid_len) != 0) {
+			dd = g_malloc0(sizeof(*dd));
+			dd->wifi = wifi;
+			dd->network = network;
+
 			connman_network_set_associating(network, false);
 			g_supplicant_interface_disconnect(wifi->interface,
-						disconnect_callback, wifi);
+						disconnect_callback, dd);
 			return false;
 		}
 
