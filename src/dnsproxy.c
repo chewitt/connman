@@ -1767,6 +1767,7 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 			char **uncompressed_ptr)
 {
 	char *uptr = *uncompressed_ptr; /* position in result buffer */
+	char * const uncomp_end = uncompressed + uncomp_len - 1;
 
 	debug("count %d ptr %p end %p uptr %p", field_count, ptr, end, uptr);
 
@@ -1787,11 +1788,14 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 		 * tmp buffer.
 		 */
 
-		ulen = strlen(name);
-		strncpy(uptr, name, uncomp_len - (uptr - uncompressed));
-
 		debug("pos %d ulen %d left %d name %s", pos, ulen,
 			(int)(uncomp_len - (uptr - uncompressed)), uptr);
+
+		ulen = strlen(name);
+		if ((uptr + ulen + 1) > uncomp_end) {
+			goto out;
+		}
+		strncpy(uptr, name, uncomp_len - (uptr - uncompressed));
 
 		uptr += ulen;
 		*uptr++ = '\0';
@@ -1802,6 +1806,10 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 		 * We copy also the fixed portion of the result (type, class,
 		 * ttl, address length and the address)
 		 */
+		if ((uptr + NS_RRFIXEDSZ) > uncomp_end) {
+			debug("uncompressed data too large for buffer");
+			goto out;
+		}
 		memcpy(uptr, ptr, NS_RRFIXEDSZ);
 
 		dns_type = uptr[0] << 8 | uptr[1];
