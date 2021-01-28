@@ -2293,7 +2293,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 {
 	GDHCPClient *dhcp_client = user_data;
 	struct sockaddr_in dst_addr = { 0 };
-	struct dhcp_packet packet;
+	struct dhcp_packet packet = { 0 };
 	struct dhcpv6_packet *packet6 = NULL;
 	uint8_t *message_type = NULL, *client_id = NULL, *option,
 		*server_id = NULL;
