@@ -370,7 +370,7 @@ unit_test_service_SOURCES = $(backtrace_sources) $(gdhcp_sources) \
 				$(gweb_sources) $(shared_sources) \
 				unit/test-service.c \
 				src/connman.h src/log.c src/error.c src/task.c \
-				src/device.c src/network.c src/connection.c \
+				src/device.c src/network.c \
 				src/manager.c src/agent-connman.c src/clock.c \
 				src/timezone.c src/agent.c src/notifier.c \
 				src/resolver.c src/ipconfig.c src/detect.c \
