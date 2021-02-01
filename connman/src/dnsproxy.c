@@ -2569,8 +2569,6 @@ static struct server_data *create_server(int index,
 {
 	struct server_data *data;
 	struct addrinfo hints, *rp;
-	struct connman_service *service;
-	GSList *vpn_index_list;
 	int ret;
 
 	DBG("index %d server %s", index, server);
@@ -2645,9 +2643,6 @@ static struct server_data *create_server(int index,
 		return NULL;
 	}
 
-	service = connman_service_get_default();
-	vpn_index_list = __connman_service_get_depending_vpn_index(service);
-
 	if (protocol == IPPROTO_UDP) {
 		if (__connman_service_index_is_default(data->index) ||
 				__connman_service_index_is_split_routing(
@@ -2656,18 +2651,10 @@ static struct server_data *create_server(int index,
 			DBG("Adding DNS server %s", data->server);
 
 			enable_fallback(false);
-		} else if (vpn_index_list && g_slist_index(vpn_index_list,
-				GINT_TO_POINTER(data->index)) != -1) {
-			data->enabled = true;
-			DBG("Adding DNS server of depending VPN %s",
-				data->server);
 		}
 
 		server_list = g_slist_append(server_list, data);
 	}
-
-	if (vpn_index_list)
-		g_slist_free(vpn_index_list);
 
 	return data;
 }
@@ -2896,7 +2883,6 @@ static void dnsproxy_default_changed(struct connman_service *service)
 	bool server_enabled = false;
 	GSList *list;
 	int index;
-	GSList *vpn_index_list;
 
 	DBG("service %p", service);
 
@@ -2913,8 +2899,6 @@ static void dnsproxy_default_changed(struct connman_service *service)
 	if (index < 0)
 		return;
 
-	vpn_index_list = __connman_service_get_depending_vpn_index(service);
-
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 
@@ -2922,19 +2906,11 @@ static void dnsproxy_default_changed(struct connman_service *service)
 			DBG("Enabling DNS server %s", data->server);
 			data->enabled = true;
 			server_enabled = true;
-		} else if (vpn_index_list && g_slist_index(vpn_index_list,
-			GINT_TO_POINTER(data->index)) != -1) {
-			DBG("Enabling DNS server of depending VPN %s",
-				data->server);
-			data->enabled = true;
 		} else {
 			DBG("Disabling DNS server %s", data->server);
 			data->enabled = false;
 		}
 	}
-
-	if (vpn_index_list)
-		g_slist_free(vpn_index_list);
 
 	if (!server_enabled)
 		enable_fallback(true);
