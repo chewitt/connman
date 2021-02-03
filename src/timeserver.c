@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <gweb/gresolv.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 #include "connman.h"
 
@@ -40,6 +41,7 @@ static GSList *ts_list = NULL;
 static char *ts_current = NULL;
 static int ts_recheck_id = 0;
 static int ts_backoff_id = 0;
+static bool ts_is_synced = false;
 
 static GResolv *resolv = NULL;
 static int resolv_id = 0;
@@ -53,10 +55,26 @@ static void resolv_debug(const char *str, void *data)
 
 static void ntp_callback(bool success, void *user_data)
 {
+	dbus_uint64_t timestamp;
+	struct timeval tv;
+
 	DBG("success %d", success);
 
-	if (!success)
+	__connman_timeserver_set_synced(success);
+	if (!success) {
 		sync_next();
+		return;
+	}
+
+	if (!gettimeofday(&tv, NULL)) {
+		connman_warn("Failed to get current time");
+	}
+
+	timestamp = tv.tv_sec;
+	connman_dbus_property_changed_basic(
+					CONNMAN_MANAGER_PATH,
+					CONNMAN_CLOCK_INTERFACE, "Time",
+					DBUS_TYPE_UINT64, &timestamp);
 }
 
 static void save_timeservers(char **servers)
@@ -337,6 +355,8 @@ static void ts_reset(struct connman_service *service)
 	if (!resolv)
 		return;
 
+	__connman_timeserver_set_synced(false);
+
 	/*
 	 * Before we start creating the new timeserver list we must stop
 	 * any ongoing ntp query and server resolution.
@@ -392,6 +412,25 @@ void __connman_timeserver_conf_update(struct connman_service *service)
 	ts_reset(service);
 }
 
+
+bool __connman_timeserver_is_synced(void)
+{
+	return ts_is_synced;
+}
+
+void __connman_timeserver_set_synced(bool status)
+{
+	dbus_bool_t is_synced;
+
+	if (ts_is_synced == status)
+		return;
+
+	ts_is_synced = status;
+	is_synced = status;
+	connman_dbus_property_changed_basic(CONNMAN_MANAGER_PATH,
+				CONNMAN_CLOCK_INTERFACE, "TimeserverSynced",
+				DBUS_TYPE_BOOLEAN, &is_synced);
+}
 
 static int timeserver_start(struct connman_service *service)
 {

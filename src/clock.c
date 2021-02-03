@@ -173,6 +173,7 @@ static DBusMessage *get_properties(DBusConnection *conn,
 {
 	DBusMessage *reply;
 	DBusMessageIter array, dict;
+	dbus_bool_t is_synced;
 	struct timeval tv;
 	const char *str;
 
@@ -209,6 +210,10 @@ static DBusMessage *get_properties(DBusConnection *conn,
 
 	connman_dbus_dict_append_array(&dict, "Timeservers",
 				DBUS_TYPE_STRING, append_timeservers, NULL);
+
+	is_synced = __connman_timeserver_is_synced();
+	connman_dbus_dict_append_basic(&dict, "TimeserverSynced",
+					DBUS_TYPE_BOOLEAN, &is_synced);
 
 	connman_dbus_dict_close(&array, &dict);
 
@@ -258,6 +263,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		if (settimeofday(&tv, NULL) < 0)
 			return __connman_error_invalid_arguments(msg);
 
+		__connman_timeserver_set_synced(false);
 		connman_dbus_property_changed_basic(CONNMAN_MANAGER_PATH,
 				CONNMAN_CLOCK_INTERFACE, "Time",
 				DBUS_TYPE_UINT64, &newval);
@@ -283,6 +289,13 @@ static DBusMessage *set_property(DBusConnection *conn,
 		connman_dbus_property_changed_basic(CONNMAN_MANAGER_PATH,
 				CONNMAN_CLOCK_INTERFACE, "TimeUpdates",
 				DBUS_TYPE_STRING, &strval);
+
+		if (newval == TIME_UPDATES_AUTO) {
+			struct connman_service *service;
+
+			service = connman_service_get_default();
+			__connman_timeserver_conf_update(service);
+		}
 	} else if (g_str_equal(name, "Timezone")) {
 		const char *strval;
 
@@ -362,6 +375,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 		connman_dbus_property_changed_array(CONNMAN_MANAGER_PATH,
 				CONNMAN_CLOCK_INTERFACE, "Timeservers",
 				DBUS_TYPE_STRING, append_timeservers, NULL);
+	} else if (g_str_equal(name, "TimeserverSynced")) {
+		return __connman_error_permission_denied(msg);
 	} else
 		return __connman_error_invalid_property(msg);
 

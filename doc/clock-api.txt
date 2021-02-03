@@ -85,3 +85,12 @@ Properties	uint64 Time [readonly or readwrite]  [experimental]
 
 			This list of servers is used when TimeUpdates is set
 			to auto.
+
+		boolean TimeserverSynced [readonly]  [experimental]
+
+			This value indicates if the current system time
+			is synced via NTP servers.
+
+			True when TimeUpdates is set to auto and Time value
+			results from the system time synchronization with a NTP
+			server. Otherwise False.
