@@ -505,7 +505,8 @@ int __connman_timeserver_system_set(char **servers)
 	save_timeservers(servers);
 
 	service = connman_service_get_default();
-	__connman_timeserver_conf_update(service);
+	if (service)
+		ts_reset(service);
 
 	return 0;
 }
