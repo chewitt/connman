@@ -2883,6 +2883,7 @@ static void dnsproxy_default_changed(struct connman_service *service)
 	bool server_enabled = false;
 	GSList *list;
 	int index;
+	int vpn_index;
 
 	DBG("service %p", service);
 
@@ -2899,6 +2900,13 @@ static void dnsproxy_default_changed(struct connman_service *service)
 	if (index < 0)
 		return;
 
+	/*
+	 * In case non-split-routed VPN is set as split routed the DNS servers
+	 * the VPN must be enabled as well, when the transport becomes the
+	 * default service.
+	 */
+	vpn_index = __connman_connection_get_vpn_index(index);
+
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 
@@ -2906,6 +2914,9 @@ static void dnsproxy_default_changed(struct connman_service *service)
 			DBG("Enabling DNS server %s", data->server);
 			data->enabled = true;
 			server_enabled = true;
+		} else if (data->index == vpn_index) {
+			DBG("Enabling DNS server of VPN %s", data->server);
+			data->enabled = true;
 		} else {
 			DBG("Disabling DNS server %s", data->server);
 			data->enabled = false;
