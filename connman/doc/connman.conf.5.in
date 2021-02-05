@@ -166,6 +166,14 @@ Path to localtime file. Defaults to /etc/localtime.
 Enable regdomain to be changed along timezone changes. With this option set to
 true each time the timezone changes the first present ISO3166 country code is
 being read from /usr/share/zoneinfo/zone1970.tab and set as regdom value.
+.BI OnlineCheckInitialInterval= secs, OnlineCheckMaxInterval= secs
+Range of intervals between two online check requests.
+When an online check request fails, another one is triggered after a
+longer interval. The intervals follow the power of two series of numbers
+between OnlineCheckInitialInterval and OnlineCheckMaxInterval.
+Default range is [1, 12], corresponding to the following intervals, in
+seconds: 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121 and 144.
+.TP
 Default value is false.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables

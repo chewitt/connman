@@ -54,6 +54,14 @@
 #define DEFAULT_UMASK (0077)
 #define DEFAULT_LOCALTIME "/etc/localtime"
 
+/*
+ * We set the integer to 1 sec so that we have a chance to get
+ * necessary IPv6 router advertisement messages that might have
+ * DNS data etc.
+ */
+#define DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL 1
+#define DEFAULT_ONLINE_CHECK_MAX_INTERVAL 12
+
 #define MAINFILE "main.conf"
 #define CONFIGMAINFILE CONFIGDIR "/" MAINFILE
 
@@ -100,6 +108,8 @@ static struct {
 	bool enable_login_manager;
 	char *localtime;
 	bool regdom_follows_timezone;
+	unsigned int online_check_initial_interval;
+	unsigned int online_check_max_interval;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -123,6 +133,8 @@ static struct {
 	.enable_login_manager = false,
 	.localtime = NULL,
 	.regdom_follows_timezone = false,
+	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
+	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -151,6 +163,9 @@ static struct {
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
 #define CONF_REGDOM_FOLLOWS_TIMEZONE    "RegdomFollowsTimezone"
+
+#define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
+#define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -182,6 +197,8 @@ static const char *supported_options[] = {
 	CONF_ENABLE_LOGIN_MANAGER,
 	CONF_LOCALTIME,
 	CONF_REGDOM_FOLLOWS_TIMEZONE,
+	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
+	CONF_ONLINE_CHECK_MAX_INTERVAL,
 	NULL
 };
 
@@ -367,7 +384,7 @@ static void parse_config(GKeyFile *config)
 	struct in_addr ip;
         char *vendor_class_id;
 	gsize len;
-	int timeout;
+	int integer;
 
 	if (!config) {
 		connman_settings.auto_connect =
@@ -429,17 +446,17 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	timeout = g_key_file_get_integer(config, "General",
+	integer = g_key_file_get_integer(config, "General",
 			CONF_TIMEOUT_INPUTREQ, &error);
-	if (!error && timeout >= 0)
-		connman_settings.timeout_inputreq = timeout * 1000;
+	if (!error && integer >= 0)
+		connman_settings.timeout_inputreq = integer * 1000;
 
 	g_clear_error(&error);
 
-	timeout = g_key_file_get_integer(config, "General",
+	integer = g_key_file_get_integer(config, "General",
 			CONF_TIMEOUT_BROWSERLAUNCH, &error);
-	if (!error && timeout >= 0)
-		connman_settings.timeout_browserlaunch = timeout * 1000;
+	if (!error && integer >= 0)
+		connman_settings.timeout_browserlaunch = integer * 1000;
 
 	g_clear_error(&error);
 
@@ -563,6 +580,32 @@ static void parse_config(GKeyFile *config)
 		connman_settings.enable_login_manager = boolean;
 
 	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "General",
+			CONF_ONLINE_CHECK_INITIAL_INTERVAL, &error);
+	if (!error && integer >= 0)
+		connman_settings.online_check_initial_interval = integer;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "General",
+			CONF_ONLINE_CHECK_MAX_INTERVAL, &error);
+	if (!error && integer >= 0)
+		connman_settings.online_check_max_interval = integer;
+
+	g_clear_error(&error);
+
+	if (connman_settings.online_check_initial_interval < 1 ||
+		connman_settings.online_check_initial_interval >
+		connman_settings.online_check_max_interval) {
+		connman_warn("Incorrect online check intervals [%u, %u]",
+				connman_settings.online_check_initial_interval,
+				connman_settings.online_check_max_interval);
+		connman_settings.online_check_initial_interval =
+			DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL;
+		connman_settings.online_check_max_interval =
+			DEFAULT_ONLINE_CHECK_MAX_INTERVAL;
+	}
 
 	str = __connman_config_get_string(config, group, CONF_LOCALTIME,
 				&error);
@@ -813,6 +856,17 @@ bool connman_setting_get_bool(const char *key)
 		return connman_settings.regdom_follows_timezone;
 
 	return false;
+}
+
+unsigned int connman_setting_get_uint(const char *key)
+{
+	if (g_str_equal(key, CONF_ONLINE_CHECK_INITIAL_INTERVAL))
+		return connman_settings.online_check_initial_interval;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_MAX_INTERVAL))
+		return connman_settings.online_check_max_interval;
+
+	return 0;
 }
 
 char **connman_setting_get_string_list(const char *key)

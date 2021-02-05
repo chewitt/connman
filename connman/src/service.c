@@ -270,6 +270,8 @@ static bool services_dirty = false;
 static bool autoconnect_paused = false;
 static guint load_wifi_services_id = 0;
 static GHashTable **service_type_hash;
+static unsigned int online_check_initial_interval = 0;
+static unsigned int online_check_max_interval = 0;
 
 struct connman_service_boolean_property {
 	const char *name;
@@ -1917,6 +1919,60 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 					type);
 	else if (service->nameservers)
 		nameserver_del_routes(index, service->nameservers, type);
+}
+
+static bool check_proxy_setup(struct connman_service *service)
+{
+	/*
+	 * We start WPAD if we haven't got a PAC URL from DHCP and
+	 * if our proxy manual configuration is either empty or set
+	 * to AUTO with an empty URL.
+	 */
+
+	if (service->proxy != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN)
+		return true;
+
+	if (service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN &&
+		(service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_AUTO ||
+			service->pac))
+		return true;
+
+	if (__connman_wpad_start(service) < 0) {
+		service->proxy = CONNMAN_SERVICE_PROXY_METHOD_DIRECT;
+		__connman_notifier_proxy_changed(service);
+		return true;
+	}
+
+	return false;
+}
+
+static void cancel_online_check(struct connman_service *service)
+{
+	if (service->online_check_timer_ipv4) {
+		g_source_remove(service->online_check_timer_ipv4);
+		service->online_check_timer_ipv4 = 0;
+	}
+	
+	if (service->online_check_timer_ipv6) {
+		g_source_remove(service->online_check_timer_ipv6);
+		service->online_check_timer_ipv6 = 0;
+	}
+
+	connman_service_unref(service);
+}
+
+static void start_online_check(struct connman_service *service,
+				enum connman_ipconfig_type type)
+{
+	online_check_initial_interval =
+		connman_setting_get_uint("OnlineCheckInitialInterval");
+	online_check_max_interval =
+		connman_setting_get_uint("OnlineCheckMaxInterval");
+
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV4 || check_proxy_setup(service)) {
+		cancel_online_check(service);
+		__connman_service_wispr_start(service, type);
+	}
 }
 
 static void address_updated(struct connman_service *service,
@@ -4778,14 +4834,6 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 static void set_error(struct connman_service *service,
 					enum connman_service_error error);
 
-/*
- * We set the timeout to 1 sec so that we have a chance to get
- * necessary IPv6 router advertisement messages that might have
- * DNS data etc.
- */
-#define ONLINE_CHECK_INITIAL_INTERVAL 1
-#define ONLINE_CHECK_MAX_INTERVAL 12
-
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -4793,10 +4841,10 @@ void __connman_service_wispr_start(struct connman_service *service,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_interval_ipv4 =
-					ONLINE_CHECK_INITIAL_INTERVAL;
+					online_check_initial_interval;
 	else
 		service->online_check_interval_ipv6 =
-					ONLINE_CHECK_INITIAL_INTERVAL;
+					online_check_initial_interval;
 
 	__connman_wispr_start(service, type);
 }
@@ -8024,31 +8072,6 @@ enum connman_service_state __connman_service_ipconfig_get_state(
 	return CONNMAN_SERVICE_STATE_UNKNOWN;
 }
 
-static bool check_proxy_setup(struct connman_service *service)
-{
-	/*
-	 * We start WPAD if we haven't got a PAC URL from DHCP and
-	 * if our proxy manual configuration is either empty or set
-	 * to AUTO with an empty URL.
-	 */
-
-	if (service->proxy != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN)
-		return true;
-
-	if (service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN &&
-		(service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_AUTO ||
-			service->pac))
-		return true;
-
-	if (__connman_wpad_start(service) < 0) {
-		service->proxy = CONNMAN_SERVICE_PROXY_METHOD_DIRECT;
-		__connman_notifier_proxy_changed(service);
-		return true;
-	}
-
-	return false;
-}
-
 /*
  * How many networks are connected at the same time. If more than 1,
  * then set the rp_filter setting properly (loose mode routing) so that network
@@ -8193,37 +8216,16 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	}
 
 	/* Increment the interval for the next time, set a maximum timeout of
-	 * ONLINE_CHECK_MAX_INTERVAL * ONLINE_CHECK_MAX_INTERVAL seconds.
+	 * online_check_max_interval seconds * online_check_max_interval seconds.
 	 */
 	*online_check_timer = connman_wakeup_timer_add_seconds(
 				*interval * *interval, redo_func,
 				connman_service_ref(service));
-	if (*interval < ONLINE_CHECK_MAX_INTERVAL)
+
+	if (*interval < online_check_max_interval)
 		(*interval)++;
 
 	return -EAGAIN;
-}
-
-static void cancel_online_check(struct connman_service *service)
-{
-	if (service->online_check_timer_ipv4 == 0 ||
-				service->online_check_timer_ipv6 == 0)
-		return;
-}
-
-static void start_online_check(struct connman_service *service,
-				enum connman_ipconfig_type type)
-{
-	if (!connman_setting_get_bool("EnableOnlineCheck")) {
-		connman_info("Online check disabled. "
-			"Default service remains in READY state.");
-		return;
-	}
-
-	if (type != CONNMAN_IPCONFIG_TYPE_IPV4 || check_proxy_setup(service)) {
-		cancel_online_check(service);
-		__connman_service_wispr_start(service, type);
-	}
 }
 
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
