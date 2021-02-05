@@ -54,6 +54,8 @@ static unsigned int autoconnect_id = 0;
 static unsigned int vpn_autoconnect_id = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
+static unsigned int online_check_initial_interval = 0;
+static unsigned int online_check_max_interval = 0;
 
 struct connman_stats {
 	bool valid;
@@ -1448,6 +1450,10 @@ static void start_online_check(struct connman_service *service,
 			"Default service remains in READY state.");
 		return;
 	}
+	online_check_initial_interval =
+		connman_setting_get_uint("OnlineCheckInitialInterval");
+	online_check_max_interval =
+		connman_setting_get_uint("OnlineCheckMaxInterval");
 
 	if (type != CONNMAN_IPCONFIG_TYPE_IPV4 || check_proxy_setup(service)) {
 		cancel_online_check(service);
@@ -3559,14 +3565,6 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 	return err;
 }
 
-/*
- * We set the timeout to 1 sec so that we have a chance to get
- * necessary IPv6 router advertisement messages that might have
- * DNS data etc.
- */
-#define ONLINE_CHECK_INITIAL_INTERVAL 1
-#define ONLINE_CHECK_MAX_INTERVAL 12
-
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -3574,10 +3572,10 @@ void __connman_service_wispr_start(struct connman_service *service,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_interval_ipv4 =
-					ONLINE_CHECK_INITIAL_INTERVAL;
+					online_check_initial_interval;
 	else
 		service->online_check_interval_ipv6 =
-					ONLINE_CHECK_INITIAL_INTERVAL;
+					online_check_initial_interval;
 
 	__connman_wispr_start(service, type);
 }
@@ -6279,9 +6277,9 @@ int __connman_service_online_check_failed(struct connman_service *service,
 				redo_func, connman_service_ref(service));
 
 	/* Increment the interval for the next time, set a maximum timeout of
-	 * ONLINE_CHECK_MAX_INTERVAL * ONLINE_CHECK_MAX_INTERVAL seconds.
+	 * online_check_max_interval seconds * online_check_max_interval seconds.
 	 */
-	if (*interval < ONLINE_CHECK_MAX_INTERVAL)
+	if (*interval < online_check_max_interval)
 		(*interval)++;
 
 	return EAGAIN;

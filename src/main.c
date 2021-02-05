@@ -44,6 +44,14 @@
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
 
+/*
+ * We set the integer to 1 sec so that we have a chance to get
+ * necessary IPv6 router advertisement messages that might have
+ * DNS data etc.
+ */
+#define DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL 1
+#define DEFAULT_ONLINE_CHECK_MAX_INTERVAL 12
+
 #define MAINFILE "main.conf"
 #define CONFIGMAINFILE CONFIGDIR "/" MAINFILE
 
@@ -88,6 +96,8 @@ static struct {
 	bool enable_6to4;
 	char *vendor_class_id;
 	bool enable_online_check;
+	unsigned int online_check_initial_interval;
+	unsigned int online_check_max_interval;
 	bool auto_connect_roaming_services;
 	bool acd;
 	bool use_gateways_as_timeservers;
@@ -110,6 +120,8 @@ static struct {
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
+	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
+	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
 	.auto_connect_roaming_services = false,
 	.acd = false,
 	.use_gateways_as_timeservers = false,
@@ -133,6 +145,8 @@ static struct {
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
+#define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
+#define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
 #define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
@@ -156,6 +170,8 @@ static const char *supported_options[] = {
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
 	CONF_ENABLE_ONLINE_CHECK,
+	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
+	CONF_ONLINE_CHECK_MAX_INTERVAL,
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
 	CONF_ACD,
 	CONF_USE_GATEWAYS_AS_TIMESERVERS,
@@ -283,7 +299,7 @@ static void parse_config(GKeyFile *config)
 	char **tethering;
         char *vendor_class_id;
 	gsize len;
-	int timeout;
+	int integer;
 
 	if (!config) {
 		connman_settings.auto_connect =
@@ -370,17 +386,17 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	timeout = g_key_file_get_integer(config, "General",
+	integer = g_key_file_get_integer(config, "General",
 			CONF_TIMEOUT_INPUTREQ, &error);
-	if (!error && timeout >= 0)
-		connman_settings.timeout_inputreq = timeout * 1000;
+	if (!error && integer >= 0)
+		connman_settings.timeout_inputreq = integer * 1000;
 
 	g_clear_error(&error);
 
-	timeout = g_key_file_get_integer(config, "General",
+	integer = g_key_file_get_integer(config, "General",
 			CONF_TIMEOUT_BROWSERLAUNCH, &error);
-	if (!error && timeout >= 0)
-		connman_settings.timeout_browserlaunch = timeout * 1000;
+	if (!error && integer >= 0)
+		connman_settings.timeout_browserlaunch = integer * 1000;
 
 	g_clear_error(&error);
 
@@ -457,6 +473,32 @@ static void parse_config(GKeyFile *config)
 	}
 
 	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "General",
+			CONF_ONLINE_CHECK_INITIAL_INTERVAL, &error);
+	if (!error && integer >= 0)
+		connman_settings.online_check_initial_interval = integer;
+
+	g_clear_error(&error);
+
+	integer = g_key_file_get_integer(config, "General",
+			CONF_ONLINE_CHECK_MAX_INTERVAL, &error);
+	if (!error && integer >= 0)
+		connman_settings.online_check_max_interval = integer;
+
+	g_clear_error(&error);
+
+	if (connman_settings.online_check_initial_interval < 1 ||
+		connman_settings.online_check_initial_interval >
+		connman_settings.online_check_max_interval) {
+		connman_warn("Incorrect online check intervals [%u, %u]",
+				connman_settings.online_check_initial_interval,
+				connman_settings.online_check_max_interval);
+		connman_settings.online_check_initial_interval =
+			DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL;
+		connman_settings.online_check_max_interval =
+			DEFAULT_ONLINE_CHECK_MAX_INTERVAL;
+	}
 
 	boolean = __connman_config_get_bool(config, "General",
 				CONF_AUTO_CONNECT_ROAMING_SERVICES, &error);
@@ -697,6 +739,17 @@ bool connman_setting_get_bool(const char *key)
 		return connman_settings.use_gateways_as_timeservers;
 
 	return false;
+}
+
+unsigned int connman_setting_get_uint(const char *key)
+{
+	if (g_str_equal(key, CONF_ONLINE_CHECK_INITIAL_INTERVAL))
+		return connman_settings.online_check_initial_interval;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_MAX_INTERVAL))
+		return connman_settings.online_check_max_interval;
+
+	return 0;
 }
 
 char **connman_setting_get_string_list(const char *key)

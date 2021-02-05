@@ -167,6 +167,14 @@ transitioned to ONLINE state.
 If this setting is false, the default service will remain in READY state.
 Default value is true.
 .TP
+.BI OnlineCheckInitialInterval= secs, OnlineCheckMaxInterval= secs
+Range of intervals between two online check requests.
+When an online check request fails, another one is triggered after a
+longer interval. The intervals follow the power of two series of numbers
+between OnlineCheckInitialInterval and OnlineCheckMaxInterval.
+Default range is [1, 12], corresponding to the following intervals, in
+seconds: 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121 and 144.
+.TP
 .BI AutoConnectRoamingServices=true\ \fR|\fB\ false
 Automatically connect roaming services. This is not recommended unless you know
 you won't have any billing problem.
