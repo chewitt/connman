@@ -2095,6 +2095,15 @@ static void default_changed(void)
 			__connman_utsname_set_domainname(service->domainname);
 
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
+		if (__connman_service_is_connected_state(service,
+						CONNMAN_IPCONFIG_TYPE_IPV4))
+			__connman_service_wispr_start(service,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+
+		if (__connman_service_is_connected_state(service,
+						CONNMAN_IPCONFIG_TYPE_IPV6))
+			__connman_service_wispr_start(service,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
 
 		/*
 		 * Connect VPN automatically when new default service
