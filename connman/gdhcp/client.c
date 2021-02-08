@@ -1648,12 +1648,12 @@ static void start_request(GDHCPClient *dhcp_client)
 							NULL);
 }
 
-static uint32_t get_lease(struct dhcp_packet *packet)
+static uint32_t get_lease(struct dhcp_packet *packet, uint16_t packet_len)
 {
 	uint8_t *option;
 	uint32_t lease_seconds;
 
-	option = dhcp_get_option(packet, DHCP_LEASE_TIME);
+	option = dhcp_get_option(packet, packet_len, DHCP_LEASE_TIME);
 	if (!option)
 		return 3600;
 
@@ -2249,7 +2249,8 @@ static void get_dhcpv6_request(GDHCPClient *dhcp_client,
 	}
 }
 
-static void get_request(GDHCPClient *dhcp_client, struct dhcp_packet *packet)
+static void get_request(GDHCPClient *dhcp_client, struct dhcp_packet *packet,
+		uint16_t packet_len)
 {
 	GDHCPOptionType type;
 	GList *list, *value_list;
@@ -2260,7 +2261,7 @@ static void get_request(GDHCPClient *dhcp_client, struct dhcp_packet *packet)
 	for (list = dhcp_client->request_list; list; list = list->next) {
 		code = (uint8_t) GPOINTER_TO_INT(list->data);
 
-		option = dhcp_get_option(packet, code);
+		option = dhcp_get_option(packet, packet_len, code);
 		if (!option) {
 			g_hash_table_remove(dhcp_client->code_value_hash,
 						GINT_TO_POINTER((int) code));
@@ -2292,7 +2293,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 {
 	GDHCPClient *dhcp_client = user_data;
 	struct sockaddr_in dst_addr = { 0 };
-	struct dhcp_packet packet;
+	struct dhcp_packet packet = { 0 };
 	struct dhcpv6_packet *packet6 = NULL;
 	uint8_t *message_type = NULL, *client_id = NULL, *option,
 		*server_id = NULL;
@@ -2320,6 +2321,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		re = dhcp_recv_l2_packet(&packet,
 					dhcp_client->listener_sockfd,
 					&dst_addr);
+		pkt_len = (uint16_t)(unsigned int)re;
 		xid = packet.xid;
 	} else if (dhcp_client->listen_mode == L3) {
 		if (dhcp_client->type == G_DHCP_IPV6) {
@@ -2384,7 +2386,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 			dhcp_client->status_code = status;
 		}
 	} else {
-		message_type = dhcp_get_option(&packet, DHCP_MESSAGE_TYPE);
+		message_type = dhcp_get_option(&packet, pkt_len, DHCP_MESSAGE_TYPE);
 		if (!message_type)
 			return TRUE;
 	}
@@ -2401,7 +2403,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		dhcp_client->timeout = 0;
 		dhcp_client->retry_times = 0;
 
-		option = dhcp_get_option(&packet, DHCP_SERVER_ID);
+		option = dhcp_get_option(&packet, pkt_len, DHCP_SERVER_ID);
 		dhcp_client->server_ip = get_be32(option);
 		dhcp_client->requested_ip = ntohl(packet.yiaddr);
 
@@ -2451,9 +2453,9 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 
 			remove_timeouts(dhcp_client);
 
-			dhcp_client->lease_seconds = get_lease(&packet);
+			dhcp_client->lease_seconds = get_lease(&packet, pkt_len);
 
-			get_request(dhcp_client, &packet);
+			get_request(dhcp_client, &packet, pkt_len);
 
 			switch_listening_mode(dhcp_client, L_NONE);
 
@@ -2461,7 +2463,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 			dhcp_client->assigned_ip = get_ip(packet.yiaddr);
 
 			if (dhcp_client->state == REBOOTING) {
-				option = dhcp_get_option(&packet,
+				option = dhcp_get_option(&packet, pkt_len,
 							DHCP_SERVER_ID);
 				dhcp_client->server_ip = get_be32(option);
 			}
