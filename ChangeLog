@@ -1,3 +1,9 @@
+ver 1.39:
+	Fix issue with scanning state synchronization and iwd.
+	Fix issue with invalid key with 4-way handshake offloading.
+	Fix issue with DNS proxy length checks to prevent buffer overflow.
+	Fix issue with DHCP leaking stack data via uninitialized variable.
+
 ver 1.38:
 	Fix issue with online check on IP address update.
 	Fix issue with OpenVPN and encrypted private keys.
