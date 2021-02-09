@@ -2263,7 +2263,8 @@ static void disconnect_callback(int result, GSupplicantInterface *interface,
 		return;
 	}
 
-	connman_network_set_connected(network, false);
+	if (g_slist_find(wifi->networks, network))
+		connman_network_set_connected(network, false);
 
 	if (network != wifi->network) {
 		if (network == wifi->pending_network)
