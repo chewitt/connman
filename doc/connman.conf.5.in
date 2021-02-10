@@ -175,6 +175,19 @@ between OnlineCheckInitialInterval and OnlineCheckMaxInterval.
 Default range is [1, 12], corresponding to the following intervals, in
 seconds: 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121 and 144.
 .TP
+.BI EnableOnlineToReadyTransition=true\ \fR|\fB\ false
+WARNING: Experimental feature!!!
+In addition to EnableOnlineCheck setting, enable or disable use of HTTP GET
+to detect the loss of end-to-end connectivity.
+If this setting is false, when the default service transitions to ONLINE
+state, the HTTP GET request is no more called until next cycle, initiated
+by a transition of the default service to DISCONNECT state.
+If this setting is true, the HTTP GET request keeps beeing called to guarantee
+that end-to-end connectivity is still successful. If not, the default service
+will transition to READY state, enabling another service to become the
+default one, in replacement.
+Default value is false.
+.TP
 .BI AutoConnectRoamingServices=true\ \fR|\fB\ false
 Automatically connect roaming services. This is not recommended unless you know
 you won't have any billing problem.

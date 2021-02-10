@@ -729,8 +729,9 @@ int __connman_service_set_mdns(struct connman_service *service,
 
 void __connman_service_set_string(struct connman_service *service,
 					const char *key, const char *value);
-int __connman_service_online_check_failed(struct connman_service *service,
-					enum connman_ipconfig_type type);
+void __connman_service_online_check(struct connman_service *service,
+					enum connman_ipconfig_type type,
+					bool success);
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 					enum connman_service_state new_state,
 					enum connman_ipconfig_type type);

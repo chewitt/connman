@@ -96,6 +96,7 @@ static struct {
 	bool enable_6to4;
 	char *vendor_class_id;
 	bool enable_online_check;
+	bool enable_online_to_ready_transition;
 	unsigned int online_check_initial_interval;
 	unsigned int online_check_max_interval;
 	bool auto_connect_roaming_services;
@@ -120,6 +121,7 @@ static struct {
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
+	.enable_online_to_ready_transition = false,
 	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
 	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
 	.auto_connect_roaming_services = false,
@@ -145,6 +147,7 @@ static struct {
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
+#define CONF_ENABLE_ONLINE_TO_READY_TRANSITION "EnableOnlineToReadyTransition"
 #define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
 #define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
@@ -170,6 +173,7 @@ static const char *supported_options[] = {
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
 	CONF_ENABLE_ONLINE_CHECK,
+	CONF_ENABLE_ONLINE_TO_READY_TRANSITION,
 	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
 	CONF_ONLINE_CHECK_MAX_INTERVAL,
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
@@ -474,6 +478,14 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	boolean = __connman_config_get_bool(config, "General",
+			CONF_ENABLE_ONLINE_TO_READY_TRANSITION, &error);
+	if (!error) {
+		connman_settings.enable_online_to_ready_transition = boolean;
+	}
+
+	g_clear_error(&error);
+
 	integer = g_key_file_get_integer(config, "General",
 			CONF_ONLINE_CHECK_INITIAL_INTERVAL, &error);
 	if (!error && integer >= 0)
@@ -728,6 +740,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
 		return connman_settings.enable_online_check;
+
+	if (g_str_equal(key, CONF_ENABLE_ONLINE_TO_READY_TRANSITION))
+		return connman_settings.enable_online_to_ready_transition;
 
 	if (g_str_equal(key, CONF_AUTO_CONNECT_ROAMING_SERVICES))
 		return connman_settings.auto_connect_roaming_services;

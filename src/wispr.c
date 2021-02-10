@@ -96,6 +96,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data);
 
 static GHashTable *wispr_portal_list = NULL;
 
+static bool enable_online_to_ready_transition = false;
+
 static void connman_wispr_message_init(struct connman_wispr_message *msg)
 {
 	DBG("");
@@ -450,10 +452,14 @@ static void portal_manage_status(GWebResult *result,
 				&str))
 		connman_info("Client-Timezone: %s", str);
 
-	free_connman_wispr_portal_context(wp_context);
+	if (!enable_online_to_ready_transition)
+		free_connman_wispr_portal_context(wp_context);
 
 	__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_ONLINE, type);
+
+	if (enable_online_to_ready_transition)
+		__connman_service_online_check(service, type, true);
 }
 
 static bool wispr_route_request(const char *address, int ai_family,
@@ -773,12 +779,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		goto done;
 	case 400:
 	case 404:
-		if (__connman_service_online_check_failed(wp_context->service,
-						wp_context->type) == 0) {
-			wispr_portal_error(wp_context);
-			free_connman_wispr_portal_context(wp_context);
-			return false;
-		}
+		__connman_service_online_check(wp_context->service,
+						wp_context->type, false);
 
 		break;
 	case 505:
@@ -1028,6 +1030,9 @@ int __connman_wispr_init(void)
 	wispr_portal_list = g_hash_table_new_full(g_direct_hash,
 						g_direct_equal, NULL,
 						free_connman_wispr_portal);
+
+	enable_online_to_ready_transition =
+		connman_setting_get_bool("EnableOnlineToReadyTransition");
 
 	return 0;
 }
