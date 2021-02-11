@@ -6698,6 +6698,40 @@ out:
 	return 0;
 }
 
+static gint service_compare(gconstpointer a, gconstpointer b);
+
+static gint service_compare_vpn(struct connman_service *a,
+						struct connman_service *b)
+{
+	struct connman_provider *provider;
+	struct connman_service *service;
+	struct connman_service *transport;
+	const char *ident;
+	bool reverse;
+
+	if (a->provider) {
+		provider = a->provider;
+		service = b;
+		reverse = false;
+	} else if (b->provider) {
+		provider = b->provider;
+		service = a;
+		reverse = true;
+	} else {
+		return 0;
+	}
+
+	ident = __connman_provider_get_transport_ident(provider);
+	transport = connman_service_lookup_from_identifier(ident);
+	if (!transport)
+		return 0;
+
+	if (reverse)
+		return service_compare(service, transport);
+
+	return service_compare(transport, service);
+}
+
 static gint service_compare(gconstpointer a, gconstpointer b)
 {
 	struct connman_service *service_a = (void *) a;
@@ -6721,6 +6755,17 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	b_connected = is_connected(service_b);
 
 	if (a_connected && b_connected) {
+		int rval;
+
+		/* Compare the VPN transport and the service */
+		if ((service_a->type == CONNMAN_SERVICE_TYPE_VPN ||
+				service_b->type == CONNMAN_SERVICE_TYPE_VPN) &&
+				service_b->type != service_a->type) {
+			rval = service_compare_vpn(service_a, service_b);
+			if (rval)
+				return rval;
+		}
+
 		if (state_a == state_b) {
 			int preference;
 
