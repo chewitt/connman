@@ -362,8 +362,8 @@ struct connman_service {
 	char **excludes;
 	char *pac;
 	bool wps;
-	int online_check_interval_ipv4;
-	int online_check_interval_ipv6;
+	unsigned int online_check_interval_ipv4;
+	unsigned int online_check_interval_ipv6;
 	guint online_check_timer_ipv4;
 	guint online_check_timer_ipv6;
 	guint connect_retry_timer;
@@ -8181,7 +8181,7 @@ int __connman_service_online_check_failed(struct connman_service *service,
 	guint *online_check_timer;
 	GSourceFunc downgrade_func;
 	GSourceFunc redo_func;
-	int *interval;
+	unsigned int *interval;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		online_check_timer = &service->online_check_timer_ipv4;
