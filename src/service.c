@@ -136,8 +136,8 @@ struct connman_service {
 	bool wps;
 	bool wps_advertizing;
 	guint online_timeout;
-	int online_check_interval_ipv4;
-	int online_check_interval_ipv6;
+	unsigned int online_check_interval_ipv4;
+	unsigned int online_check_interval_ipv6;
 	bool do_split_routing;
 	bool new_service;
 	bool hidden_service;
@@ -6260,7 +6260,7 @@ int __connman_service_online_check_failed(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	GSourceFunc redo_func;
-	int *interval;
+	unsigned int *interval;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;
