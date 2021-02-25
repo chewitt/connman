@@ -2601,6 +2601,15 @@ static void ipv6_configuration_changed(struct connman_service *service)
 							service);
 }
 
+void __connman_service_notify_ipv6_configuration(
+					struct connman_service *service)
+{
+	if (!service)
+		return;
+
+	ipv6_configuration_changed(service);
+}
+
 static void dns_changed(struct connman_service *service)
 {
 	if (!allow_property_changed(service))
