@@ -1244,6 +1244,9 @@ out:
 
 bool __connman_storage_remove_service(const char *service_id)
 {
+	struct storage_subdir key = { .name = (gchar*) service_id };
+	GList *subdirs;
+	GList *pos;
 	bool removed = false;
 	gchar *pathname;
 	const char *storagedir;
@@ -1253,26 +1256,23 @@ bool __connman_storage_remove_service(const char *service_id)
 	if (!service_id || !service_id_is_valid(service_id))
 		return false;
 
+	if (is_user_dir(service_id))
+		subdirs = storage.user_subdirs;
+	else
+		subdirs = storage.subdirs;
+
+	pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
+	if (pos)
+		storage_subdir_unregister(pos->data);
+
 	if (storage.only_unload) {
-		struct storage_subdir key = { .name = (gchar*) service_id };
-		GList *subdirs;
-		GList *pos;
-
-		DBG("Unload service %s", service_id);
-
-		if (is_user_dir(service_id))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
-
-		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
-		if (!pos) {
+		if (pos) {
+			DBG("Unregister service %s", service_id);
+			return true;
+		} else {
 			DBG("cannot unregister %s", service_id);
 			return false;
 		}
-
-		storage_subdir_unregister(pos->data);
-		return true;
 	}
 
 	storagedir = storagedir_for(service_id);
