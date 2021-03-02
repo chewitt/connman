@@ -502,6 +502,15 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 
 		DBG("delete/move-from %s", event->name);
 
+		if (is_user_dir(event->name))
+			subdirs = storage.user_subdirs;
+		else
+			subdirs = storage.subdirs;
+
+		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
+		if (!pos)
+			return;
+
 		/*
 		 * To support manual removal of services as well call the
 		 * unload callback to propagate the notify about the removal
@@ -529,11 +538,6 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 			storage.only_unload = unload_state;
 		}
 
-		if (is_user_dir(event->name))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
-
 		/*
 		 * If the service was manually removed it is removed also from
 		 * subdirs when the unload callback reaches back to service/
@@ -541,11 +545,8 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 		 * removed using internal functionality it must be removed from
 		 * the subdirs here.
 		 */
-		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
-		if (pos) {
-			storage_subdir_unregister(pos->data);
-			debug_subdirs();
-		}
+		storage_subdir_unregister(pos->data);
+		debug_subdirs();
 
 		return;
 	}
