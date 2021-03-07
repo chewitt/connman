@@ -57,6 +57,7 @@ struct connman_ipconfig {
 	int ipv6_autoconf_config;
 	char *last_dhcp_address;
 	char **last_dhcpv6_prefixes;
+	char *dhcpv6_duid;
 
 	bool ipv6_force_disabled;
 };
@@ -1446,6 +1447,7 @@ void __connman_ipconfig_unref_debug(struct connman_ipconfig *ipconfig,
 	connman_ipaddress_free(ipconfig->address);
 	g_free(ipconfig->last_dhcp_address);
 	g_strfreev(ipconfig->last_dhcpv6_prefixes);
+	g_free(ipconfig->dhcpv6_duid);
 	g_free(ipconfig);
 }
 
@@ -1683,6 +1685,24 @@ char **__connman_ipconfig_get_dhcpv6_prefixes(struct connman_ipconfig *ipconfig)
 		return NULL;
 
 	return ipconfig->last_dhcpv6_prefixes;
+}
+
+void __connman_ipconfig_set_dhcpv6_duid(struct connman_ipconfig *ipconfig,
+						const char *dhcpv6_duid)
+{
+	if (!ipconfig)
+		return;
+
+	g_free(ipconfig->dhcpv6_duid);
+	ipconfig->dhcpv6_duid = g_strdup(dhcpv6_duid);
+}
+
+char *__connman_ipconfig_get_dhcpv6_duid(struct connman_ipconfig *ipconfig)
+{
+	if (!ipconfig)
+		return NULL;
+
+	return ipconfig->dhcpv6_duid;
 }
 
 static int disable_ipv6(struct connman_ipconfig *ipconfig, bool forced)
@@ -2472,6 +2492,8 @@ void __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 		g_strfreev(ipconfig->last_dhcpv6_prefixes);
 		ipconfig->last_dhcpv6_prefixes =
 			store_get_strs(&is, "DHCP.LastPrefixes");
+
+		ipconfig->dhcpv6_duid = store_get_str(&is, "DHCP.DUID");
 	}
 
 
@@ -2548,6 +2570,8 @@ void __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
 
 		store_set_strs(&is, "DHCP.LastPrefixes",
 				ipconfig->last_dhcpv6_prefixes);
+
+		store_set_str(&is, "DHCP.DUID", ipconfig->dhcpv6_duid);
 	}
 
 	switch (ipconfig->method) {

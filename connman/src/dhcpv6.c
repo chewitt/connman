@@ -191,30 +191,23 @@ static int set_duid(struct connman_service *service,
 			struct connman_network *network,
 			GDHCPClient *dhcp_client, int index)
 {
-	GKeyFile *keyfile;
-	const char *ident;
 	char *hex_duid;
 	unsigned char *duid;
 	int duid_len;
+	struct connman_ipconfig *ip6config;
 
-	ident = connman_service_get_identifier(service);
-
-	keyfile = connman_storage_load_service(ident);
-	if (!keyfile)
+	ip6config = __connman_service_get_ip6config(service);
+	if (!ip6config)
 		return -EINVAL;
 
-	hex_duid = g_key_file_get_string(keyfile, ident, "IPv6.DHCP.DUID",
-					NULL);
+	hex_duid = __connman_ipconfig_get_dhcpv6_duid(ip6config);
 	if (hex_duid) {
 		unsigned int i, j = 0, hex;
 		size_t hex_duid_len = strlen(hex_duid);
 
 		duid = g_try_malloc0(hex_duid_len / 2);
-		if (!duid) {
-			g_key_file_unref(keyfile);
-			g_free(hex_duid);
+		if (!duid)
 			return -ENOMEM;
-		}
 
 		for (i = 0; i < hex_duid_len; i += 2) {
 			sscanf(hex_duid + i, "%02x", &hex);
@@ -228,26 +221,18 @@ static int set_duid(struct connman_service *service,
 
 		ret = g_dhcpv6_create_duid(G_DHCPV6_DUID_LLT, index, type,
 					&duid, &duid_len);
-		if (ret < 0) {
-			g_key_file_unref(keyfile);
+		if (ret < 0)
 			return ret;
-		}
 
 		hex_duid = convert_to_hex(duid, duid_len);
 		if (!hex_duid) {
 			g_free(duid);
-			g_key_file_unref(keyfile);
 			return -ENOMEM;
 		}
 
-		g_key_file_set_string(keyfile, ident, "IPv6.DHCP.DUID",
-				hex_duid);
-
-		__connman_storage_save_service(keyfile, ident);
+		__connman_ipconfig_set_dhcpv6_duid(ip6config, hex_duid);
+		g_free(hex_duid);
 	}
-	g_free(hex_duid);
-
-	g_key_file_unref(keyfile);
 
 	g_dhcpv6_client_set_duid(dhcp_client, duid, duid_len);
 
@@ -405,6 +390,8 @@ static int dhcpv6_info_request(struct connman_dhcpv6 *dhcp)
 
 	ret = set_duid(service, dhcp->network, dhcp_client, index);
 	if (ret < 0) {
+		DBG("dhcp %p failed to set dhcpv6 duid for service %p",
+								dhcp, service);
 		clear_timer(dhcp);
 		g_dhcp_client_unref(dhcp_client);
 		return ret;
@@ -1759,6 +1746,8 @@ static int dhcpv6_solicitation(struct connman_dhcpv6 *dhcp)
 
 	ret = set_duid(service, dhcp->network, dhcp_client, index);
 	if (ret < 0) {
+		DBG("dhcp %p failed to set dhcpv6 duid for service %p",
+								dhcp, service);
 		clear_timer(dhcp);
 		g_dhcp_client_unref(dhcp_client);
 		return ret;
@@ -2077,6 +2066,8 @@ static GDHCPClient *create_pd_client(struct connman_dhcpv6 *dhcp, int *err)
 
 	ret = set_duid(service, dhcp->network, dhcp_client, index);
 	if (ret < 0) {
+		DBG("dhcp %p failed to set dhcpv6 duid for service %p",
+								dhcp, service);
 		g_dhcp_client_unref(dhcp_client);
 		*err = ret;
 		return NULL;
