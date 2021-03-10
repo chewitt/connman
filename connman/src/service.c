@@ -5068,9 +5068,6 @@ static void service_complete(struct connman_service *service)
 {
 	reply_pending(service, EIO);
 
-	if (service->connect_reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
-		do_auto_connect(service, service->connect_reason);
-
 	update_modified(service);
 	service_save(service);
 }
