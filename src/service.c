@@ -3481,15 +3481,21 @@ static void do_auto_connect(struct connman_service *service,
 		return;
 
 	/*
+	 * Only user interaction should get VPN or WIFI connected in failure
+	 * state.
+	 */
+	if (service->state == CONNMAN_SERVICE_STATE_FAILURE &&
+				reason != CONNMAN_SERVICE_CONNECT_REASON_USER &&
+				(service->type == CONNMAN_SERVICE_TYPE_VPN ||
+				service->type == CONNMAN_SERVICE_TYPE_WIFI))
+		return;
+
+	/*
 	 * Run service auto connect for other than VPN services. Afterwards
 	 * start also VPN auto connect process.
 	 */
 	if (service->type != CONNMAN_SERVICE_TYPE_VPN)
 		__connman_service_auto_connect(reason);
-	/* Only user interaction should get VPN connected in failure state. */
-	else if (service->state == CONNMAN_SERVICE_STATE_FAILURE &&
-				reason != CONNMAN_SERVICE_CONNECT_REASON_USER)
-		return;
 
 	vpn_auto_connect();
 }
