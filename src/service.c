@@ -4538,7 +4538,7 @@ static DBusMessage *connect_service(DBusConnection *conn,
 		struct connman_service *temp = list->data;
 
 		if (!is_connecting(temp->state) && !is_connected(temp->state))
-			break;
+			continue;
 
 		if (service == temp)
 			continue;
