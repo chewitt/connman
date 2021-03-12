@@ -306,6 +306,14 @@ static bool is_user_dir(const char *name)
 	return is_user_wifi(name) || is_user_vpn(name);
 }
 
+static GList *subdir_for(const char *name)
+{
+	if (is_user_dir(name))
+		return storage.user_subdirs;
+	else
+		return storage.subdirs;
+}
+
 static const char *storagedir_for(const char *name)
 {
 	DBG("name %s", name);
@@ -502,10 +510,7 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 
 		DBG("delete/move-from %s", event->name);
 
-		if (is_user_dir(event->name))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
+		subdirs = subdir_for(event->name);
 
 		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
 		if (!pos)
@@ -1257,10 +1262,7 @@ bool __connman_storage_remove_service(const char *service_id)
 	if (!service_id || !service_id_is_valid(service_id))
 		return false;
 
-	if (is_user_dir(service_id))
-		subdirs = storage.user_subdirs;
-	else
-		subdirs = storage.subdirs;
+	subdirs = subdir_for(service_id);
 
 	pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
 	if (pos)
@@ -1392,10 +1394,7 @@ static bool remove_all(const char *id)
 
 		DBG("Unload provider %s", id);
 
-		if (is_user_dir(id))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
+		subdirs = subdir_for(id);
 
 		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
 		if (!pos) {
