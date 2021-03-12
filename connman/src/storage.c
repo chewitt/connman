@@ -306,6 +306,14 @@ static bool is_user_dir(const char *name)
 	return is_user_wifi(name) || is_user_vpn(name);
 }
 
+static GList *subdir_for(const char *name)
+{
+	if (is_user_dir(name))
+		return storage.user_subdirs;
+	else
+		return storage.subdirs;
+}
+
 static const char *storagedir_for(const char *name)
 {
 	DBG("name %s", name);
@@ -502,6 +510,12 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 
 		DBG("delete/move-from %s", event->name);
 
+		subdirs = subdir_for(event->name);
+
+		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
+		if (!pos)
+			return;
+
 		/*
 		 * To support manual removal of services as well call the
 		 * unload callback to propagate the notify about the removal
@@ -529,11 +543,6 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 			storage.only_unload = unload_state;
 		}
 
-		if (is_user_dir(event->name))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
-
 		/*
 		 * If the service was manually removed it is removed also from
 		 * subdirs when the unload callback reaches back to service/
@@ -541,11 +550,8 @@ static void storage_inotify_cb(struct inotify_event *event, const char *ident,
 		 * removed using internal functionality it must be removed from
 		 * the subdirs here.
 		 */
-		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
-		if (pos) {
-			storage_subdir_unregister(pos->data);
-			debug_subdirs();
-		}
+		storage_subdir_unregister(pos->data);
+		debug_subdirs();
 
 		return;
 	}
@@ -1244,6 +1250,9 @@ out:
 
 bool __connman_storage_remove_service(const char *service_id)
 {
+	struct storage_subdir key = { .name = (gchar*) service_id };
+	GList *subdirs;
+	GList *pos;
 	bool removed = false;
 	gchar *pathname;
 	const char *storagedir;
@@ -1253,26 +1262,20 @@ bool __connman_storage_remove_service(const char *service_id)
 	if (!service_id || !service_id_is_valid(service_id))
 		return false;
 
+	subdirs = subdir_for(service_id);
+
+	pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
+	if (pos)
+		storage_subdir_unregister(pos->data);
+
 	if (storage.only_unload) {
-		struct storage_subdir key = { .name = (gchar*) service_id };
-		GList *subdirs;
-		GList *pos;
-
-		DBG("Unload service %s", service_id);
-
-		if (is_user_dir(service_id))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
-
-		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
-		if (!pos) {
+		if (pos) {
+			DBG("Unregister service %s", service_id);
+			return true;
+		} else {
 			DBG("cannot unregister %s", service_id);
 			return false;
 		}
-
-		storage_subdir_unregister(pos->data);
-		return true;
 	}
 
 	storagedir = storagedir_for(service_id);
@@ -1391,10 +1394,7 @@ static bool remove_all(const char *id)
 
 		DBG("Unload provider %s", id);
 
-		if (is_user_dir(id))
-			subdirs = storage.user_subdirs;
-		else
-			subdirs = storage.subdirs;
+		subdirs = subdir_for(id);
 
 		pos = g_list_find_custom(subdirs, &key, storage_subdir_cmp);
 		if (!pos) {
