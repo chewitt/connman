@@ -766,7 +766,7 @@ static void tech_disable_tethering_cb(const DBusError *error, void *user_data)
 
 	if (!g_dbus_proxy_method_call(iwdap->proxy, "Stop",
 					NULL, tech_ap_stop_cb, cbd, NULL)) {
-		connman_warn("iwd ap %s could not start AccessPoint mode: %s",
+		connman_warn("iwd ap %s could not stop AccessPoint mode: %s",
 			cbd->path, error->message);
 		goto out;
 	}
