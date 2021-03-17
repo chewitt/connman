@@ -98,11 +98,18 @@ struct connman_provider {
 	struct connman_service *vpn_service;
 	int index;
 	char *identifier;
+	int family;
+	const char *service_ident;
 };
 
 int connman_provider_get_index(struct connman_provider *provider)
 {
 	return provider ? provider->index : -1;
+}
+
+int connman_provider_get_family(struct connman_provider *provider)
+{
+	return provider ? provider->family : PF_UNSPEC;
 }
 
 int __connman_provider_create_and_connect(DBusMessage *msg) { return 0; }
@@ -142,13 +149,19 @@ const char *__connman_provider_get_ident(struct connman_provider *provider)
 	return provider ? provider->identifier : NULL;
 }
 
+const char * __connman_provider_get_transport_ident(
+					struct connman_provider *provider)
+{
+	return provider ? provider->service_ident : NULL;
+}
+
 void __connman_provider_append_properties(struct connman_provider *provider,
 							DBusMessageIter *iter)
 {
 	return;
 }
 
-static int provider_count = 0;
+static gint index_counter = 0;
 
 static struct connman_provider *provider_new(void)
 {
@@ -160,13 +173,14 @@ static struct connman_provider *provider_new(void)
 		return NULL;
 	}
 
-	provider->index = provider_count;
+	provider->index = ++index_counter;
 	provider->identifier = NULL;
+	provider->family = AF_INET;
 
 	return provider;
 }
 
-
+static int provider_count = 0;
 
 struct connman_provider *connman_provider_get(const char *identifier)
 {
@@ -192,6 +206,12 @@ const char *connman_provider_get_string(struct connman_provider *provider,
 	g_assert_cmpstr(key, ==, "Name");
 
 	return provider->name;
+}
+
+int __connman_provider_toggle_transport_ipv6(struct connman_provider *provider,
+								bool disable)
+{
+	return 0;
 }
 
 //typedef struct connman_stats;
@@ -248,9 +268,100 @@ int __connman_wispr_start(struct connman_service *service,
 
 void __connman_wispr_stop(struct connman_service *service) { return; }
 
+static GHashTable *phy_vpn_table = NULL;
 
+int __connman_connection_get_vpn_index(int phy_index)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+
+	DBG("%d", phy_index);
+
+	g_hash_table_iter_init(&iter, phy_vpn_table);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct connman_service *service = key;
+		struct connman_service *transport = value;
+
+		if (__connman_service_get_index(transport) != phy_index)
+			continue;
+
+		return __connman_service_get_index(service);
+	}
+
+	return -1;
+}
+
+int __connman_connection_get_vpn_phy_index(int vpn_index)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+
+	DBG("%d", vpn_index);
+
+	g_hash_table_iter_init(&iter, phy_vpn_table);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct connman_service *service = key;
+		struct connman_service *transport = value;
+
+		if (__connman_service_get_index(service) != vpn_index)
+			continue;
+
+		return __connman_service_get_index(transport);
+	}
+
+	return -1;
+}
+
+bool __connman_connection_update_gateway(void)
+{
+	return true;
+}
+
+int __connman_connection_gateway_add(struct connman_service *service,
+					const char *gateway,
+					enum connman_ipconfig_type type,
+					const char *peer)
+{
+	return 0;
+}
+
+void __connman_connection_gateway_remove(struct connman_service *service,
+					enum connman_ipconfig_type type)
+{
+	return;
+}
 
 /* EOD - end of dummies */
+
+static void set_vpn_phy(struct connman_service *service)
+{
+	struct connman_service *transport;
+
+	transport = get_connected_default_service();
+	if (!transport) {
+		return; // May be unset, not connected
+	}
+
+	DBG("VPN %p -> %p", service, transport);
+
+	g_assert(phy_vpn_table);
+
+	g_hash_table_replace(phy_vpn_table, service, transport);
+
+	if (service->provider)
+		service->provider->service_ident = transport->identifier;
+}
+
+static struct connman_service *get_vpn_transport(
+					struct connman_service *service)
+{
+	if (!phy_vpn_table)
+		return NULL;
+
+	return g_hash_table_lookup(phy_vpn_table, service);
+}
 
 static gint ident_counter = 0;
 
@@ -340,13 +451,18 @@ static void setup_network_or_provider(struct connman_service *service)
 	ident = g_strdup_printf("%s_%s", prefixes[prefix_pos],
 			service->identifier);
 
-	if (type != CONNMAN_NETWORK_TYPE_UNKNOWN)
+	if (type != CONNMAN_NETWORK_TYPE_UNKNOWN) {
 		service->network = connman_network_create(ident, type);
+		connman_network_set_index(service->network, ++index_counter);
+	}
 
 	if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
 		service->provider = connman_provider_get(ident);
 		service->provider->vpn_service = service;
 	}
+
+	connman_service_create_ip4config(service, index_counter);
+	connman_service_create_ip6config(service, index_counter);
 
 	g_free(ident);
 }
@@ -368,13 +484,16 @@ static void add_service_type(enum connman_service_type type,
 	
 	if (type == CONNMAN_SERVICE_TYPE_VPN) {
 		if (state == CONNMAN_SERVICE_STATE_READY)
-			service->depends_on = get_connected_default_service();
+			set_vpn_phy(service);
+			/*service->vpn_transport =
+					get_connected_default_service();*/
 
 		__connman_service_set_split_routing(service, split_routing);
 	}
 
 	service_list = g_list_insert_sorted(service_list, service,
 							service_compare);
+	g_hash_table_replace(service_hash, service->identifier, service);
 
 	g_free(ident);
 }
@@ -417,8 +536,9 @@ static void print_test_service(struct connman_service *service, void *user_data)
 	if (!service)
 		return;
 
-	printf("%p %-56s %-3d %-6s %-10s %-16s %-12s %u\n",
-			service, service->identifier, service->order,
+	printf("%p %2d %-56s %-3d %-6s %-10s %-16s %-12s %u\n",
+			service, __connman_service_get_index(service),
+			service->identifier, service->order,
 			is_connected(service) ? "true" : "false",
 			is_available(service) ? "available" : "non-avail",
 			state2string(service->state),
@@ -536,15 +656,21 @@ static void service_order_check(bool(*order_cb)(struct connman_service *a,
 			 * which need to be connected for state comparison to
 			 * to work.
 			 */
-			if(a->depends_on && is_connected(a) &&
-						is_connected(b)) {
+			if(is_connected(a) && is_connected(b)) {
 				/* Both are VPNs */
-				if (b->depends_on)
-					g_assert(a->depends_on->state >=
-							b->depends_on->state);
+				if (b->type == CONNMAN_SERVICE_TYPE_VPN) {
+					struct connman_service* a_transport;
+					struct connman_service* b_transport;
+
+					a_transport = get_vpn_transport(a);
+					b_transport = get_vpn_transport(b);
+
+					g_assert_cmpint(a_transport->state, >=,
+							b_transport->state);
 				/* Check order only if b is transport */
-				else
+				} else {
 					g_assert_true(order_cb(a,b));
+				}
 			}
 
 			continue;
@@ -617,9 +743,26 @@ static void clean_service_list()
 	service_list = NULL;
 }
 
+static void test_init()
+{
+	service_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
+							NULL, NULL);
+	ident_counter = index_counter = 0;
+	phy_vpn_table = g_hash_table_new(g_direct_hash, g_direct_equal);
+	g_assert(phy_vpn_table);
+}
+
+static void test_cleanup()
+{
+	g_hash_table_destroy(service_hash);
+	g_hash_table_destroy(phy_vpn_table);
+	clean_service_list();
+}
+
 static void test_service_sort_full_positive()
 {
-	ident_counter = 0;
+	test_init();
+
 	add_services();
 
 	service_list = g_list_sort(service_list, service_compare);
@@ -627,7 +770,7 @@ static void test_service_sort_full_positive()
 	print_services();
 	service_order_check(check_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 void test_service_sort_with_preferred_list1()
@@ -639,7 +782,8 @@ void test_service_sort_with_preferred_list1()
 		CONNMAN_SERVICE_TYPE_UNKNOWN,
 	};
 
-	ident_counter = 0;
+	test_init();
+
 	preferred_list = list;
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
@@ -678,7 +822,8 @@ void test_service_sort_with_preferred_list2()
 		CONNMAN_SERVICE_TYPE_UNKNOWN,
 	};
 
-	ident_counter = 0;
+	test_init();
+
 	preferred_list = list;
 
 	add_services();
@@ -705,12 +850,13 @@ void test_service_sort_with_preferred_list2()
 	print_services();
 	service_order_check(check_preferred_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 void test_service_sort_without_preferred_list()
 {
-	ident_counter = 0;
+	test_init();
+
 	add_services();
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
@@ -735,12 +881,12 @@ void test_service_sort_without_preferred_list()
 	print_services();
 	service_order_check(check_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 void test_service_sort_vpn_default()
 {
-	ident_counter = 0;
+	test_init();
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
 				CONNMAN_SERVICE_STATE_ONLINE, false,50);
@@ -764,7 +910,7 @@ void test_service_sort_vpn_default()
 	print_services();
 	service_order_check(check_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 void test_service_sort_vpn_default_preferred_list()
@@ -777,7 +923,8 @@ void test_service_sort_vpn_default_preferred_list()
 		CONNMAN_SERVICE_TYPE_UNKNOWN,
 	};
 
-	ident_counter = 0;
+	test_init();
+
 	preferred_list = list;
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
@@ -804,12 +951,12 @@ void test_service_sort_vpn_default_preferred_list()
 	print_services();
 	service_order_check(check_preferred_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 void test_service_sort_vpn_split()
 {
-	ident_counter = 0;
+	test_init();
 
 	add_service_type(CONNMAN_SERVICE_TYPE_CELLULAR,
 				CONNMAN_SERVICE_STATE_ONLINE, false, 0);
@@ -829,7 +976,7 @@ void test_service_sort_vpn_split()
 	print_services();
 	service_order_check(check_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 void test_service_sort_vpn_split_preferred_list()
@@ -842,7 +989,8 @@ void test_service_sort_vpn_split_preferred_list()
 		CONNMAN_SERVICE_TYPE_UNKNOWN,
 	};
 
-	ident_counter = 0;
+	test_init();
+
 	preferred_list = list;
 
 	add_service_type(CONNMAN_SERVICE_TYPE_WIFI,
@@ -867,15 +1015,16 @@ void test_service_sort_vpn_split_preferred_list()
 	print_services();
 	service_order_check(check_preferred_type_order);
 
-	clean_service_list();
+	test_cleanup();
 }
 
 
 void test_service_sort_single_tech_types()
 {
-	ident_counter = 0;
 	enum connman_service_type type;
 	enum connman_service_state state;
+
+	test_init();
 
 	for (type = CONNMAN_SERVICE_TYPE_UNKNOWN;
 				type < MAX_CONNMAN_SERVICE_TYPES; type++) {
@@ -896,6 +1045,8 @@ void test_service_sort_single_tech_types()
 
 		clean_service_list();
 	}
+
+	test_cleanup();
 }
 
 int rmdir_r(const gchar* path)
@@ -994,6 +1145,7 @@ int main(int argc, char **argv)
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_cmpint(__connman_notifier_init(), ==, 0);
+	g_assert_cmpint(__connman_ipconfig_init(), ==, 0);
 
 	connection = (DBusConnection*)&ptr;
 	dbus_path_data = g_hash_table_new(g_str_hash, g_str_equal);

@@ -45,6 +45,13 @@
 #define WIFI_BSSID_LEN 6
 #define WIFI_BSSID_STR_LEN	18
 
+/*
+ * As per RFC 4861, a host should transmit up to MAX_RTR_SOLICITATIONS(3)
+ * Router Solicitation messages, each separated by at least
+ * RTR_SOLICITATION_INTERVAL(4) seconds to obtain RA for IPv6 auto-configuration.
+ */
+#define RTR_SOLICITATION_INTERVAL	4
+
 static GSList *network_list = NULL;
 static GSList *driver_list = NULL;
 
@@ -275,7 +282,8 @@ static int set_connected_dhcp(struct connman_network *network)
 }
 
 static int manual_ipv6_set(struct connman_network *network,
-				struct connman_ipconfig *ipconfig_ipv6)
+				struct connman_ipconfig *ipconfig_ipv6,
+				bool force)
 {
 	struct connman_service *service;
 	int err;
@@ -289,7 +297,9 @@ static int manual_ipv6_set(struct connman_network *network,
 	if (!__connman_ipconfig_get_local(ipconfig_ipv6))
 		__connman_service_read_ip6config(service);
 
-	__connman_ipconfig_enable_ipv6(ipconfig_ipv6);
+	err = __connman_ipconfig_enable_ipv6(ipconfig_ipv6, force);
+	if (err)
+		return err;
 
 	err = __connman_ipconfig_address_add(ipconfig_ipv6);
 	if (err < 0) {
@@ -367,7 +377,7 @@ err:
 	return err;
 }
 
-static void autoconf_ipv6_set(struct connman_network *network);
+static void autoconf_ipv6_set(struct connman_network *network, bool force);
 static void dhcpv6_callback(struct connman_network *network,
 			enum __connman_dhcpv6_status status, gpointer data);
 
@@ -389,7 +399,7 @@ static void dhcpv6_renew_callback(struct connman_network *network,
 		stop_dhcpv6(network);
 
 		/* restart and do solicit again. */
-		autoconf_ipv6_set(network);
+		autoconf_ipv6_set(network, false);
 		break;
 	}
 }
@@ -415,7 +425,7 @@ static void dhcpv6_callback(struct connman_network *network,
 
 	} else if (status == CONNMAN_DHCPV6_STATUS_RESTART) {
 		stop_dhcpv6(network);
-		autoconf_ipv6_set(network);
+		autoconf_ipv6_set(network, false);
 	} else
 		stop_dhcpv6(network);
 }
@@ -438,7 +448,7 @@ static void check_dhcpv6(struct nd_router_advert *reply,
 			DBG("re-send router solicitation %d",
 						network->router_solicit_count);
 			network->router_solicit_count--;
-			__connman_inet_ipv6_send_rs(network->index, 1,
+			__connman_inet_ipv6_send_rs(network->index, RTR_SOLICITATION_INTERVAL,
 						check_dhcpv6, network);
 			return;
 		}
@@ -551,7 +561,7 @@ int __connman_network_refresh_rs_ipv6(struct connman_network *network,
 	return ret;
 }
 
-static void autoconf_ipv6_set(struct connman_network *network)
+static void autoconf_ipv6_set(struct connman_network *network, bool force)
 {
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
@@ -581,7 +591,8 @@ static void autoconf_ipv6_set(struct connman_network *network)
 
 	__connman_ipconfig_enable(ipconfig);
 
-	__connman_ipconfig_enable_ipv6(ipconfig);
+	if (__connman_ipconfig_enable_ipv6(ipconfig, force))
+		return;
 
 	__connman_ipconfig_address_remove(ipconfig);
 
@@ -591,7 +602,8 @@ static void autoconf_ipv6_set(struct connman_network *network)
 
 	/* Try to get stateless DHCPv6 information, RFC 3736 */
 	network->router_solicit_count = 3;
-	__connman_inet_ipv6_send_rs(index, 1, check_dhcpv6, network);
+	__connman_inet_ipv6_send_rs(index, RTR_SOLICITATION_INTERVAL,
+			check_dhcpv6, network);
 }
 
 static void set_connected(struct connman_network *network)
@@ -614,8 +626,8 @@ static void set_connected(struct connman_network *network)
 	DBG("service %p ipv4 %p ipv6 %p", service, ipconfig_ipv4,
 		ipconfig_ipv6);
 
-	__connman_network_enable_ipconfig(network, ipconfig_ipv4);
-	__connman_network_enable_ipconfig(network, ipconfig_ipv6);
+	__connman_network_enable_ipconfig(network, ipconfig_ipv4, false);
+	__connman_network_enable_ipconfig(network, ipconfig_ipv6, false);
 }
 
 static void set_disconnected(struct connman_network *network)
@@ -722,8 +734,8 @@ static void set_disconnected(struct connman_network *network)
 		 * automagically.
 		 */
 		if (ipv6_method == CONNMAN_IPCONFIG_METHOD_AUTO) {
-			__connman_ipconfig_disable_ipv6(ipconfig_ipv6);
-			__connman_ipconfig_enable_ipv6(ipconfig_ipv6);
+			__connman_ipconfig_disable_ipv6(ipconfig_ipv6, false);
+			__connman_ipconfig_enable_ipv6(ipconfig_ipv6, false);
 		}
 	}
 
@@ -1473,9 +1485,9 @@ int __connman_network_connect(struct connman_network *network)
 	if (!network->device)
 		return -ENODEV;
 
-	network->connecting = true;
-
 	__connman_device_disconnect(network->device);
+
+	network->connecting = true;
 
 	err = network->driver->connect(network);
 	if (err < 0) {
@@ -1567,7 +1579,7 @@ int __connman_network_clear_ipconfig(struct connman_network *network,
 }
 
 int __connman_network_enable_ipconfig(struct connman_network *network,
-				struct connman_ipconfig *ipconfig)
+				struct connman_ipconfig *ipconfig, bool force)
 {
 	int r = 0;
 	enum connman_ipconfig_type type;
@@ -1595,19 +1607,20 @@ int __connman_network_enable_ipconfig(struct connman_network *network,
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_OFF:
-			__connman_ipconfig_disable_ipv6(ipconfig);
+			__connman_ipconfig_disable_ipv6(ipconfig, force);
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_AUTO:
-			autoconf_ipv6_set(network);
+			autoconf_ipv6_set(network, force);
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
-			r = manual_ipv6_set(network, ipconfig);
+			r = manual_ipv6_set(network, ipconfig, force);
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
+			__connman_ipconfig_enable_ipv6(ipconfig, force);
 			r = -ENOSYS;
 			break;
 		}

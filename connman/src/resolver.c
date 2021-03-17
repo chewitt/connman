@@ -84,9 +84,22 @@ static void resolvfile_remove_entries(GList *entries)
 	g_list_free(entries);
 }
 
-static int resolvfile_export(void)
+static bool already_exported(GList *export_list, const char *str)
 {
 	GList *list;
+
+	for (list = export_list; list; list = g_list_next(list)) {
+		const char *str0 = list->data;
+		if (g_strcmp0(str0, str) == 0)
+			return true;
+	}
+
+	return false;
+}
+
+static int resolvfile_export(void)
+{
+	GList *list, *export_list;
 	GString *content;
 	int fd, err;
 	unsigned int count;
@@ -100,36 +113,52 @@ static int resolvfile_export(void)
 	 * MAXDNSRCH/MAXNS entries are used.
 	 */
 
-	for (count = 0, list = g_list_last(resolvfile_list);
+	export_list = NULL;
+	for (count = 0, list = g_list_first(resolvfile_list);
 						list && (count < MAXDNSRCH);
-						list = g_list_previous(list)) {
+						list = g_list_next(list)) {
 		struct resolvfile_entry *entry = list->data;
 
 		if (!entry->domain)
+			continue;
+
+		if (already_exported(export_list, entry->domain))
 			continue;
 
 		if (count == 0)
 			g_string_append_printf(content, "search ");
 
 		g_string_append_printf(content, "%s ", entry->domain);
+
+		export_list = g_list_append(export_list, entry->domain);
+
 		count++;
 	}
+	g_list_free(export_list);
+
 
 	if (count)
 		g_string_append_printf(content, "\n");
 
-	for (count = 0, list = g_list_last(resolvfile_list);
+	export_list = NULL;
+	for (count = 0, list = g_list_first(resolvfile_list);
 						list && (count < MAXNS);
-						list = g_list_previous(list)) {
+						list = g_list_next(list)) {
 		struct resolvfile_entry *entry = list->data;
 
 		if (!entry->server)
 			continue;
 
-		g_string_append_printf(content, "nameserver %s\n",
-								entry->server);
+		if (already_exported(export_list, entry->server))
+			continue;
+
+		g_string_append_printf(content, "nameserver %s\n", entry->server);
+
+		export_list = g_list_append(export_list, entry->server);
+
 		count++;
 	}
+	g_list_free(export_list);
 
 	old_umask = umask(022);
 
@@ -173,7 +202,7 @@ int __connman_resolvfile_append(int index, const char *domain,
 {
 	struct resolvfile_entry *entry;
 
-	DBG("index %d server %s", index, server);
+	DBG("index %d domain %s server %s", index, domain, server);
 
 	if (index < 0)
 		return -ENOENT;
@@ -196,7 +225,7 @@ int __connman_resolvfile_remove(int index, const char *domain,
 {
 	GList *list, *matches = NULL;
 
-	DBG("index %d server %s", index, server);
+	DBG("index %d domain %s server %s", index, domain, server);
 
 	for (list = resolvfile_list; list; list = g_list_next(list)) {
 		struct resolvfile_entry *entry = list->data;
