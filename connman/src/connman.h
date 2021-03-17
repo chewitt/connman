@@ -781,8 +781,9 @@ int __connman_provider_indicate_error(struct connman_provider *provider,
 int __connman_provider_connect(struct connman_provider *provider,
 					const char *dbus_sender);
 int __connman_provider_remove_by_path(const char *path);
-int __connman_provider_toggle_transport_ipv6(struct connman_provider *provider,
-					bool disable);
+int __connman_provider_set_ipv6_for_connected(
+					struct connman_provider *provider,
+					bool enable);
 void __connman_provider_cleanup(void);
 int __connman_provider_init(void);
 
