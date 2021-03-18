@@ -804,6 +804,8 @@ const char *__connman_service_create(enum connman_service_type type,
 				const char *ident, GKeyFile *settings);
 
 struct connman_service *__connman_service_lookup_from_index(int index);
+void __connman_service_set_ipv6_for_connected(struct connman_service *vpn,
+				struct connman_service *transport, bool enable);
 bool __connman_service_create_from_network(struct connman_network *network);
 struct connman_service *__connman_service_create_from_provider(struct connman_provider *provider);
 bool __connman_service_index_is_default(int index);
@@ -819,8 +821,6 @@ struct connman_ipconfig *__connman_service_get_ip6config(
 struct connman_ipconfig *__connman_service_get_ipconfig(
 				struct connman_service *service, int family);
 void __connman_service_notify_ipv4_configuration(
-				struct connman_service *service);
-void __connman_service_notify_ipv6_configuration(
 				struct connman_service *service);
 bool __connman_service_is_connected_state(struct connman_service *service,
 					enum connman_ipconfig_type type);
