@@ -434,11 +434,10 @@ void __connman_ipconfig_set_ops(struct connman_ipconfig *ipconfig,
 				const struct connman_ipconfig_ops *ops);
 int __connman_ipconfig_set_method(struct connman_ipconfig *ipconfig,
 					enum connman_ipconfig_method method);
-void __connman_ipconfig_disable_ipv6(struct connman_ipconfig *ipconfig,
-								bool forced);
-int __connman_ipconfig_enable_ipv6(struct connman_ipconfig *ipconfig,
-								bool forced);
+void __connman_ipconfig_disable_ipv6(struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_enable_ipv6(struct connman_ipconfig *ipconfig);
 int __connman_ipconfig_set_ipv6_support(bool enable);
+bool __connman_ipconfig_get_ipv6_support();
 
 int __connman_ipconfig_init(void);
 void __connman_ipconfig_cleanup(void);
@@ -532,6 +531,13 @@ int __connman_ipconfig_ipv6_reset_privacy(struct connman_ipconfig *ipconfig);
 int __connman_ipconfig_ipv6_set_privacy(struct connman_ipconfig *ipconfig,
 					const char *value);
 bool __connman_ipconfig_ipv6_is_enabled(struct connman_ipconfig *ipconfig);
+void __connman_ipconfig_ipv6_method_save(struct connman_ipconfig *ipconfig);
+void __connman_ipconfig_ipv6_method_restore(struct connman_ipconfig *ipconfig);
+void __connman_ipconfig_ipv6_set_force_disabled(
+					struct connman_ipconfig *ipconfig,
+					bool force_disabled);
+bool __connman_ipconfig_ipv6_get_force_disabled(
+					struct connman_ipconfig *ipconfig);
 
 int __connman_ipconfig_set_rp_filter();
 void __connman_ipconfig_unset_rp_filter(int old_value);
