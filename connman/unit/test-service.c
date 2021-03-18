@@ -208,8 +208,9 @@ const char *connman_provider_get_string(struct connman_provider *provider,
 	return provider->name;
 }
 
-int __connman_provider_toggle_transport_ipv6(struct connman_provider *provider,
-								bool disable)
+int __connman_provider_set_ipv6_for_connected(
+					struct connman_provider *provider,
+					bool enable)
 {
 	return 0;
 }
