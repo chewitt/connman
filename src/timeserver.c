@@ -66,7 +66,7 @@ static void ntp_callback(bool success, void *user_data)
 		return;
 	}
 
-	if (!gettimeofday(&tv, NULL)) {
+	if (gettimeofday(&tv, NULL) < 0) {
 		connman_warn("Failed to get current time");
 	}
 
