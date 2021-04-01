@@ -442,6 +442,15 @@ const char *__connman_provider_get_ident(struct connman_provider *provider)
 	return provider->identifier;
 }
 
+const char * __connman_provider_get_transport_ident(
+					struct connman_provider *provider)
+{
+	if (provider && provider && provider->driver && provider->driver->get_property)
+		return provider->driver->get_property(provider, "Transport");
+
+	return NULL;
+}
+
 int connman_provider_set_string(struct connman_provider *provider,
 					const char *key, const char *value)
 {

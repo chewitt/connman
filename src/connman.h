@@ -663,6 +663,8 @@ void __connman_provider_list(DBusMessageIter *iter, void *user_data);
 bool __connman_provider_is_immutable(struct connman_provider *provider);
 int __connman_provider_create_and_connect(DBusMessage *msg);
 const char * __connman_provider_get_ident(struct connman_provider *provider);
+const char * __connman_provider_get_transport_ident(
+					struct connman_provider *provider);
 int __connman_provider_indicate_state(struct connman_provider *provider,
 					enum connman_provider_state state);
 int __connman_provider_indicate_error(struct connman_provider *provider,
