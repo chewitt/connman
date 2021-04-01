@@ -153,6 +153,8 @@ static const char *get_string(struct connman_provider *provider,
 			return data->host_ip[0];
 	} else if (g_str_equal(key, "VPN.Domain"))
 		return data->domain;
+	else if (g_str_equal(key, "Transport"))
+		return data->service_ident;
 
 	return g_hash_table_lookup(data->setting_strings, key);
 }
@@ -268,14 +270,12 @@ static bool provider_is_connected(struct connection_data *data)
 static void set_provider_state(struct connection_data *data)
 {
 	enum connman_provider_state state = CONNMAN_PROVIDER_STATE_UNKNOWN;
+	bool connected;
 	int err = 0;
 
 	DBG("provider %p new state %s", data->provider, data->state);
 
-	if (!provider_is_connected(data)) {
-		g_free(data->service_ident);
-		data->service_ident = NULL;
-	}
+	connected = provider_is_connected(data);
 
 	if (g_str_equal(data->state, "ready")) {
 		state = CONNMAN_PROVIDER_STATE_READY;
@@ -295,7 +295,7 @@ static void set_provider_state(struct connection_data *data)
 	}
 
 	connman_provider_set_state(data->provider, state);
-	return;
+	goto free;
 
 set:
 	if (data->cb_data)
@@ -306,6 +306,12 @@ set:
 
 	free_config_cb_data(data->cb_data);
 	data->cb_data = NULL;
+
+free:
+	if (!connected) {
+		g_free(data->service_ident);
+		data->service_ident = NULL;
+	}
 }
 
 static int create_provider(struct connection_data *data, void *user_data)
@@ -1032,12 +1038,14 @@ static int disconnect_provider(struct connection_data *data)
 	dbus_pending_call_set_notify(data->disconnect_call, disconnect_reply,
 								data, NULL);
 
-	g_free(data->service_ident);
-	data->service_ident = NULL;
 	data->default_route_set = false;
 
 	connman_provider_set_state(data->provider,
 					CONNMAN_PROVIDER_STATE_DISCONNECT);
+
+	g_free(data->service_ident);
+	data->service_ident = NULL;
+
 	return -EINPROGRESS;
 }
 
