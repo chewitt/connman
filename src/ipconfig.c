@@ -258,90 +258,121 @@ static const char *scope2str(unsigned char scope)
 	return "";
 }
 
-static bool get_ipv6_state(gchar *ifname)
+#define PROC_IPV4_CONF_PREFIX "/proc/sys/net/ipv4/conf"
+#define PROC_IPV6_CONF_PREFIX "/proc/sys/net/ipv6/conf"
+
+static int read_conf_value(const char *prefix, const char *ifname,
+					const char *suffix, int *value)
 {
-	int disabled;
 	gchar *path;
 	FILE *f;
-	bool enabled = false;
+	int err;
 
-	if (!ifname)
-		path = g_strdup("/proc/sys/net/ipv6/conf/all/disable_ipv6");
-	else
-		path = g_strdup_printf(
-			"/proc/sys/net/ipv6/conf/%s/disable_ipv6", ifname);
-
+	path = g_build_filename(prefix, ifname ? ifname : "all", suffix, NULL);
 	if (!path)
-		return enabled;
+		return -ENOMEM;
 
+	errno = 0;
 	f = fopen(path, "r");
+	if (!f) {
+		err = -errno;
+	} else {
+		errno = 0; /* Avoid stale errno values with fscanf */
+
+		err = fscanf(f, "%d", value);
+		if (err <= 0 && errno)
+			err = -errno;
+
+		fclose(f);
+	}
+
+	if (err <= 0)
+		connman_error("failed to read %s", path);
 
 	g_free(path);
 
-	if (f) {
-		if (fscanf(f, "%d", &disabled) > 0)
-			enabled = !disabled;
+	return err;
+}
+
+static int read_ipv4_conf_value(const char *ifname, const char *suffix,
+								int *value)
+{
+	return read_conf_value(PROC_IPV4_CONF_PREFIX, ifname, suffix, value);
+}
+
+static int read_ipv6_conf_value(const char *ifname, const char *suffix,
+								int *value)
+{
+	return read_conf_value(PROC_IPV6_CONF_PREFIX, ifname, suffix, value);
+}
+
+static int write_conf_value(const char *prefix, const char *ifname,
+					const char *suffix, int value) {
+	gchar *path;
+	FILE *f;
+	int rval;
+
+	path = g_build_filename(prefix, ifname ? ifname : "all", suffix, NULL);
+	if (!path)
+		return -ENOMEM;
+
+	f = fopen(path, "r+");
+	if (!f) {
+		rval = -errno;
+	} else {
+		rval = fprintf(f, "%d", value);
 		fclose(f);
 	}
+
+	if (rval <= 0)
+		connman_error("failed to set %s value %d", path, value);
+
+	g_free(path);
+
+	return rval;
+}
+
+static int write_ipv4_conf_value(const char *ifname, const char *suffix,
+								int value)
+{
+	return write_conf_value(PROC_IPV4_CONF_PREFIX, ifname, suffix, value);
+}
+
+static int write_ipv6_conf_value(const char *ifname, const char *suffix,
+								int value)
+{
+	return write_conf_value(PROC_IPV6_CONF_PREFIX, ifname, suffix, value);
+}
+
+static bool get_ipv6_state(gchar *ifname)
+{
+	int disabled;
+	bool enabled = false;
+
+	if (read_ipv6_conf_value(ifname, "disable_ipv6", &disabled) > 0)
+		enabled = !disabled;
 
 	return enabled;
 }
 
-static void set_ipv6_state(gchar *ifname, bool enable)
+static int set_ipv6_state(gchar *ifname, bool enable)
 {
-	gchar *path;
-	FILE *f;
+	int disabled = enable ? 0 : 1;
 
-	if (!ifname)
-		path = g_strdup("/proc/sys/net/ipv6/conf/all/disable_ipv6");
-	else
-		path = g_strdup_printf(
-			"/proc/sys/net/ipv6/conf/%s/disable_ipv6", ifname);
+	DBG("%s %d", ifname, disabled);
 
-	if (!path)
-		return;
-
-	f = fopen(path, "r+");
-
-	g_free(path);
-
-	if (!f)
-		return;
-
-	if (!enable)
-		fprintf(f, "1");
-	else
-		fprintf(f, "0");
-
-	fclose(f);
+	return write_ipv6_conf_value(ifname, "disable_ipv6", disabled);
 }
 
 static int get_ipv6_privacy(gchar *ifname)
 {
-	gchar *path;
-	FILE *f;
 	int value;
 
 	if (!ifname)
 		return 0;
 
-	path = g_strdup_printf("/proc/sys/net/ipv6/conf/%s/use_tempaddr",
-								ifname);
-
-	if (!path)
-		return 0;
-
-	f = fopen(path, "r");
-
-	g_free(path);
-
-	if (!f)
-		return 0;
-
-	if (fscanf(f, "%d", &value) <= 0)
+	if (read_ipv6_conf_value(ifname, "use_tempaddr", &value) < 0)
 		value = 0;
-
-	fclose(f);
 
 	return value;
 }
@@ -349,62 +380,43 @@ static int get_ipv6_privacy(gchar *ifname)
 /* Enable the IPv6 privacy extension for stateless address autoconfiguration.
  * The privacy extension is described in RFC 3041 and RFC 4941
  */
-static void set_ipv6_privacy(gchar *ifname, int value)
+static int set_ipv6_privacy(gchar *ifname, int value)
 {
-	gchar *path;
-	FILE *f;
-
 	if (!ifname)
-		return;
-
-	path = g_strdup_printf("/proc/sys/net/ipv6/conf/%s/use_tempaddr",
-								ifname);
-
-	if (!path)
-		return;
+		return -EINVAL;
 
 	if (value < 0)
 		value = 0;
 
-	f = fopen(path, "r+");
-
-	g_free(path);
-
-	if (!f)
-		return;
-
-	fprintf(f, "%d", value);
-	fclose(f);
+	return write_ipv6_conf_value(ifname, "use_tempaddr", value);
 }
 
 static int get_rp_filter(void)
 {
-	FILE *f;
-	int value = -EINVAL, tmp;
+	int value;
 
-	f = fopen("/proc/sys/net/ipv4/conf/all/rp_filter", "r");
-
-	if (f) {
-		if (fscanf(f, "%d", &tmp) == 1)
-			value = tmp;
-		fclose(f);
-	}
+	if (read_ipv4_conf_value(NULL, "rp_filter", &value) < 0)
+		value = -EINVAL;
 
 	return value;
 }
 
-static void set_rp_filter(int value)
+static int set_rp_filter(int value)
 {
-	FILE *f;
+	/* 0 = no validation, 1 = strict mode, 2 = loose mode */
+	switch (value) {
+	case -1:
+		value = 0;
+		/* fall through */
+	case 0:
+	case 1:
+	case 2:
+		break;
+	default:
+		return -EINVAL;
+	}
 
-	f = fopen("/proc/sys/net/ipv4/conf/all/rp_filter", "r+");
-
-	if (!f)
-		return;
-
-	fprintf(f, "%d", value);
-
-	fclose(f);
+	return write_ipv4_conf_value(NULL, "rp_filter", value);
 }
 
 int __connman_ipconfig_set_rp_filter()
