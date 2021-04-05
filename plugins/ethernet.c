@@ -73,7 +73,7 @@ static int get_vlan_vid(const char *ifname)
 		return -errno;
 
 	vifr.cmd = GET_VLAN_VID_CMD;
-	stpncpy(vifr.device1, ifname, sizeof(vifr.device1));
+	stpncpy(vifr.device1, ifname, sizeof(vifr.device1) - 1);
 
 	if(ioctl(sk, SIOCSIFVLAN, &vifr) >= 0)
 		vid = vifr.u.VID;
@@ -99,14 +99,16 @@ static int get_dsa_port(const char *ifname)
 		return -errno;
 
 	memset(&ifr, 0, sizeof(ifr));
-	stpncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+	stpncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name) - 1);
 
 	/* check if it is a vlan and get physical interface name*/
 	vifr.cmd = GET_VLAN_REALDEV_NAME_CMD;
-	stpncpy(vifr.device1, ifname, sizeof(vifr.device1));
+	stpncpy(vifr.device1, ifname, sizeof(vifr.device1) - 1);
 
-	if(ioctl(sk, SIOCSIFVLAN, &vifr) >= 0)
-		stpncpy(ifr.ifr_name, vifr.u.device2, sizeof(ifr.ifr_name));
+	if(ioctl(sk, SIOCSIFVLAN, &vifr) >= 0) {
+		stpncpy(ifr.ifr_name, vifr.u.device2, sizeof(ifr.ifr_name) - 1);
+		ifr.ifr_name[sizeof(ifr.ifr_name) - 1] = '\0';
+	}
 
 	/* get driver info */
 	drvinfocmd.cmd =  ETHTOOL_GDRVINFO;
