@@ -6810,36 +6810,6 @@ int __connman_service_disconnect(struct connman_service *service)
 	return err;
 }
 
-int __connman_service_disconnect_all(void)
-{
-	struct connman_service *service;
-	GSList *services = NULL, *list;
-	GList *iter;
-
-	DBG("");
-
-	for (iter = service_list; iter; iter = iter->next) {
-		service = iter->data;
-
-		if (!is_connected(service->state))
-			break;
-
-		services = g_slist_prepend(services, service);
-	}
-
-	for (list = services; list; list = list->next) {
-		struct connman_service *service = list->data;
-
-		service->ignore = true;
-
-		__connman_service_disconnect(service);
-	}
-
-	g_slist_free(services);
-
-	return 0;
-}
-
 /**
  * lookup_by_identifier:
  * @identifier: service identifier
