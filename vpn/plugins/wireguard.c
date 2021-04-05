@@ -409,7 +409,7 @@ static int wg_connect(struct vpn_provider *provider,
 		err = -ENOENT;
 		goto done;
 	}
-	stpncpy(info->device.name, ifname, sizeof(info->device.name));
+	stpncpy(info->device.name, ifname, sizeof(info->device.name) - 1);
 	g_free(ifname);
 
 	err = wg_add_device(info->device.name);
