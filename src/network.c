@@ -2120,6 +2120,13 @@ int connman_network_set_autoconnect(struct connman_network *network,
 	return network->driver->set_autoconnect(network, autoconnect);
 }
 
+bool __connman_network_native_autoconnect(struct connman_network *network)
+{
+	if (!network->driver || !network->driver->set_autoconnect)
+		return false;
+	return true;
+}
+
 uint16_t connman_network_get_wifi_channel(struct connman_network *network)
 {
 	return network->wifi.channel;

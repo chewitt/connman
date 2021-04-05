@@ -616,6 +616,7 @@ const char *__connman_network_get_type(struct connman_network *network);
 const char *__connman_network_get_group(struct connman_network *network);
 const char *__connman_network_get_ident(struct connman_network *network);
 bool __connman_network_get_weakness(struct connman_network *network);
+bool __connman_network_native_autoconnect(struct connman_network *network);
 
 int __connman_config_init();
 void __connman_config_cleanup(void);
