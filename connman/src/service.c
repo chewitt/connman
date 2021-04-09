@@ -764,10 +764,9 @@ void __connman_service_set_split_routing(struct connman_service *service,
 
 	/*
 	 * Change IPv6 on the VPN transport when split routing value changes
-	 * on a connected IPv4 VPN.
+	 * on a connected VPN. If IPv6 is enabled, VPN transport 
 	 */
-	if (connman_provider_get_family(service->provider) == AF_INET &&
-					change && is_connected(service)) {
+	if (change && is_connected(service)) {
 		if (__connman_provider_set_ipv6_for_connected(
 							service->provider,
 							value))
