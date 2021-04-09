@@ -82,6 +82,8 @@ if (test "${enable_openconnect}" != "no"); then
 		OPENCONNECT="${path_openconnect}"
 		AC_SUBST(OPENCONNECT)
 	fi
+	PKG_CHECK_MODULES(LIBOPENCONNECT, openconnect >= 8, [],
+		AC_MSG_ERROR(openconnect >= 8 is required))
 fi
 AM_CONDITIONAL(OPENCONNECT, test "${enable_openconnect}" != "no")
 AM_CONDITIONAL(OPENCONNECT_BUILTIN, test "${enable_openconnect}" = "builtin")

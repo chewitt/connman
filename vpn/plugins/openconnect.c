@@ -42,6 +42,8 @@
 #include <connman/setting.h>
 #include <connman/vpn-dbus.h>
 
+#include <openconnect.h>
+
 #include "../vpn-provider.h"
 #include "../vpn-agent.h"
 
@@ -89,7 +91,6 @@ enum oc_connect_type {
 
 static const char *connect_types[] = {"cookie", "cookie_with_userpass",
 			"userpass", "publickey", "pkcs", NULL};
-static const char *protocols[] = { "anyconnect", "nc", "gp", NULL};
 
 struct oc_private_data {
 	struct vpn_provider *provider;
@@ -98,21 +99,46 @@ struct oc_private_data {
 	char *dbus_sender;
 	vpn_provider_connect_cb_t cb;
 	void *user_data;
+
+	GThread *cookie_thread;
+	struct openconnect_info *vpninfo;
+	int fd_cmd;
+	int err;
+
 	int fd_in;
-	int out_ch_id;
 	int err_ch_id;
-	GIOChannel *out_ch;
 	GIOChannel *err_ch;
 	enum oc_connect_type connect_type;
-	bool interactive;
+	bool tried_passphrase;
 };
+
+typedef void (*request_input_reply_cb_t) (DBusMessage *reply,
+					void *user_data);
+
+static int run_connect(struct oc_private_data *data, const char *cookie);
+static int request_input_credentials_full(
+			struct oc_private_data *data,
+			request_input_reply_cb_t cb,
+			void *user_data);
 
 static bool is_valid_protocol(const char* protocol)
 {
+	int num_protocols;
+	int i;
+	struct oc_vpn_proto *protos;
+
 	if (!protocol || !*protocol)
 		return false;
 
-	return g_strv_contains(protocols, protocol);
+	num_protocols = openconnect_get_supported_protocols(&protos);
+
+	for (i = 0; i < num_protocols; i++)
+		if (!strcmp(protos[i].name, protocol))
+			break;
+
+	openconnect_free_supported_protocols(protos);
+
+	return i < num_protocols;
 }
 
 static void oc_connect_done(struct oc_private_data *data, int err)
@@ -139,11 +165,7 @@ static void close_io_channel(struct oc_private_data *data, GIOChannel *channel)
 	if (!data || !channel)
 		return;
 
-	if (data->out_ch == channel) {
-		id = data->out_ch_id;
-		data->out_ch = NULL;
-		data->out_ch_id = 0;
-	} else if (data->err_ch == channel) {
+	if (data->err_ch == channel) {
 		id = data->err_ch_id;
 		data->err_ch = NULL;
 		data->err_ch_id = 0;
@@ -167,6 +189,9 @@ static void free_private_data(struct oc_private_data *data)
 
 	connman_info("provider %p", data->provider);
 
+	if (data->vpninfo)
+		openconnect_vpninfo_free(data->vpninfo);
+
 	if (vpn_provider_get_plugin_data(data->provider) == data)
 		vpn_provider_set_plugin_data(data->provider, NULL);
 
@@ -175,7 +200,6 @@ static void free_private_data(struct oc_private_data *data)
 	if (data->fd_in > 0)
 		close(data->fd_in);
 	data->fd_in = -1;
-	close_io_channel(data, data->out_ch);
 	close_io_channel(data, data->err_ch);
 
 	g_free(data->dbus_sender);
@@ -373,7 +397,7 @@ static int oc_notify(DBusMessage *msg, struct vpn_provider *provider)
 	return VPN_STATE_CONNECT;
 }
 
-static ssize_t full_write(int fd, const void *buf, size_t len)
+static ssize_t full_write(int fd, const char *buf, size_t len)
 {
 	ssize_t byte_write;
 
@@ -428,37 +452,6 @@ static void oc_died(struct connman_task *task, int exit_code, void *user_data)
 	free_private_data(data);
 }
 
-static gboolean io_channel_out_cb(GIOChannel *source, GIOCondition condition,
-			gpointer user_data)
-{
-	struct oc_private_data *data;
-	char *str;
-
-	data = user_data;
-
-	if (data->out_ch != source)
-		return G_SOURCE_REMOVE;
-
-	if ((condition & G_IO_IN) &&
-		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
-							G_IO_STATUS_NORMAL) {
-
-		g_strchomp(str);
-
-		/* Only cookie is printed to stdout */
-		vpn_provider_set_string_hide_value(data->provider,
-					"OpenConnect.Cookie", str);
-
-		g_free(str);
-	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
-		connman_info("Out channel termination");
-		close_io_channel(data, source);
-		return G_SOURCE_REMOVE;
-	}
-
-	return G_SOURCE_CONTINUE;
-}
-
 static bool strv_contains_prefix(const char *strv[], const char *str)
 {
 	int i;
@@ -474,56 +467,170 @@ static bool strv_contains_prefix(const char *strv[], const char *str)
 	return false;
 }
 
-static void clear_provider_credentials(struct vpn_provider *provider)
+static void clear_provider_credentials(struct vpn_provider *provider,
+						bool clear_pkcs_pass)
 {
-	const char *keys[] = { "OpenConnect.Username",
+	const char *keys[] = { "OpenConnect.PKCSPassword",
+				"OpenConnect.Username",
 				"OpenConnect.Password",
-				"OpenConnect.PKCSPassword",
 				"OpenConnect.Cookie",
 				NULL
 	};
-	int i;
+	size_t i;
 
 	connman_info("provider %p", provider);
 
-	for (i = 0; keys[i]; i++) {
+	for (i = !clear_pkcs_pass; keys[i]; i++) {
 		if (!vpn_provider_get_string_immutable(provider, keys[i]))
 			vpn_provider_set_string_hide_value(provider, keys[i],
 						"-");
 	}
 }
 
-typedef void (* request_input_reply_cb_t) (DBusMessage *reply,
-					void *user_data);
+static void __attribute__ ((format(printf, 3, 4))) oc_progress(void *user_data,
+		int level, const char *fmt, ...)
+{
+	va_list ap;
+	char *msg;
 
-static int request_input_credentials(struct oc_private_data *data,
-			request_input_reply_cb_t cb);
+	va_start(ap, fmt);
+	msg = g_strdup_vprintf(fmt, ap);
 
+	connman_debug("%s", msg);
+	g_free(msg);
+
+	va_end(ap);
+}
+
+/*
+ * There is no enum / defines for these in openconnect.h, but these values
+ * are based on the comment for openconnect_validate_peer_cert_vfn.
+ */
+enum oc_cert_status {
+	OC_CERT_ACCEPT = 0,
+	OC_CERT_REJECT = 1
+};
+
+struct validate_cert_data {
+	GMutex mutex;
+	GCond cond;
+	const char *reason;
+	struct oc_private_data *data;
+	bool processed;
+	enum oc_cert_status status;
+};
+
+static gboolean validate_cert(void *user_data)
+{
+	struct validate_cert_data *cert_data = user_data;
+	struct oc_private_data *data;
+	const char *server_cert;
+	bool allow_self_signed;
+
+	DBG("");
+
+	g_mutex_lock(&cert_data->mutex);
+
+	data = cert_data->data;
+	server_cert = vpn_provider_get_string(data->provider,
+						"OpenConnect.ServerCert");
+	allow_self_signed = vpn_provider_get_boolean(data->provider,
+					"OpenConnect.AllowSelfSignedCert",
+					false);
+
+	if (!allow_self_signed) {
+		cert_data->status = OC_CERT_REJECT;
+	} else if (server_cert) {
+		/*
+		 * Check peer cert hash may return negative values on errors,
+		 * but anything non-zero is acceptable.
+		 */
+		cert_data->status = openconnect_check_peer_cert_hash(
+								data->vpninfo,
+								server_cert);
+	} else {
+		/*
+		 * We could verify this from the agent at this point, and
+		 * release the thread upon reply.
+		 */
+		DBG("Server cert hash: %s",
+				openconnect_get_peer_cert_hash(data->vpninfo));
+		vpn_provider_set_string(data->provider,
+				"OpenConnect.ServerCert",
+				openconnect_get_peer_cert_hash(data->vpninfo));
+		cert_data->status = OC_CERT_ACCEPT;
+	}
+
+	cert_data->processed = true;
+	g_cond_signal(&cert_data->cond);
+	g_mutex_unlock(&cert_data->mutex);
+
+	return G_SOURCE_REMOVE;
+}
+
+static int oc_validate_peer_cert(void *user_data, const char *reason)
+{
+	struct validate_cert_data data = { .reason = reason,
+						.data = user_data,
+						.processed = false };
+
+	g_cond_init(&data.cond);
+	g_mutex_init(&data.mutex);
+
+	g_mutex_lock(&data.mutex);
+
+	g_idle_add(validate_cert, &data);
+
+	while (!data.processed)
+		g_cond_wait(&data.cond, &data.mutex);
+
+	g_mutex_unlock(&data.mutex);
+
+	g_mutex_clear(&data.mutex);
+	g_cond_clear(&data.cond);
+
+	return data.status;
+}
+
+struct process_form_data {
+	GMutex mutex;
+	GCond cond;
+	struct oc_auth_form *form;
+	struct oc_private_data *data;
+	bool processed;
+	int status;
+};
 
 static void request_input_pkcs_reply(DBusMessage *reply, void *user_data)
 {
-	struct oc_private_data *data = user_data;
-	const char *password = NULL;
+	struct process_form_data *form_data = user_data;
+	struct oc_private_data *data = form_data->data;
+	struct oc_form_opt *opt;
 	const char *key;
+	const char *password = NULL;
 	DBusMessageIter iter, dict;
-	int err;
 
 	connman_info("provider %p", data->provider);
 
-	if (!reply)
+	if (!reply) {
+		data->err = ENOENT;
 		goto err;
+	}
 
-	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
-				data->task, data->cb, data->user_data);
-	if (err) {
-		/* Ensure cb is called only once */
+	if ((data->err = vpn_agent_check_and_process_reply_error(reply,
+							data->provider,
+							data->task,
+							data->cb,
+							data->user_data))) {
 		data->cb = NULL;
 		data->user_data = NULL;
 		goto err;
 	}
 
-	if (!vpn_agent_check_reply_has_dict(reply))
+	if (!vpn_agent_check_reply_has_dict(reply)) {
+		data->err = ENOENT;
 		goto err;
+	}
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -553,39 +660,44 @@ static void request_input_pkcs_reply(DBusMessage *reply, void *user_data)
 		dbus_message_iter_next(&dict);
 	}
 
-	if (data->connect_type != OC_CONNECT_PKCS || !password)
+	if (!password)
 		goto err;
 
-	if (write_data(data->fd_in, password) != 0) {
-		connman_error("openconnect failed to take PKCS pass phrase on"
-					" stdin");
-		goto err;
+	for (opt = form_data->form->opts; opt; opt = opt->next) {
+		if (opt->flags & OC_FORM_OPT_IGNORE)
+			continue;
+
+		if (opt->type == OC_FORM_OPT_PASSWORD &&
+				g_str_has_prefix(opt->name,
+					"openconnect_pkcs")) {
+			opt->_value = strdup(password);
+			form_data->status = OC_FORM_RESULT_OK;
+			data->tried_passphrase = true;
+			break;
+		}
 	}
 
-	clear_provider_credentials(data->provider);
+	goto out;
 
-	return;
 err:
-	oc_connect_done(data, EACCES);
+	form_data->status = OC_FORM_RESULT_ERR;
+
+out:
+	form_data->processed = true;
+	g_cond_signal(&form_data->cond);
+	g_mutex_unlock(&form_data->mutex);
 }
 
 static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
-			gpointer user_data)
+							gpointer user_data)
 {
 	struct oc_private_data *data;
 	const char *auth_failures[] = {
-				/* Login failed */
-				"Got HTTP response: HTTP/1.1 401 Unauthorized",
-				"Failed to obtain WebVPN cookie",
 				/* Cookie not valid */
 				"Got inappropriate HTTP CONNECT response: "
 						"HTTP/1.1 401 Unauthorized",
 				/* Invalid cookie */
 				"VPN service unavailable",
-				/* Problem with certificates */
-				"SSL connection failure",
-				"Creating SSL connection failed",
-				"SSL connection cancelled",
 				NULL
 	};
 	const char *conn_failures[] = {
@@ -593,21 +705,8 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 				"Failed to open HTTPS connection to",
 				NULL
 	};
-	/* Handle both PKCS#12 and PKCS#8 failures */
-	const char *pkcs_failures[] = {
-				"Failed to decrypt PKCS#12 certificate file",
-				"Failed to decrypt PKCS#8 certificate file",
-				NULL
-	};
-	/* Handle both PKCS#12 and PKCS#8 requests */
-	const char *pkcs_requests[] = {
-				"Enter PKCS#12 pass phrase",
-				"Enter PKCS#8 pass phrase",
-				NULL
-	};
-	const char *server_key_hash = "    --servercert";
+	const char *server_key_hash = "    --servercert ";
 	char *str;
-	bool close = false;
 	int err = 0;
 
 	data = user_data;
@@ -620,51 +719,12 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 
 	if ((condition & G_IO_IN)) {
 		gsize len;
-		int pos;
 
-		if (!data->interactive) {
-			if (g_io_channel_read_line(source, &str, &len, NULL,
-						NULL) != G_IO_STATUS_NORMAL)
-				err = EIO;
-			else
-				str[len - 1] = '\0';
-		} else {
-			GIOStatus status;
-			str = g_try_new0(char, OC_MAX_READBUF_LEN);
-			if (!str)
-				return G_SOURCE_REMOVE;
-
-			for (pos = 0; pos < OC_MAX_READBUF_LEN - 1 ; ++pos) {
-				status = g_io_channel_read_chars(source,
-						str+pos, 1, &len, NULL);
-
-				if (status == G_IO_STATUS_EOF) {
-					break;
-				} else if (status != G_IO_STATUS_NORMAL) {
-					err = EIO;
-					break;
-				}
-
-				/* Ignore control chars and digits at start */
-				if (!pos && (g_ascii_iscntrl(str[pos]) ||
-						g_ascii_isdigit(str[pos])))
-					--pos;
-
-				/* Read zero length or no more to read */
-				if (!len || g_io_channel_get_buffer_condition(
-							source) != G_IO_IN ||
-							str[pos] == '\n')
-					break;
-			}
-
-			/*
-			 * When self signed certificates are allowed and server
-			 * SHA1 fingerprint is printed to stderr there is a
-			 * newline char at the end of SHA1 fingerprint.
-			 */
-			if (str[pos] == '\n')
-				str[pos] = '\0';
-		}
+		if (g_io_channel_read_line(source, &str, &len, NULL,
+					NULL) != G_IO_STATUS_NORMAL)
+			err = EIO;
+		else
+			g_strchomp(str);
 
 		connman_info("openconnect: %s", str);
 
@@ -689,43 +749,11 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 
 				vpn_provider_set_string(data->provider,
 						"OpenConnect.ServerCert",
-						fingerprint);
-
-				/*
-				 * OpenConnect waits for "yes" or "no" as
-				 * response to certificate acceptance request.
-				 */
-				if (write_data(data->fd_in, "yes") != 0)
-					connman_error("openconnect: cannot "
-						"write answer to certificate "
-						"accept request");
-
+						str + strlen(server_key_hash));
 			} else {
 				connman_warn("Self signed certificate is not "
-							" allowed");
-
-				/*
-				 * Close IO channel to avoid deadlock as an
-				 * answer is expected for the certificate
-				 * accept request.
-				 */
-				close = true;
+							"allowed");
 				err = ECONNREFUSED;
-			}
-		} else if (strv_contains_prefix(pkcs_failures, str)) {
-			connman_warn("PKCS failure: %s", str);
-			close = true;
-			err = EACCES;
-		} else if (strv_contains_prefix(pkcs_requests, str)) {
-			connman_info("PKCS file pass phrase request: %s", str);
-			err = request_input_credentials(data,
-						request_input_pkcs_reply);
-
-			if (err != -EINPROGRESS) {
-				err = EACCES;
-				close = true;
-			} else {
-				err = 0;
 			}
 		} else if (strv_contains_prefix(auth_failures, str)) {
 			connman_warn("authentication failed: %s", str);
@@ -738,13 +766,14 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 		g_free(str);
 	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
 		connman_info("Err channel termination");
-		close = true;
+		close_io_channel(data, source);
+		return G_SOURCE_REMOVE;
 	}
 
 	if (err) {
 		switch (err) {
 		case EACCES:
-			clear_provider_credentials(data->provider);
+			clear_provider_credentials(data->provider, true);
 			break;
 		case ECONNREFUSED:
 			/*
@@ -758,126 +787,272 @@ static gboolean io_channel_err_cb(GIOChannel *source, GIOCondition condition,
 		oc_connect_done(data, err);
 	}
 
-	if (close) {
-		close_io_channel(data, source);
-		return G_SOURCE_REMOVE;
-	}
-
 	return G_SOURCE_CONTINUE;
 }
 
-static int run_connect(struct oc_private_data *data)
+static gboolean process_auth_form(void *user_data)
+{
+	struct process_form_data *form_data = user_data;
+	struct oc_private_data *data = form_data->data;
+	struct oc_form_opt *opt;
+	const char *password;
+
+	g_mutex_lock(&form_data->mutex);
+
+	DBG("");
+
+	switch (data->connect_type) {
+	case OC_CONNECT_USERPASS:
+	case OC_CONNECT_COOKIE_WITH_USERPASS:
+		break;
+
+	case OC_CONNECT_PKCS:
+		password = vpn_provider_get_string(data->provider,
+					"OpenConnect.PKCSPassword");
+
+		for (opt = form_data->form->opts; opt; opt = opt->next) {
+			if (opt->flags & OC_FORM_OPT_IGNORE)
+				continue;
+
+			if (opt->type == OC_FORM_OPT_PASSWORD &&
+					g_str_has_prefix(opt->name,
+							"openconnect_pkcs"))
+				break;
+		}
+
+		if (opt) {
+			if (password && g_strcmp0(password, "-")) {
+				opt->_value = strdup(password);
+				data->tried_passphrase = true;
+				form_data->status = OC_FORM_RESULT_OK;
+				goto out;
+			} else {
+				if (data->tried_passphrase) {
+					vpn_provider_add_error(data->provider,
+					       VPN_PROVIDER_ERROR_AUTH_FAILED);
+					clear_provider_credentials(
+								data->provider,
+								true);
+				}
+				request_input_credentials_full(data,
+						request_input_pkcs_reply,
+						form_data);
+				return G_SOURCE_REMOVE;
+			}
+		}
+
+		/* fall-through */
+
+	/*
+	 * In case of public key, reaching here means that the
+	 * passphrase previously provided was incorrect.
+	 */
+	case OC_CONNECT_PUBLICKEY:
+		data->err = -EACCES;
+		clear_provider_credentials(data->provider, true);
+
+		/* fall-through */
+	default:
+		form_data->status = OC_FORM_RESULT_ERR;
+		goto out;
+	}
+
+	/*
+	 * Form values are released with free(), so always use strdup()
+	 * instead of g_strdup()
+	 */
+	for (opt = form_data->form->opts; opt; opt = opt->next) {
+		if (opt->flags & OC_FORM_OPT_IGNORE)
+			continue;
+
+		if (opt->type == OC_FORM_OPT_TEXT &&
+				g_str_has_prefix(opt->name, "user")) {
+			const char *user = vpn_provider_get_string(
+						data->provider,
+						"OpenConnect.Username");
+			if (user)
+				opt->_value = strdup(user);
+		} else if (opt->type == OC_FORM_OPT_PASSWORD) {
+			const char *pass = vpn_provider_get_string(
+						data->provider,
+						"OpenConnect.Password");
+			if (pass)
+				opt->_value = strdup(pass);
+		}
+	}
+
+	form_data->status = OC_FORM_RESULT_OK;
+
+out:
+	form_data->processed = true;
+	g_cond_signal(&form_data->cond);
+	g_mutex_unlock(&form_data->mutex);
+
+	return G_SOURCE_REMOVE;
+}
+
+static int oc_process_auth_form(void *user_data, struct oc_auth_form *form)
+{
+	struct process_form_data data = { .form = form,
+						.data = user_data,
+						.processed = false };
+
+	DBG("");
+
+	g_cond_init(&data.cond);
+	g_mutex_init(&data.mutex);
+
+	g_mutex_lock(&data.mutex);
+	g_idle_add(process_auth_form, &data);
+
+	while (!data.processed)
+		g_cond_wait(&data.cond, &data.mutex);
+
+	g_mutex_unlock(&data.mutex);
+
+	g_mutex_clear(&data.mutex);
+	g_cond_clear(&data.cond);
+
+	return data.status;
+}
+
+static gboolean authenticated(void *user_data)
+{
+	struct oc_private_data *data = user_data;
+	int rv = GPOINTER_TO_INT(g_thread_join(data->cookie_thread));
+
+	DBG("");
+
+	data->cookie_thread = NULL;
+
+	if (rv == 0)
+		rv = run_connect(data, openconnect_get_cookie(data->vpninfo));
+	else if (rv < 0)
+		clear_provider_credentials(data->provider, true);
+
+	openconnect_vpninfo_free(data->vpninfo);
+	data->vpninfo = NULL;
+
+	if (rv != -EINPROGRESS) {
+		oc_connect_done(data, data->err ? data->err : rv);
+		free_private_data(data);
+	}
+
+	return G_SOURCE_REMOVE;
+}
+
+static void *obtain_cookie_thread(void *user_data)
+{
+	struct oc_private_data *data = user_data;
+	int ret;
+
+	DBG("%p", data->vpninfo);
+
+	ret = openconnect_obtain_cookie(data->vpninfo);
+
+	g_idle_add(authenticated, data);
+
+	return GINT_TO_POINTER(ret);
+}
+
+static int authenticate(struct oc_private_data *data)
+{
+	const char *cert = NULL;
+	const char *key = NULL;
+	const char *urlpath;
+	const char *vpnhost;
+
+	DBG("");
+
+	switch (data->connect_type) {
+	case OC_CONNECT_PKCS:
+		cert = vpn_provider_get_string(data->provider,
+					"OpenConnect.PKCSClientCert");
+		break;
+	case OC_CONNECT_PUBLICKEY:
+		cert = vpn_provider_get_string(data->provider,
+					"OpenConnect.ClientCert");
+		key = vpn_provider_get_string(data->provider,
+					"OpenConnect.UserPrivateKey");
+		break;
+
+	case OC_CONNECT_USERPASS:
+	case OC_CONNECT_COOKIE_WITH_USERPASS:
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	openconnect_init_ssl();
+	data->vpninfo = openconnect_vpninfo_new("ConnMan VPN Agent",
+			oc_validate_peer_cert,
+			NULL,
+			oc_process_auth_form,
+			oc_progress,
+			data);
+
+	/* Replicating how openconnect's --usergroup argument works */
+	urlpath = vpn_provider_get_string(data->provider,
+						"OpenConnect.Usergroup");
+	if (urlpath)
+		openconnect_set_urlpath(data->vpninfo, urlpath);
+
+	if (vpn_provider_get_boolean(data->provider,
+					"OpenConnect.DisableIPv6", false))
+		openconnect_disable_ipv6(data->vpninfo);
+
+	vpnhost = vpn_provider_get_string(data->provider,
+						"OpenConnect.VPNHost");
+	if (!vpnhost || !*vpnhost)
+		vpnhost = vpn_provider_get_string(data->provider, "Host");
+
+	openconnect_set_hostname(data->vpninfo, vpnhost);
+
+	if (cert)
+		openconnect_set_client_cert(data->vpninfo, cert, key);
+
+	data->fd_cmd = openconnect_setup_cmd_pipe(data->vpninfo);
+
+	/*
+	 * openconnect_obtain_cookie blocks, so run it in background thread
+	 * instead
+	 */
+	data->cookie_thread = g_thread_try_new("obtain_cookie",
+							obtain_cookie_thread,
+							data, NULL);
+
+	if (!data->cookie_thread)
+		return -EIO;
+
+	return -EINPROGRESS;
+}
+
+static int run_connect(struct oc_private_data *data, const char *cookie)
 {
 	struct vpn_provider *provider;
 	struct connman_task *task;
 	const char *vpnhost;
-	const char *vpncookie = NULL;
-	const char *username;
-	const char *password = NULL;
-	const char *certificate = NULL;
-	const char *private_key;
-	const char *setting_str;
-	bool setting;
-	bool use_stdout = false;
-	int fd_out = -1;
 	int fd_err;
 	int err = 0;
+	bool allow_self_signed;
+	const char *server_cert;
 
-	if (!data)
+	if (!data || !cookie)
 		return -EINVAL;
 
 	provider = data->provider;
 	task = data->task;
 
-	connman_info("provider %p task %p", provider, task);
+	server_cert = vpn_provider_get_string(provider,
+						"OpenConnect.ServerCert");
+	allow_self_signed = vpn_provider_get_boolean(provider,
+					"OpenConnect.AllowSelfSignedCert",
+					false);
 
-	switch (data->connect_type) {
-	case OC_CONNECT_COOKIE:
-		vpncookie = vpn_provider_get_string(provider,
-					"OpenConnect.Cookie");
-		if (!vpncookie || !g_strcmp0(vpncookie, "-")) {
-			err = -EACCES;
-			goto done;
-		}
+	DBG("provider %p task %p", provider, task);
 
-		connman_task_add_argument(task, "--cookie-on-stdin", NULL);
-		break;
-	case OC_CONNECT_COOKIE_WITH_USERPASS:
-		vpncookie = vpn_provider_get_string(provider,
-					"OpenConnect.Cookie");
-		/* No cookie set yet, username and password used first */
-		if (!vpncookie || !g_strcmp0(vpncookie, "-")) {
-			username = vpn_provider_get_string(provider,
-						"OpenConnect.Username");
-			password = vpn_provider_get_string(provider,
-						"OpenConnect.Password");
-			if (!username || !password ||
-						!g_strcmp0(username, "-") ||
-						!g_strcmp0(password, "-")) {
-				err = -EACCES;
-				goto done;
-			}
-
-			connman_task_add_argument(task, "--cookieonly", NULL);
-			connman_task_add_argument(task, "--user", username);
-			connman_task_add_argument(task, "--passwd-on-stdin",
-						NULL);
-
-			/* Use stdout only when cookie is to be read. */
-			use_stdout = true;
-		} else {
-			connman_task_add_argument(task, "--cookie-on-stdin",
-						NULL);
-		}
-
-		break;
-	case OC_CONNECT_USERPASS:
-		username = vpn_provider_get_string(provider,
-					"OpenConnect.Username");
-		password = vpn_provider_get_string(provider,
-					"OpenConnect.Password");
-		if (!username || !password || !g_strcmp0(username, "-") ||
-					!g_strcmp0(password, "-")) {
-			err = -EACCES;
-			goto done;
-		}
-
-		connman_task_add_argument(task, "--user", username);
-		connman_task_add_argument(task, "--passwd-on-stdin", NULL);
-		break;
-	case OC_CONNECT_PUBLICKEY:
-		certificate = vpn_provider_get_string(provider,
-					"OpenConnect.ClientCert");
-		private_key = vpn_provider_get_string(provider,
-					"OpenConnect.UserPrivateKey");
-
-		if (!certificate || !private_key) {
-			err = -EACCES;
-			goto done;
-		}
-
-		connman_task_add_argument(task, "--certificate", certificate);
-		connman_task_add_argument(task, "--sslkey", private_key);
-		break;
-	case OC_CONNECT_PKCS:
-		certificate = vpn_provider_get_string(provider,
-					"OpenConnect.PKCSClientCert");
-		if (!certificate) {
-			err = -EACCES;
-			goto done;
-		}
-
-		connman_task_add_argument(task, "--certificate", certificate);
-
-		password = vpn_provider_get_string(data->provider,
-					"OpenConnect.PKCSPassword");
-		/* Add password only if it is has been set */
-		if (!password || !g_strcmp0(password, "-"))
-			break;
-
-		connman_task_add_argument(task, "--passwd-on-stdin", NULL);
-		break;
-	}
+	connman_task_add_argument(task, "--cookie-on-stdin", NULL);
 
 	vpnhost = vpn_provider_get_string(provider, "OpenConnect.VPNHost");
 	if (!vpnhost || !*vpnhost)
@@ -885,130 +1060,42 @@ static int run_connect(struct oc_private_data *data)
 
 	task_append_config_data(provider, task);
 
-	/*
-	 * To clarify complex situation, if cookie is expected to be printed
-	 * to stdout all other output must go to syslog. But with PKCS all
-	 * output must be caught in order to get message about file decryption
-	 * error. For this reason, the mode has to be interactive as well.
-	 */
-	switch (data->connect_type) {
-	case OC_CONNECT_COOKIE:
-		/* fall through */
-	case OC_CONNECT_COOKIE_WITH_USERPASS:
-		/* fall through */
-	case OC_CONNECT_USERPASS:
-		/* fall through */
-	case OC_CONNECT_PUBLICKEY:
-		connman_task_add_argument(task, "--syslog", NULL);
-
-		setting = vpn_provider_get_boolean(provider,
-					"OpenConnect.AllowSelfSignedCert",
-					false);
-		setting_str = vpn_provider_get_string(provider,
-					"OpenConnect.ServerCert");
-
-		/*
-		 * Run in interactive mode if self signed certificates are
-		 * allowed and there is no set server SHA1 fingerprint.
-		 */
-		if (setting_str || !setting)
-			connman_task_add_argument(task, "--non-inter", NULL);
-		else
-			data->interactive = true;
-		break;
-	case OC_CONNECT_PKCS:
-		data->interactive = true;
-		break;
-	}
-
 	connman_task_add_argument(task, "--script", SCRIPTDIR "/vpn-script");
 
 	connman_task_add_argument(task, "--interface", data->if_name);
 
 	connman_task_add_argument(task, (char *)vpnhost, NULL);
 
-	err = connman_task_run(task, oc_died, data, &data->fd_in, use_stdout ?
-				&fd_out : NULL, &fd_err);
+	err = connman_task_run(task, oc_died, data, &data->fd_in,
+				NULL, &fd_err);
 	if (err < 0) {
 		err = -EIO;
 		goto done;
 	}
 
-	switch (data->connect_type) {
-	case OC_CONNECT_COOKIE:
-		if (write_data(data->fd_in, vpncookie) != 0) {
-			connman_error("openconnect failed to take cookie on "
-						"stdin");
+	if (write_data(data->fd_in, cookie) != 0) {
+		connman_error("openconnect failed to take cookie on "
+				"stdin");
+		err = -EIO;
+	}
+
+	if (!server_cert || !allow_self_signed) {
+		if (write_data(data->fd_in,
+					(allow_self_signed ? "yes" : "no"))) {
+			connman_error("openconnect failed to take certificate "
+					"acknowledgement on stdin");
 			err = -EIO;
 		}
-
-		break;
-	case OC_CONNECT_USERPASS:
-		if (write_data(data->fd_in, password) != 0) {
-			connman_error("openconnect failed to take password on "
-						"stdin");
-			err = -EIO;
-		}
-
-		break;
-	case OC_CONNECT_COOKIE_WITH_USERPASS:
-		if (!vpncookie || !g_strcmp0(vpncookie, "-")) {
-			if (write_data(data->fd_in, password) != 0) {
-				connman_error("openconnect failed to take "
-							"password on stdin");
-				err = -EIO;
-			}
-		} else {
-			if (write_data(data->fd_in, vpncookie) != 0) {
-				connman_error("openconnect failed to take "
-							"cookie on stdin");
-				err = -EIO;
-			}
-		}
-
-		break;
-	case OC_CONNECT_PUBLICKEY:
-		break;
-	case OC_CONNECT_PKCS:
-		if (!password || !g_strcmp0(password, "-"))
-			break;
-
-		if (write_data(data->fd_in, password) != 0) {
-			connman_error("openconnect failed to take PKCS "
-						"pass phrase on stdin");
-			err = -EIO;
-		}
-
-		break;
 	}
 
 	if (err) {
-		if (fd_out > 0)
-			close(fd_out);
-
-		if (fd_err > 0)
+		if (fd_err >= 0)
 			close(fd_err);
 
 		goto done;
 	}
 
 	err = -EINPROGRESS;
-
-	if (use_stdout) {
-		data->out_ch = g_io_channel_unix_new(fd_out);
-
-		/* Use ASCII encoding only */
-		if (g_io_channel_set_encoding(data->out_ch, NULL, NULL) !=
-					G_IO_STATUS_NORMAL) {
-			close_io_channel(data, data->out_ch);
-			err = -EIO;
-		} else {
-			data->out_ch_id = g_io_add_watch(data->out_ch,
-						G_IO_IN | G_IO_ERR | G_IO_HUP,
-						(GIOFunc)io_channel_out_cb,
-						data);
-		}
-	}
 
 	data->err_ch = g_io_channel_unix_new(fd_err);
 
@@ -1024,7 +1111,7 @@ static int run_connect(struct oc_private_data *data)
 	}
 
 done:
-	clear_provider_credentials(data->provider);
+	clear_provider_credentials(data->provider, err != -EINPROGRESS);
 
 	return err;
 }
@@ -1121,8 +1208,10 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 
 	connman_info("provider %p", data->provider);
 
-	if (!reply)
+	if (!reply) {
+		err = ENOENT;
 		goto err;
+	}
 
 	err = vpn_agent_check_and_process_reply_error(reply, data->provider,
 				data->task, data->cb, data->user_data);
@@ -1133,8 +1222,10 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 		goto out;
 	}
 
-	if (!vpn_agent_check_reply_has_dict(reply))
+	if (!vpn_agent_check_reply_has_dict(reply)) {
+		err = ENOENT;
 		goto err;
+	}
 
 	dbus_message_iter_init(reply, &iter);
 	dbus_message_iter_recurse(&iter, &dict);
@@ -1226,41 +1317,53 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 
 	switch (data->connect_type) {
 	case OC_CONNECT_COOKIE:
-		if (!cookie)
+		if (!cookie) {
+			err = EACCES;
 			goto err;
+		}
 
 		break;
 	case OC_CONNECT_USERPASS:
 		/* fall through */
 	case OC_CONNECT_COOKIE_WITH_USERPASS:
-		if (!username || !password)
+		if (!username || !password) {
+			err = EACCES;
 			goto err;
+		}
 
 		break;
 	case OC_CONNECT_PUBLICKEY:
 		break; // This should not be reached.
 	case OC_CONNECT_PKCS:
-		if (!pkcspassword)
+		if (!pkcspassword) {
+			err = EACCES;
 			goto err;
+		}
 
 		break;
 	}
 
-	err = run_connect(data);
+	if (cookie)
+		err = run_connect(data, cookie);
+	else
+		err = authenticate(data);
+
 	if (err != -EINPROGRESS)
 		goto err;
 
 	return;
 
 err:
-	oc_connect_done(data, EACCES);
+	oc_connect_done(data, err);
 
 out:
 	free_private_data(data);
 }
 
-static int request_input_credentials(struct oc_private_data *data,
-			request_input_reply_cb_t cb)
+static int request_input_credentials_full(
+			struct oc_private_data *data,
+			request_input_reply_cb_t cb,
+			void *user_data)
 {
 	DBusMessage *message;
 	const char *path;
@@ -1301,7 +1404,7 @@ static int request_input_credentials(struct oc_private_data *data,
 
 	/*
 	 * For backwards compatibility add OpenConnect.ServerCert and
-	 * OpenConnect.VPNHost as madnatory only in the default authentication
+	 * OpenConnect.VPNHost as mandatory only in the default authentication
 	 * mode. Otherwise. add the fields as informational. These should be
 	 * set in provider settings and not to be queried with every connection
 	 * attempt.
@@ -1345,6 +1448,16 @@ static int request_input_credentials(struct oc_private_data *data,
 				request_input_append_informational,
 				"OpenConnect.PKCSClientCert");
 
+		/* Do not allow to store or retrieve the encrypted PKCS pass */
+		vpn_agent_append_allow_credential_storage(&dict, false);
+		vpn_agent_append_allow_credential_retrieval(&dict, false);
+
+		/*
+		 * Indicate to keep credentials, the PKCS password should not
+		 * affect the credential storing.
+		 */
+		vpn_agent_append_keep_credentials(&dict, true);
+
 		request_input_append_to_dict(data->provider, &dict,
 					request_input_append_password,
 					"OpenConnect.PKCSPassword");
@@ -1356,7 +1469,7 @@ static int request_input_credentials(struct oc_private_data *data,
 	connman_dbus_dict_close(&iter, &dict);
 
 	err = connman_agent_queue_message(data->provider, message,
-			connman_timeout_input_request(), cb, data, agent);
+			connman_timeout_input_request(), cb, user_data, agent);
 
 	dbus_message_unref(message);
 
@@ -1366,6 +1479,12 @@ static int request_input_credentials(struct oc_private_data *data,
 	}
 
 	return -EINPROGRESS;
+}
+
+static int request_input_credentials(struct oc_private_data *data,
+			request_input_reply_cb_t cb)
+{
+	return request_input_credentials_full(data, cb, data);
 }
 
 static enum oc_connect_type get_authentication_type(
@@ -1397,7 +1516,7 @@ static int oc_connect(struct vpn_provider *provider,
 			const char *dbus_sender, void *user_data)
 {
 	struct oc_private_data *data;
-	const char *vpncookie;
+	const char *vpncookie = NULL;
 	const char *certificate;
 	const char *username;
 	const char *password;
@@ -1483,7 +1602,9 @@ static int oc_connect(struct vpn_provider *provider,
 		break;
 	}
 
-	return run_connect(data);
+	if (vpncookie && g_strcmp0(vpncookie, "-"))
+		return run_connect(data, vpncookie);
+	return authenticate(data);
 
 request_input:
 	err = request_input_credentials(data, request_input_credentials_reply);
@@ -1499,6 +1620,8 @@ request_input:
 
 static void oc_disconnect(struct vpn_provider *provider)
 {
+	struct oc_private_data *data;
+
 	connman_info("provider %p", provider);
 
 	if (!provider)
@@ -1510,6 +1633,19 @@ static void oc_disconnect(struct vpn_provider *provider)
 	* agent request to avoid having multiple ones visible.
 	*/
 	connman_agent_cancel(provider);
+
+	data = vpn_provider_get_plugin_data(provider);
+
+	if (!data)
+		return;
+
+	if (data->cookie_thread) {
+		char cmd = OC_CMD_CANCEL;
+		int w = write(data->fd_cmd, &cmd, 1);
+		if (w != 1)
+			DBG("Write failed, might be leaking a thread");
+	}
+
 }
 
 static int oc_save(struct vpn_provider *provider, GKeyFile *keyfile)
@@ -1549,7 +1685,7 @@ static int oc_error_code(struct vpn_provider *provider, int exit_code)
 	switch (exit_code) {
 	case 2:
 		/* Cookie has failed */
-		clear_provider_credentials(provider);
+		clear_provider_credentials(provider, false);
 		return VPN_PROVIDER_ERROR_LOGIN_FAILED;
 	case 1:
 		/* fall through */
@@ -1559,7 +1695,8 @@ static int oc_error_code(struct vpn_provider *provider, int exit_code)
 }
 
 static int oc_route_env_parse(struct vpn_provider *provider, const char *key,
-		int *family, unsigned long *idx, enum vpn_provider_route_type *type)
+		int *family, unsigned long *idx,
+		enum vpn_provider_route_type *type)
 {
 	char *end;
 	const char *start;
