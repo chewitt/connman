@@ -47,6 +47,7 @@ struct connman_provider {
 	int family;
 	struct connman_provider_driver *driver;
 	void *driver_data;
+	bool ipv6_data_leak_prevention;
 };
 
 void __connman_provider_append_properties(struct connman_provider *provider,
@@ -139,6 +140,10 @@ int __connman_provider_set_ipv6_for_connected(
 	if (!provider)
 		return -EINVAL;
 
+	/* Feature is explicitly disabled for the provider */
+	if (!provider->ipv6_data_leak_prevention)
+		return 0;
+
 	DBG("provider %p %s", provider, enable ? "enable" : "disable");
 
 	service = provider->vpn_service;
@@ -161,9 +166,28 @@ int __connman_provider_set_ipv6_for_connected(
 	if (__connman_service_is_split_routing(service) && !enable)
 		return 0;
 
+	/*
+	 * IPv6 should be disabled when ipconfig method is OFF or disabled
+	 * otherwise for the VPN.
+	 */
 	ipconfig = __connman_service_get_ip6config(service);
 	if (__connman_ipconfig_ipv6_is_enabled(ipconfig))
 		return 0;
+
+	transport_ident = __connman_provider_get_transport_ident(provider);
+	transport = connman_service_lookup_from_identifier(transport_ident);
+
+	/*
+	 * Do not disable IPv6 for a VPN that has a VPN as transport with
+	 * IPv6 enabled.
+	 */
+	if (connman_service_get_type(transport) == CONNMAN_SERVICE_TYPE_VPN) {
+		struct connman_ipconfig *tp_ipconfig;
+		
+		tp_ipconfig = __connman_service_get_ip6config(transport);
+		if (__connman_ipconfig_ipv6_is_enabled(tp_ipconfig))
+			return 0;
+	}
 
 	single_connected_tech =
 			connman_setting_get_bool("SingleConnectedTechnology");
@@ -174,9 +198,6 @@ int __connman_provider_set_ipv6_for_connected(
 	 */
 	if (enable && !single_connected_tech)
 		__connman_ipconfig_set_ipv6_support(enable);
-
-	transport_ident = __connman_provider_get_transport_ident(provider);
-	transport = connman_service_lookup_from_identifier(transport_ident);
 
 	/* In case a sevice of same type that the current transport is changed
 	 * to use another, e.g., WiFi AP, then the service is first
@@ -220,9 +241,6 @@ static int provider_indicate_state(struct connman_provider *provider,
 		break;
 	case CONNMAN_SERVICE_STATE_READY:
 	case CONNMAN_SERVICE_STATE_ONLINE:
-		if (provider->family != AF_INET)
-			break;
-
 		err = __connman_provider_set_ipv6_for_connected(provider,
 									false);
 		if (err && err != -EALREADY)
@@ -231,9 +249,6 @@ static int provider_indicate_state(struct connman_provider *provider,
 		break;
 	case CONNMAN_SERVICE_STATE_DISCONNECT:
 	case CONNMAN_SERVICE_STATE_FAILURE:
-		if (provider->family != AF_INET)
-			break;
-
 		err = __connman_provider_set_ipv6_for_connected(provider,
 									true);
 		if (err && err != -EALREADY)
@@ -843,6 +858,15 @@ int connman_provider_get_family(struct connman_provider *provider)
 	return provider->family;
 }
 
+void connman_provider_set_ipv6_data_leak_prevention(
+				struct connman_provider *provider, bool enable)
+{
+	if (!provider)
+		return;
+
+	provider->ipv6_data_leak_prevention = enable;
+}
+
 static void unregister_provider(gpointer data)
 {
 	struct connman_provider *provider = data;
@@ -909,6 +933,7 @@ static void provider_initialize(struct connman_provider *provider)
 
 	provider->index = 0;
 	provider->identifier = NULL;
+	provider->ipv6_data_leak_prevention = false;
 }
 
 static struct connman_provider *provider_new(void)
