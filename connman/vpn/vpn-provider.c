@@ -2905,6 +2905,8 @@ int vpn_provider_set_boolean(struct vpn_provider *provider, const char *key,
 		provider->do_split_routing = value;
 		send_value_boolean(provider->path, key,
 					provider->do_split_routing);
+	} else if (g_str_equal(key, "PreventIPv6DataLeak")) {
+		send_value_boolean(provider->path, key, value);
 	}
 
 	return 0;
@@ -2954,6 +2956,21 @@ bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 		return true; /* Not found, regard as immutable - no changes */
 
 	return setting->immutable;
+}
+
+int vpn_provider_set_supported_ip_networks(struct vpn_provider *provider,
+					bool ipv4_enabled, bool ipv6_enabled)
+{
+	if (!provider)
+		return -EINVAL;
+
+	/* Both cannot be off */
+	if (!ipv4_enabled && !ipv6_enabled)
+		return -EINVAL;
+
+	/* If IPv6 is not enabled enable the feature to prevent data leak */
+	return vpn_provider_set_boolean(provider, "PreventIPv6DataLeak",
+							!ipv6_enabled, true);
 }
 
 bool __vpn_provider_check_routes(struct vpn_provider *provider)
