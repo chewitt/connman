@@ -1653,6 +1653,30 @@ static void known_network_property_change(GDBusProxy *proxy, const char *name,
 	}
 }
 
+static void init_auto_connect(struct iwd_known_network *iwdkn)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+
+	g_hash_table_iter_init(&iter, networks);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct iwd_network *iwdn = value;
+		struct iwd_known_network *kn;
+
+		if (!iwdn->known_network)
+			continue;
+
+		kn = g_hash_table_lookup(known_networks, iwdn->known_network);
+		if (iwdkn != kn)
+			continue;
+
+		iwdkn->autoconnect = iwdn->autoconnect;
+		update_auto_connect(iwdkn);
+		return;
+	}
+}
+
 static void create_know_network(GDBusProxy *proxy)
 {
 	const char *path = g_dbus_proxy_get_path(proxy);
@@ -1685,6 +1709,8 @@ static void create_know_network(GDBusProxy *proxy)
 	DBG("name '%s' type %s hidden %d, last_connection_time %s auto_connect %d",
 		iwdkn->name, iwdkn->type, iwdkn->hidden,
 		iwdkn->last_connected_time, iwdkn->auto_connect);
+
+	init_auto_connect(iwdkn);
 
 	g_dbus_proxy_set_property_watch(iwdkn->proxy,
 			known_network_property_change, NULL);
