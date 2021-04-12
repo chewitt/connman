@@ -70,6 +70,7 @@ struct {
 								OPT_BOOL},
 	{ "openfortivpn.TrustedCert", "--trusted-cert", 1, 1, OPT_STRING},
 	{ "openfortivpn.Port", NULL, 1, 0, OPT_STRING},
+	{ "PPPD.NoIPv6", "--pppd-noipv6", 0, 1, OPT_BOOL },
 };
 
 #define ROUTE_NETWORK_KEY_PREFIX "route_network_"
@@ -278,6 +279,7 @@ static int task_append_config_data(struct vpn_provider *provider,
 					struct connman_task *task)
 {
 	const char *value = NULL;
+	bool no_ipv6 = false;
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(ofv_options); i++) {
@@ -305,10 +307,16 @@ static int task_append_config_data(struct vpn_provider *provider,
 						ofv_options[i].cm_opt, false))
 				continue;
 
-			connman_task_add_argument(task, ofv_options[i].ofv_opt,
-						NULL);
+			if (!g_strcmp0(ofv_options[i].cm_opt, "PPPD.NoIPv6"))
+				no_ipv6 = true;
+			else
+				connman_task_add_argument(task,
+							ofv_options[i].ofv_opt,
+							NULL);
 		}
 	}
+
+	vpn_provider_set_supported_ip_networks(provider, true, !no_ipv6);
 
 	return 0;
 }
