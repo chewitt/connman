@@ -2923,10 +2923,14 @@ bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
 	if (!setting || !setting->value)
 		return default_value;
 
-	if (!g_strcmp0(setting->value, "true"))
+	if (!g_strcmp0(setting->value, "true") ||
+				!g_strcmp0(setting->value, "yes") ||
+				!g_strcmp0(setting->value, "1"))
 		return true;
 
-	if (!g_strcmp0(setting->value, "false"))
+	if (!g_strcmp0(setting->value, "false") ||
+				!g_strcmp0(setting->value, "no") ||
+				!g_strcmp0(setting->value, "0"))
 		return false;
 
 	return default_value;
