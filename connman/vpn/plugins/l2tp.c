@@ -119,6 +119,7 @@ struct {
 	{ "PPPD.ReqMPPE128", "require-mppe-128", OPT_PPPD, NULL, OPT_BOOL },
 	{ "PPPD.ReqMPPEStateful", "mppe-stateful", OPT_PPPD, NULL, OPT_BOOL },
 	{ "PPPD.NoVJ", "novj", OPT_PPPD, NULL, OPT_BOOL },
+	{ "PPPD.NoIPv6", "noipv6", OPT_PPPD, NULL, OPT_BOOL},
 };
 
 static DBusConnection *connection;
@@ -386,6 +387,7 @@ static int write_pppd_option(struct vpn_provider *provider, int fd)
 {
 	int i;
 	const char *opt_s;
+	bool no_ipv6 = false;
 
 	l2tp_write_option(fd, "nodetach", NULL);
 	l2tp_write_option(fd, "lock", NULL);
@@ -409,6 +411,12 @@ static int write_pppd_option(struct vpn_provider *provider, int fd)
 		if (!opt_s)
 			continue;
 
+		if (!g_strcmp0(opt_s, "PPPD.NoIPv6")) {
+			no_ipv6 = vpn_provider_get_boolean(provider,
+						pppd_options[i].cm_opt, false);
+			continue;
+		}
+
 		if (pppd_options[i].type == OPT_STRING)
 			l2tp_write_option(fd,
 				pppd_options[i].pppd_opt, opt_s);
@@ -423,6 +431,8 @@ static int write_pppd_option(struct vpn_provider *provider, int fd)
 
 	l2tp_write_option(fd, "plugin",
 				SCRIPTDIR "/libppp-plugin.so");
+
+	vpn_provider_set_supported_ip_networks(provider, true, !no_ipv6);
 
 	return 0;
 }
