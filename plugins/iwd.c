@@ -249,7 +249,7 @@ static void cm_network_connect_cb(DBusMessage *message, void *user_data)
 		if (!strcmp(dbus_error, "net.connman.iwd.Failed"))
 			connman_network_set_error(iwdn->network,
 					CONNMAN_NETWORK_ERROR_INVALID_KEY);
-		else
+		else if (!iwdn->autoconnect)
 			connman_network_set_error(iwdn->network,
 					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
 		return;
