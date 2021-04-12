@@ -91,6 +91,7 @@ struct {
 	{ "VPNC.SingleDES", "Enable Single DES", NULL, OPT_BOOLEAN, true },
 	{ "VPNC.NoEncryption", "Enable no encryption", NULL, OPT_BOOLEAN,
 									true },
+	{ "VPNC.BlockIPv6", "BlockIPv6", NULL, OPT_BOOLEAN, true},
 };
 
 struct vc_private_data {
@@ -314,6 +315,7 @@ static ssize_t write_bool_option(int fd, const char *key, const char *value)
 static int vc_write_config_data(struct vpn_provider *provider, int fd)
 {
 	const char *opt_s;
+	bool block_ipv6 = false;
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(vpnc_options); i++) {
@@ -324,6 +326,12 @@ static int vc_write_config_data(struct vpn_provider *provider, int fd)
 
 		if (!opt_s)
 			continue;
+
+		if (g_strcmp0(opt_s, "VPNC.BlockIPv6") && !g_ascii_strcasecmp(
+					vpnc_options[i].vpnc_opt, "true")) {
+			block_ipv6 = true;
+			continue;
+		}
 
 		if (vpnc_options[i].type == OPT_STRING) {
 			if (write_option(fd,
@@ -336,6 +344,8 @@ static int vc_write_config_data(struct vpn_provider *provider, int fd)
 		}
 
 	}
+
+	vpn_provider_set_supported_ip_networks(provider, true, !block_ipv6);
 
 	return 0;
 }
