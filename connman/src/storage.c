@@ -831,9 +831,18 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 	gsize length = 0;
 	GError *error = NULL;
 	int ret = 0;
+	struct keyfile_record *record = NULL;
 	const mode_t perm = STORAGE_FILE_MODE;
 	const mode_t old_mask = umask(~perm & 0777);
 
+	record = g_hash_table_lookup(keyfile_hash, pathname);
+	if (record && record->keyfile != keyfile) {
+		DBG("Keyfile cache pollution. Trying to write different data "
+			"than in cache. Cache %p, writing %p.",
+			record->keyfile, keyfile);
+		keyfile_free(record);
+		keyfile_insert(pathname, keyfile);
+	}
 	data = g_key_file_to_data(keyfile, &length, NULL);
 
 	if (!g_file_set_contents(pathname, data, length, &error)) {
