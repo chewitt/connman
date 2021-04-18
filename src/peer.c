@@ -983,7 +983,10 @@ void connman_peer_add_service(struct connman_peer *peer,
 
 	service = g_malloc0(sizeof(struct _peer_service));
 	service->type = type;
-	service->data = g_memdup(data, data_length * sizeof(unsigned char));
+	if (data_length > 0) {
+		service->data = g_malloc(data_length * sizeof(unsigned char));
+		memcpy(service->data, data, data_length * sizeof(unsigned char));
+	}
 	service->length = data_length;
 
 	peer->services = g_slist_prepend(peer->services, service);
