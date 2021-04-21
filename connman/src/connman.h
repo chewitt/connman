@@ -354,7 +354,6 @@ void __connman_storage_delete_global(void);
 GKeyFile *__connman_storage_load_config(const char *ident);
 GKeyFile *__connman_storage_load_provider_config(const char *ident);
 
-GKeyFile *__connman_storage_open_service(const char *ident);
 int __connman_storage_save_service(GKeyFile *keyfile, const char *ident);
 GKeyFile *__connman_storage_load_provider(const char *identifier);
 void __connman_storage_save_provider(GKeyFile *keyfile, const char *identifier);
@@ -520,10 +519,13 @@ char *__connman_ipconfig_get_dhcp_address(struct connman_ipconfig *ipconfig);
 void __connman_ipconfig_set_dhcpv6_prefixes(struct connman_ipconfig *ipconfig,
 					char **prefixes);
 char **__connman_ipconfig_get_dhcpv6_prefixes(struct connman_ipconfig *ipconfig);
+void __connman_ipconfig_set_dhcpv6_duid(struct connman_ipconfig *ipconfig,
+					const char *dhcpv6_duid);
+char *__connman_ipconfig_get_dhcpv6_duid(struct connman_ipconfig *ipconfig);
 
-int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
+void __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 		GKeyFile *keyfile, const char *identifier, const char *prefix);
-int __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
+void __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
 		GKeyFile *keyfile, const char *identifier, const char *prefix);
 bool __connman_ipconfig_ipv6_privacy_enabled(struct connman_ipconfig *ipconfig);
 int __connman_ipconfig_ipv6_reset_privacy(struct connman_ipconfig *ipconfig);

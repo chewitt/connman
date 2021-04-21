@@ -1141,13 +1141,6 @@ static void storage_test_basic3()
 	g_assert_null(__connman_storage_load_provider_config(NULL));
 	g_assert_null(__connman_storage_load_provider_config(""));
 	g_assert_null(__connman_storage_load_provider_config("provider1conf"));
-	g_assert_null(__connman_storage_open_service(NULL));
-	g_assert_null(__connman_storage_open_service(""));
-
-	/* For not found service an empty keyfile is returned. Why? */
-	keyfile = __connman_storage_open_service("wifi1");
-	g_assert(keyfile);
-	g_key_file_unref(keyfile);
 
 	g_assert_null(connman_storage_load_service(NULL));
 	g_assert_null(connman_storage_load_service(""));

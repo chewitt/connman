@@ -57,6 +57,7 @@ struct connman_ipconfig {
 	int ipv6_autoconf_config;
 	char *last_dhcp_address;
 	char **last_dhcpv6_prefixes;
+	char *dhcpv6_duid;
 
 	bool ipv6_force_disabled;
 };
@@ -82,9 +83,102 @@ struct connman_ipdevice {
 	int ipv6_privacy;
 };
 
+struct ipconfig_store {
+	GKeyFile *file;
+	const char *group;
+	const char *prefix;
+};
+
 static GHashTable *ipdevice_hash = NULL;
 static GList *ipconfig_list = NULL;
 static bool is_ipv6_supported = false;
+
+static void store_set_str(struct ipconfig_store *store,
+			const char *key, const char *val)
+
+{
+	char *pk;
+
+	if (!val || strlen(val) == 0)
+		return;
+
+	pk = g_strdup_printf("%s%s", store->prefix, key);
+	g_key_file_set_string(store->file, store->group, pk, val);
+	g_free(pk);
+}
+
+static char *store_get_str(struct ipconfig_store *store, const char *key)
+{
+	char *pk, *val;
+
+	pk = g_strdup_printf("%s%s", store->prefix, key);
+	val = g_key_file_get_string(store->file, store->group, pk, NULL);
+	g_free(pk);
+
+	return val;
+}
+
+static void store_set_strs(struct ipconfig_store *store,
+			const char *key, char **val)
+{
+	guint len;
+	char *pk;
+
+	if (!val)
+		return;
+
+	len = g_strv_length(val);
+	if (len == 0)
+		return;
+
+	pk = g_strdup_printf("%s%s", store->prefix, key);
+	g_key_file_set_string_list(store->file, store->group,
+				pk, (const gchar **)val, len);
+	g_free(pk);
+}
+
+static char **store_get_strs(struct ipconfig_store *store, const char *key)
+{
+	gsize len;
+	char *pk, **val;
+
+	pk = g_strdup_printf("%s%s", store->prefix, key);
+	val = g_key_file_get_string_list(store->file, store->group,
+					pk, &len, NULL);
+	g_free(pk);
+
+	if (val && len == 0) {
+		g_free(val);
+		return NULL;
+	}
+
+	return val;
+}
+
+static void store_set_int(struct ipconfig_store *store,
+			const char *key, int val)
+{
+	char *pk;
+
+	if (val == 0)
+		return;
+
+	pk = g_strdup_printf("%s%s", store->prefix, key);
+	g_key_file_set_integer(store->file, store->group, pk, val);
+	g_free(pk);
+}
+
+static int store_get_int(struct ipconfig_store *store, const char *key)
+{
+	int val;
+	char *pk;
+
+	pk = g_strdup_printf("%s%s", store->prefix, key);
+	val = g_key_file_get_integer(store->file, store->group, pk, 0);
+	g_free(pk);
+
+	return val;
+}
 
 void __connman_ipconfig_clear_address(struct connman_ipconfig *ipconfig)
 {
@@ -1353,6 +1447,7 @@ void __connman_ipconfig_unref_debug(struct connman_ipconfig *ipconfig,
 	connman_ipaddress_free(ipconfig->address);
 	g_free(ipconfig->last_dhcp_address);
 	g_strfreev(ipconfig->last_dhcpv6_prefixes);
+	g_free(ipconfig->dhcpv6_duid);
 	g_free(ipconfig);
 }
 
@@ -1590,6 +1685,24 @@ char **__connman_ipconfig_get_dhcpv6_prefixes(struct connman_ipconfig *ipconfig)
 		return NULL;
 
 	return ipconfig->last_dhcpv6_prefixes;
+}
+
+void __connman_ipconfig_set_dhcpv6_duid(struct connman_ipconfig *ipconfig,
+						const char *dhcpv6_duid)
+{
+	if (!ipconfig)
+		return;
+
+	g_free(ipconfig->dhcpv6_duid);
+	ipconfig->dhcpv6_duid = g_strdup(dhcpv6_duid);
+}
+
+char *__connman_ipconfig_get_dhcpv6_duid(struct connman_ipconfig *ipconfig)
+{
+	if (!ipconfig)
+		return NULL;
+
+	return ipconfig->dhcpv6_duid;
 }
 
 static int disable_ipv6(struct connman_ipconfig *ipconfig, bool forced)
@@ -2331,65 +2444,58 @@ void __connman_ipconfig_append_ethernet(struct connman_ipconfig *ipconfig,
 					DBUS_TYPE_UINT16, &ipdevice->mtu);
 }
 
-int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
+void __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 		GKeyFile *keyfile, const char *identifier, const char *prefix)
 {
 	char *method;
-	char *key;
 	char *str;
+	struct ipconfig_store is = { .file = keyfile,
+				     .group = identifier,
+				     .prefix = prefix };
 
 	DBG("ipconfig %p identifier %s", ipconfig, identifier);
 
-	key = g_strdup_printf("%smethod", prefix);
-	method = g_key_file_get_string(keyfile, identifier, key, NULL);
+	method = store_get_str(&is, "method");
 	if (!method) {
 		switch (ipconfig->type) {
 		case CONNMAN_IPCONFIG_TYPE_IPV4:
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_DHCP;
 			break;
+
 		case CONNMAN_IPCONFIG_TYPE_IPV6:
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_AUTO;
 			break;
+
 		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
 		case CONNMAN_IPCONFIG_TYPE_ALL:
 			ipconfig->method = CONNMAN_IPCONFIG_METHOD_OFF;
 			break;
 		}
-	} else
+	} else {
 		ipconfig->method = __connman_ipconfig_string2method(method);
+		g_free(method);
+	}
 
 	if (ipconfig->method == CONNMAN_IPCONFIG_METHOD_UNKNOWN)
 		ipconfig->method = CONNMAN_IPCONFIG_METHOD_OFF;
 
 	if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6) {
-		gsize length;
-		char *pprefix;
-
 		if (ipconfig->method == CONNMAN_IPCONFIG_METHOD_AUTO ||
-			ipconfig->method == CONNMAN_IPCONFIG_METHOD_MANUAL) {
+				ipconfig->method == CONNMAN_IPCONFIG_METHOD_MANUAL) {
 			char *privacy;
 
-			pprefix = g_strdup_printf("%sprivacy", prefix);
-			privacy = g_key_file_get_string(keyfile, identifier,
-							pprefix, NULL);
+			privacy = store_get_str(&is, "privacy");
 			ipconfig->ipv6_privacy_config = string2privacy(privacy);
-			g_free(pprefix);
 			g_free(privacy);
 		}
 
-		pprefix = g_strdup_printf("%sDHCP.LastPrefixes", prefix);
+		g_strfreev(ipconfig->last_dhcpv6_prefixes);
 		ipconfig->last_dhcpv6_prefixes =
-			g_key_file_get_string_list(keyfile, identifier, pprefix,
-						&length, NULL);
-		if (ipconfig->last_dhcpv6_prefixes && length == 0) {
-			g_free(ipconfig->last_dhcpv6_prefixes);
-			ipconfig->last_dhcpv6_prefixes = NULL;
-		}
-		g_free(pprefix);
+			store_get_strs(&is, "DHCP.LastPrefixes");
+
+		ipconfig->dhcpv6_duid = store_get_str(&is, "DHCP.DUID");
 	}
 
-	g_free(method);
-	g_free(key);
 
 	switch (ipconfig->method) {
 	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
@@ -2398,39 +2504,27 @@ int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 
 	case CONNMAN_IPCONFIG_METHOD_FIXED:
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		ipconfig->address->prefixlen =
+			store_get_int(&is, "netmask_prefixlen");
 
-		key = g_strdup_printf("%snetmask_prefixlen", prefix);
-		ipconfig->address->prefixlen = g_key_file_get_integer(
-				keyfile, identifier, key, NULL);
-		g_free(key);
-
-		key = g_strdup_printf("%slocal_address", prefix);
 		g_free(ipconfig->address->local);
-		ipconfig->address->local = g_key_file_get_string(
-			keyfile, identifier, key, NULL);
-		g_free(key);
+		ipconfig->address->local =
+			store_get_str(&is, "local_address");
 
-		key = g_strdup_printf("%speer_address", prefix);
 		g_free(ipconfig->address->peer);
-		ipconfig->address->peer = g_key_file_get_string(
-				keyfile, identifier, key, NULL);
-		g_free(key);
+		ipconfig->address->peer =
+			store_get_str(&is, "peer_address");
 
-		key = g_strdup_printf("%sbroadcast_address", prefix);
 		g_free(ipconfig->address->broadcast);
-		ipconfig->address->broadcast = g_key_file_get_string(
-				keyfile, identifier, key, NULL);
-		g_free(key);
+		ipconfig->address->broadcast =
+			store_get_str(&is, "broadcast_address");
 
-		key = g_strdup_printf("%sgateway", prefix);
 		g_free(ipconfig->address->gateway);
-		ipconfig->address->gateway = g_key_file_get_string(
-				keyfile, identifier, key, NULL);
-		g_free(key);
+		ipconfig->address->gateway =
+			store_get_str(&is, "gateway");
 		break;
 
 	case CONNMAN_IPCONFIG_METHOD_AUTO:
-
 		if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV4)
 			break;
 
@@ -2444,118 +2538,63 @@ int __connman_ipconfig_load(struct connman_ipconfig *ipconfig,
 		/* fall through */
 
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
-
-		key = g_strdup_printf("%sDHCP.LastAddress", prefix);
-		str = g_key_file_get_string(keyfile, identifier, key, NULL);
+		str = store_get_str(&is, "DHCP.LastAddress");
 		if (str) {
 			g_free(ipconfig->last_dhcp_address);
 			ipconfig->last_dhcp_address = str;
 		}
-		g_free(key);
 
 		break;
 	}
-
-	return 0;
 }
 
-int __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
+void __connman_ipconfig_save(struct connman_ipconfig *ipconfig,
 		GKeyFile *keyfile, const char *identifier, const char *prefix)
 {
 	const char *method;
-	char *key;
+	struct ipconfig_store is = { .file = keyfile,
+				     .group = identifier,
+				     .prefix = prefix };
 
 	method = __connman_ipconfig_method2string(ipconfig->method);
-
 	DBG("ipconfig %p identifier %s method %s", ipconfig, identifier,
 								method);
-	if (method) {
-		key = g_strdup_printf("%smethod", prefix);
-		g_key_file_set_string(keyfile, identifier, key, method);
-		g_free(key);
-	}
+	store_set_str(&is, "method", method);
 
 	if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6) {
-		const char *privacy;
-		privacy = privacy2string(ipconfig->ipv6_privacy_config);
-		key = g_strdup_printf("%sprivacy", prefix);
-		g_key_file_set_string(keyfile, identifier, key, privacy);
-		g_free(key);
+		store_set_str(&is, "privacy",
+				privacy2string(ipconfig->ipv6_privacy_config));
 
-		key = g_strdup_printf("%sDHCP.LastAddress", prefix);
-		if (ipconfig->last_dhcp_address &&
-				strlen(ipconfig->last_dhcp_address) > 0)
-			g_key_file_set_string(keyfile, identifier, key,
-					ipconfig->last_dhcp_address);
-		else
-			g_key_file_remove_key(keyfile, identifier, key, NULL);
-		g_free(key);
+		store_set_str(&is, "DHCP.LastAddress",
+				ipconfig->last_dhcp_address);
 
-		key = g_strdup_printf("%sDHCP.LastPrefixes", prefix);
-		if (ipconfig->last_dhcpv6_prefixes &&
-				ipconfig->last_dhcpv6_prefixes[0]) {
-			guint len =
-				g_strv_length(ipconfig->last_dhcpv6_prefixes);
+		store_set_strs(&is, "DHCP.LastPrefixes",
+				ipconfig->last_dhcpv6_prefixes);
 
-			g_key_file_set_string_list(keyfile, identifier, key,
-				(const gchar **)ipconfig->last_dhcpv6_prefixes,
-						len);
-		} else
-			g_key_file_remove_key(keyfile, identifier, key, NULL);
-		g_free(key);
+		store_set_str(&is, "DHCP.DUID", ipconfig->dhcpv6_duid);
 	}
 
 	switch (ipconfig->method) {
 	case CONNMAN_IPCONFIG_METHOD_FIXED:
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
 		break;
+
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
-		key = g_strdup_printf("%sDHCP.LastAddress", prefix);
-		if (ipconfig->last_dhcp_address &&
-				strlen(ipconfig->last_dhcp_address) > 0)
-			g_key_file_set_string(keyfile, identifier, key,
-					ipconfig->last_dhcp_address);
-		else
-			g_key_file_remove_key(keyfile, identifier, key, NULL);
-		g_free(key);
+		store_set_str(&is, "DHCP.LastAddress",
+				ipconfig->last_dhcp_address);
 		/* fall through */
+
 	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
 	case CONNMAN_IPCONFIG_METHOD_OFF:
 	case CONNMAN_IPCONFIG_METHOD_AUTO:
-		return 0;
+		return;
 	}
 
-	key = g_strdup_printf("%snetmask_prefixlen", prefix);
-	if (ipconfig->address->prefixlen != 0)
-		g_key_file_set_integer(keyfile, identifier,
-				key, ipconfig->address->prefixlen);
-	g_free(key);
-
-	key = g_strdup_printf("%slocal_address", prefix);
-	if (ipconfig->address->local)
-		g_key_file_set_string(keyfile, identifier,
-				key, ipconfig->address->local);
-	g_free(key);
-
-	key = g_strdup_printf("%speer_address", prefix);
-	if (ipconfig->address->peer)
-		g_key_file_set_string(keyfile, identifier,
-				key, ipconfig->address->peer);
-	g_free(key);
-
-	key = g_strdup_printf("%sbroadcast_address", prefix);
-	if (ipconfig->address->broadcast)
-		g_key_file_set_string(keyfile, identifier,
-			key, ipconfig->address->broadcast);
-	g_free(key);
-
-	key = g_strdup_printf("%sgateway", prefix);
-	if (ipconfig->address->gateway)
-		g_key_file_set_string(keyfile, identifier,
-			key, ipconfig->address->gateway);
-	g_free(key);
-
-	return 0;
+	store_set_int(&is, "netmask_prefixlen", ipconfig->address->prefixlen);
+	store_set_str(&is, "local_address", ipconfig->address->local);
+	store_set_str(&is, "peer_address", ipconfig->address->peer);
+	store_set_str(&is, "broadcast_address", ipconfig->address->broadcast);
+	store_set_str(&is, "gateway", ipconfig->address->gateway);
 }
 
 int __connman_ipconfig_init(void)

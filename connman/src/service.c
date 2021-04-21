@@ -1089,7 +1089,7 @@ static int service_save(struct connman_service *service)
 	if (service->new_service)
 		return -ESRCH;
 
-	keyfile = __connman_storage_open_service(service->identifier);
+	keyfile = g_key_file_new();
 	if (!keyfile)
 		return -EIO;
 
@@ -1181,9 +1181,6 @@ static int service_save(struct connman_service *service)
 		g_key_file_set_boolean(keyfile, service->identifier,
 					"Favorite", service->favorite);
 
-		g_key_file_remove_key(keyfile, service->identifier,
-				"Failure", NULL);
-
 		/* fall through */
 
 	case CONNMAN_SERVICE_TYPE_ETHERNET:
@@ -1207,48 +1204,39 @@ static int service_save(struct connman_service *service)
 
 	if (service->passphrase && strlen(service->passphrase) > 0)
 		g_key_file_set_string(keyfile, service->identifier,
-					"Passphrase", service->passphrase);
-	else
-		g_key_file_remove_key(keyfile, service->identifier,
-							"Passphrase", NULL);
+				"Passphrase", service->passphrase);
 
 	if (service->ipconfig_ipv4)
 		__connman_ipconfig_save(service->ipconfig_ipv4, keyfile,
-					service->identifier, "IPv4.");
+				service->identifier, "IPv4.");
 
 	if (service->ipconfig_ipv6)
 		__connman_ipconfig_save(service->ipconfig_ipv6, keyfile,
-						service->identifier, "IPv6.");
+				service->identifier, "IPv6.");
 
 	if (service->nameservers_config) {
 		guint len = g_strv_length(service->nameservers_config);
 
 		g_key_file_set_string_list(keyfile, service->identifier,
-								"Nameservers",
+				"Nameservers",
 				(const gchar **) service->nameservers_config, len);
-	} else
-	g_key_file_remove_key(keyfile, service->identifier,
-							"Nameservers", NULL);
+	}
 
 	if (service->timeservers_config) {
 		guint len = g_strv_length(service->timeservers_config);
 
 		g_key_file_set_string_list(keyfile, service->identifier,
-								"Timeservers",
+				"Timeservers",
 				(const gchar **) service->timeservers_config, len);
-	} else
-		g_key_file_remove_key(keyfile, service->identifier,
-							"Timeservers", NULL);
+	}
 
 	if (service->domains) {
 		guint len = g_strv_length(service->domains);
 
 		g_key_file_set_string_list(keyfile, service->identifier,
-								"Domains",
+				"Domains",
 				(const gchar **) service->domains, len);
-	} else
-		g_key_file_remove_key(keyfile, service->identifier,
-							"Domains", NULL);
+	}
 
 	cst_str = proxymethod2string(service->proxy_config);
 	if (cst_str)
@@ -1261,9 +1249,7 @@ static int service_save(struct connman_service *service)
 		g_key_file_set_string_list(keyfile, service->identifier,
 				"Proxy.Servers",
 				(const gchar **) service->proxies, len);
-	} else
-		g_key_file_remove_key(keyfile, service->identifier,
-						"Proxy.Servers", NULL);
+	}
 
 	if (service->excludes) {
 		guint len = g_strv_length(service->excludes);
@@ -1271,27 +1257,21 @@ static int service_save(struct connman_service *service)
 		g_key_file_set_string_list(keyfile, service->identifier,
 				"Proxy.Excludes",
 				(const gchar **) service->excludes, len);
-	} else
-		g_key_file_remove_key(keyfile, service->identifier,
-						"Proxy.Excludes", NULL);
+	}
 
 	if (service->pac && strlen(service->pac) > 0)
 		g_key_file_set_string(keyfile, service->identifier,
-					"Proxy.URL", service->pac);
-	else
-		g_key_file_remove_key(keyfile, service->identifier,
-							"Proxy.URL", NULL);
+				"Proxy.URL", service->pac);
 
 	if (service->hidden_service)
-		g_key_file_set_boolean(keyfile, service->identifier, "Hidden",
-									TRUE);
+		g_key_file_set_boolean(keyfile, service->identifier,
+				"Hidden", TRUE);
 
 	if (service->config_file && strlen(service->config_file) > 0)
 		g_key_file_set_string(keyfile, service->identifier,
 				"Config.file", service->config_file);
 
-	if (service->config_entry &&
-					strlen(service->config_entry) > 0)
+	if (service->config_entry && strlen(service->config_entry) > 0)
 		g_key_file_set_string(keyfile, service->identifier,
 				"Config.ident", service->config_entry);
 
