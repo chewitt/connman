@@ -6727,8 +6727,8 @@ int __connman_service_connect(struct connman_service *service,
 
 	__connman_service_clear_error(service);
 
-	if (__connman_network_native_autoconnect(service->network) &&
-			service->autoconnect) {
+	if (service->network && service->autoconnect &&
+			__connman_network_native_autoconnect(service->network)) {
 		DBG("service %p switch connecting reason to native", service);
 		reason = CONNMAN_SERVICE_CONNECT_REASON_NATIVE;
 	}
