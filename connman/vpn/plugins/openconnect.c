@@ -937,6 +937,7 @@ static int authenticate(struct oc_private_data *data)
 	const char *key = NULL;
 	const char *urlpath;
 	const char *vpnhost;
+	bool disable_ipv6;
 
 	DBG("");
 
@@ -974,9 +975,13 @@ static int authenticate(struct oc_private_data *data)
 	if (urlpath)
 		openconnect_set_urlpath(data->vpninfo, urlpath);
 
-	if (vpn_provider_get_boolean(data->provider,
-					"OpenConnect.DisableIPv6", false))
+	disable_ipv6 = vpn_provider_get_boolean(data->provider,
+					"OpenConnect.DisableIPv6", false);
+	if (disable_ipv6)
 		openconnect_disable_ipv6(data->vpninfo);
+
+	vpn_provider_set_supported_ip_networks(data->provider, true,
+								!disable_ipv6);
 
 	vpnhost = vpn_provider_get_string(data->provider,
 						"OpenConnect.VPNHost");

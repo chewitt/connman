@@ -83,6 +83,7 @@ struct {
 	{ "PPPD.ReqMPPE128", "require-mppe-128", NULL, OPT_BOOL },
 	{ "PPPD.ReqMPPEStateful", "mppe-stateful", NULL, OPT_BOOL },
 	{ "PPPD.NoVJ", "novj", NULL, OPT_BOOL },
+	{ "PPPD.NoIPv6", "noipv6", NULL, OPT_BOOL},
 };
 
 static DBusConnection *connection;
@@ -446,6 +447,7 @@ static int run_connect(struct vpn_provider *provider,
 	const char *opt_s;
 	const char *host;
 	char *str;
+	bool no_ipv6 = false;
 	int err, i;
 
 	if (!username || !password) {
@@ -482,6 +484,12 @@ static int run_connect(struct vpn_provider *provider,
 		if (!opt_s)
 			continue;
 
+		if (!g_strcmp0(opt_s, "PPPD.NoIPv6")) {
+			no_ipv6 = vpn_provider_get_boolean(provider,
+						pptp_options[i].cm_opt, false);
+			continue;
+		}
+
 		if (pptp_options[i].type == OPT_STRING)
 			connman_task_add_argument(task,
 					pptp_options[i].pptp_opt, opt_s);
@@ -499,6 +507,8 @@ static int run_connect(struct vpn_provider *provider,
 
 	connman_task_add_argument(task, "plugin",
 				SCRIPTDIR "/libppp-plugin.so");
+
+	vpn_provider_set_supported_ip_networks(provider, true, !no_ipv6);
 
 	err = connman_task_run(task, vpn_died, provider,
 				NULL, NULL, NULL);

@@ -118,6 +118,9 @@ bool connman_provider_is_split_routing(struct connman_provider *provider);
 int connman_provider_set_split_routing(struct connman_provider *provider,
 							bool split_routing);
 int connman_provider_get_family(struct connman_provider *provider);
+void connman_provider_set_ipv6_data_leak_prevention(
+					struct connman_provider *provider,
+					bool enable);
 
 const char *connman_provider_get_driver_name(struct connman_provider *provider);
 const char *connman_provider_get_save_group(struct connman_provider *provider);

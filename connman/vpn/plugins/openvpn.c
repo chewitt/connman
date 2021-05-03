@@ -87,6 +87,7 @@ struct {
 	{ "OpenVPN.Ping", "--ping", 1},
 	{ "OpenVPN.PingExit", "--ping-exit", 1},
 	{ "OpenVPN.RemapUsr1", "--remap-usr1", 1},
+	{ "OpenVPN.BlockIPv6", "--block-ipv6", 0}, /* In versions >= 2.5.0 */
 };
 
 struct ov_private_data {
@@ -357,6 +358,7 @@ static int task_append_config_data(struct vpn_provider *provider,
 					struct connman_task *task)
 {
 	const char *option;
+	bool block_ipv6 = false;
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(ov_options); i++) {
@@ -376,12 +378,20 @@ static int task_append_config_data(struct vpn_provider *provider,
 						!strcmp(option, "-"))
 			option = NULL;
 
+		/* Handle BlockIPv6 internally */
+		if (!strncmp(ov_options[i].cm_opt, "OpenVPN.BlockIPv6", 17)) {
+			block_ipv6 = true;
+			continue;
+		}
+
 		if (connman_task_add_argument(task,
 				ov_options[i].ov_opt,
 				ov_options[i].has_value ? option : NULL) < 0)
 			return -EIO;
 
 	}
+
+	vpn_provider_set_supported_ip_networks(provider, true, !block_ipv6);
 
 	return 0;
 }

@@ -2042,6 +2042,7 @@ static gboolean property_changed(DBusConnection *conn,
 	const char *key;
 	const char *signature =	DBUS_TYPE_STRING_AS_STRING
 		DBUS_TYPE_VARIANT_AS_STRING;
+	dbus_bool_t value_bool;
 
 	if (!dbus_message_has_signature(message, signature)) {
 		connman_error("vpn property signature \"%s\" does not match "
@@ -2113,13 +2114,16 @@ static gboolean property_changed(DBusConnection *conn,
 		data->domain = g_strdup(str);
 		connman_provider_set_domain(data->provider, data->domain);
 	} else if (g_str_equal(key, "SplitRouting")) {
-		dbus_bool_t split_routing;
-		dbus_message_iter_get_basic(&value, &split_routing);
-		change_provider_split_routing(data->provider, split_routing);
+		dbus_message_iter_get_basic(&value, &value_bool);
+		change_provider_split_routing(data->provider, value_bool);
 	} else if (g_str_equal(key, "DefaultRoute")) {
 		dbus_message_iter_get_basic(&value, &str);
 		change_provider_split_routing(data->provider,
 						!g_strcmp0(str, "false"));
+	} else if (g_str_equal(key, "PreventIPv6DataLeak")) {
+		dbus_message_iter_get_basic(&value, &value_bool);
+		connman_provider_set_ipv6_data_leak_prevention(data->provider,
+								value_bool);
 	}
 
 	if (ip_set && err == 0) {

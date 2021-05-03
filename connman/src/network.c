@@ -282,8 +282,7 @@ static int set_connected_dhcp(struct connman_network *network)
 }
 
 static int manual_ipv6_set(struct connman_network *network,
-				struct connman_ipconfig *ipconfig_ipv6,
-				bool force)
+				struct connman_ipconfig *ipconfig_ipv6)
 {
 	struct connman_service *service;
 	int err;
@@ -297,7 +296,7 @@ static int manual_ipv6_set(struct connman_network *network,
 	if (!__connman_ipconfig_get_local(ipconfig_ipv6))
 		__connman_service_read_ip6config(service);
 
-	err = __connman_ipconfig_enable_ipv6(ipconfig_ipv6, force);
+	err = __connman_ipconfig_enable_ipv6(ipconfig_ipv6);
 	if (err)
 		return err;
 
@@ -377,7 +376,7 @@ err:
 	return err;
 }
 
-static void autoconf_ipv6_set(struct connman_network *network, bool force);
+static void autoconf_ipv6_set(struct connman_network *network);
 static void dhcpv6_callback(struct connman_network *network,
 			enum __connman_dhcpv6_status status, gpointer data);
 
@@ -399,7 +398,7 @@ static void dhcpv6_renew_callback(struct connman_network *network,
 		stop_dhcpv6(network);
 
 		/* restart and do solicit again. */
-		autoconf_ipv6_set(network, false);
+		autoconf_ipv6_set(network);
 		break;
 	}
 }
@@ -425,7 +424,7 @@ static void dhcpv6_callback(struct connman_network *network,
 
 	} else if (status == CONNMAN_DHCPV6_STATUS_RESTART) {
 		stop_dhcpv6(network);
-		autoconf_ipv6_set(network, false);
+		autoconf_ipv6_set(network);
 	} else
 		stop_dhcpv6(network);
 }
@@ -561,7 +560,7 @@ int __connman_network_refresh_rs_ipv6(struct connman_network *network,
 	return ret;
 }
 
-static void autoconf_ipv6_set(struct connman_network *network, bool force)
+static void autoconf_ipv6_set(struct connman_network *network)
 {
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
@@ -591,7 +590,7 @@ static void autoconf_ipv6_set(struct connman_network *network, bool force)
 
 	__connman_ipconfig_enable(ipconfig);
 
-	if (__connman_ipconfig_enable_ipv6(ipconfig, force))
+	if (__connman_ipconfig_enable_ipv6(ipconfig))
 		return;
 
 	__connman_ipconfig_address_remove(ipconfig);
@@ -626,8 +625,8 @@ static void set_connected(struct connman_network *network)
 	DBG("service %p ipv4 %p ipv6 %p", service, ipconfig_ipv4,
 		ipconfig_ipv6);
 
-	__connman_network_enable_ipconfig(network, ipconfig_ipv4, false);
-	__connman_network_enable_ipconfig(network, ipconfig_ipv6, false);
+	__connman_network_enable_ipconfig(network, ipconfig_ipv4);
+	__connman_network_enable_ipconfig(network, ipconfig_ipv6);
 }
 
 static void set_disconnected(struct connman_network *network)
@@ -646,6 +645,21 @@ static void set_disconnected(struct connman_network *network)
 		ipconfig_ipv6);
 
 	ipv4_method = __connman_ipconfig_get_method(ipconfig_ipv4);
+
+	/*
+	 * If disconnecting a force disabled IPv6 restore the old method and
+	 * remove force disabled to allow enabling of IPv6 for kernel to
+	 * cleanup the addresses. This is crucial when changing to another same
+	 * type service, e.g., WiFi in order to properly get IPv6 re-enabled
+	 * via kernel.
+	 */
+	if (ipconfig_ipv6 && __connman_ipconfig_ipv6_get_force_disabled(
+							ipconfig_ipv6)) {
+		__connman_ipconfig_ipv6_set_force_disabled(ipconfig_ipv6,
+									false);
+		__connman_ipconfig_ipv6_method_restore(ipconfig_ipv6);
+	}
+
 	ipv6_method = __connman_ipconfig_get_method(ipconfig_ipv6);
 
 	DBG("method ipv4 %d ipv6 %d", ipv4_method, ipv6_method);
@@ -734,8 +748,8 @@ static void set_disconnected(struct connman_network *network)
 		 * automagically.
 		 */
 		if (ipv6_method == CONNMAN_IPCONFIG_METHOD_AUTO) {
-			__connman_ipconfig_disable_ipv6(ipconfig_ipv6, false);
-			__connman_ipconfig_enable_ipv6(ipconfig_ipv6, false);
+			__connman_ipconfig_disable_ipv6(ipconfig_ipv6);
+			__connman_ipconfig_enable_ipv6(ipconfig_ipv6);
 		}
 	}
 
@@ -1579,7 +1593,7 @@ int __connman_network_clear_ipconfig(struct connman_network *network,
 }
 
 int __connman_network_enable_ipconfig(struct connman_network *network,
-				struct connman_ipconfig *ipconfig, bool force)
+					struct connman_ipconfig *ipconfig)
 {
 	int r = 0;
 	enum connman_ipconfig_type type;
@@ -1596,6 +1610,25 @@ int __connman_network_enable_ipconfig(struct connman_network *network,
 		return -ENOSYS;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		/*
+		 * If enabling IPv6 for new network while IPv6 support is
+		 * disabled enforce the ipconfig to be completely disabled to
+		 * avoid IPv6 address being set.
+		 */
+		if (!__connman_ipconfig_get_ipv6_support()) {
+			DBG("ipv6 not enabled, force disable %p", ipconfig);
+
+			__connman_ipconfig_ipv6_method_save(ipconfig);
+			__connman_ipconfig_set_method(ipconfig,
+						CONNMAN_IPCONFIG_METHOD_OFF);
+
+			__connman_ipconfig_disable_ipv6(ipconfig);
+			__connman_ipconfig_ipv6_set_force_disabled(ipconfig,
+									true);
+
+			return 0;
+		}
+
 		set_configuration(network, type);
 
 		method = __connman_ipconfig_get_method(ipconfig);
@@ -1607,20 +1640,19 @@ int __connman_network_enable_ipconfig(struct connman_network *network,
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_OFF:
-			__connman_ipconfig_disable_ipv6(ipconfig, force);
+			__connman_ipconfig_disable_ipv6(ipconfig);
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_AUTO:
-			autoconf_ipv6_set(network, force);
+			autoconf_ipv6_set(network);
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_FIXED:
 		case CONNMAN_IPCONFIG_METHOD_MANUAL:
-			r = manual_ipv6_set(network, ipconfig, force);
+			r = manual_ipv6_set(network, ipconfig);
 			break;
 
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
-			__connman_ipconfig_enable_ipv6(ipconfig, force);
 			r = -ENOSYS;
 			break;
 		}
