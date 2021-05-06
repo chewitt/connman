@@ -301,7 +301,7 @@ static void parse_config(GKeyFile *config)
 	char **interfaces;
 	char **str_list;
 	char **tethering;
-        char *vendor_class_id;
+	char *string;
 	gsize len;
 	int integer;
 
@@ -461,10 +461,10 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	vendor_class_id = __connman_config_get_string(config, "General",
+	string = __connman_config_get_string(config, "General",
 					CONF_VENDOR_CLASS_ID, &error);
 	if (!error)
-		connman_settings.vendor_class_id = vendor_class_id;
+		connman_settings.vendor_class_id = string;
 
 	g_clear_error(&error);
 
@@ -703,7 +703,7 @@ static GOptionEntry options[] = {
 	{ NULL },
 };
 
-const char *connman_option_get_string(const char *key)
+char *connman_setting_get_string(const char *key)
 {
 	if (g_str_equal(key, CONF_VENDOR_CLASS_ID))
 		return connman_settings.vendor_class_id;
@@ -988,6 +988,7 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.fallback_nameservers);
 	g_strfreev(connman_settings.blacklisted_interfaces);
 	g_strfreev(connman_settings.tethering_technologies);
+	g_free(connman_settings.vendor_class_id);
 
 	g_free(option_debug);
 	g_free(option_wifi);
