@@ -166,6 +166,10 @@ struct wifi_data {
 	int assoc_code;
 };
 
+struct wifi_network {
+	unsigned int keymgmt;
+};
+
 struct disconnect_data {
 	struct wifi_data *wifi;
 	struct connman_network *network;
@@ -816,6 +820,7 @@ static void remove_networks(struct connman_device *device,
 	for (list = wifi->networks; list; list = list->next) {
 		struct connman_network *network = list->data;
 
+		g_free(connman_network_get_data(network));
 		connman_device_remove_network(device, network);
 		connman_network_unref(network);
 	}
@@ -2158,6 +2163,7 @@ static GSupplicantSecurity network_security(const char *security)
 
 static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 {
+	struct wifi_network *network_data = connman_network_get_data(network);
 	const char *security;
 
 	memset(ssid, 0, sizeof(*ssid));
@@ -2167,6 +2173,8 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	ssid->scan_ssid = 1;
 	security = connman_network_get_string(network, "WiFi.Security");
 	ssid->security = network_security(security);
+	ssid->keymgmt = network_data->keymgmt;
+	ssid->ieee80211w = G_SUPPLICANT_MFP_OPTIONAL;
 	ssid->passphrase = connman_network_get_string(network,
 						"WiFi.Passphrase");
 
@@ -2813,6 +2821,7 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 	struct connman_network *network;
 	GSupplicantInterface *interface;
 	struct wifi_data *wifi;
+	struct wifi_network *network_data;
 	const char *name, *identifier, *security, *group, *mode;
 	const unsigned char *ssid;
 	unsigned int ssid_len;
@@ -2861,7 +2870,14 @@ static void network_added(GSupplicantNetwork *supplicant_network)
 		}
 
 		wifi->networks = g_slist_prepend(wifi->networks, network);
+
+		network_data = g_new0(struct wifi_network, 1);
+		connman_network_set_data(network, network_data);
 	}
+
+	network_data = connman_network_get_data(network);
+	network_data->keymgmt =
+		g_supplicant_network_get_keymgmt(supplicant_network);
 
 	if (name && name[0] != '\0')
 		connman_network_set_name(network, name);
@@ -2930,6 +2946,7 @@ static void network_removed(GSupplicantNetwork *network)
 
 	wifi->networks = g_slist_remove(wifi->networks, connman_network);
 
+	g_free(connman_network_get_data(connman_network));
 	connman_device_remove_network(wifi->device, connman_network);
 	connman_network_unref(connman_network);
 }

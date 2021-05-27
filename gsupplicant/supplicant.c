@@ -92,6 +92,7 @@ static struct strvalmap keymgmt_map[] = {
 	{ "wpa-eap",		G_SUPPLICANT_KEYMGMT_WPA_EAP	},
 	{ "wpa-eap-sha256",	G_SUPPLICANT_KEYMGMT_WPA_EAP_256	},
 	{ "wps",		G_SUPPLICANT_KEYMGMT_WPS		},
+	{ "sae",		G_SUPPLICANT_KEYMGMT_SAE		},
 	{ }
 };
 
@@ -234,6 +235,7 @@ struct _GSupplicantNetwork {
 	unsigned int wps_capabilities;
 	GHashTable *bss_table;
 	GHashTable *config_table;
+	unsigned int keymgmt;
 };
 
 struct _GSupplicantPeer {
@@ -1427,6 +1429,14 @@ bool g_supplicant_peer_has_requested_connection(GSupplicantPeer *peer)
 	return peer->connection_requested;
 }
 
+unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network)
+{
+	if (!network)
+		return 0;
+
+	return network->keymgmt;
+}
+
 static void merge_network(GSupplicantNetwork *network)
 {
 	GString *str;
@@ -1457,7 +1467,8 @@ static void merge_network(GSupplicantNetwork *network)
 	else if (g_strcmp0(mode, "1") == 0)
 		g_string_append_printf(str, "_adhoc");
 
-	if (g_strcmp0(key_mgmt, "WPA-PSK") == 0)
+	if ((g_strcmp0(key_mgmt, "WPA-PSK") == 0) ||
+	    (g_strcmp0(key_mgmt, "SAE") == 0))
 		g_string_append_printf(str, "_psk");
 
 	group = g_string_free(str, FALSE);
@@ -1650,6 +1661,7 @@ static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	network->name = create_name(bss->ssid, bss->ssid_len);
 	network->mode = bss->mode;
 	network->security = bss->security;
+	network->keymgmt = bss->keymgmt;
 	network->ssid_len = bss->ssid_len;
 	memcpy(network->ssid, bss->ssid, bss->ssid_len);
 	network->signal = bss->signal;
@@ -1931,7 +1943,8 @@ static void bss_compute_security(struct g_supplicant_bss *bss)
 	if (bss->keymgmt &
 			(G_SUPPLICANT_KEYMGMT_WPA_PSK |
 				G_SUPPLICANT_KEYMGMT_WPA_FT_PSK |
-				G_SUPPLICANT_KEYMGMT_WPA_PSK_256))
+				G_SUPPLICANT_KEYMGMT_WPA_PSK_256 |
+				G_SUPPLICANT_KEYMGMT_SAE))
 		bss->psk = TRUE;
 
 	if (bss->ieee8021x)
@@ -4890,6 +4903,15 @@ static void add_network_security_proto(DBusMessageIter *dict,
 	g_free(proto);
 }
 
+static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid)
+{
+	if (!(ssid->keymgmt & G_SUPPLICANT_KEYMGMT_SAE))
+		return;
+
+	supplicant_dbus_dict_append_basic(dict, "ieee80211w", DBUS_TYPE_UINT32,
+					  &ssid->ieee80211w);
+}
+
 static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 {
 	char *key_mgmt;
@@ -4907,7 +4929,10 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 		add_network_security_ciphers(dict, ssid);
 		break;
 	case G_SUPPLICANT_SECURITY_PSK:
-		key_mgmt = "WPA-PSK";
+		if (ssid->keymgmt & G_SUPPLICANT_KEYMGMT_SAE)
+			key_mgmt = "SAE";
+		else
+			key_mgmt = "WPA-PSK";
 		add_network_security_psk(dict, ssid);
 		add_network_security_ciphers(dict, ssid);
 		add_network_security_proto(dict, ssid);
@@ -4968,6 +4993,8 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 	add_network_mode(&dict, ssid);
 
 	add_network_security(&dict, ssid);
+
+	add_network_ieee80211w(&dict, ssid);
 
 	supplicant_dbus_dict_append_fixed_array(&dict, "ssid",
 					DBUS_TYPE_BYTE, &ssid->ssid,

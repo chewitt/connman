@@ -61,6 +61,7 @@ extern "C" {
 #define G_SUPPLICANT_KEYMGMT_WPA_EAP	(1 << 7)
 #define G_SUPPLICANT_KEYMGMT_WPA_EAP_256	(1 << 8)
 #define G_SUPPLICANT_KEYMGMT_WPS		(1 << 9)
+#define G_SUPPLICANT_KEYMGMT_SAE		(1 << 10)
 
 #define G_SUPPLICANT_PROTO_WPA		(1 << 0)
 #define G_SUPPLICANT_PROTO_RSN		(1 << 1)
@@ -129,6 +130,12 @@ typedef enum {
 	G_SUPPLICANT_PEER_GROUP_FAILED,
 } GSupplicantPeerState;
 
+typedef enum {
+	G_SUPPLICANT_MFP_NONE,
+	G_SUPPLICANT_MFP_OPTIONAL,
+	G_SUPPLICANT_MFP_REQUIRED,
+} GSupplicantMfpOptions;
+
 struct _GSupplicantSSID {
 	const void *ssid;
 	unsigned int ssid_len;
@@ -155,6 +162,8 @@ struct _GSupplicantSSID {
 	dbus_bool_t use_wps;
 	const char *pin_wps;
 	const char *bgscan;
+	unsigned int keymgmt;
+	GSupplicantMfpOptions ieee80211w;
 };
 
 typedef struct _GSupplicantSSID GSupplicantSSID;
@@ -339,6 +348,7 @@ bool g_supplicant_peer_is_in_a_group(GSupplicantPeer *peer);
 GSupplicantInterface *g_supplicant_peer_get_group_interface(GSupplicantPeer *peer);
 bool g_supplicant_peer_is_client(GSupplicantPeer *peer);
 bool g_supplicant_peer_has_requested_connection(GSupplicantPeer *peer);
+unsigned int g_supplicant_network_get_keymgmt(GSupplicantNetwork *network);
 
 struct _GSupplicantCallbacks {
 	void (*system_ready) (void);
