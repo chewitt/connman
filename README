@@ -444,6 +444,12 @@ Information
 ===========
 
 Mailing list:
-	connman@connman.net
+	connman@lists.linux.dev
 
-You can report bugs to the mailing list.
+If you would like to subscribe to receive mail in your inbox, just
+send a (empty) message from your email account to
+
+	connman+subscribe@lists.linux.dev
+
+Maling list archive:
+	https://lore.kernel.org/connman
