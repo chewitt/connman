@@ -1786,17 +1786,15 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 		 * tmp buffer.
 		 */
 
-		ulen = strlen(name);
-		if ((uptr + ulen + 1) > uncomp_end) {
+		ulen = strlen(name) + 1;
+		if ((uptr + ulen) > uncomp_end)
 			goto out;
-		}
-		strncpy(uptr, name, uncomp_len - (uptr - uncompressed));
+		strncpy(uptr, name, ulen);
 
 		DBG("pos %d ulen %d left %d name %s", pos, ulen,
-			(int)(uncomp_len - (uptr - uncompressed)), uptr);
+			(int)(uncomp_end - (uptr + ulen)), uptr);
 
 		uptr += ulen;
-		*uptr++ = '\0';
 
 		ptr += pos;
 
@@ -1839,7 +1837,7 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 		} else if (dns_type == ns_t_a || dns_type == ns_t_aaaa) {
 			dlen = uptr[-2] << 8 | uptr[-1];
 
-			if (ptr + dlen > end) {
+			if ((ptr + dlen) > end || (uptr + dlen) > uncomp_end) {
 				DBG("data len %d too long", dlen);
 				goto out;
 			}
@@ -1878,6 +1876,10 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 			 * refresh interval, retry interval, expiration
 			 * limit and minimum ttl). They are 20 bytes long.
 			 */
+			if ((uptr + 20) > uncomp_end || (ptr + 20) > end) {
+				DBG("soa record too long");
+				goto out;
+			}
 			memcpy(uptr, ptr, 20);
 			uptr += 20;
 			ptr += 20;
