@@ -1,3 +1,8 @@
+ver 1.40:
+	Fix issue with handling WiFi disconnecting status.
+	Fix issue with handling WiFi auto-connect and iwd backend.
+	Fix issue with DNS Proxy stack-based buffer overflow attack.
+
 ver 1.39:
 	Fix issue with scanning state synchronization and iwd.
 	Fix issue with invalid key with 4-way handshake offloading.
