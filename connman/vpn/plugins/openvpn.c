@@ -365,6 +365,14 @@ static int task_append_config_data(struct vpn_provider *provider,
 		if (!ov_options[i].ov_opt)
 			continue;
 
+		/*
+		 * In case the option is without value, i.e. a boolean toggle
+		 * then ignore the value when option is disabled.
+		 */
+		if (!ov_options[i].has_value && !vpn_provider_get_boolean(
+					provider, ov_options[i].cm_opt, false))
+			continue;
+
 		option = vpn_provider_get_string(provider,
 					ov_options[i].cm_opt);
 		if (!option)
@@ -374,15 +382,9 @@ static int task_append_config_data(struct vpn_provider *provider,
 		 * If the AuthUserPass option is "-", provide the input
 		 * via management interface
 		 */
-		if (!strcmp(ov_options[i].cm_opt, "OpenVPN.AuthUserPass") &&
-						!strcmp(option, "-"))
+		if (!g_strcmp0(ov_options[i].cm_opt, "OpenVPN.AuthUserPass") &&
+						!g_strcmp0(option, "-"))
 			option = NULL;
-
-		/* Handle BlockIPv6 internally */
-		if (!strncmp(ov_options[i].cm_opt, "OpenVPN.BlockIPv6", 17)) {
-			block_ipv6 = true;
-			continue;
-		}
 
 		if (connman_task_add_argument(task,
 				ov_options[i].ov_opt,
@@ -391,6 +393,8 @@ static int task_append_config_data(struct vpn_provider *provider,
 
 	}
 
+	block_ipv6 = vpn_provider_get_boolean(provider, "OpenVPN.BlockIPv6",
+									false);
 	vpn_provider_set_supported_ip_networks(provider, true, !block_ipv6);
 
 	return 0;
