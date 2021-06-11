@@ -65,7 +65,7 @@ enum {
 
 struct {
 	const char *cm_opt;
-	const char *vpnc_opt;
+	const char *vpnc_opt; /* Set this NULL for internal options */
 	const char *vpnc_default;
 	int type;
 	bool cm_save;
@@ -91,7 +91,7 @@ struct {
 	{ "VPNC.SingleDES", "Enable Single DES", NULL, OPT_BOOLEAN, true },
 	{ "VPNC.NoEncryption", "Enable no encryption", NULL, OPT_BOOLEAN,
 									true },
-	{ "VPNC.BlockIPv6", "BlockIPv6", NULL, OPT_BOOLEAN, true},
+	{ "VPNC.BlockIPv6", NULL, NULL, OPT_BOOLEAN, true},
 };
 
 struct vc_private_data {
@@ -319,6 +319,10 @@ static int vc_write_config_data(struct vpn_provider *provider, int fd)
 	int i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(vpnc_options); i++) {
+		/* Ignore all internal options. */
+		if (!vpnc_options[i].vpnc_opt)
+			continue;
+
 		opt_s = vpn_provider_get_string(provider,
 					vpnc_options[i].cm_opt);
 		if (!opt_s)
@@ -326,12 +330,6 @@ static int vc_write_config_data(struct vpn_provider *provider, int fd)
 
 		if (!opt_s)
 			continue;
-
-		if (g_strcmp0(opt_s, "VPNC.BlockIPv6") && !g_ascii_strcasecmp(
-					vpnc_options[i].vpnc_opt, "true")) {
-			block_ipv6 = true;
-			continue;
-		}
 
 		if (vpnc_options[i].type == OPT_STRING) {
 			if (write_option(fd,
@@ -345,6 +343,8 @@ static int vc_write_config_data(struct vpn_provider *provider, int fd)
 
 	}
 
+	block_ipv6 = vpn_provider_get_boolean(provider, "VPNC.BlockIPv6",
+									false);
 	vpn_provider_set_supported_ip_networks(provider, true, !block_ipv6);
 
 	return 0;
