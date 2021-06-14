@@ -453,3 +453,7 @@ send a (empty) message from your email account to
 
 Mailing list archive:
 	https://lore.kernel.org/connman
+
+IRC:
+	ircs://irc.oftc.net:6697/#connman (for SSL)
+	irc://irc.oftc.net:6667/#connman (for non-SSL)
