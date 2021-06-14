@@ -131,7 +131,7 @@ This package provides OpenVPN VPN plugin for connman.
 Summary:    Connection Manager OpenConnect VPN plugin
 Requires:   %{name} = %{version}-%{release}
 Requires:   %{name}-vpn-scripts
-Requires:   openconnect
+Requires:   openconnect >= 2.5.2
 
 %description plugin-vpn-openconnect
 This package provides OpenConnect VPN plugin for connman.
