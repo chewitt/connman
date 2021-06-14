@@ -49,6 +49,7 @@ static DBusConnection *connection = NULL;
 
 static GList *service_list = NULL;
 static GHashTable *service_hash = NULL;
+static GHashTable *passphrase_requested = NULL;
 static GSList *counter_list = NULL;
 static unsigned int autoconnect_id = 0;
 static unsigned int vpn_autoconnect_id = 0;
@@ -4209,6 +4210,7 @@ static bool auto_connect_service(GList *services,
 	bool ignore[MAX_CONNMAN_SERVICE_TYPES] = { };
 	bool autoconnecting = false;
 	GList *list;
+	int index;
 
 	DBG("preferred %d sessions %d reason %s", preferred, active_count,
 		reason2string(reason));
@@ -4229,6 +4231,11 @@ static bool auto_connect_service(GList *services,
 			DBG("service %p uses native autonnect, skip", service);
 			continue;
 		}
+
+		index = __connman_service_get_index(service);
+		if (g_hash_table_lookup(passphrase_requested,
+					GINT_TO_POINTER(index)))
+			return true;
 
 		if (service->pending ||
 				is_connecting(service->state) ||
@@ -5790,6 +5797,7 @@ static void request_input_cb(struct connman_service *service,
 	struct connman_device *device;
 	const char *security;
 	int err = 0;
+	int index;
 
 	DBG("RequestInput return, %p", service);
 
@@ -5852,6 +5860,10 @@ static void request_input_cb(struct connman_service *service,
 		err = __connman_service_set_passphrase(service, passphrase);
 
  done:
+	index = __connman_service_get_index(service);
+	g_hash_table_remove(passphrase_requested,
+				GINT_TO_POINTER(index));
+
 	if (err >= 0) {
 		/* We forget any previous error. */
 		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
@@ -6690,6 +6702,7 @@ static int service_connect(struct connman_service *service)
 int __connman_service_connect(struct connman_service *service,
 			enum connman_service_connect_reason reason)
 {
+	int index;
 	int err;
 
 	DBG("service %p state %s connect reason %s -> %s",
@@ -6776,6 +6789,13 @@ int __connman_service_connect(struct connman_service *service,
 					pending);
 			if (service->hidden && err != -EINPROGRESS)
 				service->pending = pending;
+
+			if (err == -EINPROGRESS) {
+				index = __connman_service_get_index(service);
+				g_hash_table_replace(passphrase_requested,
+						GINT_TO_POINTER(index),
+						GINT_TO_POINTER(true));
+			}
 
 			return err;
 		}
@@ -7748,6 +7768,8 @@ int __connman_service_init(void)
 	service_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 							NULL, service_free);
 
+	passphrase_requested = g_hash_table_new(g_direct_hash, g_direct_equal);
+
 	services_notify = g_new0(struct _services_notify, 1);
 	services_notify->remove = g_hash_table_new_full(g_str_hash,
 			g_str_equal, g_free, NULL);
@@ -7779,6 +7801,9 @@ void __connman_service_cleanup(void)
 
 	g_hash_table_destroy(service_hash);
 	service_hash = NULL;
+
+	g_hash_table_destroy(passphrase_requested);
+	passphrase_requested = NULL;
 
 	g_slist_free(counter_list);
 	counter_list = NULL;
