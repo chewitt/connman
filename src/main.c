@@ -44,6 +44,9 @@
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
 
+#define DEFAULT_ONLINE_CHECK_IPV4_URL "http://ipv4.connman.net/online/status.html"
+#define DEFAULT_ONLINE_CHECK_IPV6_URL "http://ipv6.connman.net/online/status.html"
+
 /*
  * We set the integer to 1 sec so that we have a chance to get
  * necessary IPv6 router advertisement messages that might have
@@ -97,6 +100,8 @@ static struct {
 	char *vendor_class_id;
 	bool enable_online_check;
 	bool enable_online_to_ready_transition;
+	char *online_check_ipv4_url;
+	char *online_check_ipv6_url;
 	unsigned int online_check_initial_interval;
 	unsigned int online_check_max_interval;
 	bool auto_connect_roaming_services;
@@ -122,6 +127,8 @@ static struct {
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
 	.enable_online_to_ready_transition = false,
+	.online_check_ipv4_url = DEFAULT_ONLINE_CHECK_IPV4_URL,
+	.online_check_ipv6_url = DEFAULT_ONLINE_CHECK_IPV6_URL,
 	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
 	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
 	.auto_connect_roaming_services = false,
@@ -148,6 +155,8 @@ static struct {
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_ENABLE_ONLINE_TO_READY_TRANSITION "EnableOnlineToReadyTransition"
+#define CONF_ONLINE_CHECK_IPV4_URL      "OnlineCheckIPv4URL"
+#define CONF_ONLINE_CHECK_IPV6_URL      "OnlineCheckIPv6URL"
 #define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
 #define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
@@ -174,6 +183,8 @@ static const char *supported_options[] = {
 	CONF_VENDOR_CLASS_ID,
 	CONF_ENABLE_ONLINE_CHECK,
 	CONF_ENABLE_ONLINE_TO_READY_TRANSITION,
+	CONF_ONLINE_CHECK_IPV4_URL,
+	CONF_ONLINE_CHECK_IPV6_URL,
 	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
 	CONF_ONLINE_CHECK_MAX_INTERVAL,
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
@@ -488,6 +499,20 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	string = __connman_config_get_string(config, "General",
+					CONF_ONLINE_CHECK_IPV4_URL, &error);
+	if (!error)
+		connman_settings.online_check_ipv4_url = string;
+
+	g_clear_error(&error);
+
+	string = __connman_config_get_string(config, "General",
+					CONF_ONLINE_CHECK_IPV6_URL, &error);
+	if (!error)
+		connman_settings.online_check_ipv6_url = string;
+
+	g_clear_error(&error);
+
 	integer = g_key_file_get_integer(config, "General",
 			CONF_ONLINE_CHECK_INITIAL_INTERVAL, &error);
 	if (!error && integer >= 0)
@@ -709,6 +734,12 @@ char *connman_setting_get_string(const char *key)
 {
 	if (g_str_equal(key, CONF_VENDOR_CLASS_ID))
 		return connman_settings.vendor_class_id;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_IPV4_URL))
+		return connman_settings.online_check_ipv4_url;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_IPV6_URL))
+		return connman_settings.online_check_ipv6_url;
 
 	if (g_strcmp0(key, "wifi") == 0) {
 		if (!option_wifi)
@@ -991,6 +1022,8 @@ int main(int argc, char *argv[])
 	g_strfreev(connman_settings.blacklisted_interfaces);
 	g_strfreev(connman_settings.tethering_technologies);
 	g_free(connman_settings.vendor_class_id);
+	g_free(connman_settings.online_check_ipv4_url);
+	g_free(connman_settings.online_check_ipv6_url);
 
 	g_free(option_debug);
 	g_free(option_wifi);

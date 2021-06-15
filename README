@@ -408,8 +408,17 @@ from ipv4.connman.net (for IPv4 connectivity) and ipv6.connman.net
 (for IPv6 connectivity). The used URL looks like this
 http://ipv{4|6}.connman.net/online/status.html
 
+When an online check request fails, another one is triggered after a
+longer interval. The intervals follow the square series of numbers
+in a specific range, by default [1, 12], corresponding to the following
+intervals, in seconds: 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121 and 144.
+
 See connman.conf(5) for the EnableOnlineCheck option, if you need to
 disable the feature.
+It is also possible to specify other URLs via OnlineCheckIPv4URL and
+OnlineCheckIPv6URL options.
+The range of intervals between two online check requests can be fine-tuned
+via OnlineCheckInitialInterval and OnlineCheckMaxInterval options.
 
 During the online check procedure, ConnMan will temporarily install
 a host route to both the ipv4.connman.net and ipv6.connman.net so that
