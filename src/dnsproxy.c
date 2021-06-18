@@ -1791,7 +1791,7 @@ static char *uncompress(int16_t field_count, char *start, char *end,
 		ulen = strlen(name) + 1;
 		if ((uptr + ulen) > uncomp_end)
 			goto out;
-		strncpy(uptr, name, ulen);
+		memcpy(uptr, name, ulen);
 
 		debug("pos %d ulen %d left %d name %s", pos, ulen,
 			(int)(uncomp_end - (uptr + ulen)), uptr);
