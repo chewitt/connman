@@ -5316,6 +5316,25 @@ static gint service_compare_vpn(struct connman_service *a,
 	return service_compare(transport, service);
 }
 
+static gint service_compare_preferred(struct connman_service *service_a,
+					struct connman_service *service_b)
+{
+	unsigned int *tech_array;
+	int i;
+
+	tech_array = connman_setting_get_uint_list("PreferredTechnologies");
+	if (tech_array) {
+		for (i = 0; tech_array[i]; i++) {
+			if (tech_array[i] == service_a->type)
+				return -1;
+
+			if (tech_array[i] == service_b->type)
+				return 1;
+		}
+	}
+	return 0;
+}
+
 static gint service_compare(gconstpointer a, gconstpointer b)
 {
 	struct connman_service *service_a = (void *) a;
@@ -5346,6 +5365,10 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 
 		if (service_a->order < service_b->order)
 			return 1;
+
+		rval = service_compare_preferred(service_a, service_b);
+		if (rval)
+			return rval;
 	}
 
 	if (state_a != state_b) {
@@ -5376,20 +5399,11 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 		return 1;
 
 	if (service_a->type != service_b->type) {
-		unsigned int *tech_array;
-		int i;
+		int rval;
 
-		tech_array = connman_setting_get_uint_list(
-						"PreferredTechnologies");
-		if (tech_array) {
-			for (i = 0; tech_array[i]; i++) {
-				if (tech_array[i] == service_a->type)
-					return -1;
-
-				if (tech_array[i] == service_b->type)
-					return 1;
-			}
-		}
+		rval = service_compare_preferred(service_a, service_b);
+		if (rval)
+			return rval;
 
 		if (service_a->type == CONNMAN_SERVICE_TYPE_ETHERNET)
 			return -1;
