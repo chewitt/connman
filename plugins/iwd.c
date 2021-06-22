@@ -1372,13 +1372,7 @@ static void create_adapter(GDBusProxy *proxy)
 	struct iwd_adapter *iwda;
 	GSList *modes, *list;
 
-	iwda = g_try_new0(struct iwd_adapter, 1);
-
-	if (!iwda) {
-		connman_error("Out of memory creating IWD adapter");
-		return;
-	}
-
+	iwda = g_new0(struct iwd_adapter, 1);
 	iwda->path = g_strdup(path);
 	g_hash_table_replace(adapters, iwda->path, iwda);
 
@@ -1423,13 +1417,7 @@ static void create_device(GDBusProxy *proxy)
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_device *iwdd;
 
-	iwdd = g_try_new0(struct iwd_device, 1);
-
-	if (!iwdd) {
-		connman_error("Out of memory creating IWD device");
-		return;
-	}
-
+	iwdd = g_new0(struct iwd_device, 1);
 	iwdd->path = g_strdup(path);
 	g_hash_table_replace(devices, iwdd->path, iwdd);
 
@@ -1596,13 +1584,7 @@ static void create_network(GDBusProxy *proxy)
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_network *iwdn;
 
-	iwdn = g_try_new0(struct iwd_network, 1);
-
-	if (!iwdn) {
-		connman_error("Out of memory creating IWD network");
-		return;
-	}
-
+	iwdn = g_new0(struct iwd_network, 1);
 	iwdn->path = g_strdup(path);
 	g_hash_table_replace(networks, iwdn->path, iwdn);
 
@@ -1682,12 +1664,7 @@ static void create_know_network(GDBusProxy *proxy)
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_known_network *iwdkn;
 
-	iwdkn = g_try_new0(struct iwd_known_network, 1);
-	if (!iwdkn) {
-		connman_error("Out of memory creating IWD known network");
-		return;
-	}
-
+	iwdkn = g_new0(struct iwd_known_network, 1);
 	iwdkn->path = g_strdup(path);
 	g_hash_table_replace(known_networks, iwdkn->path, iwdkn);
 
@@ -1721,12 +1698,7 @@ static void create_station(GDBusProxy *proxy)
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_station *iwds;
 
-	iwds = g_try_new0(struct iwd_station, 1);
-	if (!iwds) {
-		connman_error("Out of memory creating IWD station");
-		return;
-	}
-
+	iwds = g_new0(struct iwd_station, 1);
 	iwds->path = g_strdup(path);
 	g_hash_table_replace(stations, iwds->path, iwds);
 
@@ -1754,11 +1726,7 @@ static void create_ap(GDBusProxy *proxy)
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_ap *iwdap;
 
-	iwdap = g_try_new0(struct iwd_ap, 1);
-	if (!iwdap) {
-		connman_error("Out of memory creating IWD access point");
-		return;
-	}
+	iwdap = g_new0(struct iwd_ap, 1);
 	iwdap->index = -1;
 
 	iwdap->path = g_strdup(path);
