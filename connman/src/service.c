@@ -5648,8 +5648,8 @@ static gboolean service_retry_connect(gpointer data)
 	DBG("service %p", service);
 	service->connect_retry_timer = 0;
 
-	if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
-
+	if (service->state == CONNMAN_SERVICE_STATE_FAILURE ||
+			service->state == CONNMAN_SERVICE_STATE_IDLE) {
 		/*
 		 * Do not reset VPN state here as doing so leads to reseting of
 		 * the VPN autoconnect timer without proper reason.
