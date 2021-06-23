@@ -6756,7 +6756,8 @@ int __connman_service_connect(struct connman_service *service,
 				service->provider)
 			connman_provider_disconnect(service->provider);
 
-	if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER) {
+	if (reason == CONNMAN_SERVICE_CONNECT_REASON_USER ||
+			reason == CONNMAN_SERVICE_CONNECT_REASON_NATIVE) {
 		if (err == -ENOKEY || err == -EPERM) {
 			DBusMessage *pending = NULL;
 			const char *dbus_sender = get_dbus_sender(service);
