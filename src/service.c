@@ -5905,8 +5905,7 @@ static int service_update_preferred_order(struct connman_service *default_servic
 		struct connman_service *new_service,
 		enum connman_service_state new_state)
 {
-	if (!default_service || default_service == new_service ||
-			default_service->state != new_state)
+	if (!default_service || default_service == new_service)
 		return 0;
 
 	if (service_compare_preferred(default_service, new_service) > 0) {
