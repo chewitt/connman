@@ -6048,11 +6048,11 @@ static int service_indicate_state(struct connman_service *service)
 
 		service->new_service = false;
 
-		default_changed();
-
 		def_service = connman_service_get_default();
 
 		service_update_preferred_order(def_service, service, new_state);
+
+		default_changed();
 
 		__connman_service_set_favorite(service, true);
 
