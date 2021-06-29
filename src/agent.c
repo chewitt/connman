@@ -366,9 +366,9 @@ static void report_error_reply(DBusMessage *reply, void *user_data)
 			retry = true;
 	}
 
+out:
 	report_error->callback(report_error->user_context, retry,
 			report_error->user_data);
-out:
 	g_free(report_error);
 }
 
