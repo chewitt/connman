@@ -5905,27 +5905,15 @@ static int service_update_preferred_order(struct connman_service *default_servic
 		struct connman_service *new_service,
 		enum connman_service_state new_state)
 {
-	unsigned int *tech_array;
-	int i;
-
 	if (!default_service || default_service == new_service ||
 			default_service->state != new_state)
 		return 0;
 
-	tech_array = connman_setting_get_uint_list("PreferredTechnologies");
-	if (tech_array) {
-
-		for (i = 0; tech_array[i] != 0; i += 1) {
-			if (default_service->type == tech_array[i])
-				return -EALREADY;
-
-			if (new_service->type == tech_array[i]) {
-				switch_default_service(default_service,
-						new_service);
-				__connman_connection_update_gateway();
-				return 0;
-			}
-		}
+	if (service_compare_preferred(default_service, new_service) > 0) {
+		switch_default_service(default_service,
+				new_service);
+		__connman_connection_update_gateway();
+		return 0;
 	}
 
 	return -EALREADY;
