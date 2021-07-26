@@ -2381,6 +2381,9 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		dhcp_client->retry_times = 0;
 
 		option = dhcp_get_option(&packet, pkt_len, DHCP_SERVER_ID);
+		if (!option)
+			return TRUE;
+
 		dhcp_client->server_ip = get_be32(option);
 		dhcp_client->requested_ip = ntohl(packet.yiaddr);
 
@@ -2442,6 +2445,8 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 			if (dhcp_client->state == REBOOTING) {
 				option = dhcp_get_option(&packet, pkt_len,
 							DHCP_SERVER_ID);
+				if (!option)
+					return TRUE;
 				dhcp_client->server_ip = get_be32(option);
 			}
 
