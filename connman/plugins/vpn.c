@@ -1849,7 +1849,7 @@ static gboolean connection_added(DBusConnection *conn, DBusMessage *message,
 	 * service, ignoring values in settings file.
 	 */
 	if (connman_storage_user_change_in_progress()) {
-		connman_info("user change in progress, ignore add signal");
+		DBG("user change in progress, ignore add signal");
 		return TRUE;
 	}
 
