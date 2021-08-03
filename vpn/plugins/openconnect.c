@@ -110,6 +110,7 @@ struct oc_private_data {
 	GIOChannel *err_ch;
 	enum oc_connect_type connect_type;
 	bool tried_passphrase;
+	bool group_set;
 };
 
 typedef void (*request_input_reply_cb_t) (DBusMessage *reply,
@@ -473,6 +474,7 @@ static void clear_provider_credentials(struct vpn_provider *provider,
 	const char *keys[] = { "OpenConnect.PKCSPassword",
 				"OpenConnect.Username",
 				"OpenConnect.Password",
+				"OpenConnect.SecondPassword",
 				"OpenConnect.Cookie",
 				NULL
 	};
@@ -794,12 +796,45 @@ static gboolean process_auth_form(void *user_data)
 {
 	struct process_form_data *form_data = user_data;
 	struct oc_private_data *data = form_data->data;
+	struct oc_form_opt_select *authgroup_opt;
 	struct oc_form_opt *opt;
 	const char *password;
+	const char *group;
+	int i;
 
 	g_mutex_lock(&form_data->mutex);
 
 	DBG("");
+
+	/*
+	 * Special handling for "GROUP:" field, if present.
+	 * Different group selections can make other fields disappear/appear
+	 */
+	if (form_data->form->authgroup_opt) {
+		group = vpn_provider_get_string(data->provider, "OpenConnect.Group");
+		authgroup_opt = form_data->form->authgroup_opt;
+
+		if (group && !data->group_set) {
+			for (i = 0; i < authgroup_opt->nr_choices; i++) {
+				struct oc_choice *choice = authgroup_opt->choices[i];
+
+				if (!strcmp(group, choice->label)) {
+					DBG("Switching to auth group: %s", group);
+					openconnect_set_option_value(&authgroup_opt->form,
+									choice->name);
+					data->group_set = true;
+					form_data->status = OC_FORM_RESULT_NEWGROUP;
+					goto out;
+				}
+			}
+
+			connman_warn("Group choice %s not present", group);
+			data->err = -EACCES;
+			clear_provider_credentials(data->provider, true);
+			form_data->status = OC_FORM_RESULT_ERR;
+			goto out;
+		}
+	}
 
 	switch (data->connect_type) {
 	case OC_CONNECT_USERPASS:
@@ -872,10 +907,19 @@ static gboolean process_auth_form(void *user_data)
 						"OpenConnect.Username");
 			if (user)
 				opt->_value = strdup(user);
-		} else if (opt->type == OC_FORM_OPT_PASSWORD) {
+		} else if (opt->type == OC_FORM_OPT_PASSWORD &&
+				g_str_has_prefix(opt->name, "password")) {
+
 			const char *pass = vpn_provider_get_string(
 						data->provider,
 						"OpenConnect.Password");
+			if (pass)
+				opt->_value = strdup(pass);
+		} else if (opt->type == OC_FORM_OPT_PASSWORD &&
+				g_str_has_prefix(opt->name, "secondary_password")) {
+			const char *pass = vpn_provider_get_string(
+						data->provider,
+						"OpenConnect.SecondPassword");
 			if (pass)
 				opt->_value = strdup(pass);
 		}
@@ -1201,6 +1245,7 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 	const char *vpnhost = NULL;
 	const char *username = NULL;
 	const char *password = NULL;
+	const char *second_password = NULL;
 	const char *pkcspassword = NULL;
 	const char *key;
 	DBusMessageIter iter, dict;
@@ -1298,6 +1343,19 @@ static void request_input_credentials_reply(DBusMessage *reply, void *user_data)
 			dbus_message_iter_get_basic(&value, &password);
 			vpn_provider_set_string_hide_value(data->provider,
 					"OpenConnect.Password", password);
+		} else if (g_str_equal(key, "OpenConnect.SecondPassword")) {
+			dbus_message_iter_next(&entry);
+			if (dbus_message_iter_get_arg_type(&entry)
+							!= DBUS_TYPE_VARIANT)
+				break;
+			dbus_message_iter_recurse(&entry, &value);
+			if (dbus_message_iter_get_arg_type(&value)
+							!= DBUS_TYPE_STRING)
+				break;
+			dbus_message_iter_get_basic(&value, &second_password);
+			vpn_provider_set_string_hide_value(data->provider,
+					"OpenConnect.SecondPassword",
+					second_password);
 		} else if (g_str_equal(key, "OpenConnect.PKCSPassword")) {
 			dbus_message_iter_next(&entry);
 			if (dbus_message_iter_get_arg_type(&entry)
@@ -1374,6 +1432,7 @@ static int request_input_credentials_full(
 	DBusMessageIter dict;
 	int err;
 	void *agent;
+	bool use_second_password = false;
 
 	if (!data || !cb)
 		return -ESRCH;
@@ -1440,6 +1499,16 @@ static int request_input_credentials_full(
 		username = vpn_provider_get_string(data->provider,
 					"OpenConnect.Username");
 		vpn_agent_append_user_info(&dict, data->provider, username);
+
+		use_second_password = vpn_provider_get_boolean(data->provider,
+					"OpenConnect.UseSecondPassword",
+					false);
+
+		if (use_second_password)
+			request_input_append_to_dict(data->provider, &dict,
+					request_input_append_password,
+					"OpenConnect.SecondPassword");
+
 		break;
 	case OC_CONNECT_PUBLICKEY:
 		return -EINVAL;
@@ -1520,8 +1589,10 @@ static int oc_connect(struct vpn_provider *provider,
 	const char *certificate;
 	const char *username;
 	const char *password;
+	const char *second_password = NULL;
 	const char *private_key;
 	int err;
+	bool use_second_password = false;
 
 	connman_info("provider %p task %p", provider, task);
 
@@ -1551,8 +1622,18 @@ static int oc_connect(struct vpn_provider *provider,
 					"OpenConnect.Username");
 		password = vpn_provider_get_string(provider,
 					"OpenConnect.Password");
+
+		use_second_password = vpn_provider_get_boolean(provider,
+					"OpenConnect.UseSecondPassword",
+					false);
+
+		if (use_second_password)
+			second_password = vpn_provider_get_string(provider,
+					"OpenConnect.SecondPassword");
+
 		if (!username || !password || !g_strcmp0(username, "-") ||
-					!g_strcmp0(password, "-"))
+					!g_strcmp0(password, "-") ||
+					(use_second_password && !second_password))
 			goto request_input;
 
 		break;

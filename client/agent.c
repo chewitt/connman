@@ -100,6 +100,8 @@ static struct agent_input_data vpnagent_input_handler[] = {
 	  request_input_string_return },
 	{ "OpenConnect.VPNHost", false, "OpenConnect VPN server? ",
 	  request_input_string_return },
+	{ "OpenConnect.SecondPassword", false, "VPN one-time password? ",
+	  request_input_string_return },
 	{ "Username", false, "VPN username? ", request_input_string_return },
 	{ "Password", false, "VPN password? ", request_input_string_return },
 	{ },
