@@ -4903,17 +4903,16 @@ static void add_network_security_proto(DBusMessageIter *dict,
 	g_free(proto);
 }
 
-static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid)
+static void add_network_ieee80211w(DBusMessageIter *dict, GSupplicantSSID *ssid,
+				   GSupplicantMfpOptions ieee80211w)
 {
-	if (!(ssid->keymgmt & G_SUPPLICANT_KEYMGMT_SAE))
-		return;
-
 	supplicant_dbus_dict_append_basic(dict, "ieee80211w", DBUS_TYPE_UINT32,
-					  &ssid->ieee80211w);
+					  &ieee80211w);
 }
 
 static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 {
+	GSupplicantMfpOptions ieee80211w;
 	char *key_mgmt;
 
 	switch (ssid->security) {
@@ -4929,10 +4928,22 @@ static void add_network_security(DBusMessageIter *dict, GSupplicantSSID *ssid)
 		add_network_security_ciphers(dict, ssid);
 		break;
 	case G_SUPPLICANT_SECURITY_PSK:
-		if (ssid->keymgmt & G_SUPPLICANT_KEYMGMT_SAE)
-			key_mgmt = "SAE";
-		else
+		if (ssid->keymgmt & G_SUPPLICANT_KEYMGMT_SAE) {
+			if (ssid->keymgmt & G_SUPPLICANT_KEYMGMT_WPA_PSK) {
+				/*
+				 * WPA3-Personal transition mode: supports both
+				 * WPA2-Personal (PSK) and WPA3-Personal (SAE)
+				 */
+				key_mgmt = "SAE WPA-PSK";
+				ieee80211w = G_SUPPLICANT_MFP_OPTIONAL;
+			} else {
+				key_mgmt = "SAE";
+				ieee80211w = G_SUPPLICANT_MFP_REQUIRED;
+			}
+			add_network_ieee80211w(dict, ssid, ieee80211w);
+		} else {
 			key_mgmt = "WPA-PSK";
+		}
 		add_network_security_psk(dict, ssid);
 		add_network_security_ciphers(dict, ssid);
 		add_network_security_proto(dict, ssid);
@@ -4993,8 +5004,6 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
 	add_network_mode(&dict, ssid);
 
 	add_network_security(&dict, ssid);
-
-	add_network_ieee80211w(&dict, ssid);
 
 	supplicant_dbus_dict_append_fixed_array(&dict, "ssid",
 					DBUS_TYPE_BYTE, &ssid->ssid,
