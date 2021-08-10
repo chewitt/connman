@@ -447,7 +447,7 @@ static int get_session_uid_and_state(uid_t *uid,
 	err = sd_seat_get_active(DEFAULT_SEAT, &session, uid);
 	if (err < 0) {
 		/* No not regard -ENOENT as error, session is not ready yet */
-		if (err != -ENOENT)
+		if (err != -ENOENT && err != -ENODATA)
 			connman_warn("err %d failed to get active session "
 						"and/or user for seat %s", err,
 						DEFAULT_SEAT);
@@ -590,6 +590,10 @@ static int check_session_status(struct systemd_login_data *login_data)
 	case -ENOENT:
 		/* Session is not proabably ready yet */
 		DBG("session not ready yet");
+		goto out;
+	case -ENODATA:
+		/* Session data is not ready yet */
+		DBG("session data is not prepared yet");
 		goto out;
 	default:
 		DBG("failed to get uid %u and/or state %d", uid, state);
@@ -752,6 +756,7 @@ static gboolean delayed_status_check(gpointer user_data)
 	case -EINPROGRESS:
 		break;
 	case -ENOENT:
+	case -ENODATA:
 		/* Session is not ready yet, keep in loop */
 		return G_SOURCE_CONTINUE;
 	default:
