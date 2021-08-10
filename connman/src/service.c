@@ -4,7 +4,7 @@
  *
  *  Copyright (C) 2007-2014  Intel Corporation. All rights reserved.
  *  Copyright (C) 2014-2020  Jolla Ltd.
- *  Copyright (C) 2020  Open Mobile Platform LLC.
+ *  Copyright (C) 2020-2021  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -3433,6 +3433,27 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 				GET_DEFAULT_ACCESS_ACCESS);
 }
 
+static void append_properties_updated(DBusMessageIter *dict,
+					struct connman_service *service)
+{
+	switch (service->type) {
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_VPN:
+	case CONNMAN_SERVICE_TYPE_P2P:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+		break;
+	case CONNMAN_SERVICE_TYPE_WIFI:
+		if (service->network)
+			append_wifi_ext_info(dict, service->network);
+		break;
+	}
+}
+
 static void append_struct_service(DBusMessageIter *iter,
 		connman_dbus_append_cb_t function,
 		struct connman_service *service)
@@ -3468,6 +3489,14 @@ static void append_struct(gpointer value, gpointer user_data)
 		return;
 
 	append_struct_service(iter, append_dict_properties, service);
+}
+
+static void append_dict_properties_updated(DBusMessageIter *dict,
+							void *user_data)
+{
+	struct connman_service *service = user_data;
+
+	append_properties_updated(dict, service);
 }
 
 void __connman_service_list_struct(DBusMessageIter *iter)
@@ -5978,6 +6007,7 @@ static struct _services_notify {
 	int id;
 	GHashTable *add;
 	GHashTable *remove;
+	GHashTable *update;
 } *services_notify;
 
 
@@ -5996,6 +6026,11 @@ static void service_append_added_foreach(gpointer data, gpointer user_data)
 
 		append_struct(service, iter);
 		g_hash_table_remove(services_notify->add, service->path);
+	} else if (g_hash_table_lookup(services_notify->update, service->path)) {
+		DBG("updated %s", service->path);
+
+		append_struct_service(iter, append_dict_properties_updated, service);
+		g_hash_table_remove(services_notify->update, service->path);
 	} else {
 		DBG("changed %s", service->path);
 
@@ -6045,6 +6080,7 @@ static gboolean service_send_changed(gpointer data)
 
 	g_hash_table_remove_all(services_notify->remove);
 	g_hash_table_remove_all(services_notify->add);
+	g_hash_table_remove_all(services_notify->update);
 
 	return FALSE;
 }
@@ -6279,6 +6315,7 @@ static void service_schedule_added(struct connman_service *service)
 	DBG("service %p", service);
 
 	g_hash_table_remove(services_notify->remove, service->path);
+	g_hash_table_remove(services_notify->update, service->path);
 	g_hash_table_replace(services_notify->add, service->path, service);
 
 	service_schedule_changed();
@@ -6294,8 +6331,25 @@ static void service_schedule_removed(struct connman_service *service)
 	DBG("service %p %s", service, service->path);
 
 	g_hash_table_remove(services_notify->add, service->path);
+	g_hash_table_remove(services_notify->update, service->path);
 	g_hash_table_replace(services_notify->remove, g_strdup(service->path),
 			NULL);
+
+	service_schedule_changed();
+}
+
+static void service_schedule_updated(struct connman_service *service)
+{
+	/* Only update if service has path */
+	if (!service || !service->path) {
+		return;
+	}
+
+	DBG("service %p", service);
+
+	g_hash_table_remove(services_notify->remove, service->path);
+	g_hash_table_remove(services_notify->add, service->path);
+	g_hash_table_replace(services_notify->update, service->path, service);
 
 	service_schedule_changed();
 }
@@ -9241,6 +9295,7 @@ static void update_from_network(struct connman_service *service,
 		service->network = connman_network_ref(network);
 		connman_network_autoconnect_changed(service->network,
 							service->autoconnect);
+		service_schedule_updated(service);
         }
 
 	if (was_available != service_available.value(service))
@@ -9731,6 +9786,7 @@ int __connman_service_init(void)
 	services_notify->remove = g_hash_table_new_full(g_str_hash,
 			g_str_equal, g_free, NULL);
 	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
+	services_notify->update = g_hash_table_new(g_str_hash, g_str_equal);
 
 	remove_unprovisioned_services();
 
@@ -9780,6 +9836,7 @@ void __connman_service_cleanup(void)
 
 	g_hash_table_destroy(services_notify->remove);
 	g_hash_table_destroy(services_notify->add);
+	g_hash_table_destroy(services_notify->update);
 	g_free(services_notify);
 
 	dbus_connection_unref(connection);
