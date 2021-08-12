@@ -93,6 +93,8 @@ int vpn_provider_set_boolean(struct vpn_provider *provider, const char *key,
 							bool force_change);
 bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
 							bool default_value);
+void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,
+							unsigned int limit);
 
 int vpn_provider_set_supported_ip_networks(struct vpn_provider *provider,
 					bool ipv4_enabled, bool ipv6_enabled);
