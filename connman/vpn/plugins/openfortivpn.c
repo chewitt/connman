@@ -2,7 +2,7 @@
  *
  * ConnMan VPN daemon
  *
- * Copyright (C) 2019-2020  Jolla Ltd.
+ * Copyright (C) 2019-2021  Jolla Ltd.
  * Copyright (C) 2019-2020  Open Mobile Platform LLC.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -78,11 +78,40 @@ struct {
 #define ROUTE_GATEWAY_KEY_PREFIX "route_gateway_"
 
 struct ofv_private_data {
+	struct vpn_provider *provider;
 	struct connman_task *task;
 	char *if_name;
 	vpn_provider_connect_cb_t cb;
 	void *user_data;
 };
+
+static void ofv_connect_done(struct ofv_private_data *data, int err)
+{
+	vpn_provider_connect_cb_t cb;
+	void *user_data;
+
+	if (!data || !data->cb)
+		return;
+
+	/* Ensure that callback is called only once */
+	cb = data->cb;
+	user_data = data->user_data;
+	data->cb = NULL;
+	data->user_data = NULL;
+	cb(data->provider, user_data, err);
+}
+
+static void free_private_data(struct ofv_private_data *data)
+{
+	if (vpn_provider_get_plugin_data(data->provider) == data)
+		vpn_provider_set_plugin_data(data->provider, NULL);
+
+	ofv_connect_done(data, EIO);
+	vpn_provider_unref(data->provider);
+	g_free(data->if_name);
+	g_free(data);
+}
+
 
 static DBusMessage *ofv_get_sec(struct connman_task *task, DBusMessage *msg,
 							void *user_data)
@@ -114,9 +143,11 @@ static DBusMessage *ofv_get_sec(struct connman_task *task, DBusMessage *msg,
 
 static void ofv_died(struct connman_task *task, int exit_code, void *user_data)
 {
+	struct ofv_private_data *data = user_data;
+
 	DBG("task %p, code %d, data %p", task, exit_code, user_data);
 	vpn_died(task, exit_code, user_data);
-	return;
+	free_private_data(data);
 }
 
 struct request_input_reply {
@@ -321,11 +352,11 @@ static int task_append_config_data(struct vpn_provider *provider,
 	return 0;
 }
 
-static int run_connect(struct vpn_provider *provider,
-			struct connman_task *task, const char *if_name,
-			vpn_provider_connect_cb_t cb, void *user_data,
-			const char *username, const char *password)
+static int run_connect(struct ofv_private_data *data, const char *username,
+							const char *password)
 {
+	struct vpn_provider *provider = data->provider;
+	struct connman_task *task = data->task;
 	const char *host;
 	const char *port;
 	char *gateway;
@@ -388,24 +419,17 @@ static int run_connect(struct vpn_provider *provider,
 	g_free(esc_pass);
 	g_free(plugin);
 
-	err = connman_task_run(task, ofv_died, provider, NULL, NULL, NULL);
+	err = connman_task_run(task, ofv_died, data, NULL, NULL, NULL);
 	if (err < 0) {
 		connman_error("ofv failed to start");
 		err = -EIO;
-		goto done;
 	}
 
 done:
-	if (cb)
-		cb(provider, user_data, err);
+	if (err)
+		ofv_connect_done(data, -err);
 
 	return err;
-}
-
-static void free_private_data(struct ofv_private_data *data)
-{
-	g_free(data->if_name);
-	g_free(data);
 }
 
 static void request_input_cb(struct vpn_provider *provider,
@@ -424,10 +448,7 @@ static void request_input_cb(struct vpn_provider *provider,
 	vpn_provider_set_string_hide_value(provider, "openfortivpn.Password",
 				password);
 
-	run_connect(provider, data->task, data->if_name, data->cb,
-				data->user_data, username, password);
-
-	free_private_data(data);
+	run_connect(data, username, password);
 }
 
 static int ofv_notify(DBusMessage *msg, struct vpn_provider *provider)
@@ -443,8 +464,11 @@ static int ofv_notify(DBusMessage *msg, struct vpn_provider *provider)
 	char *ifname = NULL;
 	char *nameservers = NULL;
 	struct connman_ipaddress *ipaddress = NULL;
+	struct ofv_private_data *data;
 
 	DBG("provider %p", provider);
+
+	data = vpn_provider_get_plugin_data(provider);
 
 	vpn_provider_set_string(provider, "DefaultRoute", "false");
 
@@ -465,11 +489,22 @@ static int ofv_notify(DBusMessage *msg, struct vpn_provider *provider)
 		vpn_provider_set_string_hide_value(provider,
 					"openfortivpn.Password", NULL);
 
+		ofv_connect_done(data, EACCES);
 		return VPN_STATE_AUTH_FAILURE;
 	}
 
-	if (strcmp(reason, "connect"))
+	if (strcmp(reason, "connect")) {
+		ofv_connect_done(data, EIO);
+
+		/*
+		 * Stop the task to avoid potential looping of this state when
+		 * authentication fails.
+		 */
+		if (data && data->task)
+			connman_task_stop(data->task);
+
 		return VPN_STATE_DISCONNECT;
+	}
 
 	dbus_message_iter_recurse(&iter, &dict);
 
@@ -539,6 +574,7 @@ static int ofv_notify(DBusMessage *msg, struct vpn_provider *provider)
 	g_free(nameservers);
 	connman_ipaddress_free(ipaddress);
 
+	ofv_connect_done(data, 0);
 	return VPN_STATE_CONNECT;
 }
 
@@ -546,11 +582,20 @@ static int ofv_connect(struct vpn_provider *provider, struct connman_task *task,
 			const char *if_name, vpn_provider_connect_cb_t cb,
 			const char *dbus_sender, void *user_data)
 {
+	struct ofv_private_data *data;
 	const char *username;
 	const char *password;
 	int err = -ENETUNREACH;
 
 	DBG("provider %p", provider);
+
+	data = g_try_new0(struct ofv_private_data, 1);
+	data->provider = vpn_provider_ref(provider);
+	data->task = task;
+	data->if_name = g_strdup(if_name);
+	data->cb = cb;
+	data->user_data = user_data;
+	vpn_provider_set_plugin_data(provider, data);
 
 	if (connman_task_set_notify(task, "getsec", ofv_get_sec, provider)
 				!= 0) {
@@ -562,31 +607,19 @@ static int ofv_connect(struct vpn_provider *provider, struct connman_task *task,
 	password = vpn_provider_get_string(provider, "openfortivpn.Password");
 
 	if (!username || !*username || !password || !*password) {
-		struct ofv_private_data *data;
-
-		data = g_new0(struct ofv_private_data, 1);
-		data->task = task;
-		data->if_name = g_strdup(if_name);
-		data->cb = cb;
-		data->user_data = user_data;
-
 		err = request_input(provider, request_input_cb, dbus_sender,
 					data);
-		if (err != -EINPROGRESS) {
-			free_private_data(data);
-			goto done;
-		}
+		if (err != -EINPROGRESS)
+			goto error;
 
 		return err;
 	}
 
-done:
-	return run_connect(provider, task, if_name, cb, user_data, username,
-				password);
+	return run_connect(data, username, password);
 
 error:
-	if (cb)
-		cb(provider, user_data, err);
+	ofv_connect_done(data, -err);
+	free_private_data(data);
 
 	return err;
 }
