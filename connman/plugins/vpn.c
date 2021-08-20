@@ -538,21 +538,24 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 	if (dbus_set_error_from_message(&error, reply)) {
 		int err = errorstr2val(error.name);
 
+		switch (err) {
+		case -EINPROGRESS:
+			break;
 		/*
 		 * ECANCELED means that user has canceled authentication
 		 * dialog. That's not really an error, it's part of a normal
 		 * workflow. We also take it as a request to turn autoconnect
 		 * off, in case if it was on.
 		 */
-		if (err == -ECANCELED) {
+		case -ECANCELED:
 			DBG("%s connect canceled", data->path);
 			connman_provider_set_autoconnect(data->provider, false);
-		/*
-		 * ENOLINK (No carrier) is not an error situation but is caused
-		 * by connman not being online when VPN is attempted to be
-		 * connected.
-		 */
-		} else if (err != -EINPROGRESS && err != -ENOLINK) {
+			break;
+		case -ENOLINK: /* vpnd reports that connmand is not online. */
+		case -EISCONN:
+		case -ECONNABORTED:
+		case -ECONNREFUSED:
+		default:
 			connman_error("Connect reply: %s (%s)", error.message,
 								error.name);
 			DBG("data %p cb_data %p", data, cb_data);
@@ -563,6 +566,7 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 				data->cb_data = NULL;
 			}
 		}
+
 		dbus_error_free(&error);
 	}
 
@@ -607,7 +611,6 @@ static int connect_provider(struct connection_data *data, void *user_data,
 	 * Connect method requires no parameter, Connect2 requires dbus sender
 	 * name to be set.
 	 */
-
 	message = dbus_message_new_method_call(VPN_SERVICE, data->path,
 					VPN_CONNECTION_INTERFACE,
 					dbus_sender && *dbus_sender ?
