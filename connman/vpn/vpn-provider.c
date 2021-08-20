@@ -3,7 +3,7 @@
  *  ConnMan VPN daemon
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
- *  Copyright (C) 2019-2020  Jolla Ltd.
+ *  Copyright (C) 2019-2021  Jolla Ltd.
  *  Copyright (C) 2019  Open Mobile Platform LLC.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -25,6 +25,14 @@
 #include <config.h>
 #endif
 
+/*
+ * One hour difference in seconds between connections for checking whether to
+ * treat the authentication error as a real error or as a result of rapid
+ * transport change.
+ */
+#define CONNECT_OK_DIFF			(time_t)60*60
+#define AUTH_ERROR_LIMIT_DEFAULT	1
+
 #define STATE_INTERVAL_DEFAULT		0
 
 #define CONNMAN_STATE_ONLINE 		"online"
@@ -40,6 +48,7 @@
 #include <connman/log.h>
 #include <gweb/gresolv.h>
 #include <netdb.h>
+#include <time.h>
 
 #include "../src/connman.h"
 #include "connman/agent.h"
@@ -101,6 +110,8 @@ struct vpn_provider {
 	unsigned int auth_error_counter;
 	unsigned int conn_error_counter;
 	unsigned int signal_watch;
+	unsigned int auth_error_limit;
+	time_t previous_connect_time;
 };
 
 struct vpn_provider_connect_data {
@@ -1302,12 +1313,15 @@ static void reset_error_counters(struct vpn_provider *provider)
 	if (!provider)
 		return;
 
+	DBG("provider %p", provider);
+
 	provider->auth_error_counter = provider->conn_error_counter = 0;
 }
 
 static int vpn_provider_save(struct vpn_provider *provider)
 {
 	GKeyFile *keyfile;
+	const char *value;
 
 	DBG("provider %p immutable %s", provider,
 					provider->immutable ? "yes" : "no");
@@ -1337,6 +1351,11 @@ static int vpn_provider_save(struct vpn_provider *provider)
 			"Host", provider->host);
 	g_key_file_set_string(keyfile, provider->identifier,
 			"VPN.Domain", provider->domain);
+
+	value = vpn_provider_get_string(provider, "AuthErrorLimit");
+	if (value)
+		g_key_file_set_string(keyfile, provider->identifier,
+						"AuthErrorLimit", value);
 
 	if (provider->user_networks) {
 		gchar **networks;
@@ -1845,6 +1864,18 @@ static void append_dns(DBusMessageIter *iter, void *user_data)
 		append_nameservers(iter, provider->nameservers);
 }
 
+static time_t get_uptime(void)
+{
+	struct timespec t = { 0 };
+
+	if (clock_gettime(CLOCK_BOOTTIME, &t) == -1) {
+		connman_warn("clock_gettime() error %d, uptime failed", errno);
+		return 0;
+	}
+
+	return t.tv_sec;
+}
+
 static int provider_indicate_state(struct vpn_provider *provider,
 				enum vpn_provider_state state)
 {
@@ -1863,6 +1894,8 @@ static int provider_indicate_state(struct vpn_provider *provider,
 	provider->state = state;
 
 	if (state == VPN_PROVIDER_STATE_READY) {
+		provider->previous_connect_time = get_uptime();
+
 		connman_dbus_property_changed_basic(provider->path,
 					VPN_CONNECTION_INTERFACE, "Index",
 					DBUS_TYPE_INT32, &provider->index);
@@ -2075,8 +2108,10 @@ void vpn_provider_add_error(struct vpn_provider *provider,
 {
 	switch (error) {
 	case VPN_PROVIDER_ERROR_UNKNOWN:
+		provider->previous_connect_time = 0;
 		break;
 	case VPN_PROVIDER_ERROR_CONNECT_FAILED:
+		provider->previous_connect_time = 0;
 		++provider->conn_error_counter;
 		break;
 	case VPN_PROVIDER_ERROR_LOGIN_FAILED:
@@ -2084,6 +2119,10 @@ void vpn_provider_add_error(struct vpn_provider *provider,
 		++provider->auth_error_counter;
 		break;
 	}
+
+	DBG("%p connect errors %d auth errors %d", provider,
+						provider->conn_error_counter,
+						provider->auth_error_counter);
 }
 
 int vpn_provider_indicate_error(struct vpn_provider *provider,
@@ -2091,6 +2130,21 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 {
 	DBG("provider %p id %s error %d", provider, provider->identifier,
 									error);
+
+	/*
+	 * Ignore adding of errors when the VPN is idle or not set. Calls may
+	 * happen in a case when networks are rapidly changed and the call to
+	 * vpn_died() is done before executing the connect_cb() from the
+	 * plugin. Then vpn.c:vpn_died() executes the plugin specific died()
+	 * function which may free the plugin private data, containing also
+	 * the callback which hasn't yet been called. As a result the provider
+	 * might already been reset to idle state when the callback is executed
+	 * resulting in unnecessary reset of the previous succesful connect
+	 * timer and adding of an error for already disconnected VPN.
+	 */
+	if (provider->state == VPN_PROVIDER_STATE_IDLE ||
+				provider->state == VPN_PROVIDER_STATE_UNKNOWN)
+		return 0;
 
 	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
 
@@ -2243,6 +2297,7 @@ static void provider_initialize(struct vpn_provider *provider)
 					g_free, free_route);
 	provider->setting_strings = g_hash_table_new_full(g_str_hash,
 					g_str_equal, g_free, free_setting);
+	provider->auth_error_limit = AUTH_ERROR_LIMIT_DEFAULT;
 }
 
 static struct vpn_provider *vpn_provider_new(void)
@@ -2962,6 +3017,15 @@ bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 	return setting->immutable;
 }
 
+void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,
+							unsigned int limit)
+{
+	if (!provider)
+		return;
+
+	provider->auth_error_limit = limit;
+}
+
 int vpn_provider_set_supported_ip_networks(struct vpn_provider *provider,
 					bool ipv4_enabled, bool ipv6_enabled)
 {
@@ -3286,9 +3350,70 @@ const char *vpn_provider_get_path(struct vpn_provider *provider)
 	return provider->path;
 }
 
+/*
+ * This crude heuristic is meant to mitigate an issue with certain VPN
+ * providers that allow only one authentication per account at a time. These
+ * providers require the VPN client shuts down cleanly by sending an exit
+ * notification. In many cases this is not possible as the transport may
+ * already be gone and there is no route to the VPN server. In such case server
+ * may return authentication error to indicate that an other client is active
+ * and reserves the slot.
+ *
+ * By allowing the VPN client to try again with the following conditons the
+ * unnecessary credential resets done by VPN agent can be avoided. VPN client
+ * is allowed to retry if 1) there was a succesful connection to the server
+ * within the specified CONNECT_OK_DIFF time and 2) the provider specific
+ * limit for auth errors is not reached the unnecessary credential resets in
+ * this case are avoided.
+ *
+ * This feature is controlled by the provider specific value for
+ * "AuthErrorLimit". Setting the value to 0 feature is disabled. User defined
+ * value is preferred if set, otherwise plugin default set with
+ * vpn_provider_set_auth_error_limit() is used, which defaults to
+ * AUTH_ERROR_LIMIT_DEFAULT.
+ */
+static bool ignore_authentication_errors(struct vpn_provider *provider)
+{
+	const char *val;
+	unsigned int limit;
+	time_t uptime;
+	time_t diff;
+
+	val = vpn_provider_get_string(provider, "AuthErrorLimit");
+	if (val)
+		limit = g_ascii_strtoull(val, NULL, 10);
+	else
+		limit = provider->auth_error_limit;
+
+	if (!limit || !provider->previous_connect_time) {
+		DBG("%p errors %u %s", provider, provider->auth_error_counter,
+					!limit ?
+					"disabled by 0 limit" :
+					"no previous ok conn");
+		return false;
+	}
+
+	uptime = get_uptime();
+	diff = uptime - provider->previous_connect_time;
+
+	DBG("%p errors %u limit %u uptime %jd time diff %jd", provider,
+				provider->auth_error_counter, limit,
+				(intmax_t)uptime, (intmax_t)diff);
+
+	if (diff <= CONNECT_OK_DIFF && provider->auth_error_counter <= limit) {
+		DBG("ignore auth errors");
+		return true;
+	}
+
+	return false;
+}
+
 unsigned int vpn_provider_get_authentication_errors(
 						struct vpn_provider *provider)
 {
+	if (ignore_authentication_errors(provider))
+		return 0;
+
 	return provider->auth_error_counter;
 }
 

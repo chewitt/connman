@@ -1114,6 +1114,15 @@ static int ov_connect(struct vpn_provider *provider,
 	const char *tmpdir;
 	struct ov_private_data *data;
 
+	/*
+	 * Explicitly set limit of 10 for authentication errors. This defines
+	 * the authentication error message limit from the server before VPN
+	 * agent is instructed to clear the credentials. This is effective only
+	 * after a succesful connection has been made within CONNECT_OK_DIFF
+	 * time. User defined value for "AuthErrorLimit" overrides this.
+	 */
+	vpn_provider_set_auth_error_limit(provider, 10);
+
 	data = g_try_new0(struct ov_private_data, 1);
 	if (!data)
 		return -ENOMEM;
