@@ -506,15 +506,21 @@ static GString *modem_append_strv(GString *str, char *const *strv)
 static GString *modem_configure_ipv4(struct connman_network *network,
 	const struct ofono_connctx_settings *config, GString *nameservers)
 {
-	if (config->method == OFONO_CONNCTX_METHOD_STATIC && config->address) {
-		struct connman_ipaddress *ipaddr =
+	DBG("config %p address %p dns %p", config, config->address,
+								config->dns);
+
+	if (config->method == OFONO_CONNCTX_METHOD_STATIC) {
+		if (config->address) {
+			struct connman_ipaddress *ipaddr =
 					connman_ipaddress_alloc(AF_INET);
-		connman_ipaddress_set_ipv4(ipaddr, config->address,
+			connman_ipaddress_set_ipv4(ipaddr, config->address,
 					config->netmask, config->gateway);
+			connman_network_set_ipaddress(network, ipaddr);
+			connman_ipaddress_free(ipaddr);
+		}
+
 		connman_network_set_ipv4_method(network,
 					CONNMAN_IPCONFIG_METHOD_FIXED);
-		connman_network_set_ipaddress(network, ipaddr);
-		connman_ipaddress_free(ipaddr);
 	} else {
 		connman_network_set_ipv4_method(network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
@@ -556,19 +562,24 @@ static int modem_configure(struct modem_data *md)
 		DBG("%s %d", ofono_modem_path(md->modem), index);
 
 		if (md->connctx->settings) {
+			DBG("IPv4 method %d", md->connctx->settings->method);
 			connman_service_create_ip4config(service, index);
 			ns = modem_configure_ipv4(md->network,
 					md->connctx->settings, ns);
 		} else {
+			DBG("set network %p IPv4 DHCP", md->network);
 			connman_network_set_ipv4_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
 		}
 
 		if (md->connctx->ipv6_settings) {
+			DBG("IPv6 method %d",
+					md->connctx->ipv6_settings->method);
 			connman_service_create_ip6config(service, index);
 			ns = modem_configure_ipv6(md->network,
 					md->connctx->ipv6_settings, ns);
 		} else {
+			DBG("set network %p IPv6 AUTO", md->network);
 			connman_network_set_ipv6_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_AUTO);
 		}
@@ -585,6 +596,9 @@ static int modem_configure(struct modem_data *md)
 static void modem_connected(struct modem_data *md)
 {
 	const int index = modem_configure(md);
+
+	DBG("index %d ipv4 %p ipv6 %p", index, md->connctx->settings,
+				md->connctx->ipv6_settings);
 
 	if (index >= 0) {
 		connman_network_set_index(md->network, index);
@@ -710,6 +724,17 @@ static void connctx_active_changed(OfonoConnCtx *connctx, void *arg)
 
 static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
 {
+	struct modem_data *md = arg;
+	bool disconnecting = connman_network_get_disconnecting(md->network);
+
+	DBG("index %d ipv4 %p ipv6 %p", connman_network_get_index(md->network),
+			md->connctx->settings, md->connctx->ipv6_settings);
+
+	if (disconnecting) {
+		DBG("network %p disconnecting, skip modem conf", md->network);
+		return;
+	}
+
 	modem_configure(arg);
 }
 
