@@ -77,6 +77,7 @@ struct connman_network {
 
 	bool connecting;
 	bool associating;
+	bool disconnecting;
 
 	struct connman_device *device;
 
@@ -763,6 +764,7 @@ static void set_disconnected(struct connman_network *network)
 
 	network->connecting = false;
 	network->connected = false;
+	network->disconnecting = false;
 
 	connman_network_set_associating(network, false);
 }
@@ -1205,6 +1207,14 @@ bool connman_network_get_connecting(struct connman_network *network)
 	return network->connecting;
 }
 
+bool connman_network_get_disconnecting(struct connman_network *network)
+{
+	if (!network)
+		return false;
+
+	return network->disconnecting;
+}
+
 /**
  * connman_network_set_available:
  * @network: network structure
@@ -1314,6 +1324,8 @@ void connman_network_set_ipv4_method(struct connman_network *network,
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
 
+	DBG("network %p method %d", network, method);
+
 	service = connman_service_lookup_from_network(network);
 	if (!service)
 		return;
@@ -1330,6 +1342,8 @@ void connman_network_set_ipv6_method(struct connman_network *network,
 {
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
+
+	DBG("network %p method %d", network, method);
 
 	service = connman_service_lookup_from_network(network);
 	if (!service)
@@ -1502,6 +1516,7 @@ int __connman_network_connect(struct connman_network *network)
 	__connman_device_disconnect(network->device);
 
 	network->connecting = true;
+	network->disconnecting = false;
 
 	err = network->driver->connect(network);
 	if (err < 0) {
@@ -1538,6 +1553,7 @@ int __connman_network_disconnect(struct connman_network *network)
 		return -EUNATCH;
 
 	network->connecting = false;
+	network->disconnecting = true;
 
 	if (network->driver->disconnect)
 		err = network->driver->disconnect(network);
