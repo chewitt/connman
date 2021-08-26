@@ -1,12 +1,15 @@
 [Unit]
 Description=Connection service
+DefaultDependencies=false
+Conflicts=shutdown.target
 Requires=@CONNMAN_SERVICE_REQUIRES@
 After=@CONNMAN_SERVICE_AFTER@ network-pre.target
-Before=network.target
+Before=network.target multi-user.target shutdown.target
 Wants=network.target
 
 [Service]
-Type=notify
+Type=dbus
+BusName=net.connman
 Restart=always
 EnvironmentFile=-/etc/sysconfig/connman
 EnvironmentFile=-/var/lib/environment/connman/*.conf
