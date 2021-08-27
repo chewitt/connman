@@ -840,7 +840,8 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 		DBG("Keyfile cache pollution. Trying to write different data "
 			"than in cache. Cache %p, writing %p.",
 			record->keyfile, keyfile);
-		keyfile_free(record);
+		/* Cleanup cb set for the keyfile will call keyfile_free(). */
+		keyfile_unregister(record);
 		keyfile_insert(pathname, keyfile);
 	}
 	data = g_key_file_to_data(keyfile, &length, NULL);
