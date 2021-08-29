@@ -1597,6 +1597,12 @@ bool __connman_service_index_is_default(int index)
 
 static void start_wispr_when_connected(struct connman_service *service)
 {
+	if (!connman_setting_get_bool("EnableOnlineCheck")) {
+		connman_info("Online check disabled. "
+			"Default service remains in READY state.");
+		return;
+	}
+
 	if (__connman_service_is_connected_state(service,
 			CONNMAN_IPCONFIG_TYPE_IPV4))
 		__connman_service_wispr_start(service,
