@@ -491,6 +491,9 @@ static int errorstr2val(const char *error) {
 	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".AlreadyConnected") == 0)
 		return -EISCONN;
 
+	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".NoCarrier") == 0)
+		return -ENOLINK;
+
 	if (g_strcmp0(error, CONNMAN_ERROR_INTERFACE ".OperationCanceled") == 0)
 		return -ECANCELED;
 
@@ -529,16 +532,23 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 	if (dbus_set_error_from_message(&error, reply)) {
 		int err = errorstr2val(error.name);
 
+		switch (err) {
+		case -EINPROGRESS:
+			break;
 		/*
 		 * ECANCELED means that user has canceled authentication
 		 * dialog. That's not really an error, it's part of a normal
 		 * workflow. We also take it as a request to turn autoconnect
 		 * off, in case if it was on.
 		 */
-		if (err == -ECANCELED) {
+		case -ECANCELED:
 			DBG("%s connect canceled", data->path);
 			connman_provider_set_autoconnect(data->provider, false);
-		} else if (err != -EINPROGRESS) {
+			break;
+		case -ENOLINK: /* vpnd reports that connmand is not online. */
+		case -EISCONN:
+		case -ECONNREFUSED:
+		default:
 			connman_error("Connect reply: %s (%s)", error.message,
 								error.name);
 			DBG("data %p cb_data %p", data, cb_data);
