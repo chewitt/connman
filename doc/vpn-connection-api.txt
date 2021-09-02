@@ -235,6 +235,19 @@ Properties	string State [readonly]
 			The VPN server activated route. These routes
 			are pushed to connman by VPN server.
 
+		string AuthErrorLimit
+
+			This value defines the amount of authentication errors
+			that are allowed before informing VPN agent to clear
+			the credentials in case there was a previous successful
+			VPN connection made within one hour. This is to be used
+			with providers that allow only one login from one
+			account at a time to prevent clearing of credentials
+			when networks are rapidly changed. This value is used
+			as an integer and if unset this default to "1" for all
+			except OpenVPN that uses value "10". Setting value "0"
+			disables the feature for the provider.
+
 		There can be other properties also but as the VPN
 		technologies are so different, they have different
 		kind of options that they need, so not all options
