@@ -2026,6 +2026,21 @@ int vpn_provider_indicate_error(struct vpn_provider *provider,
 	DBG("provider %p id %s error %d", provider, provider->identifier,
 									error);
 
+	/*
+	 * Ignore adding of errors when the VPN is idle or not set. Calls may
+	 * happen in a case when networks are rapidly changed and the call to
+	 * vpn_died() is done before executing the connect_cb() from the
+	 * plugin. Then vpn.c:vpn_died() executes the plugin specific died()
+	 * function which may free the plugin private data, containing also
+	 * the callback which hasn't yet been called. As a result the provider
+	 * might already been reset to idle state when the callback is executed
+	 * resulting in unnecessary reset of the previous successful connect
+	 * timer and adding of an error for already disconnected VPN.
+	 */
+	if (provider->state == VPN_PROVIDER_STATE_IDLE ||
+				provider->state == VPN_PROVIDER_STATE_UNKNOWN)
+		return 0;
+
 	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_FAILURE);
 
 	vpn_provider_add_error(provider, error);
