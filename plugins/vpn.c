@@ -3,6 +3,7 @@
  *  Connection Manager
  *
  *  Copyright (C) 2012-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2019-2021  Jolla Ltd. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -1026,7 +1027,7 @@ static int disconnect_provider(struct connection_data *data)
 
 	if (data->disconnect_call) {
 		DBG("already disconnecting");
-		return -EINVAL;
+		return -EALREADY;
 	}
 
 	message = dbus_message_new_method_call(VPN_SERVICE, data->path,
