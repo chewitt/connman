@@ -538,21 +538,24 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 	if (dbus_set_error_from_message(&error, reply)) {
 		int err = errorstr2val(error.name);
 
+		switch (err) {
+		case -EINPROGRESS:
+			break;
 		/*
 		 * ECANCELED means that user has canceled authentication
 		 * dialog. That's not really an error, it's part of a normal
 		 * workflow. We also take it as a request to turn autoconnect
 		 * off, in case if it was on.
 		 */
-		if (err == -ECANCELED) {
+		case -ECANCELED:
 			DBG("%s connect canceled", data->path);
 			connman_provider_set_autoconnect(data->provider, false);
-		/*
-		 * ENOLINK (No carrier) is not an error situation but is caused
-		 * by connman not being online when VPN is attempted to be
-		 * connected.
-		 */
-		} else if (err != -EINPROGRESS && err != -ENOLINK) {
+			break;
+		case -ENOLINK: /* vpnd reports that connmand is not online. */
+		case -EISCONN:
+		case -ECONNABORTED:
+		case -ECONNREFUSED:
+		default:
 			connman_error("Connect reply: %s (%s)", error.message,
 								error.name);
 			DBG("data %p cb_data %p", data, cb_data);
@@ -563,6 +566,7 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 				data->cb_data = NULL;
 			}
 		}
+
 		dbus_error_free(&error);
 	}
 
@@ -607,7 +611,6 @@ static int connect_provider(struct connection_data *data, void *user_data,
 	 * Connect method requires no parameter, Connect2 requires dbus sender
 	 * name to be set.
 	 */
-
 	message = dbus_message_new_method_call(VPN_SERVICE, data->path,
 					VPN_CONNECTION_INTERFACE,
 					dbus_sender && *dbus_sender ?
@@ -1545,32 +1548,29 @@ static int save_route(GHashTable *routes, int family, const char *network,
 
 static int add_network_route(struct connection_data *data)
 {
-	char *network = NULL;
-	char *gateway = NULL;
-	char *netmask = NULL;
-	int family;
+	struct vpn_route rt = { 0, };
 	int err;
 
 	if (!data)
 		return -EINVAL;
 
-	family = connman_provider_get_family(data->provider);
-	switch (family) {
+	rt.family = connman_provider_get_family(data->provider);
+	switch (rt.family) {
 	case PF_INET:
-		err = connman_inet_get_route_addresses(data->index, &network,
-					&netmask, &gateway);
+		err = connman_inet_get_route_addresses(data->index,
+					&rt.network, &rt.netmask, &rt.gateway);
 		break;
 	case PF_INET6:
 		err = connman_inet_ipv6_get_route_addresses(data->index,
-					&network, &netmask, &gateway);
+					&rt.network, &rt.netmask, &rt.gateway);
 		break;
 	default:
-		connman_error("invalid protocol family %d", family);
+		connman_error("invalid protocol family %d", rt.family);
 		return -EINVAL;
 	}
 
 	DBG("network %s gateway %s netmask %s for provider %p",
-						network, gateway, netmask,
+						rt.network, rt.gateway, rt.netmask,
 						data->provider);
 
 	if (err) {
@@ -1579,21 +1579,20 @@ static int add_network_route(struct connection_data *data)
 		goto out;
 	}
 
-	err = save_route(data->server_routes, family, network, netmask,
-				gateway);
+	err = save_route(data->server_routes, rt.family, rt.network, rt.netmask,
+				rt.gateway);
 	if (err) {
 		connman_warn("failed to add network route for provider"
 					"%p", data->provider);
 		goto out;
 	}
 
-	struct vpn_route route = { family, network, netmask, gateway };
-	set_route(data, &route);
+	set_route(data, &rt);
 
 out:
-	g_free(network);
-	g_free(gateway);
-	g_free(netmask);
+	g_free(rt.network);
+	g_free(rt.netmask);
+	g_free(rt.gateway);
 
 	return 0;
 }
