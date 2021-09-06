@@ -1813,6 +1813,31 @@ bool __connman_ipconfig_is_usable(struct connman_ipconfig *ipconfig)
 	return true;
 }
 
+bool __connman_ipconfig_is_configured(struct connman_ipconfig *ipconfig)
+{
+	if (!ipconfig)
+		return false;
+
+	DBG("%p", ipconfig);
+
+	switch (ipconfig->method) {
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+		return false;
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+		break;
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		if (!__connman_ipconfig_get_local(ipconfig))
+			return false;
+
+		break;
+	}
+
+	return true;
+}
+
 int __connman_ipconfig_enable(struct connman_ipconfig *ipconfig)
 {
 	struct connman_ipdevice *ipdevice;
