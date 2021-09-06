@@ -1435,6 +1435,44 @@ bool connman_network_get_associating(struct connman_network *network)
 	return network->associating;
 }
 
+/**
+ * connman_network_is_configured:
+ * @network: network structure
+ * @type: ipconfig type
+ *
+ * Check if the given ipconfig type is configured
+ */
+bool connman_network_is_configured(struct connman_network *network,
+					enum connman_ipconfig_type type)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	struct connman_ipconfig *ipconfig_ipv6;
+
+	DBG("%p type %s", network, __connman_ipconfig_type2string(type));
+
+	if (!network)
+		return false;
+
+	service = connman_service_lookup_from_network(network);
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	ipconfig_ipv6 = __connman_service_get_ip6config(service);
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		return false;
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		return __connman_ipconfig_is_configured(ipconfig_ipv4);
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		return __connman_ipconfig_is_configured(ipconfig_ipv6);
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		return __connman_ipconfig_is_configured(ipconfig_ipv4) &&
+				__connman_ipconfig_is_configured(ipconfig_ipv6);
+	}
+
+	return false;
+}
+
 void connman_network_clear_hidden(void *user_data)
 {
 	if (!user_data)

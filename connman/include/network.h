@@ -103,6 +103,9 @@ bool connman_network_get_connected(struct connman_network *network);
 
 bool connman_network_get_associating(struct connman_network *network);
 
+bool connman_network_is_configured(struct connman_network *network,
+					enum connman_ipconfig_type type);
+
 void connman_network_clear_hidden(void *user_data);
 int connman_network_connect_hidden(struct connman_network *network,
 			char *identity, char* passphrase, void *user_data);
