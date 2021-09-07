@@ -116,6 +116,8 @@ void connman_network_set_ipv6_method(struct connman_network *network,
 					enum connman_ipconfig_method method);
 int connman_network_set_ipaddress(struct connman_network *network,
 				struct connman_ipaddress *ipaddress);
+void connman_network_clear_ipaddress(struct connman_network *network,
+					enum connman_ipconfig_type type);
 int connman_network_set_nameservers(struct connman_network *network,
 				const char *nameservers);
 int connman_network_set_domain(struct connman_network *network,

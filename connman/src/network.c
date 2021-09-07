@@ -1774,6 +1774,36 @@ int connman_network_set_ipaddress(struct connman_network *network,
 	return 0;
 }
 
+void connman_network_clear_ipaddress(struct connman_network *network,
+					enum connman_ipconfig_type type)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	struct connman_ipconfig *ipconfig_ipv6;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	ipconfig_ipv6 = __connman_service_get_ip6config(service);
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		__connman_ipconfig_clear_address(ipconfig_ipv4);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		__connman_ipconfig_clear_address(ipconfig_ipv6);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		__connman_ipconfig_clear_address(ipconfig_ipv4);
+		__connman_ipconfig_clear_address(ipconfig_ipv6);
+		break;
+	}
+}
+
 /*
  * Description: Network client requires additional wifi specific info
  */
