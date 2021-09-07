@@ -791,6 +791,27 @@ static void connctx_valid_changed(OfonoConnCtx *connctx, void *arg)
 	modem_update_network(arg);
 }
 
+static enum connman_ipconfig_type get_ofono_ipconfig_type(
+						struct modem_data *data)
+{
+	if (!data)
+		return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+
+	switch (data->connctx->protocol) {
+	case OFONO_CONNCTX_PROTOCOL_UNKNOWN:
+	case OFONO_CONNCTX_PROTOCOL_NONE:
+		return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+	case OFONO_CONNCTX_PROTOCOL_IP:
+		return CONNMAN_IPCONFIG_TYPE_IPV4;
+	case OFONO_CONNCTX_PROTOCOL_IPV6:
+		return CONNMAN_IPCONFIG_TYPE_IPV6;
+	case OFONO_CONNCTX_PROTOCOL_DUAL:
+		return CONNMAN_IPCONFIG_TYPE_ALL;
+	}
+
+	return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+}
+
 static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
@@ -816,6 +837,8 @@ static void connctx_update_active(struct modem_data *md)
 				modem_clean_delayed_set_connected(md);
 				connman_network_set_connected(md->network,
 								FALSE);
+				connman_network_clear_ipaddress(md->network,
+						get_ofono_ipconfig_type(md));
 			}
 		}
 	}
@@ -834,7 +857,8 @@ static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
 	struct modem_data *md = arg;
 	bool disconnecting = connman_network_get_disconnecting(md->network);
 
-	DBG("index %d ipv4 %p ipv6 %p", connman_network_get_index(md->network),
+	DBG("index %d ipv4 %p ipv6 %p",md->network ?
+				connman_network_get_index(md->network) : -1,
 			md->connctx->settings, md->connctx->ipv6_settings);
 
 	if (disconnecting) {
