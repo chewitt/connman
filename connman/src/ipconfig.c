@@ -184,7 +184,17 @@ void __connman_ipconfig_clear_address(struct connman_ipconfig *ipconfig)
 	if (!ipconfig)
 		return;
 
-	connman_ipaddress_clear(ipconfig->address);
+	switch (ipconfig->method) {
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+		break;
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		connman_ipaddress_clear(ipconfig->address);
+		break;
+	}
 }
 
 static void free_address_list(struct connman_ipdevice *ipdevice)
