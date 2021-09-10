@@ -209,7 +209,8 @@ int dhcp_send_raw_packet(struct dhcp_packet *dhcp_pkt,
 int dhcpv6_send_packet(int index, struct dhcpv6_packet *dhcp_pkt, int len);
 int dhcp_send_kernel_packet(struct dhcp_packet *dhcp_pkt,
 			uint32_t source_ip, int source_port,
-			uint32_t dest_ip, int dest_port);
+			uint32_t dest_ip, int dest_port,
+			const char *interface);
 int dhcp_l3_socket(int port, const char *interface, int family);
 int dhcp_recv_l3_packet(struct dhcp_packet *packet, int fd);
 int dhcpv6_recv_l3_packet(struct dhcpv6_packet **packet, unsigned char *buf,

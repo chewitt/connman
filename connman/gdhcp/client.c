@@ -554,7 +554,8 @@ static int send_request(GDHCPClient *dhcp_client)
 	if (dhcp_client->state == RENEWING)
 		return dhcp_send_kernel_packet(&packet,
 				dhcp_client->requested_ip, CLIENT_PORT,
-				dhcp_client->server_ip, SERVER_PORT);
+				dhcp_client->server_ip, SERVER_PORT,
+				dhcp_client->interface);
 
 	return dhcp_send_raw_packet(&packet, INADDR_ANY, CLIENT_PORT,
 				INADDR_BROADCAST, SERVER_PORT,
@@ -578,7 +579,8 @@ static int send_release(GDHCPClient *dhcp_client,
 	dhcp_add_option_uint32(&packet, DHCP_SERVER_ID, server);
 
 	return dhcp_send_kernel_packet(&packet, ciaddr, CLIENT_PORT,
-						server, SERVER_PORT);
+						server, SERVER_PORT,
+						dhcp_client->interface);
 }
 
 static gboolean ipv4ll_probe_timeout(gpointer dhcp_data);
@@ -2404,6 +2406,9 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		dhcp_client->retry_times = 0;
 
 		option = dhcp_get_option(&packet, pkt_len, DHCP_SERVER_ID);
+		if (!option)
+			return TRUE;
+
 		dhcp_client->server_ip = get_be32(option);
 		dhcp_client->requested_ip = ntohl(packet.yiaddr);
 
@@ -2465,6 +2470,8 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 			if (dhcp_client->state == REBOOTING) {
 				option = dhcp_get_option(&packet, pkt_len,
 							DHCP_SERVER_ID);
+				if (!option)
+					return TRUE;
 				dhcp_client->server_ip = get_be32(option);
 			}
 

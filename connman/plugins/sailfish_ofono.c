@@ -98,6 +98,10 @@ enum connctx_handler_id {
 /* Should be less than CONNECT_TIMEOUT defined in service.c (currently 120) */
 #define ACTIVATE_TIMEOUT_SEC (60)
 #define ONLINE_CHECK_SEC  (2)
+/* Timeout for delayed set connected call, in milliseconds. */
+#define DELAYED_CONNECT_TIMEOUT_MS (100)
+/* Wait for approx 2s for address information from ofono. */
+#define DELAYED_CONNECT_LIMIT (2000 / DELAYED_CONNECT_TIMEOUT_MS)
 
 struct modem_data {
 	OfonoModem *modem;
@@ -121,6 +125,8 @@ struct modem_data {
 	guint strength;
 	char *name;
 	char *imsi;
+	guint delayed_set_connected_id;
+	guint delayed_set_connected_attempts;
 };
 
 struct plugin_data {
@@ -506,15 +512,21 @@ static GString *modem_append_strv(GString *str, char *const *strv)
 static GString *modem_configure_ipv4(struct connman_network *network,
 	const struct ofono_connctx_settings *config, GString *nameservers)
 {
-	if (config->method == OFONO_CONNCTX_METHOD_STATIC && config->address) {
-		struct connman_ipaddress *ipaddr =
+	DBG("config %p address %p dns %p", config, config->address,
+								config->dns);
+
+	if (config->method == OFONO_CONNCTX_METHOD_STATIC) {
+		if (config->address) {
+			struct connman_ipaddress *ipaddr =
 					connman_ipaddress_alloc(AF_INET);
-		connman_ipaddress_set_ipv4(ipaddr, config->address,
+			connman_ipaddress_set_ipv4(ipaddr, config->address,
 					config->netmask, config->gateway);
+			connman_network_set_ipaddress(network, ipaddr);
+			connman_ipaddress_free(ipaddr);
+		}
+
 		connman_network_set_ipv4_method(network,
 					CONNMAN_IPCONFIG_METHOD_FIXED);
-		connman_network_set_ipaddress(network, ipaddr);
-		connman_ipaddress_free(ipaddr);
 	} else {
 		connman_network_set_ipv4_method(network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
@@ -556,19 +568,24 @@ static int modem_configure(struct modem_data *md)
 		DBG("%s %d", ofono_modem_path(md->modem), index);
 
 		if (md->connctx->settings) {
+			DBG("IPv4 method %d", md->connctx->settings->method);
 			connman_service_create_ip4config(service, index);
 			ns = modem_configure_ipv4(md->network,
 					md->connctx->settings, ns);
 		} else {
+			DBG("set network %p IPv4 DHCP", md->network);
 			connman_network_set_ipv4_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
 		}
 
 		if (md->connctx->ipv6_settings) {
+			DBG("IPv6 method %d",
+					md->connctx->ipv6_settings->method);
 			connman_service_create_ip6config(service, index);
 			ns = modem_configure_ipv6(md->network,
 					md->connctx->ipv6_settings, ns);
 		} else {
+			DBG("set network %p IPv6 AUTO", md->network);
 			connman_network_set_ipv6_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_AUTO);
 		}
@@ -582,13 +599,116 @@ static int modem_configure(struct modem_data *md)
 	return index;
 }
 
+static gboolean modem_is_network_configured(struct modem_data *md)
+{
+	DBG("%p", md);
+
+	switch (md->connctx->protocol) {
+	case OFONO_CONNCTX_PROTOCOL_UNKNOWN:
+	case OFONO_CONNCTX_PROTOCOL_NONE:
+		return FALSE;
+
+	case OFONO_CONNCTX_PROTOCOL_IP:
+		if (!connman_network_is_configured(md->network,
+						CONNMAN_IPCONFIG_TYPE_IPV4)) {
+			connman_warn("ofono: %p IPv4 no address set", md);
+			return FALSE;
+		}
+
+		break;
+
+	case OFONO_CONNCTX_PROTOCOL_IPV6:
+		if (!connman_network_is_configured(md->network,
+						CONNMAN_IPCONFIG_TYPE_IPV6)) {
+			connman_warn("ofono: %p IPv6 no address set", md);
+			return FALSE;
+		}
+
+		break;
+
+	case OFONO_CONNCTX_PROTOCOL_DUAL:
+		if (!connman_network_is_configured(md->network,
+						CONNMAN_IPCONFIG_TYPE_IPV4)) {
+			connman_warn("ofono: %p DUAL no IPv4 address set", md);
+			return FALSE;
+		}
+
+		if (!connman_network_is_configured(md->network,
+						CONNMAN_IPCONFIG_TYPE_IPV6)) {
+			connman_warn("ofono: %p DUAL no IPv6 address set", md);
+			return FALSE;
+		}
+
+		break;
+	}
+
+	DBG("%p is configured", md);
+
+	return TRUE;
+}
+
+static gboolean modem_delayed_set_connected(gpointer data)
+{
+	struct modem_data *md = data;
+
+	/* Keep in loop until configured and attempt limit is not reached. */
+	if (!modem_is_network_configured(md) &&
+				md->delayed_set_connected_attempts <
+					DELAYED_CONNECT_LIMIT) {
+		md->delayed_set_connected_attempts++;
+		return G_SOURCE_CONTINUE;
+	}
+
+	/* Log that we're giving up, network setup wasn't completed in time. */
+	if (md->delayed_set_connected_attempts == DELAYED_CONNECT_LIMIT)
+		connman_error("cellular setup was not completed in time");
+
+	DBG("modem %p network %p configured, set connected", md, md->network);
+
+	connman_network_set_connected(md->network, TRUE);
+
+	md->delayed_set_connected_id = 0;
+	md->delayed_set_connected_attempts = 0;
+
+	return G_SOURCE_REMOVE;
+}
+
+static void modem_clean_delayed_set_connected(struct modem_data *md)
+{
+	if (md->delayed_set_connected_id) {
+		g_source_remove(md->delayed_set_connected_id);
+		md->delayed_set_connected_id = 0;
+	}
+
+	md->delayed_set_connected_attempts = 0;
+}
+
+static void modem_set_connected(struct modem_data *md)
+{
+	modem_clean_delayed_set_connected(md);
+
+	if (modem_is_network_configured(md)) {
+		connman_network_set_connected(md->network, TRUE);
+	} else {
+		DBG("%p init delayed connect, modem network not ready", md);
+
+		md->delayed_set_connected_id = g_timeout_add(
+						DELAYED_CONNECT_TIMEOUT_MS,
+						modem_delayed_set_connected,
+						md);
+	}
+}
+
 static void modem_connected(struct modem_data *md)
 {
 	const int index = modem_configure(md);
 
+	DBG("index %d ipv4 %p ipv6 %p", index, md->connctx->settings,
+				md->connctx->ipv6_settings);
+
 	if (index >= 0) {
 		connman_network_set_index(md->network, index);
-		connman_network_set_connected(md->network, TRUE);
+		modem_set_connected(md);
 	}
 }
 
@@ -671,6 +791,27 @@ static void connctx_valid_changed(OfonoConnCtx *connctx, void *arg)
 	modem_update_network(arg);
 }
 
+static enum connman_ipconfig_type get_ofono_ipconfig_type(
+						struct modem_data *data)
+{
+	if (!data)
+		return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+
+	switch (data->connctx->protocol) {
+	case OFONO_CONNCTX_PROTOCOL_UNKNOWN:
+	case OFONO_CONNCTX_PROTOCOL_NONE:
+		return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+	case OFONO_CONNCTX_PROTOCOL_IP:
+		return CONNMAN_IPCONFIG_TYPE_IPV4;
+	case OFONO_CONNCTX_PROTOCOL_IPV6:
+		return CONNMAN_IPCONFIG_TYPE_IPV6;
+	case OFONO_CONNCTX_PROTOCOL_DUAL:
+		return CONNMAN_IPCONFIG_TYPE_ALL;
+	}
+
+	return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+}
+
 static void connctx_update_active(struct modem_data *md)
 {
 	GASSERT(md->connctx);
@@ -693,8 +834,11 @@ static void connctx_update_active(struct modem_data *md)
 		} else {
 			connctx_activate_cancel(md);
 			if (md->network) {
+				modem_clean_delayed_set_connected(md);
 				connman_network_set_connected(md->network,
 								FALSE);
+				connman_network_clear_ipaddress(md->network,
+						get_ofono_ipconfig_type(md));
 			}
 		}
 	}
@@ -710,6 +854,18 @@ static void connctx_active_changed(OfonoConnCtx *connctx, void *arg)
 
 static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
 {
+	struct modem_data *md = arg;
+	bool disconnecting = connman_network_get_disconnecting(md->network);
+
+	DBG("index %d ipv4 %p ipv6 %p",md->network ?
+				connman_network_get_index(md->network) : -1,
+			md->connctx->settings, md->connctx->ipv6_settings);
+
+	if (disconnecting) {
+		DBG("network %p disconnecting, skip modem conf", md->network);
+		return;
+	}
+
 	modem_configure(arg);
 }
 
@@ -937,6 +1093,10 @@ static void modem_delete(gpointer value)
 	connctx_activate_cancel(md);
 	if (md->online_check_id) {
 		g_source_remove(md->online_check_id);
+	}
+
+	if (md->delayed_set_connected_id) {
+		g_source_remove(md->delayed_set_connected_id);
 	}
 
 	modem_destroy_device(md);

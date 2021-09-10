@@ -184,7 +184,17 @@ void __connman_ipconfig_clear_address(struct connman_ipconfig *ipconfig)
 	if (!ipconfig)
 		return;
 
-	connman_ipaddress_clear(ipconfig->address);
+	switch (ipconfig->method) {
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+		break;
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		connman_ipaddress_clear(ipconfig->address);
+		break;
+	}
 }
 
 static void free_address_list(struct connman_ipdevice *ipdevice)
@@ -1807,6 +1817,31 @@ bool __connman_ipconfig_is_usable(struct connman_ipconfig *ipconfig)
 	case CONNMAN_IPCONFIG_METHOD_FIXED:
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		break;
+	}
+
+	return true;
+}
+
+bool __connman_ipconfig_is_configured(struct connman_ipconfig *ipconfig)
+{
+	if (!ipconfig)
+		return false;
+
+	DBG("%p", ipconfig);
+
+	switch (ipconfig->method) {
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+		return false;
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+		break;
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		if (!__connman_ipconfig_get_local(ipconfig))
+			return false;
+
 		break;
 	}
 

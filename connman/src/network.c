@@ -77,6 +77,7 @@ struct connman_network {
 
 	bool connecting;
 	bool associating;
+	bool disconnecting;
 
 	struct connman_device *device;
 
@@ -763,6 +764,7 @@ static void set_disconnected(struct connman_network *network)
 
 	network->connecting = false;
 	network->connected = false;
+	network->disconnecting = false;
 
 	connman_network_set_associating(network, false);
 }
@@ -1205,6 +1207,14 @@ bool connman_network_get_connecting(struct connman_network *network)
 	return network->connecting;
 }
 
+bool connman_network_get_disconnecting(struct connman_network *network)
+{
+	if (!network)
+		return false;
+
+	return network->disconnecting;
+}
+
 /**
  * connman_network_set_available:
  * @network: network structure
@@ -1314,6 +1324,8 @@ void connman_network_set_ipv4_method(struct connman_network *network,
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
 
+	DBG("network %p method %d", network, method);
+
 	service = connman_service_lookup_from_network(network);
 	if (!service)
 		return;
@@ -1330,6 +1342,8 @@ void connman_network_set_ipv6_method(struct connman_network *network,
 {
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig;
+
+	DBG("network %p method %d", network, method);
 
 	service = connman_service_lookup_from_network(network);
 	if (!service)
@@ -1421,6 +1435,44 @@ bool connman_network_get_associating(struct connman_network *network)
 	return network->associating;
 }
 
+/**
+ * connman_network_is_configured:
+ * @network: network structure
+ * @type: ipconfig type
+ *
+ * Check if the given ipconfig type is configured
+ */
+bool connman_network_is_configured(struct connman_network *network,
+					enum connman_ipconfig_type type)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	struct connman_ipconfig *ipconfig_ipv6;
+
+	DBG("%p type %s", network, __connman_ipconfig_type2string(type));
+
+	if (!network)
+		return false;
+
+	service = connman_service_lookup_from_network(network);
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	ipconfig_ipv6 = __connman_service_get_ip6config(service);
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		return false;
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		return __connman_ipconfig_is_configured(ipconfig_ipv4);
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		return __connman_ipconfig_is_configured(ipconfig_ipv6);
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		return __connman_ipconfig_is_configured(ipconfig_ipv4) &&
+				__connman_ipconfig_is_configured(ipconfig_ipv6);
+	}
+
+	return false;
+}
+
 void connman_network_clear_hidden(void *user_data)
 {
 	if (!user_data)
@@ -1502,6 +1554,7 @@ int __connman_network_connect(struct connman_network *network)
 	__connman_device_disconnect(network->device);
 
 	network->connecting = true;
+	network->disconnecting = false;
 
 	err = network->driver->connect(network);
 	if (err < 0) {
@@ -1538,6 +1591,7 @@ int __connman_network_disconnect(struct connman_network *network)
 		return -EUNATCH;
 
 	network->connecting = false;
+	network->disconnecting = true;
 
 	if (network->driver->disconnect)
 		err = network->driver->disconnect(network);
@@ -1718,6 +1772,36 @@ int connman_network_set_ipaddress(struct connman_network *network,
 	__connman_ipconfig_set_gateway(ipconfig, ipaddress->gateway);
 
 	return 0;
+}
+
+void connman_network_clear_ipaddress(struct connman_network *network,
+					enum connman_ipconfig_type type)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	struct connman_ipconfig *ipconfig_ipv6;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	ipconfig_ipv6 = __connman_service_get_ip6config(service);
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		__connman_ipconfig_clear_address(ipconfig_ipv4);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		__connman_ipconfig_clear_address(ipconfig_ipv6);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		__connman_ipconfig_clear_address(ipconfig_ipv4);
+		__connman_ipconfig_clear_address(ipconfig_ipv6);
+		break;
+	}
 }
 
 /*
