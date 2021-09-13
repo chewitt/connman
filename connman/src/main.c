@@ -51,6 +51,7 @@
 
 #define DEFAULT_INPUT_REQUEST_TIMEOUT (120 * 1000)
 #define DEFAULT_BROWSER_LAUNCH_TIMEOUT (300 * 1000)
+#define DEFAULT_STOGAGE_ROOT_PERMISSIONS (0755)
 #define DEFAULT_STORAGE_DIR_PERMISSIONS (0700)
 #define DEFAULT_STORAGE_FILE_PERMISSIONS (0600)
 #define DEFAULT_UMASK (0077)
@@ -91,6 +92,7 @@ static struct {
 	char **dont_bring_down_at_startup;
 	char *fs_identity;
 	char *storage_root;
+	mode_t storage_root_permissions;
 	mode_t storage_dir_permissions;
 	mode_t storage_file_permissions;
 	mode_t umask;
@@ -111,6 +113,7 @@ static struct {
 	.single_tech = false,
 	.tethering_technologies = NULL,
 	.persistent_tethering_mode = false,
+	.storage_root_permissions = DEFAULT_STOGAGE_ROOT_PERMISSIONS,
 	.storage_dir_permissions = DEFAULT_STORAGE_DIR_PERMISSIONS,
 	.storage_file_permissions = DEFAULT_STORAGE_FILE_PERMISSIONS,
 	.umask = DEFAULT_UMASK,
@@ -136,6 +139,7 @@ static struct {
 #define CONF_DISABLE_PLUGINS            "DisablePlugins"
 #define CONF_FILE_SYSTEM_IDENTITY       "FileSystemIdentity"
 #define CONF_STORAGE_ROOT               "StorageRoot"
+#define CONF_STORAGE_ROOT_PERMISSIONS   "StorageRootPermissions"
 #define CONF_STORAGE_DIR_PERMISSIONS    "StorageDirPermissions"
 #define CONF_STORAGE_FILE_PERMISSIONS   "StorageFilePermissions"
 #define CONF_UMASK                      "Umask"
@@ -159,6 +163,7 @@ static const char *supported_options[] = {
 	CONF_PERSISTENT_TETHERING_MODE,
 	CONF_FILE_SYSTEM_IDENTITY,
 	CONF_STORAGE_ROOT,
+	CONF_STORAGE_ROOT_PERMISSIONS,
 	CONF_STORAGE_DIR_PERMISSIONS,
 	CONF_STORAGE_FILE_PERMISSIONS,
 	CONF_UMASK,
@@ -494,6 +499,9 @@ static void parse_config(GKeyFile *config)
 
 	connman_settings.fs_identity = __connman_config_get_string(config,
 				group, CONF_FILE_SYSTEM_IDENTITY, NULL);
+
+	parse_perm(config, group, CONF_STORAGE_ROOT_PERMISSIONS,
+				&connman_settings.storage_root_permissions);
 
 	parse_perm(config, group, CONF_STORAGE_DIR_PERMISSIONS,
 				&connman_settings.storage_dir_permissions);
@@ -853,6 +861,7 @@ int main(int argc, char *argv[])
 	DBusConnection *conn;
 	DBusError err;
 	guint signal;
+	int fs_err;
 
 	context = g_option_context_new(NULL);
 	g_option_context_add_main_entries(context, options, NULL);
@@ -921,9 +930,20 @@ int main(int argc, char *argv[])
 				connman_settings.storage_dir_permissions,
 				connman_settings.storage_file_permissions);
 
-	if (__connman_storage_create_dir(STORAGEDIR,
-				connman_settings.storage_dir_permissions)) {
-		connman_error("failed to create storage directory");
+	fs_err = __connman_storage_create_dir(connman_settings.storage_root,
+				connman_settings.storage_root_permissions);
+	if (fs_err)
+		connman_error("failed to create storage root %s: %s "
+					"settings cannot be saved.",
+					connman_settings.storage_root,
+					strerror(-fs_err));
+
+	fs_err = __connman_storage_create_dir(STORAGEDIR,
+				connman_settings.storage_dir_permissions);
+	if (fs_err) {
+		connman_error("failed to create storage directory %s: %s "
+					"settings cannot be saved",
+					STORAGEDIR, strerror(-fs_err));
 	} else {
 		if (__connman_storage_register_dbus(STORAGE_DIR_TYPE_MAIN,
 					&storage_callbacks))
