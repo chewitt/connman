@@ -136,6 +136,28 @@ If /sys/class/net/<interface>/uevent does not contain DEVTYPE information,
 heuristics are used to choose between wifi and ethernet device types. If
 neither is appropriate, this setting can be used to provide more suitable
 fallback value - e.g. rndis0:gadget.
+.TP
+.BI StorageRoot= string
+The root storage dir ConnMan uses for creating connman and connman-vpn
+directories into. This defaults to the build time directory, usually /var/lib
+if omitted. This directory will be created with StorageRootPermissions if it
+does not exist.
+.TP
+.BI StorageRootPermissions= permissions (int)
+Permissions for creating StorageRoot directory when it does not exist yet.
+The permissions must be given in the Linux File Permissions format using
+Binary references. Defaults to 0755.
+.TP
+.BI StorageDirPermissions= permissions (int)
+Permissions to create directories into StorageRoot. These permsisions are
+used for connman, connman-vpn and all the service and provider subdirectories
+when they are created. The permissions must be given in the Linux File
+Permissions format using Binary references. Defaults to 0700.
+.TP
+.BI StorageFilePermissions= permissions (int)
+Permissions for files created inside connman and connman-vpn subdirectories
+and into the respective service directories. The permissions must be given in
+the Linux File Permissions format using Binary references. Defaults to 0600.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables
 ethernet tethering.
