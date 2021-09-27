@@ -929,6 +929,9 @@ static gchar* setup_test_directory()
 
 	g_assert_true(g_file_test(test_path, G_FILE_TEST_EXISTS));
 	g_assert_true(g_file_test(test_path, G_FILE_TEST_IS_DIR));
+	g_assert_cmpint(g_access(test_path, R_OK), ==, 0);
+	g_assert_cmpint(g_access(test_path, W_OK), ==, 0);
+	g_assert_cmpint(g_access(test_path, X_OK), ==, 0);
 	g_assert_cmpint(g_access(test_path, R_OK|W_OK|X_OK), ==, 0);
 
 	return test_path;
@@ -5680,6 +5683,145 @@ static void storage_test_technology_callbacks3()
 	g_free(test_path);
 }
 
+static void storage_test_path_validation_error1()
+{
+	GKeyFile *keyfile;
+	char *test_path;
+	char *target;
+	char *linkpath;
+	char *realpath;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+
+	gchar *wifi1[] = {
+		"[wifi_1_managed_psk]",
+		"Name=wifi1",
+		"SSID=444e412d4d6f6b6b756c612d35472d444a3335726e5f322e3447",
+		"Frequency=2417",
+		NULL
+	};
+
+	test_path = setup_test_directory();
+
+	target = g_build_filename(test_path, "real", NULL);
+	linkpath = g_build_filename(test_path, "symlink", NULL);
+	realpath = g_build_filename(target, "connman", NULL);
+
+	DBG("target %s realpath %s linkpath %s test_path %s", target, realpath,
+							linkpath, test_path);
+
+	__connman_inotify_init();
+
+	/* Init storage with symlink as STORAGEDIR */
+	g_assert_cmpint(symlink(target, linkpath), ==, 0);
+	g_assert_cmpint(__connman_storage_init(linkpath, m_dir, m_file), ==,
+									0);
+
+	/* Create the target/connman dir and add files there. */
+	g_assert_cmpint(__connman_storage_create_dir(realpath,
+				__connman_storage_dir_mode()), ==, 0);
+	create_settings_file(realpath, "wifi_1_managed_psk", wifi1);
+
+	/* STORAGEDIR points to symlink, cannot be loaded */
+	g_assert_null(connman_storage_load_service("wifi_1_managed_psk"));
+
+	/* Nor saved */
+	keyfile = g_key_file_new();
+	g_assert_cmpint(__connman_storage_save_service(keyfile,
+						"wifi_1_managed_psk"), !=, 0);
+	g_key_file_unref(keyfile);
+
+	g_assert_cmpint(unlink(linkpath), ==, 0);
+	g_free(target);
+	g_free(linkpath);
+	g_free(realpath);
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
+static void storage_test_path_validation_error2()
+{
+	GKeyFile *keyfile;
+	const char *test_dirs[] = { "wifi_1_managed_psk", "wifi_X_managed_psk",
+									NULL };
+	char *test_path;
+	char *target;
+	char *linkpath;
+	char *newlink;
+	mode_t m_dir = 0700;
+	mode_t m_file = 0600;
+	int i = 0;
+
+	gchar *wifi1[] = {
+		"[wifi_1_managed_psk]",
+		"Name=wifi1",
+		"SSID=444e412d4d6f6b6b756c612d35472d444a3335726e5f322e3447",
+		"Frequency=2417",
+		NULL
+	};
+
+	test_path = setup_test_directory();
+
+	__connman_inotify_init();
+	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
+									0);
+	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
+					__connman_storage_dir_mode()), ==, 0);
+
+	create_settings_file(STORAGEDIR, "wifi_1_managed_psk", wifi1);
+
+	newlink = "wifi_3_managed_psk";
+
+	/* Test with existing (wifi_1) and broken link (wifi_X) */
+	for (i = 0; test_dirs[i]; i++) {
+		target = g_build_filename(STORAGEDIR, test_dirs[i], NULL);
+		linkpath = g_build_filename(STORAGEDIR, newlink, NULL);
+		DBG("target %s linkpath %s", target, linkpath);
+		g_assert_cmpint(symlink(target, linkpath), ==, 0);
+		g_assert_null(connman_storage_load_service(newlink));
+
+		keyfile = g_key_file_new();
+		g_assert_cmpint(__connman_storage_save_service(keyfile,
+							newlink), !=, 0);
+		g_key_file_unref(keyfile);
+
+		g_assert_cmpint(unlink(linkpath), ==, 0);
+		g_free(target);
+		g_free(linkpath);
+	}
+
+	newlink = "wifi_4_managed_psk";
+	linkpath = g_build_filename(STORAGEDIR, newlink, NULL);
+	g_assert_cmpint(__connman_storage_create_dir(linkpath, m_dir), ==, 0);
+	g_free(linkpath);
+
+	/* Symlink settings file */
+	target = g_build_filename(STORAGEDIR, "wifi_1_managed_psk", "settings",
+							NULL);
+	linkpath = g_build_filename(STORAGEDIR, newlink, "settings", NULL);
+	DBG("target %s linkpath %s", target, linkpath);
+	g_assert_cmpint(symlink(target, linkpath), ==, 0);
+	g_assert_null(connman_storage_load_service(newlink));
+
+	keyfile = g_key_file_new();
+	g_assert_cmpint(__connman_storage_save_service(keyfile, newlink), !=,
+									0);
+
+	g_assert_cmpint(unlink(linkpath), ==, 0);
+	g_free(target);
+	g_free(linkpath);
+
+	__connman_storage_cleanup();
+	__connman_inotify_cleanup();
+
+	cleanup_test_directory(test_path);
+	g_free(test_path);
+}
+
 static gchar *option_debug = NULL;
 
 static bool parse_debug(const char *key, const char *value,
@@ -5821,6 +5963,10 @@ int main(int argc, char **argv)
 				storage_test_technology_callbacks2);
 	g_test_add_func(TEST_PREFIX "/test_technology_callbacks3",
 				storage_test_technology_callbacks3);
+	g_test_add_func(TEST_PREFIX "/test_path_validation_error1",
+				storage_test_path_validation_error1);
+	g_test_add_func(TEST_PREFIX "/test_path_validation_error2",
+				storage_test_path_validation_error2);
 
 	err = g_test_run();
 
