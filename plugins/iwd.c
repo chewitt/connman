@@ -317,7 +317,7 @@ static int cm_network_disconnect(struct connman_network *network)
 			NULL, cm_network_disconnect_cb, g_strdup(iwdn->path), g_free))
 		return -EIO;
 
-	return -EINPROGRESS;
+	return 0;
 }
 
 struct auto_connect_cb_data {
