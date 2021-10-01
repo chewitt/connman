@@ -209,18 +209,13 @@ static int cm_network_probe(struct connman_network *network)
 static void update_network_connected(struct iwd_network *iwdn)
 {
 	struct iwd_device *iwdd;
-	int index;
 
 	iwdd = g_hash_table_lookup(devices, iwdn->device);
 	if (!iwdd)
 		return;
 
-	index = connman_inet_ifindex(iwdd->name);
-	if (index < 0)
-		return;
-
-	DBG("interface name %s index %d", iwdd->name, index);
-	connman_network_set_index(iwdn->network, index);
+	DBG("interface name %s index %d", iwdd->name,
+		connman_network_get_index(iwdn->network));
 	connman_network_set_connected(iwdn->network, true);
 }
 
@@ -912,6 +907,7 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 {
 	struct iwd_device *iwdd;
 	char *identifier;
+	int index;
 
 	iwdd = g_hash_table_lookup(devices, iwdn->device);
 	if (!iwdd)
@@ -920,6 +916,11 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 	identifier = create_identifier(path, iwdn->type);
 	iwdn->network = connman_network_create(identifier,
 					CONNMAN_NETWORK_TYPE_WIFI);
+
+	index = connman_inet_ifindex(iwdd->name);
+	if (index >= 0)
+		connman_network_set_index(iwdn->network, index);
+
 	connman_network_set_data(iwdn->network, iwdn);
 
 	connman_network_set_name(iwdn->network, iwdn->name);
