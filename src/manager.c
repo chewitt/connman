@@ -600,6 +600,9 @@ static const GDBusSignalTable manager_signals[] = {
 	{ GDBUS_SIGNAL("PeersChanged",
 			GDBUS_ARGS({ "changed", "a(oa{sv})" },
 					{ "removed", "ao" })) },
+	{ GDBUS_SIGNAL("TetheringClientsChanged",
+			GDBUS_ARGS({ "registered", "as" },
+					{ "removed", "as" })) },
 	{ },
 };
 
