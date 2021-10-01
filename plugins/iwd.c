@@ -311,6 +311,8 @@ static int cm_network_disconnect(struct connman_network *network)
 	if (!iwds)
 		return -EIO;
 
+	connman_network_set_associating(network, false);
+
 	if (!g_dbus_proxy_method_call(iwds->proxy, "Disconnect",
 			NULL, cm_network_disconnect_cb, g_strdup(iwdn->path), g_free))
 		return -EIO;
