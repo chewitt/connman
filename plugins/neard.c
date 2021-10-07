@@ -223,9 +223,9 @@ static DBusMessage *create_request_oob_reply(DBusMessage *message)
 	DBusMessageIter dict;
 	const char *ssid, *psk;
 	uint8_t *tlv_msg;
-	int length;
+	int length, freq;
 
-	if (!connman_technology_get_wifi_tethering(NULL, &ssid, &psk))
+	if (!connman_technology_get_wifi_tethering(NULL, &ssid, &psk, &freq))
 		return get_reply_on_error(message, ENOTSUP);
 
 	tlv_msg = encode_to_tlv(ssid, psk, &length);

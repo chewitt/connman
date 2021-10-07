@@ -46,7 +46,7 @@ enum connman_service_type connman_technology_get_type
 				(struct connman_technology *technology);
 
 bool connman_technology_get_wifi_tethering(const struct connman_technology *technology,
-					const char **ssid, const char **psk);
+					const char **ssid, const char **psk, int *freq);
 
 bool connman_technology_is_tethering_allowed(enum connman_service_type type);
 

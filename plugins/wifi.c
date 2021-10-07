@@ -3337,6 +3337,7 @@ static GSupplicantSSID *ssid_ap_init(const struct connman_technology *technology
 {
 	GSupplicantSSID *ap;
 	const char *ssid, *passphrase;
+	int freq;
 	bool ret;
 
 	ap = g_try_malloc0(sizeof(GSupplicantSSID));
@@ -3344,7 +3345,8 @@ static GSupplicantSSID *ssid_ap_init(const struct connman_technology *technology
 		return NULL;
 
 	ret = connman_technology_get_wifi_tethering(technology,
-						&ssid, &passphrase);
+						&ssid, &passphrase,
+						&freq);
 	if (ret == false)
 		return NULL;
 
@@ -3352,7 +3354,10 @@ static GSupplicantSSID *ssid_ap_init(const struct connman_technology *technology
 	ap->ssid = ssid;
 	ap->ssid_len = strlen(ssid);
 	ap->scan_ssid = 0;
-	ap->freq = 2412;
+	if (freq)
+		ap->freq = freq;
+	else
+		ap->freq = 2412;
 
 	if (!passphrase || strlen(passphrase) == 0) {
 		ap->security = G_SUPPLICANT_SECURITY_NONE;

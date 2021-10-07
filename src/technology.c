@@ -66,6 +66,7 @@ struct connman_technology {
 					      */
 	char *tethering_ident;
 	char *tethering_passphrase;
+	int tethering_freq;
 
 	bool enable_persistent; /* Save the tech state */
 
@@ -191,6 +192,13 @@ static void technology_save(struct connman_technology *technology)
 					"Tethering.Passphrase", enc);
 		g_free(enc);
 	}
+
+	if (technology->tethering_freq == 0)
+		technology->tethering_freq = 2412;
+
+	g_key_file_set_integer(keyfile, identifier,
+				"Tethering.Freq",
+				technology->tethering_freq);
 
 done:
 	g_free(identifier);
@@ -356,7 +364,8 @@ enum connman_service_type connman_technology_get_type
 }
 
 bool connman_technology_get_wifi_tethering(const struct connman_technology *technology,
-					const char **ssid, const char **psk)
+					const char **ssid, const char **psk,
+					int *freq)
 {
 	if (!ssid || !psk)
 		return false;
@@ -375,6 +384,7 @@ bool connman_technology_get_wifi_tethering(const struct connman_technology *tech
 
 	*ssid = technology->tethering_ident;
 	*psk = technology->tethering_passphrase;
+	*freq = technology->tethering_freq;
 
 	return true;
 }
@@ -443,6 +453,10 @@ static void technology_load(struct connman_technology *technology)
 				identifier, "Tethering.Passphrase", NULL);
 	if (enc)
 		technology->tethering_passphrase = g_strcompress(enc);
+
+	technology->tethering_freq = g_key_file_get_integer(keyfile,
+				identifier, "Tethering.Freq", NULL);
+
 done:
 	g_free(identifier);
 
@@ -553,6 +567,10 @@ static void append_properties(DBusMessageIter *iter,
 		connman_dbus_dict_append_basic(&dict, "TetheringPassphrase",
 					DBUS_TYPE_STRING,
 					&technology->tethering_passphrase);
+
+	connman_dbus_dict_append_basic(&dict, "TetheringFreq",
+				DBUS_TYPE_INT32,
+				&technology->tethering_freq);
 
 	connman_dbus_dict_close(iter, &dict);
 }
@@ -967,6 +985,27 @@ static DBusMessage *set_property(DBusConnection *conn,
 					"TetheringPassphrase",
 					DBUS_TYPE_STRING,
 					&technology->tethering_passphrase);
+		}
+	} else if (g_str_equal(name, "TetheringFreq")) {
+		dbus_int32_t freq;
+
+		if (type != DBUS_TYPE_INT32)
+			return __connman_error_invalid_arguments(msg);
+
+		dbus_message_iter_get_basic(&value, &freq);
+
+		if (technology->type != CONNMAN_SERVICE_TYPE_WIFI)
+			return __connman_error_not_supported(msg);
+
+		if (freq >= 0) {
+			technology->tethering_freq = freq;
+			technology_save(technology);
+
+			connman_dbus_property_changed_basic(technology->path,
+					CONNMAN_TECHNOLOGY_INTERFACE,
+					"TetheringFreq",
+					DBUS_TYPE_INT32,
+					&technology->tethering_freq);
 		}
 	} else if (g_str_equal(name, "Powered")) {
 		dbus_bool_t enable;

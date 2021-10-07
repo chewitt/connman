@@ -822,8 +822,9 @@ static int cm_tech_tethering(struct connman_technology *technology,
 	int err = 0, res;
 	const char *ssid;
 	const char *psk;
+	int freq;
 
-	connman_technology_get_wifi_tethering(technology, &ssid, &psk);
+	connman_technology_get_wifi_tethering(technology, &ssid, &psk, &freq);
 
 	g_hash_table_iter_init(&iter, devices);
 
