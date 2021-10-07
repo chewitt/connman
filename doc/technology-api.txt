@@ -100,3 +100,10 @@ Properties	boolean Powered [readwrite]
 			This property is only valid for the WiFi technology,
 			and is then mapped to the WPA pre-shared key clients
 			will have to use in order to establish a connection.
+
+		int TetheringFreq [readwrite]
+
+			The tethering access point frequency
+
+			This property is only valid for the WiFi technology and it's
+			optional. Default frequency is 2412 Mhz.
