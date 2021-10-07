@@ -225,7 +225,7 @@ static DBusMessage *create_request_oob_reply(DBusMessage *message)
 	uint8_t *tlv_msg;
 	int length;
 
-	if (!connman_technology_get_wifi_tethering(&ssid, &psk))
+	if (!connman_technology_get_wifi_tethering(NULL, &ssid, &psk))
 		return get_reply_on_error(message, ENOTSUP);
 
 	tlv_msg = encode_to_tlv(ssid, psk, &length);

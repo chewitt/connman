@@ -183,7 +183,6 @@ static bool wfd_service_registered = false;
 
 static void start_autoscan(struct connman_device *device);
 static int tech_set_tethering(struct connman_technology *technology,
-				const char *identifier, const char *passphrase,
 				const char *bridge, bool enabled);
 
 static int p2p_tech_probe(struct connman_technology *technology)
@@ -2791,8 +2790,6 @@ static void ap_create_fail(GSupplicantInterface *interface)
 		wifi->tethering = false;
 
 		ret = tech_set_tethering(wifi->tethering_param->technology,
-				wifi->tethering_param->ssid->ssid,
-				wifi->tethering_param->ssid->passphrase,
 				wifi->bridge, true);
 
 		if ((ret == -EOPNOTSUPP) && (wifi_technology)) {
@@ -3336,12 +3333,19 @@ static void tech_remove(struct connman_technology *technology)
 	wifi_technology = NULL;
 }
 
-static GSupplicantSSID *ssid_ap_init(const char *ssid, const char *passphrase)
+static GSupplicantSSID *ssid_ap_init(const struct connman_technology *technology)
 {
 	GSupplicantSSID *ap;
+	const char *ssid, *passphrase;
+	bool ret;
 
 	ap = g_try_malloc0(sizeof(GSupplicantSSID));
 	if (!ap)
+		return NULL;
+
+	ret = connman_technology_get_wifi_tethering(technology,
+						&ssid, &passphrase);
+	if (ret == false)
 		return NULL;
 
 	ap->mode = G_SUPPLICANT_MODE_MASTER;
@@ -3458,8 +3462,7 @@ static void sta_remove_callback(int result,
 }
 
 static int enable_wifi_tethering(struct connman_technology *technology,
-				const char *bridge, const char *identifier,
-				const char *passphrase, bool available)
+				const char *bridge, bool available)
 {
 	GList *list;
 	GSupplicantInterface *interface;
@@ -3512,14 +3515,14 @@ static int enable_wifi_tethering(struct connman_technology *technology,
 		info->wifi = wifi;
 		info->technology = technology;
 		info->wifi->bridge = bridge;
-		info->ssid = ssid_ap_init(identifier, passphrase);
+		info->ssid = ssid_ap_init(technology);
 		if (!info->ssid)
 			goto failed;
 
 		info->ifname = g_strdup(ifname);
 
 		wifi->tethering_param->technology = technology;
-		wifi->tethering_param->ssid = ssid_ap_init(identifier, passphrase);
+		wifi->tethering_param->ssid = ssid_ap_init(technology);
 		if (!wifi->tethering_param->ssid)
 			goto failed;
 
@@ -3561,7 +3564,6 @@ static int enable_wifi_tethering(struct connman_technology *technology,
 }
 
 static int tech_set_tethering(struct connman_technology *technology,
-				const char *identifier, const char *passphrase,
 				const char *bridge, bool enabled)
 {
 	GList *list;
@@ -3589,13 +3591,11 @@ static int tech_set_tethering(struct connman_technology *technology,
 	}
 
 	DBG("trying tethering for available devices");
-	err = enable_wifi_tethering(technology, bridge, identifier, passphrase,
-				true);
+	err = enable_wifi_tethering(technology, bridge, true);
 
 	if (err < 0) {
 		DBG("trying tethering for any device");
-		err = enable_wifi_tethering(technology, bridge, identifier,
-					passphrase, false);
+		err = enable_wifi_tethering(technology, bridge, false);
 	}
 
 	return err;

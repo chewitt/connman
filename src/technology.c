@@ -264,8 +264,7 @@ static int set_tethering(struct connman_technology *technology,
 		if (!driver || !driver->set_tethering)
 			continue;
 
-		err = driver->set_tethering(technology, ident, passphrase,
-				bridge, enabled);
+		err = driver->set_tethering(technology, bridge, enabled);
 
 		if (result == -EINPROGRESS)
 			continue;
@@ -356,17 +355,18 @@ enum connman_service_type connman_technology_get_type
 	return technology->type;
 }
 
-bool connman_technology_get_wifi_tethering(const char **ssid,
-							const char **psk)
+bool connman_technology_get_wifi_tethering(const struct connman_technology *technology,
+					const char **ssid, const char **psk)
 {
-	struct connman_technology *technology;
-
 	if (!ssid || !psk)
 		return false;
 
 	*ssid = *psk = NULL;
 
-	technology = technology_find(CONNMAN_SERVICE_TYPE_WIFI);
+	/* Workaround for the neard plugin */
+	if (!technology)
+		technology = technology_find(CONNMAN_SERVICE_TYPE_WIFI);
+
 	if (!technology)
 		return false;
 

@@ -815,12 +815,15 @@ static int cm_change_tethering(struct iwd_device *iwdd,
 }
 
 static int cm_tech_tethering(struct connman_technology *technology,
-			const char *identifier, const char *passphrase,
 			const char *bridge, bool enabled)
 {
 	GHashTableIter iter;
 	gpointer key, value;
 	int err = 0, res;
+	const char *ssid;
+	const char *psk;
+
+	connman_technology_get_wifi_tethering(technology, &ssid, &psk);
 
 	g_hash_table_iter_init(&iter, devices);
 
@@ -837,8 +840,8 @@ static int cm_tech_tethering(struct connman_technology *technology,
 			continue;
 
 		if (!enabled && !g_strcmp0("ap", iwdd->mode)) {
-			res = cm_change_tethering(iwdd, technology, identifier,
-						passphrase, bridge, enabled);
+			res = cm_change_tethering(iwdd, technology, ssid,
+						psk, bridge, enabled);
 			if (res)
 				connman_warn("%s switching to Station mode failed",
 					iwdd->path);
@@ -848,8 +851,8 @@ static int cm_tech_tethering(struct connman_technology *technology,
 		}
 
 		if (enabled && !g_strcmp0("station", iwdd->mode)) {
-			err = cm_change_tethering(iwdd, technology, identifier,
-					passphrase, bridge, enabled);
+			err = cm_change_tethering(iwdd, technology, ssid,
+					psk, bridge, enabled);
 			if (err)
 				connman_warn("%s switching to AccessPoint mode failed",
 					iwdd->path);

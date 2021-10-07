@@ -44,8 +44,10 @@ void connman_technology_regdom_notify(struct connman_technology *technology,
 
 enum connman_service_type connman_technology_get_type
 				(struct connman_technology *technology);
-bool connman_technology_get_wifi_tethering(const char **ssid,
-							const char **psk);
+
+bool connman_technology_get_wifi_tethering(const struct connman_technology *technology,
+					const char **ssid, const char **psk);
+
 bool connman_technology_is_tethering_allowed(enum connman_service_type type);
 
 struct connman_technology_driver {
@@ -60,7 +62,6 @@ struct connman_technology_driver {
 	void (*remove_interface) (struct connman_technology *technology,
 								int index);
 	int (*set_tethering) (struct connman_technology *technology,
-				const char *identifier, const char *passphrase,
 				const char *bridge, bool enabled);
 	int (*set_regdom) (struct connman_technology *technology,
 						const char *alpha2);
