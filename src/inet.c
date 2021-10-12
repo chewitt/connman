@@ -1836,13 +1836,6 @@ int __connman_inet_ipv6_send_rs(int index, int timeout,
 	return 0;
 }
 
-static inline void ipv6_addr_advert_mult(const struct in6_addr *addr,
-					struct in6_addr *advert)
-{
-	ipv6_addr_set(advert, htonl(0xFF020000), 0, htonl(0x2),
-			htonl(0xFF000000) | addr->s6_addr32[3]);
-}
-
 #define MSG_SIZE_SEND 1452
 
 static int inc_len(int len, int inc)
