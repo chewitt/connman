@@ -31,6 +31,8 @@
 #include <dirent.h>
 #include <sys/inotify.h>
 #include <pwd.h>
+#include <limits.h>
+#include <stdlib.h>
 
 #include <gdbus.h>
 
@@ -794,11 +796,53 @@ static void keyfile_cleanup(void)
 	keyfile_hash = NULL;
 }
 
+static int validate_path(const char *pathname)
+{
+	char resolved_path[PATH_MAX] = { 0 };
+
+	/*
+	 * realpath() expands all symbolic links and references and handles
+	 * NULL pathname.
+	 */
+	if (!realpath(pathname, resolved_path)) {
+		switch (errno) {
+		/*
+		 * File does not exist, which is the case when saving. Verify
+		 * the path to avoid using a broken symlink or unaccessible
+		 * file.
+		 */
+		case ENOENT:
+			DBG("path %s is not readable/has missing symlink (%s)",
+						pathname, resolved_path);
+			break;
+		case EACCES:
+		case EIO:
+		case ELOOP:
+		case ENAMETOOLONG:
+		case ENOMEM:
+		case ENOTDIR:
+		default:
+			DBG("realpath() error %d/%s", errno, strerror(errno));
+			return -errno;
+		}
+	}
+
+	/*
+	 * If the paths differ the path most likely contains symlink or is not
+	 * an absolute path.
+	 */
+	if (g_strcmp0(pathname, resolved_path))
+		return -ENOTSUP;
+
+	return 0;
+}
+
 static GKeyFile *storage_load(const char *pathname)
 {
 	struct keyfile_record *record = NULL;
 	GError *error = NULL;
 	GKeyFile *keyfile = NULL;
+	int err;
 
 	DBG("Loading %s", pathname);
 
@@ -806,6 +850,13 @@ static GKeyFile *storage_load(const char *pathname)
 	if (record) {
 		DBG("Found record %p for %s from cache.", record, pathname);
 		return g_key_file_ref(record->keyfile);
+	}
+
+	err = validate_path(pathname);
+	if (err) {
+		connman_warn("file %s is not loaded, path is not absolute or "
+					"contains symlink(s)", pathname);
+		return NULL;
 	}
 
 	DBG("No keyfile in cache for %s", pathname);
@@ -833,7 +884,7 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 	int ret = 0;
 	struct keyfile_record *record = NULL;
 	const mode_t perm = STORAGE_FILE_MODE;
-	const mode_t old_mask = umask(~perm & 0777);
+	mode_t old_mask;
 
 	record = g_hash_table_lookup(keyfile_hash, pathname);
 	if (record && record->keyfile != keyfile) {
@@ -844,6 +895,15 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 		keyfile_unregister(record);
 		keyfile_insert(pathname, keyfile);
 	}
+
+	ret = validate_path(pathname);
+	if (ret) {
+		connman_warn("file %s is not saved, path is not absolute or "
+					"contains symlink(s)", pathname);
+		return ret;
+	}
+
+	old_mask = umask(~perm & 0777);
 	data = g_key_file_to_data(keyfile, &length, NULL);
 
 	if (!g_file_set_contents(pathname, data, length, &error)) {
