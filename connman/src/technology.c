@@ -1936,6 +1936,15 @@ bool __connman_technology_disable_all(void)
 	return ret;
 }
 
+static void initialize_offline_mode(void)
+{
+	global_offlinemode = connman_technology_load_offlinemode();
+	global_offlinemode_override = 0;
+
+	/* This will create settings file if it is missing */
+	connman_technology_save_offlinemode();
+}
+
 bool __connman_technology_enable_from_config()
 {
 	GSList *list;
@@ -1946,7 +1955,13 @@ bool __connman_technology_enable_from_config()
 
 	keyfile = __connman_storage_load_global();
 	if (!keyfile) {
-		connman_warn("No global settings found, all techs are off.");
+		/*
+		 * When the settings file does not exist create it similarly to
+		 * technology is initialization. This concerns new users only.
+		 */
+		initialize_offline_mode();
+
+		DBG("No global settings found, all techs are off.");
 		return false;
 	}
 
@@ -2279,11 +2294,7 @@ int __connman_technology_init(void)
 	rfkill_list = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 							NULL, free_rfkill);
 
-	global_offlinemode = connman_technology_load_offlinemode();
-	global_offlinemode_override = 0;
-
-	/* This will create settings file if it is missing */
-	connman_technology_save_offlinemode();
+	initialize_offline_mode();
 
 	return 0;
 }
