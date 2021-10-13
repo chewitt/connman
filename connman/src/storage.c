@@ -796,7 +796,7 @@ static void keyfile_cleanup(void)
 	keyfile_hash = NULL;
 }
 
-static int validate_path(const char *pathname)
+static int validate_path(const char *pathname, bool process_enoent)
 {
 	char resolved_path[PATH_MAX] = { 0 };
 
@@ -814,6 +814,10 @@ static int validate_path(const char *pathname)
 		case ENOENT:
 			DBG("path %s is not readable/has missing symlink (%s)",
 						pathname, resolved_path);
+
+			if (!process_enoent)
+				return -ENOENT;
+
 			break;
 		case EACCES:
 		case EIO:
@@ -852,10 +856,14 @@ static GKeyFile *storage_load(const char *pathname)
 		return g_key_file_ref(record->keyfile);
 	}
 
-	err = validate_path(pathname);
+	err = validate_path(pathname, false);
 	if (err) {
-		connman_warn("file %s is not loaded, path is not absolute or "
-					"contains symlink(s)", pathname);
+		if (err != -ENOENT)
+			connman_warn("file %s is not loaded, path is not "
+						"absolute or contains "
+						"symlink(s), error %s",
+						pathname, strerror(-err));
+
 		return NULL;
 	}
 
@@ -897,7 +905,7 @@ static int storage_save(GKeyFile *keyfile, char *pathname)
 		keyfile_insert(pathname, keyfile);
 	}
 
-	ret = validate_path(pathname);
+	ret = validate_path(pathname, true);
 	if (ret) {
 		connman_warn("file %s is not saved, path is not absolute or "
 					"contains symlink(s)", pathname);
