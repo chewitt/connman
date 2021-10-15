@@ -1603,6 +1603,7 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 						VPN_PROVIDER_STATE_DISCONNECT);
 			}
 			break;
+		case ECONNRESET:
 		default:
 			vpn_provider_indicate_error(provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
