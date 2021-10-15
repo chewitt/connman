@@ -229,15 +229,33 @@ static void free_ns_entry(gpointer data)
 static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 {
 	DBusMessageIter iter, dict;
-	const char *reason, *key, *value;
+	const char *reason, *context, *key, *value;
 	char *address = NULL, *gateway = NULL, *peer = NULL, *netmask = NULL;
 	struct connman_ipaddress *ipaddress;
 	GSList *nameserver_list = NULL;
 	struct ov_private_data *data = vpn_provider_get_plugin_data(provider);
+	const char *signature = DBUS_TYPE_STRING_AS_STRING
+				DBUS_TYPE_STRING_AS_STRING
+				DBUS_TYPE_ARRAY_AS_STRING
+				DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
+				DBUS_TYPE_STRING_AS_STRING
+				DBUS_TYPE_STRING_AS_STRING
+				DBUS_DICT_ENTRY_END_CHAR_AS_STRING;
+
+	if (!dbus_message_has_signature(msg, signature)) {
+		connman_error("openvpn notify signature \"%s\" does not match "
+				"expected \"%s\"",
+				dbus_message_get_signature(msg), signature);
+
+		return VPN_STATE_UNKNOWN;
+	}
 
 	dbus_message_iter_init(msg, &iter);
 
 	dbus_message_iter_get_basic(&iter, &reason);
+	dbus_message_iter_next(&iter);
+
+	dbus_message_iter_get_basic(&iter, &context);
 	dbus_message_iter_next(&iter);
 
 	if (!provider) {
@@ -245,10 +263,23 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		return VPN_STATE_FAILURE;
 	}
 
-	DBG("%p %s", vpn_provider_get_name(provider), reason);
+	DBG("%p %s %s", vpn_provider_get_name(provider), reason, context);
 
-	if (strcmp(reason, "up")) {
+	if (g_strcmp0(reason, "up")) {
 		ov_connect_done(data, EIO);
+		return VPN_STATE_DISCONNECT;
+	}
+
+	if (g_strcmp0(context, "init")) {
+		connman_warn("provider %p up notify with context %s", provider,
+								context);
+		ov_connect_done(data, ECONNRESET);
+
+		/*  TODO: remove this when restarts are completely supported */
+		if (data->task)
+			connman_task_stop(data->task);
+
+		/* TODO: change to CONNECT after restarts are supported */
 		return VPN_STATE_DISCONNECT;
 	}
 
