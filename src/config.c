@@ -1106,8 +1106,7 @@ static char *config_pem_fsid(const char *pem_file)
 
 static void provision_service_wifi(struct connman_config_service *config,
 				struct connman_service *service,
-				struct connman_network *network,
-				const void *ssid, unsigned int ssid_len)
+				struct connman_network *network)
 {
 	if (config->eap)
 		__connman_service_set_string(service, "EAP", config->eap);
@@ -1418,8 +1417,7 @@ static int try_provision_service(struct connman_config_service *config,
 						config->timeservers);
 
 	if (type == CONNMAN_SERVICE_TYPE_WIFI) {
-		provision_service_wifi(config, service, network,
-							ssid, ssid_len);
+		provision_service_wifi(config, service, network);
 	}
 
 	__connman_service_mark_dirty();
