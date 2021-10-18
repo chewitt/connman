@@ -2707,7 +2707,7 @@ static void update_domain(int index, const char *domain, bool append)
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 		GList *dom_list;
-		char *dom;
+		char *dom = NULL;
 		bool dom_found = false;
 
 		if (data->index < 0)
