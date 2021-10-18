@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 {
 	enum iptables_command cmd = IPTABLES_COMMAND_UNKNOWN;
 	char *table = NULL, *chain = NULL, *rule = NULL, *tmp;
-	int err, c, i;
+	int err = -EINVAL, c, i;
 
 	opterr = 0;
 
