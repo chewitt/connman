@@ -367,19 +367,23 @@ bool connman_technology_get_wifi_tethering(const struct connman_technology *tech
 					const char **ssid, const char **psk,
 					int *freq)
 {
+	bool force = true;
+
 	if (!ssid || !psk)
 		return false;
 
 	*ssid = *psk = NULL;
 
 	/* Workaround for the neard plugin */
-	if (!technology)
+	if (!technology) {
 		technology = technology_find(CONNMAN_SERVICE_TYPE_WIFI);
+		force = false;
+	}
 
 	if (!technology)
 		return false;
 
-	if (!technology->tethering)
+	if (!force && !technology->tethering)
 		return false;
 
 	*ssid = technology->tethering_ident;
