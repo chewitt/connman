@@ -331,7 +331,13 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 		}
 		break;
 
+	/*
+	 * Unknown case is reported by the plugin when there was an error
+	 * processing the notify message. This should be ignored.
+	 */
 	case VPN_STATE_UNKNOWN:
+		break;
+
 	case VPN_STATE_IDLE:
 	case VPN_STATE_DISCONNECT:
 	case VPN_STATE_FAILURE:
