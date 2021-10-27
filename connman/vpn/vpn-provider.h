@@ -93,6 +93,8 @@ int vpn_provider_set_boolean(struct vpn_provider *provider, const char *key,
 							bool force_change);
 bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
 							bool default_value);
+bool vpn_provider_setting_key_exists(struct vpn_provider *provider,
+							const char *key);
 void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,
 							unsigned int limit);
 

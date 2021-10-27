@@ -1603,6 +1603,7 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 						VPN_PROVIDER_STATE_DISCONNECT);
 			}
 			break;
+		case ECONNRESET:
 		default:
 			vpn_provider_indicate_error(provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
@@ -3011,6 +3012,12 @@ bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 		return true; /* Not found, regard as immutable - no changes */
 
 	return setting->immutable;
+}
+
+bool vpn_provider_setting_key_exists(struct vpn_provider *provider,
+							const char *key)
+{
+	return g_hash_table_contains(provider->setting_strings, key);
 }
 
 void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,

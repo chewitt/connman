@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 	DBusError error;
 	DBusMessage *msg;
 	DBusMessageIter iter, dict;
-	char **envp, *busname, *interface, *path, *reason;
+	char **envp, *busname, *interface, *path, *reason, *context;
 	int ret = 0;
 
 	openlog(basename(argv[0]), LOG_NDELAY | LOG_PID, LOG_DAEMON);
@@ -81,8 +81,9 @@ int main(int argc, char *argv[])
 	path = getenv("CONNMAN_PATH");
 
 	reason = getenv("script_type");
+	context = getenv("script_context");
 
-	if (!busname || !interface || !path || !reason) {
+	if (!busname || !interface || !path || !reason || !context) {
 		print("Required environment variables not set; "
 			"bus=%s iface=%s path=%s reason=%s",
 			busname, interface, path, reason);
@@ -114,6 +115,7 @@ int main(int argc, char *argv[])
 
 	dbus_message_append_args(msg,
 				 DBUS_TYPE_STRING, &reason,
+				 DBUS_TYPE_STRING, &context,
 				 DBUS_TYPE_INVALID);
 
 	dbus_message_iter_init_append(msg, &iter);
