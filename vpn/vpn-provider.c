@@ -2937,6 +2937,12 @@ bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 	return setting->immutable;
 }
 
+bool vpn_provider_setting_key_exists(struct vpn_provider *provider,
+							const char *key)
+{
+	return g_hash_table_contains(provider->setting_strings, key);
+}
+
 void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,
 							unsigned int limit)
 {
