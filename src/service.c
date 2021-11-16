@@ -7464,8 +7464,19 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 	if (__connman_network_get_weakness(network))
 		return service;
 
+	index = connman_network_get_index(network);
+
 	if (service->path) {
 		update_from_network(service, network);
+
+		if (service->ipconfig_ipv4)
+			__connman_ipconfig_set_index(service->ipconfig_ipv4,
+									index);
+
+		if (service->ipconfig_ipv6)
+			__connman_ipconfig_set_index(service->ipconfig_ipv6,
+									index);
+
 		__connman_connection_update_gateway();
 		return service;
 	}
@@ -7496,14 +7507,16 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 
 	update_from_network(service, network);
 
-	index = connman_network_get_index(network);
-
 	if (!service->ipconfig_ipv4)
 		service->ipconfig_ipv4 = create_ip4config(service, index,
 				CONNMAN_IPCONFIG_METHOD_DHCP);
+	else
+		__connman_ipconfig_set_index(service->ipconfig_ipv4, index);
 
 	if (!service->ipconfig_ipv6)
 		service->ipconfig_ipv6 = create_ip6config(service, index);
+	else
+		__connman_ipconfig_set_index(service->ipconfig_ipv6, index);
 
 	service_register(service);
 	service_schedule_added(service);
