@@ -1593,6 +1593,9 @@ static void disable_ipv6(struct connman_ipconfig *ipconfig)
 
 	ifname = connman_inet_ifname(ipconfig->index);
 
+	if (!ifname)
+	        return;
+
 	set_ipv6_state(ifname, false);
 
 	g_free(ifname);
@@ -1611,6 +1614,9 @@ static void enable_ipv6(struct connman_ipconfig *ipconfig)
 		return;
 
 	ifname = connman_inet_ifname(ipconfig->index);
+
+	if (!ifname)
+	        return;
 
 	if (ipconfig->method == CONNMAN_IPCONFIG_METHOD_AUTO)
 		set_ipv6_privacy(ifname, ipconfig->ipv6_privacy_config);
