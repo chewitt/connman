@@ -647,6 +647,33 @@ static gboolean modem_is_network_configured(struct modem_data *md)
 	return TRUE;
 }
 
+static void modem_ensure_dual_mode_configuration(struct modem_data *md)
+{
+	bool ipv4_configured;
+	bool ipv6_configured;
+
+	ipv4_configured = connman_network_is_configured(md->network,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+	ipv6_configured = connman_network_is_configured(md->network,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+
+	/* When both are unconfigured connection must fail */
+	if (ipv4_configured == ipv6_configured)
+		return;
+
+	if (!ipv4_configured) {
+		DBG("%p set IPv4 OFF", md);
+		connman_network_set_ipv4_method(md->network,
+						CONNMAN_IPCONFIG_METHOD_OFF);
+	}
+
+	if (!ipv6_configured) {
+		DBG("%p set IPv6 OFF", md);
+		connman_network_set_ipv6_method(md->network,
+						CONNMAN_IPCONFIG_METHOD_OFF);
+	}
+}
+
 static gboolean modem_delayed_set_connected(gpointer data)
 {
 	struct modem_data *md = data;
@@ -664,6 +691,14 @@ static gboolean modem_delayed_set_connected(gpointer data)
 		connman_error("cellular setup was not completed in time");
 
 	DBG("modem %p network %p configured, set connected", md, md->network);
+
+	/*
+	 * When we've tried to wait for missing IP configuration in dual mode
+	 * set the missing one OFF to avoid disconnection of mobile data and
+	 * to comply with 3GPP TS 24.301.
+	 */
+	if (md->connctx->protocol == OFONO_CONNCTX_PROTOCOL_DUAL)
+		modem_ensure_dual_mode_configuration(md);
 
 	connman_network_set_connected(md->network, TRUE);
 
