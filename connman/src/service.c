@@ -269,6 +269,7 @@ static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 static bool autoconnect_paused = false;
 static guint load_wifi_services_id = 0;
+static GHashTable **service_type_hash;
 
 struct connman_service_boolean_property {
 	const char *name;
@@ -400,6 +401,7 @@ static GList* preferred_tech_list_get(void);
 
 static void stats_init(struct connman_service *service);
 static void service_send_initial_stats(const char *counter);
+static gboolean is_available(struct connman_service *service);
 
 struct find_data {
 	const char *path;
@@ -510,8 +512,46 @@ static inline char *service_path(const char *ident)
 	return g_strconcat(CONNMAN_PATH, "/service/", ident, NULL);
 }
 
+
+static void count_available_service_type(struct connman_service *service,
+								bool add)
+{
+	GHashTable *table;
+	enum connman_service_type type;
+
+	if (!service)
+		return;
+
+	type = service->type;
+	table = service_type_hash[type];
+
+	DBG("%p/%s %s %c 1", service, service->name,
+					__connman_service_type2string(type),
+					add ? '+' : '-');
+
+	if (add) {
+		if (!is_available(service)) {
+			DBG("service %p/%s not available", service,
+							service->identifier);
+			return;
+		}
+
+		if (!table)
+			table = service_type_hash[type] = g_hash_table_new(
+						g_str_hash, g_str_equal);
+
+		g_hash_table_replace(table, service->identifier, service);
+	} else if (table) {
+		g_hash_table_remove(table, service->identifier);
+	}
+
+	DBG("%s service count: %d", __connman_service_type2string(type),
+					table ? g_hash_table_size(table) : 0);
+}
+
 static void service_remove(struct connman_service *service)
 {
+	count_available_service_type(service, false);
 	service_list = g_list_remove(service_list, service);
 	g_hash_table_remove(service_hash, service->identifier);
 }
@@ -1055,6 +1095,8 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 
 	service->hidden_service = g_key_file_get_boolean(keyfile,
 					service->identifier, "Hidden", NULL);
+
+	count_available_service_type(service, true);
 }
 
 static int service_load(struct connman_service *service)
@@ -8586,6 +8628,7 @@ static void service_init(struct connman_service *service)
 	g_hash_table_replace(service_hash, service->identifier, service);
 	service_list = g_list_insert_sorted(service_list,
 			connman_service_ref(service), service_compare);
+	count_available_service_type(service, true);
 
 	if (!service->ipconfig_ipv4) {
 		service->ipconfig_ipv4 = create_ip4config(service, -1,
@@ -9111,6 +9154,14 @@ const char *__connman_service_get_name(struct connman_service *service)
 	return service->name;
 }
 
+int connman_service_get_available_count(enum connman_service_type type)
+{
+	if (!service_type_hash[type])
+		return 0;
+
+	return g_hash_table_size(service_type_hash[type]);
+}
+
 enum connman_service_state connman_service_get_state(struct connman_service *service)
 {
 	return service ? service->state : CONNMAN_SERVICE_STATE_UNKNOWN;
@@ -9221,6 +9272,7 @@ static void update_from_network(struct connman_service *service,
 	const gboolean was_available = service_available.value(service);
 	uint8_t strength = service->strength;
 	const char *str;
+	bool network_update = false;
 
 	DBG("service %p network %p", service, network);
 
@@ -9293,13 +9345,18 @@ static void update_from_network(struct connman_service *service,
 
 	if (!service->network) {
 		service->network = connman_network_ref(network);
+		network_update = service->network ? true : false;
 		connman_network_autoconnect_changed(service->network,
 							service->autoconnect);
 		service_schedule_updated(service);
-        }
+	}
 
-	if (was_available != service_available.value(service))
+	if (was_available != service_available.value(service)) {
 		service_boolean_changed(service, &service_available);
+
+		if (network_update)
+			count_available_service_type(service, true);
+	}
 
 	service_list_sort();
 }
@@ -9527,6 +9584,7 @@ void __connman_service_remove_from_network(struct connman_network *network)
 	if (service->network) {
 		connman_network_unref(service->network);
 		service->network = NULL;
+		count_available_service_type(service, false);
 	}
 
 	/*
@@ -9794,6 +9852,7 @@ int __connman_service_init(void)
 
 	service_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 							NULL, service_removed);
+	service_type_hash = g_new0(GHashTable*, MAX_CONNMAN_SERVICE_TYPES);
 
 	services_notify = g_new0(struct _services_notify, 1);
 	services_notify->remove = g_hash_table_new_full(g_str_hash,
@@ -9814,6 +9873,8 @@ int __connman_service_init(void)
 
 void __connman_service_cleanup(void)
 {
+	int i;
+
 	DBG("");
 
 	if (load_wifi_services_id) {
@@ -9838,6 +9899,17 @@ void __connman_service_cleanup(void)
 
 	g_hash_table_destroy(service_hash);
 	service_hash = NULL;
+
+	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++) {
+		if (!service_type_hash[i])
+			continue;
+
+		g_hash_table_destroy(service_type_hash[i]);
+		service_type_hash[i] = NULL;
+	}
+
+	g_free(service_type_hash);
+	service_type_hash = NULL;
 
 	g_slist_free(counter_list);
 	counter_list = NULL;

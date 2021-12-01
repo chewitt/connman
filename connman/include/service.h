@@ -132,6 +132,7 @@ bool connman_service_get_saved(struct connman_service *service);
 bool connman_service_get_autoconnect(struct connman_service *service);
 bool connman_service_set_autoconnect(struct connman_service *service,
 							bool autoconnect);
+int connman_service_get_available_count(enum connman_service_type type);
 
 /* Return non-zero value to terminate the loop, zero to continue */
 typedef int (* connman_service_iterate_cb) (struct connman_service *service,
