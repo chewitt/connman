@@ -65,7 +65,11 @@
 #define WIFI_BSS_COUNT_SMALL (10)
 #define WIFI_BSS_COUNT_MAX (100)
 #define WIFI_WEAK_RSSI (-85) /* dBm */
+#define WIFI_WEAK_RSSI_MAX (-65) /* dBm */
 #define WIFI_WEAK_BSS_MIN_SIGHTINGS (3)
+
+#define WIFI_SERVICE_COUNT_INTERVAL (20)
+#define WIFI_RSSI_INCREASE_INTERVAL (5)
 
 /* Access point (tethering) configuration */
 #define WIFI_AP_FREQUENCY (2412)
@@ -638,7 +642,23 @@ static void wifi_bss_free(struct wifi_bss *bss_data)
 
 static inline gboolean wifi_bss_weak(const struct wifi_bss *bss_data)
 {
-	return (bss_data->signal < WIFI_WEAK_RSSI);
+	int weak_rssi = WIFI_WEAK_RSSI;
+	int services;
+
+	services = connman_service_get_available_count(
+						CONNMAN_SERVICE_TYPE_WIFI);
+	if (services) {
+		int multiplier = services / WIFI_SERVICE_COUNT_INTERVAL;
+		weak_rssi += WIFI_RSSI_INCREASE_INTERVAL * multiplier;
+
+		/* Keep at same level as background scan. */
+		if (weak_rssi > WIFI_WEAK_RSSI_MAX)
+			weak_rssi = WIFI_WEAK_RSSI_MAX;
+	}
+
+	DBG("WEAK_RSSI %d, %d services", weak_rssi, services);
+
+	return (bss_data->signal < weak_rssi);
 }
 
 static inline gboolean wifi_bss_ignorable(const struct wifi_bss *bss_data)
