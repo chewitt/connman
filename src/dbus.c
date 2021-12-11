@@ -687,7 +687,7 @@ int __connman_dbus_init(DBusConnection *conn)
 
 	connection = conn;
 
-	return 0;
+	return g_dbus_attach_object_manager(conn);
 }
 
 void __connman_dbus_cleanup(void)
