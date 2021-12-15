@@ -6023,6 +6023,15 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_IDLE:
+		if (old_state == CONNMAN_SERVICE_STATE_FAILURE &&
+				service->connect_reason ==
+					CONNMAN_SERVICE_CONNECT_REASON_NATIVE &&
+				service->error ==
+					CONNMAN_SERVICE_ERROR_INVALID_KEY) {
+			__connman_service_clear_error(service);
+			service_complete(service);
+		}
+
 		if (old_state != CONNMAN_SERVICE_STATE_DISCONNECT)
 			__connman_service_disconnect(service);
 
