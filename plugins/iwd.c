@@ -1489,6 +1489,8 @@ static DBusMessage *agent_request_passphrase(DBusConnection *dbus_conn,
 		return get_reply_on_error(message, EINVAL);
 
 	passwd = connman_network_get_string(iwdn->network, "WiFi.Passphrase");
+	if (!passwd)
+		return get_reply_on_error(message, ENOKEY);
 
 	return g_dbus_create_reply(message, DBUS_TYPE_STRING, &passwd,
 					DBUS_TYPE_INVALID);
