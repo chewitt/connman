@@ -943,7 +943,9 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 	}
 	iwdn->iwdd = iwdd;
 
-	connman_network_set_available(iwdn->network, true);
+	if (connman_network_get_strength(iwdn->network))
+		connman_network_set_available(iwdn->network, true);
+
 	connman_network_set_group(iwdn->network, identifier);
 
 	g_free(identifier);
