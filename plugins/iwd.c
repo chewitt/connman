@@ -555,7 +555,7 @@ static void cm_device_scan_cb(DBusMessage *message, void *user_data)
 	const char *path = user_data;
 	struct iwd_station *iwds;
 
-	iwds = g_hash_table_lookup(networks, path);
+	iwds = g_hash_table_lookup(stations, path);
 	if (!iwds)
 		return;
 
