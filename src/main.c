@@ -127,8 +127,8 @@ static struct {
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
 	.enable_online_to_ready_transition = false,
-	.online_check_ipv4_url = DEFAULT_ONLINE_CHECK_IPV4_URL,
-	.online_check_ipv6_url = DEFAULT_ONLINE_CHECK_IPV6_URL,
+	.online_check_ipv4_url = NULL,
+	.online_check_ipv6_url = NULL,
 	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
 	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
 	.auto_connect_roaming_services = false,
@@ -503,6 +503,9 @@ static void parse_config(GKeyFile *config)
 					CONF_ONLINE_CHECK_IPV4_URL, &error);
 	if (!error)
 		connman_settings.online_check_ipv4_url = string;
+	else
+		connman_settings.online_check_ipv4_url =
+			g_strdup(DEFAULT_ONLINE_CHECK_IPV4_URL);
 
 	g_clear_error(&error);
 
@@ -510,6 +513,10 @@ static void parse_config(GKeyFile *config)
 					CONF_ONLINE_CHECK_IPV6_URL, &error);
 	if (!error)
 		connman_settings.online_check_ipv6_url = string;
+	else
+		connman_settings.online_check_ipv6_url =
+			g_strdup(DEFAULT_ONLINE_CHECK_IPV6_URL);
+
 
 	g_clear_error(&error);
 
