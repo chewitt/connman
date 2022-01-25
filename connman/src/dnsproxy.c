@@ -2373,11 +2373,6 @@ hangup:
 		server->connected = true;
 		server_list = g_slist_append(server_list, server);
 
-		if (server->timeout > 0) {
-			g_source_remove(server->timeout);
-			server->timeout = 0;
-		}
-
 		for (list = request_list; list; ) {
 			struct request_data *req = list->data;
 			int status;
