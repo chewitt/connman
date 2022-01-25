@@ -2358,6 +2358,18 @@ hangup:
 			}
 		}
 
+		/*
+		 * Remove the G_IO_OUT flag from the watch, otherwise we end
+		 * up in a busy loop, because the socket is constantly writable.
+		 *
+		 * There seems to be no better way in g_io to do that than
+		 * re-adding the watch.
+		 */
+		g_source_remove(server->watch);
+		server->watch = g_io_add_watch(server->channel,
+			G_IO_IN | G_IO_HUP | G_IO_NVAL | G_IO_ERR,
+			tcp_server_event, server);
+
 		server->connected = true;
 		server_list = g_slist_append(server_list, server);
 
