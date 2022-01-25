@@ -1949,6 +1949,12 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 
 	if (offset < 0)
 		return offset;
+	if (reply_len < 0)
+		return -EINVAL;
+	if (reply_len < offset + 1)
+		return -EINVAL;
+	if ((size_t)reply_len < sizeof(struct domain_hdr))
+		return -EINVAL;
 
 	hdr = (void *)(reply + offset);
 	dns_id = reply[offset] | reply[offset + 1] << 8;
@@ -1984,23 +1990,31 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 		 */
 		if (req->append_domain && ntohs(hdr->qdcount) == 1) {
 			uint16_t domain_len = 0;
-			uint16_t header_len;
+			uint16_t header_len, payload_len;
 			uint16_t dns_type, dns_class;
 			uint8_t host_len, dns_type_pos;
 			char uncompressed[NS_MAXDNAME], *uptr;
 			char *ptr, *eom = (char *)reply + reply_len;
+			char *domain;
 
 			/*
 			 * ptr points to the first char of the hostname.
 			 * ->hostname.domain.net
 			 */
 			header_len = offset + sizeof(struct domain_hdr);
+			if (reply_len < header_len)
+				return -EINVAL;
+			payload_len = reply_len - header_len;
+
 			ptr = (char *)reply + header_len;
 
 			host_len = *ptr;
+			domain = ptr + 1 + host_len;
+			if (domain > eom)
+				return -EINVAL;
+
 			if (host_len > 0)
-				domain_len = strnlen(ptr + 1 + host_len,
-						reply_len - header_len);
+				domain_len = strnlen(domain, eom - domain);
 
 			/*
 			 * If the query type is anything other than A or AAAA,
@@ -2009,6 +2023,8 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 			 */
 			dns_type_pos = host_len + 1 + domain_len + 1;
 
+			if (ptr + (dns_type_pos + 3) > eom)
+				return -EINVAL;
 			dns_type = ptr[dns_type_pos] << 8 |
 							ptr[dns_type_pos + 1];
 			dns_class = ptr[dns_type_pos + 2] << 8 |
@@ -2038,6 +2054,8 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 				int new_len, fixed_len;
 				char *answers;
 
+				if (len > payload_len)
+					return -EINVAL;
 				/*
 				 * First copy host (without domain name) into
 				 * tmp buffer.
@@ -2052,6 +2070,8 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 				 * Copy type and class fields of the question.
 				 */
 				ptr += len + domain_len + 1;
+				if (ptr + NS_QFIXEDSZ > eom)
+					return -EINVAL;
 				memcpy(uptr, ptr, NS_QFIXEDSZ);
 
 				/*
@@ -2061,6 +2081,8 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 				uptr += NS_QFIXEDSZ;
 				answers = uptr;
 				fixed_len = answers - uncompressed;
+				if (ptr + offset > eom)
+					return -EINVAL;
 
 				/*
 				 * We then uncompress the result to buffer
@@ -2255,8 +2277,7 @@ static gboolean udp_server_event(GIOChannel *channel, GIOCondition condition,
 
 	len = recv(sk, buf, sizeof(buf), 0);
 
-	if (len >= 12)
-		forward_dns_reply(buf, len, IPPROTO_UDP, data);
+	forward_dns_reply(buf, len, IPPROTO_UDP, data);
 
 	return TRUE;
 }
