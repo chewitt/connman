@@ -2164,6 +2164,9 @@ out:
 			err = sendto(sk, req->resp, req->resplen, 0,
 				&req->sa, req->sa_len);
 	} else {
+		uint16_t tcp_len = htons(req->resplen - 2);
+		/* correct TCP message length */
+		memcpy(req->resp, &tcp_len, sizeof(tcp_len));
 		sk = req->client_sk;
 		err = send(sk, req->resp, req->resplen, MSG_NOSIGNAL);
 	}
