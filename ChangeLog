@@ -1,3 +1,11 @@
+ver 1.41:
+	Fix issue with RTNL netlink message alignment.
+	Fix issue with dnsproxy and timeout for TCP feature.
+	Fix issue with dnsproxy and busy loop in TCP server.
+	Fix issue with WiFi connection with no passphrase.
+	Add support for wpa_supplicant and WPA3-SAE functionality.
+	Add support for D-Bus ObjectManager interface.
+
 ver 1.40:
 	Fix issue with handling WiFi disconnecting status.
 	Fix issue with handling WiFi auto-connect and iwd backend.
