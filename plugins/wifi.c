@@ -2163,21 +2163,29 @@ static GSupplicantSecurity network_security(const char *security)
 static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 {
 	struct wifi_network *network_data = connman_network_get_data(network);
+	const char *ssid_blob;
 	const char *security;
 
 	memset(ssid, 0, sizeof(*ssid));
 	ssid->mode = G_SUPPLICANT_MODE_INFRA;
-	ssid->ssid = connman_network_get_blob(network, "WiFi.SSID",
-						&ssid->ssid_len);
+	ssid->ssid_len = 0;
+	ssid_blob =
+		connman_network_get_blob(network, "WiFi.SSID", &ssid->ssid_len);
+	ssid->ssid = g_try_malloc(ssid->ssid_len);
+	if (ssid->ssid)
+		memcpy((void *)ssid->ssid, ssid_blob, ssid->ssid_len);
+	else
+		ssid->ssid_len = 0;
+
 	ssid->scan_ssid = 1;
 	security = connman_network_get_string(network, "WiFi.Security");
 	ssid->security = network_security(security);
 	ssid->keymgmt = network_data->keymgmt;
 	ssid->ieee80211w = G_SUPPLICANT_MFP_OPTIONAL;
-	ssid->passphrase = connman_network_get_string(network,
-						"WiFi.Passphrase");
+	ssid->passphrase = g_strdup(
+		connman_network_get_string(network, "WiFi.Passphrase"));
 
-	ssid->eap = connman_network_get_string(network, "WiFi.EAP");
+	ssid->eap = g_strdup(connman_network_get_string(network, "WiFi.EAP"));
 
 	/*
 	 * If our private key password is unset,
@@ -2186,42 +2194,44 @@ static void ssid_init(GSupplicantSSID *ssid, struct connman_network *network)
 	 * cert may have to be provided.
 	 */
 	if (!connman_network_get_string(network, "WiFi.PrivateKeyPassphrase"))
-		connman_network_set_string(network,
-						"WiFi.PrivateKeyPassphrase",
-						ssid->passphrase);
+		connman_network_set_string(network, "WiFi.PrivateKeyPassphrase",
+					   ssid->passphrase);
 	/* We must have an identity for both PEAP and TLS */
-	ssid->identity = connman_network_get_string(network, "WiFi.Identity");
+	ssid->identity =
+		g_strdup(connman_network_get_string(network, "WiFi.Identity"));
 
 	/* Use agent provided identity as a fallback */
 	if (!ssid->identity || strlen(ssid->identity) == 0)
-		ssid->identity = connman_network_get_string(network,
-							"WiFi.AgentIdentity");
+		ssid->identity = g_strdup(connman_network_get_string(
+			network, "WiFi.AgentIdentity"));
 
-	ssid->anonymous_identity = connman_network_get_string(network,
-						"WiFi.AnonymousIdentity");
-	ssid->ca_cert_path = connman_network_get_string(network,
-							"WiFi.CACertFile");
-	ssid->subject_match = connman_network_get_string(network,
-							"WiFi.SubjectMatch");
-	ssid->altsubject_match = connman_network_get_string(network,
-							"WiFi.AltSubjectMatch");
-	ssid->domain_suffix_match = connman_network_get_string(network,
-							"WiFi.DomainSuffixMatch");
-	ssid->domain_match = connman_network_get_string(network,
-							"WiFi.DomainMatch");
-	ssid->client_cert_path = connman_network_get_string(network,
-							"WiFi.ClientCertFile");
-	ssid->private_key_path = connman_network_get_string(network,
-							"WiFi.PrivateKeyFile");
-	ssid->private_key_passphrase = connman_network_get_string(network,
-						"WiFi.PrivateKeyPassphrase");
-	ssid->phase2_auth = connman_network_get_string(network, "WiFi.Phase2");
+	ssid->anonymous_identity = g_strdup(
+		connman_network_get_string(network, "WiFi.AnonymousIdentity"));
+	ssid->ca_cert_path = g_strdup(
+		connman_network_get_string(network, "WiFi.CACertFile"));
+	ssid->subject_match = g_strdup(
+		connman_network_get_string(network, "WiFi.SubjectMatch"));
+	ssid->altsubject_match = g_strdup(
+		connman_network_get_string(network, "WiFi.AltSubjectMatch"));
+	ssid->domain_suffix_match = g_strdup(
+		connman_network_get_string(network, "WiFi.DomainSuffixMatch"));
+	ssid->domain_match = g_strdup(
+		connman_network_get_string(network, "WiFi.DomainMatch"));
+	ssid->client_cert_path = g_strdup(
+		connman_network_get_string(network, "WiFi.ClientCertFile"));
+	ssid->private_key_path = g_strdup(
+		connman_network_get_string(network, "WiFi.PrivateKeyFile"));
+	ssid->private_key_passphrase = g_strdup(connman_network_get_string(
+		network, "WiFi.PrivateKeyPassphrase"));
+	ssid->phase2_auth =
+		g_strdup(connman_network_get_string(network, "WiFi.Phase2"));
 
 	ssid->use_wps = connman_network_get_bool(network, "WiFi.UseWPS");
-	ssid->pin_wps = connman_network_get_string(network, "WiFi.PinWPS");
+	ssid->pin_wps =
+		g_strdup(connman_network_get_string(network, "WiFi.PinWPS"));
 
 	if (connman_setting_get_bool("BackgroundScanning"))
-		ssid->bgscan = BGSCAN_DEFAULT;
+		ssid->bgscan = g_strdup(BGSCAN_DEFAULT);
 }
 
 static int network_connect(struct connman_network *network)
@@ -2246,12 +2256,12 @@ static int network_connect(struct connman_network *network)
 
 	interface = wifi->interface;
 
-	ssid_init(ssid, network);
-
 	if (wifi->disconnecting) {
 		wifi->pending_network = network;
 		g_free(ssid);
 	} else {
+		ssid_init(ssid, network);
+
 		wifi->network = connman_network_ref(network);
 		wifi->retries = 0;
 
