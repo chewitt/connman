@@ -693,7 +693,7 @@ static void tech_enable_tethering_cb(const DBusError *error, void *user_data)
 	}
 
 	if (dbus_error_is_set(error)) {
-		connman_warn("iwd device %s could not enable AcessPoint mode: %s",
+		connman_warn("iwd device %s could not enable AccessPoint mode: %s",
 			cbd->path, error->message);
 		goto out;
 	}
