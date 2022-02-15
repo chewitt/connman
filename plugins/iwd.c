@@ -745,6 +745,7 @@ static void tech_disable_tethering_cb(const DBusError *error, void *user_data)
 		goto out;
 	}
 
+	connman_technology_tethering_notify(cbd->tech, false);
 	iwdap = g_hash_table_lookup(access_points, iwdd->path);
 	if (!iwdap) {
 		DBG("%s no ap object found", iwdd->path);
@@ -755,11 +756,6 @@ static void tech_disable_tethering_cb(const DBusError *error, void *user_data)
 	iwdap->index = -1;
 	iwdap->bridge = NULL;
 	iwdap->tech = NULL;
-
-	if (!connman_inet_remove_from_bridge(cbd->index, cbd->bridge))
-		goto out;
-
-	connman_technology_tethering_notify(cbd->tech, false);
 
 	if (!g_dbus_proxy_method_call(iwdap->proxy, "Stop",
 					NULL, tech_ap_stop_cb, cbd, NULL)) {
@@ -786,6 +782,9 @@ static int cm_change_tethering(struct iwd_device *iwdd,
 	index = connman_inet_ifindex(iwdd->name);
 	if (index < 0)
 		return -ENODEV;
+
+	if (!enabled && connman_inet_remove_from_bridge(index, bridge))
+		return -EIO;
 
 	cbd = g_new(struct tech_cb_data, 1);
 	cbd->iwdd = iwdd;
