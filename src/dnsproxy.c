@@ -223,6 +223,7 @@ static GHashTable *listener_table = NULL;
 static time_t next_refresh;
 static GHashTable *partial_tcp_req_table;
 static guint cache_timer = 0;
+static in_port_t dns_listen_port = 53;
 
 static guint16 get_id(void)
 {
@@ -3704,7 +3705,7 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	if (family == AF_INET6) {
 		memset(&s.sin6, 0, sizeof(s.sin6));
 		s.sin6.sin6_family = AF_INET6;
-		s.sin6.sin6_port = htons(53);
+		s.sin6.sin6_port = htons(dns_listen_port);
 		slen = sizeof(s.sin6);
 
 		if (__connman_inet_get_interface_address(index,
@@ -3721,7 +3722,7 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 	} else if (family == AF_INET) {
 		memset(&s.sin, 0, sizeof(s.sin));
 		s.sin.sin_family = AF_INET;
-		s.sin.sin_port = htons(53);
+		s.sin.sin_port = htons(dns_listen_port);
 		slen = sizeof(s.sin);
 
 		if (__connman_inet_get_interface_address(index,
@@ -4049,4 +4050,9 @@ void __connman_dnsproxy_cleanup(void)
 		g_resolv_unref(ipv4_resolve);
 	if (ipv6_resolve)
 		g_resolv_unref(ipv6_resolve);
+}
+
+void __connman_dnsproxy_set_listen_port(unsigned int port)
+{
+	dns_listen_port = port;
 }
