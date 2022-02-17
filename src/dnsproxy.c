@@ -2843,8 +2843,7 @@ int __connman_dnsproxy_append(int index, const char *domain,
 	return 0;
 }
 
-static void remove_server(int index, const char *domain,
-			const char *server, int protocol)
+static void remove_server(int index, const char *server, int protocol)
 {
 	struct server_data *data;
 	GSList *list;
@@ -2885,8 +2884,8 @@ int __connman_dnsproxy_remove(int index, const char *domain,
 	if (g_str_equal(server, "::1"))
 		return -ENODEV;
 
-	remove_server(index, domain, server, IPPROTO_UDP);
-	remove_server(index, domain, server, IPPROTO_TCP);
+	remove_server(index, server, IPPROTO_UDP);
+	remove_server(index, server, IPPROTO_TCP);
 
 	return 0;
 }
