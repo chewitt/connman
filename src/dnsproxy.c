@@ -2855,7 +2855,7 @@ static void remove_server(int index, const char *server, int protocol)
 	destroy_server(data);
 
 	for (list = server_list; list; list = list->next) {
-		struct server_data *data = list->data;
+		data = list->data;
 
 		if (data->index != -1 && data->enabled == true)
 			return;
