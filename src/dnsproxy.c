@@ -233,7 +233,7 @@ static guint16 get_id(void)
 	return rand;
 }
 
-static int protocol_offset(int protocol)
+static size_t protocol_offset(int protocol)
 {
 	switch (protocol) {
 	case IPPROTO_UDP:
@@ -243,9 +243,9 @@ static int protocol_offset(int protocol)
 		return 2;
 
 	default:
-		return -EINVAL;
+		/* this should never happen */
+		abort();
 	}
-
 }
 
 /*
@@ -480,12 +480,10 @@ static void send_response(int sk, unsigned char *buf, size_t len,
 				int protocol)
 {
 	struct domain_hdr *hdr;
-	int err, offset = protocol_offset(protocol);
+	int err;
+	size_t offset = protocol_offset(protocol);
 
 	debug("sk %d", sk);
-
-	if (offset < 0)
-		return;
 
 	if (len < sizeof(*hdr) + offset)
 		return;
@@ -802,16 +800,12 @@ static struct cache_entry *cache_check(gpointer request, int *qtype, int proto)
 	struct cache_entry *entry;
 	struct domain_question *q;
 	uint16_t type;
-	int offset, proto_offset;
+	int offset;
 
 	if (!request)
 		return NULL;
 
-	proto_offset = protocol_offset(proto);
-	if (proto_offset < 0)
-		return NULL;
-
-	question = request + proto_offset + 12;
+	question = request + protocol_offset(proto) + 12;
 
 	offset = strlen(question) + 1;
 	q = (void *) (question + offset);
@@ -1383,7 +1377,7 @@ static int reply_query_type(unsigned char *msg, int len)
 static int cache_update(struct server_data *srv, unsigned char *msg,
 			unsigned int msg_len)
 {
-	int offset = protocol_offset(srv->protocol);
+	size_t offset = protocol_offset(srv->protocol);
 	int err, qlen, ttl = 0;
 	uint16_t answers = 0, type = 0, class = 0;
 	struct domain_hdr *hdr = (void *)(msg + offset);
@@ -1411,10 +1405,7 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 		next_refresh = current_time + 30;
 	}
 
-	if (offset < 0)
-		return 0;
-
-	debug("offset %d hdr %p msg %p rcode %d", offset, hdr, msg, hdr->rcode);
+	debug("offset %zd hdr %p msg %p rcode %d", offset, hdr, msg, hdr->rcode);
 
 	/* Continue only if response code is 0 (=ok) */
 	if (hdr->rcode != ns_r_noerror)
@@ -1678,16 +1669,13 @@ static int ns_resolv(struct server_data *server, struct request_data *req,
 		char *domain;
 		unsigned char alt[1024];
 		struct domain_hdr *hdr = (void *) &alt;
-		int altlen, domlen, offset;
+		int altlen, domlen;
+		size_t offset = protocol_offset(server->protocol);
 
 		domain = list->data;
 
 		if (!domain)
 			continue;
-
-		offset = protocol_offset(server->protocol);
-		if (offset < 0)
-			return offset;
 
 		domlen = strlen(domain) + 1;
 		if (domlen < 5)
@@ -1947,13 +1935,12 @@ static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
 {
 	struct domain_hdr *hdr;
 	struct request_data *req;
-	int dns_id, sk, err, offset = protocol_offset(protocol);
+	int dns_id, sk, err;
+	size_t offset = protocol_offset(protocol);
 
-	if (offset < 0)
-		return offset;
 	if (reply_len < 0)
 		return -EINVAL;
-	if (reply_len < offset + 1)
+	if ((size_t)reply_len < offset + 1)
 		return -EINVAL;
 	if ((size_t)reply_len < sizeof(struct domain_hdr))
 		return -EINVAL;
