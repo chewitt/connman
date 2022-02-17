@@ -99,6 +99,8 @@ static unsigned char msg_invalid[] = {
 	0x31, 0xC0, /* tran id */
 };
 
+static const char *dns_port = "53";
+
 static int create_tcp_socket(int family)
 {
 	int sk, err;
@@ -139,7 +141,7 @@ static int connect_tcp_socket(char *server)
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_flags = AI_NUMERICSERV | AI_NUMERICHOST;
-	getaddrinfo(server, "53", &hints, &rp);
+	getaddrinfo(server, dns_port, &hints, &rp);
 
 	sk = create_tcp_socket(rp->ai_family);
 	err = sk;
@@ -201,7 +203,7 @@ static int connect_udp_socket(char *server, struct sockaddr *sa,
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_flags = AI_NUMERICSERV | AI_NUMERICHOST;
-	getaddrinfo(server, "53", &hints, &rp);
+	getaddrinfo(server, dns_port, &hints, &rp);
 
 	sk = create_udp_socket(rp->ai_family);
 	err = sk;
@@ -429,6 +431,11 @@ static void test_failure_tcp_msg(void)
 int main(int argc, char *argv[])
 {
 	g_test_init(&argc, &argv, NULL);
+
+	if (argc == 2) {
+		/* alternative dns port */
+		dns_port = argv[1];
+	}
 
 	g_test_add_func("/dnsproxy/ipv4 udp msg",
 			test_ipv4_udp_msg);
