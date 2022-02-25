@@ -607,6 +607,7 @@ void __connman_network_set_device(struct connman_network *network,
 
 int __connman_network_connect(struct connman_network *network);
 int __connman_network_disconnect(struct connman_network *network);
+int __connman_network_forget(struct connman_network *network);
 int __connman_network_clear_ipconfig(struct connman_network *network,
 					struct connman_ipconfig *ipconfig);
 int __connman_network_enable_ipconfig(struct connman_network *network,

@@ -1848,6 +1848,19 @@ int __connman_network_disconnect(struct connman_network *network)
 	return err;
 }
 
+int __connman_network_forget(struct connman_network *network)
+{
+	DBG("network %p", network);
+
+	if (!network->driver)
+		return -EUNATCH;
+
+	if (network->driver->forget)
+		return network->driver->forget(network);
+
+	return 0;
+}
+
 int __connman_network_clear_ipconfig(struct connman_network *network,
 					struct connman_ipconfig *ipconfig)
 {

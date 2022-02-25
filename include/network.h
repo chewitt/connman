@@ -163,6 +163,7 @@ struct connman_network_driver {
 	void (*remove) (struct connman_network *network);
 	int (*connect) (struct connman_network *network);
 	int (*disconnect) (struct connman_network *network);
+	int (*forget) (struct connman_network *network);
 	int (*set_autoconnect) (struct connman_network *network,
 				bool autoconnect);
 };

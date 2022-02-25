@@ -4634,6 +4634,8 @@ bool __connman_service_remove(struct connman_service *service)
 		return false;
 
 	__connman_service_disconnect(service);
+	if (service->network)
+		__connman_network_forget(service->network);
 
 	g_free(service->passphrase);
 	service->passphrase = NULL;

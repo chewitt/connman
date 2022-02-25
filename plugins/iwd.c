@@ -270,6 +270,46 @@ static int cm_network_connect(struct connman_network *network)
 	return -EINPROGRESS;
 }
 
+static void cm_network_forget_cb(DBusMessage *message, void *user_data)
+{
+	struct iwd_known_network *iwdkn;
+	const char *path = user_data;
+
+	iwdkn = g_hash_table_lookup(known_networks, path);
+	if (!iwdkn)
+		return;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		DBG("%s failed: %s", path, dbus_error);
+	}
+}
+
+static int cm_network_forget(struct connman_network *network)
+{
+	struct iwd_network *iwdn = connman_network_get_data(network);
+	struct iwd_known_network *iwdkn;
+
+	if (!iwdn)
+		return -EINVAL;
+
+	if (!iwdn->known_network)
+		return 0;
+
+	iwdkn = g_hash_table_lookup(known_networks,
+				iwdn->known_network);
+	if (!iwdkn)
+		return 0;
+
+	if (!g_dbus_proxy_method_call(iwdkn->proxy, "Forget",
+			NULL, cm_network_forget_cb,
+			g_strdup(iwdkn->path), g_free))
+		return -EIO;
+
+	return 0;
+}
+
 static void cm_network_disconnect_cb(DBusMessage *message, void *user_data)
 {
 	const char *path = user_data;
@@ -470,6 +510,7 @@ static struct connman_network_driver network_driver = {
 	.probe			= cm_network_probe,
 	.connect		= cm_network_connect,
 	.disconnect		= cm_network_disconnect,
+	.forget		= cm_network_forget,
 	.set_autoconnect	= cm_network_set_autoconnect,
 };
 
