@@ -865,3 +865,17 @@ int __connman_agent_request_peer_authorization(struct connman_peer *peer,
 
 	return -EINPROGRESS;
 }
+
+bool __connman_agent_is_request_pending(struct connman_service *service,
+						const char *dbus_sender)
+{
+	void *agent;
+
+	/* Default agent will be returned if no dbus_sender */
+	agent = connman_agent_get_info(dbus_sender, NULL, NULL);
+
+	if (!service || !agent)
+		return false;
+
+	return connman_agent_queue_search(service, agent);
+}
