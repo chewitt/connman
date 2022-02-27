@@ -318,11 +318,17 @@ static void parse_config(GKeyFile *config)
 
 	if (!config) {
 		connman_settings.auto_connect =
-			parse_service_types(default_auto_connect, CONF_ARRAY_SIZE(default_auto_connect));
+			parse_service_types(default_auto_connect,
+					CONF_ARRAY_SIZE(default_auto_connect));
 		connman_settings.favorite_techs =
-			parse_service_types(default_favorite_techs, CONF_ARRAY_SIZE(default_favorite_techs));
+			parse_service_types(default_favorite_techs,
+					CONF_ARRAY_SIZE(default_favorite_techs));
 		connman_settings.blacklisted_interfaces =
 			g_strdupv(default_blacklist);
+		connman_settings.online_check_ipv4_url =
+			g_strdup(DEFAULT_ONLINE_CHECK_IPV4_URL);
+		connman_settings.online_check_ipv6_url =
+			g_strdup(DEFAULT_ONLINE_CHECK_IPV6_URL);
 		return;
 	}
 
