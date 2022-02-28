@@ -434,6 +434,21 @@ test_scripts += test/vpn-connect test/vpn-disconnect test/vpn-get \
 if TEST
 testdir = $(pkglibdir)/test
 test_SCRIPTS = $(test_scripts)
+
+if INTERNAL_DNS_BACKEND
+tools_dnsproxy_standalone_CFLAGS = $(src_connmand_CFLAGS) -I$(srcdir)/src
+tools_dnsproxy_standalone_SOURCES = tools/dnsproxy-standalone.c $(src_connmand_SOURCES)
+# for EXTRA_PROGRAMS the BUILT_SOURCES aren't automatically added as
+# dependency, so let's do it explicitly
+tools/dnsproxy-standalone.c: $(BUILT_SOURCES)
+tools_dnsproxy_standalone_LDADD = $(src_connmand_LDADD)
+# pass -zmuldefs to let the linker tolerate the duplicate definition of
+# main(), the first definition from dnsproxy-standalone should be used
+tools_dnsproxy_standalone_LDFLAGS = $(src_connmand_LDFLAGS) -Wl,-zmuldefs
+
+noinst_PROGRAMS += tools/dnsproxy-standalone
+endif
+
 endif
 
 EXTRA_DIST += $(test_scripts)

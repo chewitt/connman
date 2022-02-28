@@ -18,4 +18,5 @@ fi
 		--enable-vpnc=builtin \
 		--enable-session-policy-local=builtin \
 		--enable-nmcompat \
-		--enable-polkit $*
+		--enable-polkit $* \
+		--enable-test

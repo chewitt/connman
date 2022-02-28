@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# this script runs the dnsproxy-standalone test program and runs a couple of
+# standard DNS queries against it, using the currently configured DNS server
+# in the system as dnsproxy configuration.
+
+echoerr() {
+	echo $@ 1>&2
+	exit 1
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	"--valgrind")
+		VALGRIND=`which valgrind`
+		if [ -z "$VALGRIND" ]; then
+			echoerr "no valgrind executable found"
+		fi
+		;;
+	"-h")
+		echo "$0 [--valgrind]"
+		echo "--valgrind: run dnsproxy-standalone in valgrind"
+		exit 2
+		;;
+	*)
+		echoerr "Unknown argument $1"
+		;;
+	esac
+	shift
+done
+
+if [ -e "Makefile" ]; then
+	BUILDROOT="$PWD"
+else
+	if [ ! -n "$BUILDROOT" ]; then
+		echoerr "You need to set the BUILDROOT environment variable or run this script from the connman build tree root"
+	fi
+
+	pushd "$BUILDROOT" >/dev/null || echoerr "couldn't enter $BUILDROOT"
+fi
+make tools/dnsproxy-standalone || echoerr "failed to build dnsproxy-standalone"
+
+HOST=`which host`
+if [ -z "$HOST" ]; then
+	echoerr "Couldn't find 'host' DNS utility"
+fi
+
+DNSPROXY="$BUILDROOT/tools/dnsproxy-standalone"
+
+if [ ! -f "$DNSPROXY" ]; then
+	echoerr "standalone dnsproxy does not exist at $DNSPROXY"
+fi
+
+NS1=`grep -w nameserver -m 1 /etc/resolv.conf | cut -d ' ' -f 2`
+if [ -z "$NS1" ]; then
+	echoerr "Failed to determine system's nameserver from /etc/resolv.conf"
+fi
+
+DOMAIN1=`grep -w search -m 1 /etc/resolv.conf | cut -d ' ' -f 2`
+if [ -z "$DOMAIN1" ]; then
+	echoerr "Failed to determine default DNS domain from /etc/resolv.conf"
+fi
+
+# use an unprivileged port for the proxy so we don't need special permissions
+# to run this test
+PORT=8053
+
+# run the proxy in the background
+$VALGRIND $DNSPROXY $PORT "$DOMAIN1" "$NS1" &
+proxy_pid=$!
+
+cleanup() {
+	if [ $proxy_pid -eq -1 ]; then
+		return 0
+	fi
+	kill $proxy_pid
+	wait $proxy_pid
+	ret=$?
+	proxy_pid=-1
+	return $ret
+}
+
+trap cleanup err exit
+
+sleep 1
+echo -e "\n\n"
+
+# test both UDP and TCP mode
+for TRANSPORT in -U -T; do
+	# test both IPv4 and IPv6
+	for IP in -4 -6; do
+		echo "Testing resolution using transport $TRANSPORT and IP${IP}"
+		set -x
+		$HOST $TRANSPORT $IP -p$PORT www.example.com 127.0.0.1
+		RES=$?
+		set +x
+		if [ $RES -ne 0 ]; then
+			echoerr "resolution failed"
+		fi
+
+		echo -e "\n\n"
+	done
+done
+
+echo -e "\n\nDNS resolution succeeded for all test combinations"
+cleanup
+if [ $? -eq 0 ]; then
+	exit 0
+else
+	echoerr "dnsproxy returned non-zero exit status $?"
+fi
+
