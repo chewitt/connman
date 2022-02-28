@@ -257,6 +257,34 @@ int connman_agent_queue_message(void *user_context,
 	return err;
 }
 
+bool connman_agent_queue_search(void *user_context, void *agent_data)
+{
+	struct connman_agent *agent = agent_data;
+	struct connman_agent_request *queue_data;
+	GList *iter;
+
+	DBG("user context %p agent %p", user_context, agent);
+
+	if (!agent || !user_context)
+		return false;
+
+	if (agent->pending && agent->pending->user_context == user_context) {
+		DBG("user context %p is pending for reply", user_context);
+		return true;
+	}
+
+	for (iter = agent->queue; iter; iter = iter->next) {
+		queue_data = iter->data;
+
+		if (queue_data && queue_data->user_context == user_context) {
+			DBG("user context %p is in queue", user_context);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void set_default_agent(void)
 {
 	struct connman_agent *agent = NULL;

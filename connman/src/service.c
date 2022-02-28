@@ -5800,7 +5800,10 @@ static DBusMessage *connect_service(DBusConnection *conn,
 				service->type == CONNMAN_SERVICE_TYPE_VPN))
 		return __connman_error_no_carrier(msg);
 
-	if (service->pending)
+	/* Hidden services do not keep the pending msg, check it from agent */
+	if (service->pending || (service->hidden &&
+				__connman_agent_is_request_pending(service,
+						dbus_message_get_sender(msg))))
 		return __connman_error_in_progress(msg);
 
 	index = __connman_service_get_index(service);

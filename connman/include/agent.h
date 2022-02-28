@@ -71,6 +71,7 @@ int connman_agent_queue_message(void *user_context,
 				DBusMessage *msg, int timeout,
 				agent_queue_cb callback, void *user_data,
 				void *agent_data);
+bool connman_agent_queue_search(void *user_context, void *agent_data);
 
 void *connman_agent_get_info(const char *dbus_sender, const char **sender,
 							const char **path);

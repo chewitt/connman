@@ -128,6 +128,8 @@ int __connman_agent_request_peer_authorization(struct connman_peer *peer,
 						bool wps_requested,
 						const char *dbus_sender,
 						void *user_data);
+bool __connman_agent_is_request_pending(struct connman_service *service,
+						const char *dbus_sender);
 
 #include <connman/log.h>
 
