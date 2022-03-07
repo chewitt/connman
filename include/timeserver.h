@@ -26,6 +26,13 @@
 extern "C" {
 #endif
 
+enum connman_timeserver_sync_reason {
+	CONNMAN_TIMESERVER_SYNC_REASON_START		= 0,
+	CONNMAN_TIMESERVER_SYNC_REASON_ADDRESS_UPDATE	= 1,
+	CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE	= 2,
+	CONNMAN_TIMESERVER_SYNC_REASON_TS_CHANGE	= 3,
+};
+
 int __connman_timeserver_system_set(char **server);
 
 #ifdef __cplusplus

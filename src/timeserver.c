@@ -309,7 +309,8 @@ static gboolean ts_recheck(gpointer user_data)
 		g_slist_free_full(ts, g_free);
 
 		service = connman_service_get_default();
-		__connman_timeserver_sync(service);
+		__connman_timeserver_sync(service,
+				CONNMAN_TIMESERVER_SYNC_REASON_TS_CHANGE);
 
 		return FALSE;
 	}
@@ -427,10 +428,26 @@ static void ts_reset(struct connman_service *service)
 	timeserver_sync_start();
 }
 
-void __connman_timeserver_sync(struct connman_service *service)
+void __connman_timeserver_sync(struct connman_service *service,
+			enum connman_timeserver_sync_reason reason)
 {
-	if (!service || ts_service == service)
+	if (!service)
 		return;
+
+	switch (reason) {
+	case CONNMAN_TIMESERVER_SYNC_REASON_START:
+	case CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE:
+		if (ts_service == service)
+			return;
+		break;
+	case CONNMAN_TIMESERVER_SYNC_REASON_ADDRESS_UPDATE:
+	case CONNMAN_TIMESERVER_SYNC_REASON_TS_CHANGE:
+		if (ts_service != service)
+			return;
+		break;
+	default:
+		return;
+	}
 
 	ts_reset(service);
 }
@@ -476,7 +493,8 @@ static int timeserver_start(struct connman_service *service)
 
 	ts_set_nameservers(service);
 
-	__connman_timeserver_sync(service);
+	__connman_timeserver_sync(service,
+			CONNMAN_TIMESERVER_SYNC_REASON_START);
 
 	return 0;
 }

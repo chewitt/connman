@@ -451,7 +451,8 @@ char **__connman_timeserver_system_get();
 GSList *__connman_timeserver_add_list(GSList *server_list,
 		const char *timeserver);
 GSList *__connman_timeserver_get_all(struct connman_service *service);
-void __connman_timeserver_sync(struct connman_service *service);
+void __connman_timeserver_sync(struct connman_service *service,
+				enum connman_timeserver_sync_reason reason);
 void __connman_timeserver_conf_update(struct connman_service *service);
 
 bool __connman_timeserver_is_synced(void);

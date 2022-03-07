@@ -1476,7 +1476,8 @@ static void address_updated(struct connman_service *service,
 		nameserver_add_all(service, type);
 		start_online_check(service, type);
 
-		__connman_timeserver_sync(service);
+		__connman_timeserver_sync(service,
+				CONNMAN_TIMESERVER_SYNC_REASON_ADDRESS_UPDATE);
 	}
 }
 
@@ -6506,7 +6507,8 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 	if (!is_connected(old_state) && is_connected(new_state))
 		nameserver_add_all(service, type);
 
-	__connman_timeserver_sync(service);
+	__connman_timeserver_sync(service,
+				CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE);
 
 	return service_indicate_state(service);
 }
