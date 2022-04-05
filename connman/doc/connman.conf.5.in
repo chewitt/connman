@@ -158,6 +158,9 @@ Permissions format using Binary references. Defaults to 0700.
 Permissions for files created inside connman and connman-vpn subdirectories
 and into the respective service directories. The permissions must be given in
 the Linux File Permissions format using Binary references. Defaults to 0600.
+.TP
+.BI Localtime= string
+Path to localtime file. Defaults to /etc/localtime.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables
 ethernet tethering.
