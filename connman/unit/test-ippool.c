@@ -39,7 +39,7 @@
 #define LOG(fmt, arg...)
 #endif
 
-const char *connman_option_get_string(const char *key)
+const char *connman_setting_get_string(const char *key)
 {
 	return "192.168.0.0";
 }

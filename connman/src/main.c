@@ -755,7 +755,7 @@ static GOptionEntry options[] = {
 	{ NULL },
 };
 
-const char *connman_option_get_string(const char *key)
+const char *connman_setting_get_string(const char *key)
 {
 	if (g_str_equal(key, CONF_VENDOR_CLASS_ID))
 		return connman_settings.vendor_class_id;

@@ -322,7 +322,8 @@ char *__connman_timezone_lookup(void)
 
 	DBG("sysconfig zone %s", zone);
 
-	fd = open(connman_option_get_string("Localtime"), O_RDONLY | O_CLOEXEC);
+	fd = open(connman_setting_get_string("Localtime"),
+							O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		g_free(zone);
 		return NULL;
@@ -430,7 +431,7 @@ int __connman_timezone_change(const char *zone)
 		return -EIO;
 	}
 
-	err = write_file(map, &st, connman_option_get_string("Localtime"));
+	err = write_file(map, &st, connman_setting_get_string("Localtime"));
 
 	munmap(map, st.st_size);
 
@@ -524,7 +525,7 @@ int __connman_timezone_init(void)
 
 	g_io_channel_unref(channel);
 
-	dirname = g_path_get_dirname(connman_option_get_string("Localtime"));
+	dirname = g_path_get_dirname(connman_setting_get_string("Localtime"));
 
 	wd = inotify_add_watch(fd, dirname, IN_CREATE | IN_DONT_FOLLOW |
 						IN_CLOSE_WRITE | IN_MOVED_TO);

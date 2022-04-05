@@ -25,7 +25,7 @@ endif
 nodist_include_HEADERS = include/version.h
 
 noinst_HEADERS = include/rtnl.h \
-			include/dbus.h include/option.h \
+			include/dbus.h \
 			include/provider.h include/vpn-dbus.h \
 			include/utsname.h include/timeserver.h include/proxy.h \
 			include/wakeup_timer.h include/access.h \

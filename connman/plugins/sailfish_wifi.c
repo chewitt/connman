@@ -3396,7 +3396,7 @@ static gboolean wifi_device_init_cip(struct wifi_device *dev,
 
 	if (cip->ifname) {
 		cip->params.ifname = cip->ifname;
-		cip->params.driver = connman_option_get_string("wifi");
+		cip->params.driver = connman_setting_get_string("wifi");
 		return TRUE;
 	} else {
 		DBG("no interface!");
@@ -3748,7 +3748,7 @@ static GCancellable *wifi_device_tether_3(struct wifi_device *dev)
 	memset(&params, 0, sizeof(params));
 	params.ifname = dev->tp->ifname;
 	params.bridge_ifname = dev->bridge;
-	params.driver = connman_option_get_string("wifi");
+	params.driver = connman_setting_get_string("wifi");
 
 	DBG("creating interface %s/%s", params.ifname, params.bridge_ifname);
 	return gsupplicant_create_interface(dev->supplicant, &params,

@@ -315,7 +315,7 @@ static void tun_newlink(unsigned flags, unsigned change, void *user_data)
 		if (getenv("CONNMAN_WEB_DEBUG"))
 			g_web_set_debug(web, web_debug, "6to4");
 
-		const char *url = connman_option_get_string(CONF_STATUS_URL_IPV6);
+		const char *url = connman_setting_get_string(CONF_STATUS_URL_IPV6);
 
 		web_request_id = g_web_request_get(web, url,
 				web_result, NULL,  NULL);
