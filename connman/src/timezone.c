@@ -39,9 +39,9 @@
 
 #include "connman.h"
 
-#define ETC_LOCALTIME		"/etc/localtime"
 #define ETC_SYSCONFIG_CLOCK	"/etc/sysconfig/clock"
 #define USR_SHARE_ZONEINFO	"/usr/share/zoneinfo"
+#define USR_SHARE_ZONEINFO_MAP	USR_SHARE_ZONEINFO "/zone1970.tab"
 
 static char *read_key_file(const char *pathname, const char *key)
 {
@@ -226,18 +226,103 @@ static char *find_origin(void *src_map, struct stat *src_st,
 	return NULL;
 }
 
+static char *get_timezone_alpha2(const char *zone)
+{
+	GIOChannel *channel;
+	struct stat st;
+	char **tokens;
+	char *line;
+	char *alpha2 = NULL;
+	gsize len;
+	int fd;
+
+	if (!zone)
+		return NULL;
+
+	fd = open(USR_SHARE_ZONEINFO_MAP, O_RDONLY | O_CLOEXEC);
+	if (fd < 0) {
+		connman_warn("failed to open zoneinfo map %s",
+							USR_SHARE_ZONEINFO_MAP);
+		return NULL;
+	}
+
+	if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
+		connman_warn("zoneinfo map does not exist/not regular file");
+		close(fd);
+		return NULL;
+	}
+
+	channel = g_io_channel_unix_new(fd);
+	if (!channel) {
+		connman_warn("failed to create io channel for %s",
+							USR_SHARE_ZONEINFO_MAP);
+		close(fd);
+		return NULL;
+	}
+
+	DBG("read %s for %s", USR_SHARE_ZONEINFO_MAP, zone);
+	g_io_channel_set_encoding(channel, "UTF-8", NULL);
+
+	while (g_io_channel_read_line(channel, &line, &len, NULL, NULL) ==
+							G_IO_STATUS_NORMAL) {
+		if (!line || !*line || *line == '#' || *line == '\n') {
+			g_free(line);
+			continue;
+		}
+
+		/* File format: Countrycodes Coordinates TZ Comments */
+		tokens = g_strsplit_set(line, " \t", 4);
+		if (!tokens) {
+			connman_warn("line %s failed to parse", line);
+			g_free(line);
+			continue;
+		}
+
+		if (g_strv_length(tokens) >= 3 && !g_strcmp0(
+						g_strstrip(tokens[2]), zone)) {
+			/*
+			 * Multiple country codes can be listed, use the first
+			 * 2 chars.
+			 */
+			alpha2 = g_strndup(g_strstrip(tokens[0]), 2);
+		}
+
+		g_strfreev(tokens);
+		g_free(line);
+
+		if (alpha2) {
+			if (strlen(alpha2) != 2) {
+				connman_warn("Invalid ISO3166 code %s", alpha2);
+				g_free(alpha2);
+				alpha2 = NULL;
+			} else {
+				DBG("Zone %s ISO3166 country code %s", zone,
+									alpha2);
+			}
+
+			break;
+		}
+	}
+
+	g_io_channel_unref(channel);
+	close(fd);
+
+	return alpha2;
+}
+
 char *__connman_timezone_lookup(void)
 {
 	struct stat st;
 	void *map;
 	int fd;
 	char *zone;
+	char *alpha2;
 
 	zone = read_key_file(ETC_SYSCONFIG_CLOCK, "ZONE");
 
 	DBG("sysconfig zone %s", zone);
 
-	fd = open(ETC_LOCALTIME, O_RDONLY | O_CLOEXEC);
+	fd = open(connman_option_get_string("Localtime"), O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		g_free(zone);
 		return NULL;
@@ -280,6 +365,15 @@ done:
 	close(fd);
 
 	DBG("localtime zone %s", zone);
+
+	if (connman_setting_get_bool("RegdomFollowsTimezone")) {
+		alpha2 = get_timezone_alpha2(zone);
+		if (alpha2) {
+			DBG("change regdom to %s", alpha2);
+			connman_technology_set_regdom(alpha2);
+			g_free(alpha2);
+		}
+	}
 
 	return zone;
 }
@@ -336,7 +430,7 @@ int __connman_timezone_change(const char *zone)
 		return -EIO;
 	}
 
-	err = write_file(map, &st, ETC_LOCALTIME);
+	err = write_file(map, &st, connman_option_get_string("Localtime"));
 
 	munmap(map, st.st_size);
 
@@ -430,9 +524,9 @@ int __connman_timezone_init(void)
 
 	g_io_channel_unref(channel);
 
-	dirname = g_path_get_dirname(ETC_LOCALTIME);
+	dirname = g_path_get_dirname(connman_option_get_string("Localtime"));
 
-	wd = inotify_add_watch(fd, dirname, IN_DONT_FOLLOW |
+	wd = inotify_add_watch(fd, dirname, IN_CREATE | IN_DONT_FOLLOW |
 						IN_CLOSE_WRITE | IN_MOVED_TO);
 
 	g_free(dirname);
