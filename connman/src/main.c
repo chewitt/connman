@@ -99,6 +99,7 @@ static struct {
 	GHashTable *fallback_device_types;
 	bool enable_login_manager;
 	char *localtime;
+	bool regdom_follows_timezone;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -121,6 +122,7 @@ static struct {
 	.fallback_device_types = NULL,
 	.enable_login_manager = false,
 	.localtime = NULL,
+	.regdom_follows_timezone = false,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -148,6 +150,7 @@ static struct {
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
+#define CONF_REGDOM_FOLLOWS_TIMEZONE    "RegdomFollowsTimezone"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -178,6 +181,7 @@ static const char *supported_options[] = {
 	CONF_FALLBACK_DEVICE_TYPES,
 	CONF_ENABLE_LOGIN_MANAGER,
 	CONF_LOCALTIME,
+	CONF_REGDOM_FOLLOWS_TIMEZONE,
 	NULL
 };
 
@@ -568,6 +572,13 @@ static void parse_config(GKeyFile *config)
 		g_free(str);
 
 	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, group,
+				CONF_REGDOM_FOLLOWS_TIMEZONE, &error);
+	if (!error)
+		connman_settings.regdom_follows_timezone = boolean;
+
+	g_clear_error(&error);
 }
 
 static int config_init(const char *file)
@@ -797,6 +808,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
 		return connman_settings.enable_login_manager;
+
+	if (g_str_equal(key, CONF_REGDOM_FOLLOWS_TIMEZONE))
+		return connman_settings.regdom_follows_timezone;
 
 	return false;
 }

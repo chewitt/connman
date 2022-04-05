@@ -161,6 +161,12 @@ the Linux File Permissions format using Binary references. Defaults to 0600.
 .TP
 .BI Localtime= string
 Path to localtime file. Defaults to /etc/localtime.
+.TP
+.BI RegdomFollowsTimezone= true\ \fR|\fB\ false
+Enable regdomain to be changed along timezone changes. With this option set to
+true each time the timezone changes the first present ISO3166 country code is
+being read from /usr/share/zoneinfo/zone1970.tab and set as regdom value.
+Default value is false.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables
 ethernet tethering.
