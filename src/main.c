@@ -54,6 +54,7 @@
  */
 #define DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL 1
 #define DEFAULT_ONLINE_CHECK_MAX_INTERVAL 12
+#define DEFAULT_LOCALTIME "/etc/localtime"
 
 #define MAINFILE "main.conf"
 #define CONFIGMAINFILE CONFIGDIR "/" MAINFILE
@@ -107,6 +108,7 @@ static struct {
 	bool auto_connect_roaming_services;
 	bool acd;
 	bool use_gateways_as_timeservers;
+	char *localtime;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -134,6 +136,7 @@ static struct {
 	.auto_connect_roaming_services = false,
 	.acd = false,
 	.use_gateways_as_timeservers = false,
+	.localtime = NULL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -162,6 +165,7 @@ static struct {
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
 #define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
+#define CONF_LOCALTIME                  "Localtime"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -190,6 +194,7 @@ static const char *supported_options[] = {
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
 	CONF_ACD,
 	CONF_USE_GATEWAYS_AS_TIMESERVERS,
+	CONF_LOCALTIME,
 	NULL
 };
 
@@ -571,6 +576,15 @@ static void parse_config(GKeyFile *config)
 		connman_settings.use_gateways_as_timeservers = boolean;
 
 	g_clear_error(&error);
+
+	string = __connman_config_get_string(config, "General",
+				CONF_LOCALTIME, &error);
+	if (!error)
+		connman_settings.localtime = string;
+	else
+		g_free(string);
+
+	g_clear_error(&error);
 }
 
 static int config_init(const char *file)
@@ -760,6 +774,10 @@ char *connman_setting_get_string(const char *key)
 		else
 			return option_wifi;
 	}
+
+	if (g_str_equal(key, CONF_LOCALTIME))
+		return connman_settings.localtime ?
+			connman_settings.localtime : DEFAULT_LOCALTIME;
 
 	return NULL;
 }
@@ -1037,6 +1055,7 @@ int main(int argc, char *argv[])
 	g_free(connman_settings.vendor_class_id);
 	g_free(connman_settings.online_check_ipv4_url);
 	g_free(connman_settings.online_check_ipv6_url);
+	g_free(connman_settings.localtime);
 
 	g_free(option_debug);
 	g_free(option_wifi);
