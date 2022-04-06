@@ -102,8 +102,8 @@ struct group *vpn_util_get_group(const char *groupname)
  * running a VPN plugin as a different user and thus, user specific run dir is
  * allowed and limitation to access any other system dir is restricted.
  */
-static const char *allowed_prefixes[] = { "/var/run/connman-vpn/",
-					"/var/run/user/", "/tmp/", NULL };
+static const char *allowed_prefixes[] = { RUNSTATEDIR "/connman-vpn/",
+					RUNSTATEDIR "/user/", "/tmp/", NULL };
 
 static int is_path_allowed(const char *path)
 {

@@ -54,7 +54,7 @@
 #include "../vpn.h"
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
-#define PID_PATH_ROOT "/var/run/user"
+#define PID_PATH_ROOT RUNSTATEDIR "/user"
 
 enum {
 	OPT_STRING = 1,
