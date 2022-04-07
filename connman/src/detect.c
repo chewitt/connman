@@ -49,7 +49,7 @@ static void detect_newlink(unsigned short type, int index,
 	struct connman_device *device;
 	enum connman_device_type devtype;
 
-//	DBG("type %d index %d", type, index);
+	DBG("type %d index %d", type, index);
 
 	devtype = __connman_rtnl_get_device_type(index);
 

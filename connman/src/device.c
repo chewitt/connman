@@ -1316,7 +1316,7 @@ struct connman_device *connman_device_create_from_index(int index)
 		return NULL;
 
 	if (__connman_device_isfiltered(devname)) {
-//		DBG("Ignoring interface %s (filtered)", devname);
+		DBG("Ignoring interface %s (filtered)", devname);
 		g_free(devname);
 		return NULL;
 	}
@@ -1325,7 +1325,7 @@ struct connman_device *connman_device_create_from_index(int index)
 
 	switch (type) {
 	case CONNMAN_DEVICE_TYPE_UNKNOWN:
-//		DBG("Ignoring interface %s (type unknown)", devname);
+		DBG("Ignoring interface %s (type unknown)", devname);
 		g_free(devname);
 		return NULL;
 	case CONNMAN_DEVICE_TYPE_ETHERNET:
@@ -1400,13 +1400,13 @@ bool __connman_device_isfiltered(const char *devname)
 	}
 
 	if (!match) {
-//		DBG("ignoring device %s (match)", devname);
+		DBG("ignoring device %s (match)", devname);
 		return true;
 	}
 
 nodevice:
 	if (g_pattern_match_simple("dummy*", devname)) {
-//		DBG("ignoring dummy networking devices");
+		DBG("ignoring dummy networking devices");
 		return true;
 	}
 
@@ -1415,7 +1415,7 @@ nodevice:
 
 	for (pattern = nodevice_filter; *pattern; pattern++) {
 		if (g_pattern_match_simple(*pattern, devname)) {
-//			DBG("ignoring device %s (no match)", devname);
+			DBG("ignoring device %s (no match)", devname);
 			return true;
 		}
 	}
@@ -1428,7 +1428,7 @@ list:
 
 	for (pattern = blacklisted_interfaces; *pattern; pattern++) {
 		if (g_str_has_prefix(devname, *pattern)) {
-//			DBG("ignoring device %s (blacklist)", devname);
+			DBG("ignoring device %s (blacklist)", devname);
 			return true;
 		}
 	}
@@ -1459,8 +1459,7 @@ static void cleanup_devices(void)
 	/*
 	 * Check what interfaces are currently up and if connman is
 	 * suppose to handle the interface, then cleanup the mess
-
-         * related to that interface. There might be weird routes etc
+	 * related to that interface. There might be weird routes etc
 	 * that are related to that interface and that might confuse
 	 * connmand. So in this case we just turn the interface down
 	 * so that kernel removes routes/addresses automatically and
