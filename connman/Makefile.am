@@ -255,6 +255,7 @@ AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)\"" \
+				-DRUNSTATEDIR=\""$(runstatedir)"\" \
 				-DCONFIGDIR=\""$(configdir)\""
 
 if VPN
@@ -272,6 +273,7 @@ src_connmand_CFLAGS = @DBUS_CFLAGS@ @GIO_CFLAGS@ @GOBJECT_CFLAGS@ @GLIB_CFLAGS@ 
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+				-DRUNSTATEDIR=\""$(runstatedir)"\" \
 				-DCONFIGDIR=\""$(configdir)"\" \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-I$(builddir)/src
@@ -289,6 +291,7 @@ vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				-DSCRIPTDIR=\""$(build_scriptdir)"\" \
 				-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
+				-DRUNSTATEDIR=\""$(runstatedir)"\" \
 				-DCONFIGDIR=\""$(configdir)"\" \
 				-I$(builddir)/vpn
 
