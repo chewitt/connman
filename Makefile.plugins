@@ -138,6 +138,7 @@ vpn_plugin_objects += $(plugins_vpnc_la_OBJECTS)
 vpn_plugins_vpnc_la_SOURCES = vpn/plugins/vpnc.c
 vpn_plugins_vpnc_la_CFLAGS = $(plugin_cflags) -DVPNC=\"@VPNC@\" \
 					-DVPN_STATEDIR=\""$(vpn_statedir)"\" \
+					-DRUNSTATEDIR=\""$(runstatedir)"\" \
 					-DSCRIPTDIR=\""$(build_scriptdir)"\"
 vpn_plugins_vpnc_la_LDFLAGS = $(plugin_ldflags)
 endif
