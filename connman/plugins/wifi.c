@@ -50,7 +50,6 @@
 #include <connman/service.h>
 #include <connman/peer.h>
 #include <connman/log.h>
-#include <connman/option.h>
 #include <connman/storage.h>
 #include <include/setting.h>
 #include <connman/provision.h>
@@ -1481,7 +1480,7 @@ static int wifi_enable(struct connman_device *device)
 	struct wifi_data *wifi = connman_device_get_data(device);
 	int index;
 	char *interface;
-	const char *driver = connman_option_get_string("wifi");
+	const char *driver = connman_setting_get_string("wifi");
 	int ret;
 
 	DBG("device %p %p", device, wifi);
@@ -3062,7 +3061,7 @@ static void sta_remove_callback(int result,
 					void *user_data)
 {
 	struct wifi_tethering_info *info = user_data;
-	const char *driver = connman_option_get_string("wifi");
+	const char *driver = connman_setting_get_string("wifi");
 
 	DBG("ifname %s result %d ", info->ifname, result);
 

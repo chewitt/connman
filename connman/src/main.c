@@ -52,6 +52,7 @@
 #define DEFAULT_STORAGE_DIR_PERMISSIONS (0700)
 #define DEFAULT_STORAGE_FILE_PERMISSIONS (0600)
 #define DEFAULT_UMASK (0077)
+#define DEFAULT_LOCALTIME "/etc/localtime"
 
 #define MAINFILE "main.conf"
 #define CONFIGMAINFILE CONFIGDIR "/" MAINFILE
@@ -97,6 +98,8 @@ static struct {
 	char *vendor_class_id;
 	GHashTable *fallback_device_types;
 	bool enable_login_manager;
+	char *localtime;
+	bool regdom_follows_timezone;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -118,6 +121,8 @@ static struct {
 	.vendor_class_id = NULL,
 	.fallback_device_types = NULL,
 	.enable_login_manager = false,
+	.localtime = NULL,
+	.regdom_follows_timezone = false,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -144,6 +149,8 @@ static struct {
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
+#define CONF_LOCALTIME                  "Localtime"
+#define CONF_REGDOM_FOLLOWS_TIMEZONE    "RegdomFollowsTimezone"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -173,6 +180,8 @@ static const char *supported_options[] = {
 	CONF_VENDOR_CLASS_ID,
 	CONF_FALLBACK_DEVICE_TYPES,
 	CONF_ENABLE_LOGIN_MANAGER,
+	CONF_LOCALTIME,
+	CONF_REGDOM_FOLLOWS_TIMEZONE,
 	NULL
 };
 
@@ -544,14 +553,30 @@ static void parse_config(GKeyFile *config)
 		connman_settings.fallback_device_types =
 				parse_fallback_device_types(str_list, len);
 
+	g_strfreev(str_list);
+
 	g_clear_error(&error);
 
-	boolean = __connman_config_get_bool(config, "General",
+	boolean = __connman_config_get_bool(config, group,
 				CONF_ENABLE_LOGIN_MANAGER, &error);
 	if (!error)
 		connman_settings.enable_login_manager = boolean;
 
-	g_strfreev(str_list);
+	g_clear_error(&error);
+
+	str = __connman_config_get_string(config, group, CONF_LOCALTIME,
+				&error);
+	if (!error)
+		connman_settings.localtime = str;
+	else
+		g_free(str);
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, group,
+				CONF_REGDOM_FOLLOWS_TIMEZONE, &error);
+	if (!error)
+		connman_settings.regdom_follows_timezone = boolean;
 
 	g_clear_error(&error);
 }
@@ -730,7 +755,7 @@ static GOptionEntry options[] = {
 	{ NULL },
 };
 
-const char *connman_option_get_string(const char *key)
+const char *connman_setting_get_string(const char *key)
 {
 	if (g_str_equal(key, CONF_VENDOR_CLASS_ID))
 		return connman_settings.vendor_class_id;
@@ -757,6 +782,10 @@ const char *connman_option_get_string(const char *key)
 			connman_settings.tethering_subnet_block :
 			CONF_TETHERING_SUBNET_BLOCK_DEF;
 
+	if (g_str_equal(key, CONF_LOCALTIME))
+		return connman_settings.localtime ?
+				connman_settings.localtime : DEFAULT_LOCALTIME;
+
 	return NULL;
 }
 
@@ -779,6 +808,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
 		return connman_settings.enable_login_manager;
+
+	if (g_str_equal(key, CONF_REGDOM_FOLLOWS_TIMEZONE))
+		return connman_settings.regdom_follows_timezone;
 
 	return false;
 }
@@ -1064,6 +1096,7 @@ int main(int argc, char *argv[])
 	g_free(connman_settings.tethering_subnet_block);
 	g_free(connman_settings.storage_root);
 	g_free(connman_settings.fs_identity);
+	g_free(connman_settings.localtime);
 
 	if (connman_settings.fallback_device_types)
 		g_hash_table_unref(connman_settings.fallback_device_types);

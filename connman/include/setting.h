@@ -32,6 +32,7 @@ extern "C" {
 #define CONF_STATUS_URL_IPV4            "Ipv4StatusUrl"
 #define CONF_TETHERING_SUBNET_BLOCK     "TetheringSubnetBlock"
 
+const char *connman_setting_get_string(const char *key);
 bool connman_setting_get_bool(const char *key);
 char **connman_setting_get_string_list(const char *key);
 unsigned int *connman_setting_get_uint_list(const char *key);

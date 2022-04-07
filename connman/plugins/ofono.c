@@ -40,6 +40,7 @@
 #include <connman/dbus.h>
 #include <connman/log.h>
 #include <connman/technology.h>
+#include <connman/setting.h>
 
 #include "mcc.h"
 
@@ -1679,6 +1680,10 @@ static void netreg_update_regdom(struct modem_data *modem,
 	char *mobile_country_code;
 	char *alpha2;
 	int mcc;
+
+	/* Do not change regdom here if it is set to follow timezone. */
+	if (connman_setting_get_bool("RegdomFollowsTimezone"))
+		return;
 
 	dbus_message_iter_get_basic(value, &mobile_country_code);
 

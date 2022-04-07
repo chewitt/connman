@@ -51,7 +51,7 @@ bool __connman_session_policy_autoconnect(
 	enum connman_service_connect_reason reason) { return true; }
 int __connman_session_destroy(DBusMessage *msg) { return 0; }
 int __connman_session_create(DBusMessage *msg) { return 0; }
-const char *connman_option_get_string(const char *key) { return NULL; }
+const char *connman_setting_get_string(const char *key) { return NULL; }
 const char *__connman_tethering_get_bridge(void) { return NULL; }
 void __connman_tethering_set_disabled(void) { return; }
 void __connman_tethering_set_enabled(void) { return; }

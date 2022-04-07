@@ -142,8 +142,6 @@ void __connman_log_enable(struct connman_debug_desc *start,
 
 #include <connman/backtrace.h>
 
-#include <connman/option.h>
-
 #include <connman/setting.h>
 
 const char *__connman_setting_get_fallback_device_type(const char *interface);

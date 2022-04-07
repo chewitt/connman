@@ -624,7 +624,7 @@ static int dhcp_initialize(struct connman_dhcp *dhcp)
 	g_dhcp_client_set_request(dhcp_client, G_DHCP_ROUTER);
 	g_dhcp_client_set_request(dhcp_client, G_DHCP_SUBNET);
 
-	vendor_class_id = connman_option_get_string("VendorClassID");
+	vendor_class_id = connman_setting_get_string("VendorClassID");
 	if (vendor_class_id)
 		g_dhcp_client_set_send(dhcp_client, G_DHCP_VENDOR_CLASS_ID,
 					vendor_class_id);

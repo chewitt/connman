@@ -93,11 +93,11 @@ static DBusMessage *get_properties(DBusConnection *conn,
 					DBUS_TYPE_UINT32,
 					&uint32_value);
 
-	ipv4_status_url = connman_option_get_string(CONF_STATUS_URL_IPV4);
+	ipv4_status_url = connman_setting_get_string(CONF_STATUS_URL_IPV4);
 	connman_dbus_dict_append_basic(&dict, "Ipv4StatusUrl",
 						DBUS_TYPE_STRING, &ipv4_status_url);
 
-	ipv6_status_url = connman_option_get_string(CONF_STATUS_URL_IPV6);
+	ipv6_status_url = connman_setting_get_string(CONF_STATUS_URL_IPV6);
 	connman_dbus_dict_append_basic(&dict, "Ipv6StatusUrl",
 						DBUS_TYPE_STRING, &ipv6_status_url);
 

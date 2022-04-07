@@ -806,6 +806,11 @@ static void modem_update_name(struct modem_data *md)
 static void modem_update_country(struct modem_data *md)
 {
 	const char *country = md->country;
+
+	/* Do not change regdom here if it is set to follow timezone. */
+	if (connman_setting_get_bool("RegdomFollowsTimezone"))
+		return;
+
 	md->country = ofono_netreg_country(md->netreg);
 	if (md->country && g_strcmp0(md->country, country)) {
 		DBG("%s", md->country);

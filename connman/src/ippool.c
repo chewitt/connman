@@ -441,7 +441,7 @@ int __connman_ippool_init(void)
 	block_24_bits = ntohl(inet_addr("10.0.0.0"));
 	subnet_mask_24 = ntohl(inet_addr("255.255.255.0"));
 
-	last_block = ntohl(inet_addr(connman_option_get_string(
+	last_block = ntohl(inet_addr(connman_setting_get_string(
 						CONF_TETHERING_SUBNET_BLOCK)));
 
 	if (!is_private_address(last_block))
