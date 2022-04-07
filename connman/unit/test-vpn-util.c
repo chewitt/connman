@@ -296,13 +296,13 @@ static void test_util_groupname_ok1()
 /* Create nonexistent paths */
 static void test_util_create_path_ok1()
 {
-	const char *paths[] = { "/var/run/connman-vpn/test/",
-				"/var/run/connman-vpn/test/file",
-				"/var/run/connman-vpn/test/dir/file",
-				"/var/run/user/1000/",
-				"/var/run/user/1000/file",
-				"/var/run/user/1000/test/file",
-				"/var/run/user/1000/test/dir/file",
+	const char *paths[] = { RUNSTATEDIR "/connman-vpn/test/",
+				RUNSTATEDIR "/connman-vpn/test/file",
+				RUNSTATEDIR "/connman-vpn/test/dir/file",
+				RUNSTATEDIR "/user/1000/",
+				RUNSTATEDIR "/user/1000/file",
+				RUNSTATEDIR "/user/1000/test/file",
+				RUNSTATEDIR "/user/1000/test/dir/file",
 				"/tmp/test/",
 				"/tmp/test/file",
 				"/tmp/test/dir/file"};
@@ -339,9 +339,9 @@ static void test_util_create_path_ok1()
 /* Overwrite existing paths with same mode */
 static void test_util_create_path_ok2()
 {
-	const char *paths[] = { "/var/run/connman-vpn/test/",
-				"/var/run/user/1000/file",
-				"/var/run/user/1000/test/file"};
+	const char *paths[] = { RUNSTATEDIR "/connman-vpn/test/",
+				RUNSTATEDIR "/user/1000/file",
+				RUNSTATEDIR "/user/1000/test/file"};
 	char *test_path;
 	char *full_path;
 	uid_t uid = geteuid(); /* TODO: use arbitrary uid here, add caps */
@@ -391,9 +391,9 @@ static void test_util_create_path_ok2()
 /* Overwrite existing paths with different mode */
 static void test_util_create_path_ok3()
 {
-	const char *paths[] = { "/var/run/connman-vpn/test/",
-				"/var/run/user/1000/file",
-				"/var/run/user/1000/test/file"};
+	const char *paths[] = { RUNSTATEDIR "/connman-vpn/test/",
+				RUNSTATEDIR "/user/1000/file",
+				RUNSTATEDIR "/user/1000/test/file"};
 	char *test_path;
 	char *full_path;
 	uid_t uid = geteuid(); /* TODO: use arbitrary uid here, add caps */
@@ -484,17 +484,17 @@ static void test_util_groupname_fail1()
 /* Create too short paths */
 static void test_util_create_path_fail1()
 {
-	const char *paths[] = { "/var/run/connman-vpn",
-				"/var/run/connman-vpn/",
-				"/var/run/connman-vpn//",
-				"/var/run/connman-vpn/./",
-				"/var/run/connman-vpn/test",
-				"/var/run/user",
-				"/var/run/user/",
-				"/var/run/user/1000",
+	const char *paths[] = { RUNSTATEDIR "/connman-vpn",
+				RUNSTATEDIR "/connman-vpn/",
+				RUNSTATEDIR "/connman-vpn//",
+				RUNSTATEDIR "/connman-vpn/./",
+				RUNSTATEDIR "/connman-vpn/test",
+				RUNSTATEDIR "/user",
+				RUNSTATEDIR "/user/",
+				RUNSTATEDIR "/user/1000",
 				"/tmp/dir",
-				"/var/run/connman-vpn/test/../../../",
-				"/var/run/connman-vpn/test/../../../lib"};
+				RUNSTATEDIR "/connman-vpn/test/../../../",
+				RUNSTATEDIR "/connman-vpn/test/../../../lib"};
 	char *test_path;
 	int i;
 
@@ -526,8 +526,11 @@ static void test_util_create_path_fail2()
 	const char *paths[] = { NULL,
 				"",
 				" ",
+				"run",
 				"var/run",
+				"run/connman-vpn/",
 				"var/run/connman-vpn/",
+				"run/user/1000/test/file",
 				"var/run/user/1000/test/file",
 				"tmp/test/file"};
 	char *test_path;

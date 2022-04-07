@@ -198,7 +198,8 @@ This package provides OpenFortiNet VPN plugin for connman.
     --disable-wispr \
     --with-systemdunitdir=%{_unitdir} \
     --enable-systemd \
-    --with-tmpfilesdir=%{_prefix}/lib/tmpfiles.d
+    --with-tmpfilesdir=%{_prefix}/lib/tmpfiles.d \
+    runstatedir=/run
 
 %make_build
 
@@ -235,7 +236,7 @@ fi
 
 %post
 # These should match connman_resolvconf.conf rules
-%define connman_run_dir /var/run/connman
+%define connman_run_dir /run/connman
 %define run_resolv_conf %{connman_run_dir}/resolv.conf
 %define etc_resolv_conf %{_sysconfdir}/resolv.conf
 
