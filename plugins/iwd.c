@@ -241,7 +241,9 @@ static void cm_network_connect_cb(DBusMessage *message, void *user_data)
 			return;
 
 		DBG("%s connect failed: %s", path, dbus_error);
-		if (!strcmp(dbus_error, "net.connman.iwd.Failed"))
+		if (!strcmp(dbus_error, "net.connman.iwd.Failed") ||
+				!strcmp(dbus_error,
+					"net.connman.iwd.InvalidFormat"))
 			connman_network_set_error(iwdn->network,
 					CONNMAN_NETWORK_ERROR_INVALID_KEY);
 		else if (!iwdn->autoconnect)
