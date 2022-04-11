@@ -422,8 +422,7 @@ static bool apply_lease_available_on_network(GDHCPClient *dhcp_client,
 		g_free(dhcp->pac);
 		dhcp->pac = pac;
 
-		__connman_ipconfig_set_proxy_autoconfig(dhcp->ipconfig,
-								dhcp->pac);
+		__connman_service_set_proxy_autoconfig(service, dhcp->pac);
 	}
 
 	if (connman_setting_get_bool("Enable6to4"))
