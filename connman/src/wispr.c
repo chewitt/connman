@@ -904,9 +904,35 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	return false;
 }
 
+static char *parse_proxy(const char *proxy)
+{
+	char *proxy_server;
+
+	if (!g_strcmp0(proxy, "DIRECT"))
+		return NULL;
+
+	if (!g_str_has_prefix(proxy, "PROXY "))
+		return NULL;
+
+	proxy_server = g_strdup(proxy + 6);
+
+	/* Use first proxy server */
+	for (char *c = proxy_server; *c != '\0'; ++c) {
+		if (*c == ';') {
+			*c = '\0';
+			break;
+		}
+	}
+
+	g_strstrip(proxy_server);
+
+	return proxy_server;
+}
+
 static void proxy_callback(const char *proxy, void *user_data)
 {
 	struct connman_wispr_portal_context *wp_context = user_data;
+	char *proxy_server;
 
 	DBG("proxy %s", proxy);
 
@@ -915,12 +941,10 @@ static void proxy_callback(const char *proxy, void *user_data)
 
 	wp_context->token = 0;
 
-	if (proxy && g_strcmp0(proxy, "DIRECT") != 0) {
-		if (g_str_has_prefix(proxy, "PROXY")) {
-			proxy += 5;
-			for (; *proxy == ' ' && *proxy != '\0'; proxy++);
-		}
-		g_web_set_proxy(wp_context->web, proxy);
+	proxy_server = parse_proxy(proxy);
+	if (proxy_server) {
+		g_web_set_proxy(wp_context->web, proxy_server);
+		g_free(proxy_server);
 	}
 
 	g_web_set_accept(wp_context->web, NULL);
