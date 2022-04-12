@@ -195,6 +195,12 @@ static void read_uevent(struct interface_data *interface)
 		} else if (strcmp(devtype, "vlan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
+		} else if (strcmp(devtype + 8, "bond") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
+		} else if (strcmp(devtype + 8, "dsa") == 0) {
+			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
+			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 		} else {
 			connman_warn("%s DEVTYPE=%s not supported, ignoring",
 					name, devtype);
@@ -457,8 +463,8 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 						address.ether_addr_octet[5]);
 
 	if (flags & IFF_SLAVE) {
-	//	DBG("%s {newlink} ignoring slave, index %d address %s",
-	//					ifname, index, str);
+		DBG("%s {newlink} ignoring slave, index %d address %s",
+						ifname, index, str);
 		return;
 	}
 
@@ -475,13 +481,13 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 		break;
 	}
 
-//        DBG("%s {newlink} index %d address %s mtu %u",
-//						ifname, index, str, mtu);
+        DBG("%s {newlink} index %d address %s mtu %u",
+						ifname, index, str, mtu);
 
-//	if (operstate != 0xff)
-//		DBG("%s {newlink} index %d operstate %u <%s>",
-//						ifname, index, operstate,
-//						operstate2str(operstate));
+	if (operstate != 0xff)
+		DBG("%s {newlink} index %d operstate %u <%s>",
+						ifname, index, operstate,
+						operstate2str(operstate));
 
 	interface = g_hash_table_lookup(interface_list, GINT_TO_POINTER(index));
 	if (!interface) {
@@ -1325,80 +1331,76 @@ static const char *type2string(uint16_t type)
 static GIOChannel *channel = NULL;
 static guint channel_watch = 0;
 
-struct rtnl_request {
-	struct nlmsghdr hdr;
-	struct rtgenmsg msg;
-};
-#define RTNL_REQUEST_SIZE  (sizeof(struct nlmsghdr) + sizeof(struct rtgenmsg))
+#define RTNL_REQUEST_SIZE (NLMSG_HDRLEN + NLMSG_ALIGN(sizeof(struct rtgenmsg)))
 
 static GSList *request_list = NULL;
 static guint32 request_seq = 0;
 
-static struct rtnl_request *find_request(guint32 seq)
+static struct nlmsghdr *find_request(guint32 seq)
 {
 	GSList *list;
 
 	for (list = request_list; list; list = list->next) {
-		struct rtnl_request *req = list->data;
+		struct nlmsghdr *hdr = list->data;
 
-		if (req->hdr.nlmsg_seq == seq)
-			return req;
+		if (hdr->nlmsg_seq == seq)
+			return hdr;
 	}
 
 	return NULL;
 }
 
-static int send_request(struct rtnl_request *req)
+static int send_request(struct nlmsghdr *hdr)
 {
 	struct sockaddr_nl addr;
 	int sk;
 
-//	DBG("%s len %d type %d flags 0x%04x seq %d",
-//				type2string(req->hdr.nlmsg_type),
-//				req->hdr.nlmsg_len, req->hdr.nlmsg_type,
-//				req->hdr.nlmsg_flags, req->hdr.nlmsg_seq);
+	DBG("%s len %d type %d flags 0x%04x seq %d",
+				type2string(hdr->nlmsg_type),
+				hdr->nlmsg_len, hdr->nlmsg_type,
+				hdr->nlmsg_flags, hdr->nlmsg_seq);
 
 	sk = g_io_channel_unix_get_fd(channel);
 
 	memset(&addr, 0, sizeof(addr));
 	addr.nl_family = AF_NETLINK;
 
-	return sendto(sk, req, req->hdr.nlmsg_len, 0,
+	return sendto(sk, hdr, hdr->nlmsg_len, 0,
 				(struct sockaddr *) &addr, sizeof(addr));
 }
 
-static int queue_request(struct rtnl_request *req)
+static int queue_request(struct nlmsghdr *hdr)
 {
-	request_list = g_slist_append(request_list, req);
+	request_list = g_slist_append(request_list, hdr);
 
 	if (g_slist_length(request_list) > 1)
 		return 0;
 
-	return send_request(req);
+	return send_request(hdr);
 }
 
 static int process_response(guint32 seq)
 {
-	struct rtnl_request *req;
+	struct nlmsghdr *hdr;
 
-//	DBG("seq %d", seq);
+	DBG("seq %d", seq);
 
-	req = find_request(seq);
-	if (req) {
-		request_list = g_slist_remove(request_list, req);
-		g_free(req);
+	hdr = find_request(seq);
+	if (hdr) {
+		request_list = g_slist_remove(request_list, hdr);
+		g_free(hdr);
 	}
 
-	req = g_slist_nth_data(request_list, 0);
-	if (!req)
+	hdr = g_slist_nth_data(request_list, 0);
+	if (!hdr)
 		return 0;
 
-	return send_request(req);
+	return send_request(hdr);
 }
 
 static void rtnl_message(void *buf, size_t len)
 {
-//	DBG("buf %p len %zd", buf, len);
+	DBG("buf %p len %zd", buf, len);
 
 	while (len > 0) {
 		struct nlmsghdr *hdr = buf;
@@ -1407,11 +1409,11 @@ static void rtnl_message(void *buf, size_t len)
 		if (!NLMSG_OK(hdr, len))
 			break;
 
-//		DBG("%s len %d type %d flags 0x%04x seq %d pid %d",
-//					type2string(hdr->nlmsg_type),
-//					hdr->nlmsg_len, hdr->nlmsg_type,
-//					hdr->nlmsg_flags, hdr->nlmsg_seq,
-//					hdr->nlmsg_pid);
+		DBG("%s len %d type %d flags 0x%04x seq %d pid %d",
+					type2string(hdr->nlmsg_type),
+					hdr->nlmsg_len, hdr->nlmsg_type,
+					hdr->nlmsg_flags, hdr->nlmsg_seq,
+					hdr->nlmsg_pid);
 
 		switch (hdr->nlmsg_type) {
 		case NLMSG_NOOP:
@@ -1493,62 +1495,65 @@ static gboolean netlink_event(GIOChannel *chan, GIOCondition cond, gpointer data
 
 static int send_getlink(void)
 {
-	struct rtnl_request *req;
+	struct nlmsghdr *hdr;
+	struct rtgenmsg *msg;
 
-//	DBG("");
+	DBG("");
 
-	req = g_try_malloc0(RTNL_REQUEST_SIZE);
-	if (!req)
-		return -ENOMEM;
+	hdr = g_malloc0(RTNL_REQUEST_SIZE);
 
-	req->hdr.nlmsg_len = RTNL_REQUEST_SIZE;
-	req->hdr.nlmsg_type = RTM_GETLINK;
-	req->hdr.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-	req->hdr.nlmsg_pid = 0;
-	req->hdr.nlmsg_seq = request_seq++;
-	req->msg.rtgen_family = AF_INET;
+	hdr->nlmsg_len = RTNL_REQUEST_SIZE;
+	hdr->nlmsg_type = RTM_GETLINK;
+	hdr->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+	hdr->nlmsg_pid = 0;
+	hdr->nlmsg_seq = request_seq++;
 
-	return queue_request(req);
+	msg = (struct rtgenmsg *) NLMSG_DATA(hdr);
+	msg->rtgen_family = AF_INET;
+
+	return queue_request(hdr);
 }
 
 static int send_getaddr(void)
 {
-	struct rtnl_request *req;
+	struct nlmsghdr *hdr;
+	struct rtgenmsg *msg;
 
 	DBG("");
 
-	req = g_try_malloc0(RTNL_REQUEST_SIZE);
-	if (!req)
-		return -ENOMEM;
+	hdr = g_malloc0(RTNL_REQUEST_SIZE);
 
-	req->hdr.nlmsg_len = RTNL_REQUEST_SIZE;
-	req->hdr.nlmsg_type = RTM_GETADDR;
-	req->hdr.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-	req->hdr.nlmsg_pid = 0;
-	req->hdr.nlmsg_seq = request_seq++;
-	req->msg.rtgen_family = AF_INET;
+	hdr->nlmsg_len = RTNL_REQUEST_SIZE;
+	hdr->nlmsg_type = RTM_GETADDR;
+	hdr->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+	hdr->nlmsg_pid = 0;
+	hdr->nlmsg_seq = request_seq++;
 
-	return queue_request(req);
+	msg = (struct rtgenmsg *) NLMSG_DATA(hdr);
+	msg->rtgen_family = AF_INET;
+
+	return queue_request(hdr);
 }
 
 static int send_getroute(void)
 {
-	struct rtnl_request *req;
+	struct nlmsghdr *hdr;
+	struct rtgenmsg *msg;
 
 	DBG("");
 
-	req = g_try_malloc0(RTNL_REQUEST_SIZE);
-	if (!req)
-		return -ENOMEM;
+	hdr = g_malloc0(RTNL_REQUEST_SIZE);
 
-	req->hdr.nlmsg_len = RTNL_REQUEST_SIZE;
-	req->hdr.nlmsg_type = RTM_GETROUTE;
-	req->hdr.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
-	req->hdr.nlmsg_pid = 0;
-	req->hdr.nlmsg_seq = request_seq++;
-	req->msg.rtgen_family = AF_INET;
+	hdr->nlmsg_len = RTNL_REQUEST_SIZE;
+	hdr->nlmsg_type = RTM_GETROUTE;
+	hdr->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+	hdr->nlmsg_pid = 0;
+	hdr->nlmsg_seq = request_seq++;
 
-	return queue_request(req);
+	msg = (struct rtgenmsg *) NLMSG_DATA(hdr);
+	msg->rtgen_family = AF_INET;
+
+	return queue_request(hdr);
 }
 
 static gboolean update_timeout_cb(gpointer user_data)
@@ -1692,14 +1697,14 @@ void __connman_rtnl_cleanup(void)
 	update_list = NULL;
 
 	for (list = request_list; list; list = list->next) {
-		struct rtnl_request *req = list->data;
+		struct nlmsghdr *hdr= list->data;
 
 		DBG("%s len %d type %d flags 0x%04x seq %d",
-				type2string(req->hdr.nlmsg_type),
-				req->hdr.nlmsg_len, req->hdr.nlmsg_type,
-				req->hdr.nlmsg_flags, req->hdr.nlmsg_seq);
+				type2string(hdr->nlmsg_type),
+				hdr->nlmsg_len, hdr->nlmsg_type,
+				hdr->nlmsg_flags, hdr->nlmsg_seq);
 
-		g_free(req);
+		g_free(hdr);
 		list->data = NULL;
 	}
 

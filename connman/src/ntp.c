@@ -144,7 +144,7 @@ static gboolean send_timeout(gpointer user_data)
 {
 	uint32_t timeout = GPOINTER_TO_UINT(user_data);
 
-//	DBG("send timeout %u (retries %d)", timeout, retries);
+	DBG("send timeout %u (retries %d)", timeout, retries);
 
 	if (retries++ == NTP_SEND_RETRIES)
 		next_server();
