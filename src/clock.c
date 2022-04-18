@@ -270,6 +270,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 	} else if (g_str_equal(name, "TimeUpdates")) {
 		const char *strval;
 		enum time_updates newval;
+		struct connman_service *service;
 
 		if (type != DBUS_TYPE_STRING)
 			return __connman_error_invalid_arguments(msg);
@@ -290,12 +291,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 				CONNMAN_CLOCK_INTERFACE, "TimeUpdates",
 				DBUS_TYPE_STRING, &strval);
 
-		if (newval == TIME_UPDATES_AUTO) {
-			struct connman_service *service;
-
-			service = connman_service_get_default();
-			__connman_timeserver_conf_update(service);
-		}
+		service = connman_service_get_default();
+		__connman_timeserver_conf_update(service);
 	} else if (g_str_equal(name, "Timezone")) {
 		const char *strval;
 
