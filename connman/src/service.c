@@ -7047,6 +7047,26 @@ __connman_service_get_ipconfig(struct connman_service *service, int family)
 
 }
 
+enum connman_ipconfig_method connman_service_get_ipconfig_method(
+						struct connman_service *service,
+						enum connman_ipconfig_type type)
+{
+	if (!service)
+		return CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		return __connman_ipconfig_get_method(service->ipconfig_ipv4);
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		return __connman_ipconfig_get_method(service->ipconfig_ipv6);
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		break;
+	}
+
+	return CONNMAN_IPCONFIG_METHOD_UNKNOWN;
+}
+
 bool __connman_service_is_connected_state(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -8979,6 +8999,21 @@ void connman_service_create_ip6config(struct connman_service *service,
 }
 
 /**
+ * connman_service_get_network:
+ * @service: service structure
+ *
+ * Get network of the service
+ */
+struct connman_network *connman_service_get_network(
+						struct connman_service *service)
+{
+	if (!service)
+		return NULL;
+
+	return service->network;
+}
+
+/**
  * connman_service_lookup_from_network:
  * @network: network structure
  *
@@ -9027,6 +9062,11 @@ struct connman_service *__connman_service_lookup_from_index(int index)
 	}
 
 	return NULL;
+}
+
+struct connman_service *connman_service_lookup_from_index(int index)
+{
+	return __connman_service_lookup_from_index(index);
 }
 
 struct set_ipv6_data {
