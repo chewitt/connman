@@ -52,6 +52,9 @@ enum connman_ipconfig_method {
 
 struct connman_ipconfig;
 
+enum connman_ipconfig_type connman_ipconfig_get_config_type(
+					struct connman_ipconfig *ipconfig);
+
 #ifdef __cplusplus
 }
 #endif
