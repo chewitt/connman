@@ -116,6 +116,7 @@ bool connman_device_get_managed(struct connman_device *device);
 bool connman_device_has_status_changed_to(struct connman_device *device,
 					bool new_status);
 void connman_device_status_notify(struct connman_device *device, bool on);
+bool connman_device_isfiltered(const char *devname);
 
 struct connman_device_driver {
 	const char *name;
