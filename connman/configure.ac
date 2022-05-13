@@ -592,6 +592,11 @@ AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--disable-datafiles],
 					[enable_datafiles=${enableval}])
 AM_CONDITIONAL(DATAFILES, test "${enable_datafiles}" != "no")
 
+AC_ARG_ENABLE(blacklist-monitor,
+	AC_HELP_STRING([--enable-blacklist-monitor], [enable Blacklist monitor plugin]),
+			[enable_blacklist_monitor=${enableval}], [enable_blacklist_monitor="no"])
+AM_CONDITIONAL(BLACKLIST_MONITOR, test "${enable_blacklist_monitor}" != "no")
+
 if (test "${enable_client}" != "no"); then
 	AC_CHECK_HEADERS(readline/readline.h, dummy=yes,
 		AC_MSG_ERROR(readline header files are required))

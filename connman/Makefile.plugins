@@ -349,3 +349,8 @@ if SAILFISH_DEVELOPER_MODE
 builtin_modules += sailfish_developer_mode
 builtin_sources += plugins/sailfish_developer_mode.c
 endif
+
+if BLACKLIST_MONITOR
+builtin_modules += blacklist_monitor
+builtin_sources += plugins/blacklist_monitor.c
+endif
