@@ -1048,17 +1048,11 @@ void __connman_wispr_stop(struct connman_service *service)
 	if (!wispr_portal)
 		return;
 
-	if (wispr_portal->ipv4_context) {
-		if (service == wispr_portal->ipv4_context->service)
-			g_hash_table_remove(wispr_portal_list,
-					GINT_TO_POINTER(index));
-	}
-
-	if (wispr_portal->ipv6_context) {
-		if (service == wispr_portal->ipv6_context->service)
-			g_hash_table_remove(wispr_portal_list,
-					GINT_TO_POINTER(index));
-	}
+	if ((wispr_portal->ipv4_context &&
+	     service == wispr_portal->ipv4_context->service) ||
+	    (wispr_portal->ipv6_context &&
+	     service == wispr_portal->ipv6_context->service))
+		g_hash_table_remove(wispr_portal_list, GINT_TO_POINTER(index));
 }
 
 int __connman_wispr_init(void)
