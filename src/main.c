@@ -110,6 +110,7 @@ static struct {
 	bool use_gateways_as_timeservers;
 	char *localtime;
 	bool regdom_follows_timezone;
+	char *resolv_conf;
 } connman_settings  = {
 	.bg_scan = true,
 	.pref_timeservers = NULL,
@@ -138,6 +139,7 @@ static struct {
 	.acd = false,
 	.use_gateways_as_timeservers = false,
 	.localtime = NULL,
+	.resolv_conf = NULL,
 };
 
 #define CONF_BG_SCAN                    "BackgroundScanning"
@@ -168,6 +170,7 @@ static struct {
 #define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
 #define CONF_LOCALTIME                  "Localtime"
 #define CONF_REGDOM_FOLLOWS_TIMEZONE    "RegdomFollowsTimezone"
+#define CONF_RESOLV_CONF                "ResolvConf"
 
 static const char *supported_options[] = {
 	CONF_BG_SCAN,
@@ -198,6 +201,7 @@ static const char *supported_options[] = {
 	CONF_USE_GATEWAYS_AS_TIMESERVERS,
 	CONF_LOCALTIME,
 	CONF_REGDOM_FOLLOWS_TIMEZONE,
+	CONF_RESOLV_CONF,
 	NULL
 };
 
@@ -594,6 +598,13 @@ static void parse_config(GKeyFile *config)
 	if (!error)
 		connman_settings.regdom_follows_timezone = boolean;
 
+	string = __connman_config_get_string(config, "General",
+				CONF_RESOLV_CONF, &error);
+	if (!error)
+		connman_settings.resolv_conf = string;
+	else
+		g_free(string);
+
 	g_clear_error(&error);
 }
 
@@ -829,6 +840,9 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_REGDOM_FOLLOWS_TIMEZONE))
 		return connman_settings.regdom_follows_timezone;
+
+	if (g_str_equal(key, CONF_RESOLV_CONF))
+		return connman_settings.resolv_conf;
 
 	return false;
 }

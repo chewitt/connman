@@ -215,6 +215,14 @@ Enable regdomain to be changed along timezone changes. With this option set to
 true each time the timezone changes the first present ISO3166 country code is
 being read from /usr/share/zoneinfo/zone1970.tab and set as regdom value.
 Default value is false.
+.TP
+.BI ResolvConf= string
+Path to resolv.conf file. If the file does not exist, but intermediate
+directories exist, it will be created.
+If this option is not set, it tries to write into
+@runstatedir@/connman/resolv.conf and fallbacks to @sysconfdir@/resolv.conf if
+it fails (@runstatedir@/connman does not exist or is not writeable).
+If you do not want to update resolv.conf, you can set /dev/null.
 .SH "EXAMPLE"
 The following example configuration disables hostname updates and enables
 ethernet tethering.
