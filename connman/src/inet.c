@@ -747,7 +747,11 @@ int connman_inet_add_ipv6_network_route_with_metric(int index, const char *host,
 		goto out;
 	}
 
-	rt.rtmsg_flags = RTF_UP | RTF_HOST;
+	rt.rtmsg_flags = RTF_UP;
+
+	/* Add host flag for route only when not setting a default route. */
+	if (!__connman_inet_is_any_addr(host, AF_INET6))
+		rt.rtmsg_flags |= RTF_HOST;
 
 	/*
 	 * Set RTF_GATEWAY only when gateway is set, the gateway IP address is
