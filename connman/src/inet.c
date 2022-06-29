@@ -257,6 +257,11 @@ out:
 	return ret;
 }
 
+bool connman_inet_is_any_addr(const char *address, int family)
+{
+	return __connman_inet_is_any_addr(address, family);
+}
+
 int connman_inet_ifindex(const char *name)
 {
 	struct ifreq ifr;
@@ -663,8 +668,9 @@ out:
 	return err;
 }
 
-int connman_inet_del_ipv6_network_route(int index, const char *host,
-						unsigned char prefix_len)
+int connman_inet_del_ipv6_network_route_with_metric(int index, const char *host,
+						unsigned char prefix_len,
+						short metric)
 {
 	struct in6_rtmsg rt;
 	int sk, err = 0;
@@ -685,7 +691,7 @@ int connman_inet_del_ipv6_network_route(int index, const char *host,
 
 	rt.rtmsg_flags = RTF_UP | RTF_HOST;
 
-	rt.rtmsg_metric = 1;
+	rt.rtmsg_metric = metric;
 	rt.rtmsg_ifindex = index;
 
 	sk = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
@@ -707,14 +713,22 @@ out:
 	return err;
 }
 
+int connman_inet_del_ipv6_network_route(int index, const char *host,
+						unsigned char prefix_len)
+{
+	return connman_inet_del_ipv6_network_route_with_metric(index, host,
+							prefix_len, 1);
+}
+
 int connman_inet_del_ipv6_host_route(int index, const char *host)
 {
 	return connman_inet_del_ipv6_network_route(index, host, 128);
 }
 
-int connman_inet_add_ipv6_network_route(int index, const char *host,
+int connman_inet_add_ipv6_network_route_with_metric(int index, const char *host,
 					const char *gateway,
-					unsigned char prefix_len)
+					unsigned char prefix_len,
+					short metric)
 {
 	struct in6_rtmsg rt;
 	int sk, err = 0;
@@ -733,7 +747,11 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 		goto out;
 	}
 
-	rt.rtmsg_flags = RTF_UP | RTF_HOST;
+	rt.rtmsg_flags = RTF_UP;
+
+	/* Add host flag for route only when not setting a default route. */
+	if (!__connman_inet_is_any_addr(host, AF_INET6))
+		rt.rtmsg_flags |= RTF_HOST;
 
 	/*
 	 * Set RTF_GATEWAY only when gateway is set, the gateway IP address is
@@ -747,7 +765,7 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) > 0)
 		rt.rtmsg_flags |= RTF_GATEWAY;
 
-	rt.rtmsg_metric = 1;
+	rt.rtmsg_metric = metric;
 	rt.rtmsg_ifindex = index;
 
 	sk = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
@@ -767,6 +785,14 @@ out:
 						strerror(-err));
 
 	return err;
+}
+
+int connman_inet_add_ipv6_network_route(int index, const char *host,
+					const char *gateway,
+					unsigned char prefix_len)
+{
+	return connman_inet_add_ipv6_network_route_with_metric(index, host,
+						gateway, prefix_len, 1);
 }
 
 int connman_inet_add_ipv6_host_route(int index, const char *host,

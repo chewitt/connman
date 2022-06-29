@@ -1111,6 +1111,12 @@ enum connman_ipconfig_type __connman_ipconfig_get_config_type(
 	return ipconfig ? ipconfig->type : CONNMAN_IPCONFIG_TYPE_UNKNOWN;
 }
 
+enum connman_ipconfig_type connman_ipconfig_get_config_type(
+					struct connman_ipconfig *ipconfig)
+{
+	return __connman_ipconfig_get_config_type(ipconfig);
+}
+
 unsigned short __connman_ipconfig_get_type_from_index(int index)
 {
 	struct connman_ipdevice *ipdevice;

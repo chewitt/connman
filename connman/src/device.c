@@ -1436,6 +1436,11 @@ list:
 	return false;
 }
 
+bool connman_device_isfiltered(const char *devname)
+{
+	return __connman_device_isfiltered(devname);
+}
+
 static bool can_bring_down(const char *devname)
 {
 	char **pattern =

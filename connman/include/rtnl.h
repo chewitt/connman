@@ -22,6 +22,8 @@
 #ifndef __CONNMAN_RTNL_H
 #define __CONNMAN_RTNL_H
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -53,10 +55,25 @@ struct connman_rtnl {
 					unsigned flags, unsigned change);
 	void (*newgateway) (int index, const char *gateway);
 	void (*delgateway) (int index, const char *gateway);
+	/*
+	 * IPv6 route callbacks handle the route message protocol type
+	 * internally, e.g., RTPROT_RA messages are not normally handled and
+	 * must be explicitly set with connman_rtnl_handle_rtprot_ra(). After
+	 * the function is made to be more generic a list of RTPROTO_ types
+	 * could be added to be handled by rtnl.c and passed to the callback.
+	 */
+	void (*newgateway6) (int index, const char *dst, const char *gateway,
+					int metric, unsigned char rtm_protocol);
+	void (*delgateway6) (int index, const char *dst, const char *gateway,
+					int metric, unsigned char rtm_protocol);
 };
 
 int connman_rtnl_register(struct connman_rtnl *rtnl);
 void connman_rtnl_unregister(struct connman_rtnl *rtnl);
+
+/* TODO: this could be more generic: handle a list of user spec rtproto types */
+void connman_rtnl_handle_rtprot_ra(bool value);
+int connman_rtnl_request_route_update(int family);
 
 #ifdef __cplusplus
 }

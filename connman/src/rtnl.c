@@ -67,6 +67,7 @@ static unsigned int watch_id = 0;
 static GSList *update_list = NULL;
 static guint update_interval = G_MAXUINT;
 static guint update_timeout = 0;
+static bool handle_rtprot_ra = false;
 
 struct interface_data {
 	int index;
@@ -365,6 +366,17 @@ void connman_rtnl_unregister(struct connman_rtnl *rtnl)
 	DBG("rtnl %p name %s", rtnl, rtnl->name);
 
 	rtnl_list = g_slist_remove(rtnl_list, rtnl);
+}
+
+/**
+ * connman_rtnl_handle_rtprot_ra:
+ * @value true to also notify RTPROT_RA gateways
+ *
+ * Toggle notify about RTPROT_RA gateways added by route advertisement
+ */
+void connman_rtnl_handle_rtprot_ra(bool value)
+{
+	handle_rtprot_ra = value;
 }
 
 static const char *operstate2str(unsigned char operstate)
@@ -743,7 +755,8 @@ static void extract_ipv6_route(struct rtmsg *msg, int bytes, int *index,
 }
 
 static void process_newroute(unsigned char family, unsigned char scope,
-						struct rtmsg *msg, int bytes)
+						int metric, struct rtmsg *msg,
+						int bytes)
 {
 	GSList *list;
 	char dststr[INET6_ADDRSTRLEN], gatewaystr[INET6_ADDRSTRLEN];
@@ -777,8 +790,10 @@ static void process_newroute(unsigned char family, unsigned char scope,
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
-		__connman_ipconfig_newroute(index, family, scope, dststr,
-								gatewaystr);
+		/* Ignore IPv6 route advertized protocol */
+		if (msg->rtm_protocol != RTPROT_RA)
+			__connman_ipconfig_newroute(index, family, scope,
+							dststr, gatewaystr);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -794,13 +809,28 @@ static void process_newroute(unsigned char family, unsigned char scope,
 	for (list = rtnl_list; list; list = list->next) {
 		struct connman_rtnl *rtnl = list->data;
 
-		if (rtnl->newgateway)
-			rtnl->newgateway(index, gatewaystr);
+		switch (family) {
+		case AF_INET:
+			if (rtnl->newgateway)
+				rtnl->newgateway(index, gatewaystr);
+
+			break;
+		case AF_INET6:
+			if (rtnl->newgateway6)
+				rtnl->newgateway6(index, dststr, gatewaystr,
+						metric, msg->rtm_protocol);
+
+			break;
+		default:
+			connman_warn("unexpected rtnl route family %d", family);
+			break;
+		}
 	}
 }
 
 static void process_delroute(unsigned char family, unsigned char scope,
-						struct rtmsg *msg, int bytes)
+						int metric, struct rtmsg *msg,
+						int bytes)
 {
 	GSList *list;
 	char dststr[INET6_ADDRSTRLEN], gatewaystr[INET6_ADDRSTRLEN];
@@ -834,8 +864,9 @@ static void process_delroute(unsigned char family, unsigned char scope,
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
-		__connman_ipconfig_delroute(index, family, scope, dststr,
-						gatewaystr);
+		if (msg->rtm_protocol != RTPROT_RA)
+			__connman_ipconfig_delroute(index, family, scope,
+							dststr, gatewaystr);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -851,8 +882,22 @@ static void process_delroute(unsigned char family, unsigned char scope,
 	for (list = rtnl_list; list; list = list->next) {
 		struct connman_rtnl *rtnl = list->data;
 
-		if (rtnl->delgateway)
-			rtnl->delgateway(index, gatewaystr);
+		switch (family) {
+		case AF_INET:
+			if (rtnl->delgateway)
+				rtnl->delgateway(index, gatewaystr);
+
+			break;
+		case AF_INET6:
+			if (rtnl->delgateway6)
+				rtnl->delgateway6(index, dststr, gatewaystr,
+						metric, msg->rtm_protocol);
+
+			break;
+		default:
+			connman_warn("unexpected rtnl route family %d", family);
+			break;
+		}
 	}
 }
 
@@ -1126,8 +1171,13 @@ static bool is_route_rtmsg(struct rtmsg *msg)
 		return false;
 
 	if (msg->rtm_protocol != RTPROT_BOOT &&
-			msg->rtm_protocol != RTPROT_KERNEL)
+					msg->rtm_protocol != RTPROT_KERNEL) {
+
+		if (handle_rtprot_ra && msg->rtm_protocol == RTPROT_RA)
+			return true;
+
 		return false;
+	}
 
 	if (msg->rtm_type != RTN_UNICAST)
 		return false;
@@ -1135,26 +1185,52 @@ static bool is_route_rtmsg(struct rtmsg *msg)
 	return true;
 }
 
+static int get_route_metric(struct rtmsg *msg, int bytes)
+{
+	struct rtattr *attr;
+
+	for (attr = RTM_RTA(msg); RTA_OK(attr, bytes);
+					attr = RTA_NEXT(attr, bytes)) {
+		/* With IPv6 priority contains metric value */
+		if (attr->rta_type == RTA_PRIORITY)
+			return *((int *) RTA_DATA(attr));
+	}
+
+	return -1;
+}
+
 static void rtnl_newroute(struct nlmsghdr *hdr)
 {
 	struct rtmsg *msg = (struct rtmsg *) NLMSG_DATA(hdr);
+	int bytes = RTM_PAYLOAD(hdr);
+	int metric = -1;
 
 	rtnl_route(hdr);
 
-	if (is_route_rtmsg(msg))
-		process_newroute(msg->rtm_family, msg->rtm_scope,
-						msg, RTM_PAYLOAD(hdr));
+	if (is_route_rtmsg(msg)) {
+		if (msg->rtm_family == AF_INET6)
+			metric = get_route_metric(msg, bytes);
+
+		process_newroute(msg->rtm_family, msg->rtm_scope, metric,
+						msg, bytes);
+	}
 }
 
 static void rtnl_delroute(struct nlmsghdr *hdr)
 {
 	struct rtmsg *msg = (struct rtmsg *) NLMSG_DATA(hdr);
+	int bytes = RTM_PAYLOAD(hdr);
+	int metric = -1;
 
 	rtnl_route(hdr);
 
-	if (is_route_rtmsg(msg))
-		process_delroute(msg->rtm_family, msg->rtm_scope,
-						msg, RTM_PAYLOAD(hdr));
+	if (is_route_rtmsg(msg)) {
+		if (msg->rtm_family == AF_INET6)
+			metric = get_route_metric(msg, bytes);
+
+		process_delroute(msg->rtm_family, msg->rtm_scope, metric,
+						msg, bytes);
+	}
 }
 
 static void *rtnl_nd_opt_rdnss(struct nd_opt_hdr *opt, guint32 *lifetime,
@@ -1493,7 +1569,7 @@ static gboolean netlink_event(GIOChannel *chan, GIOCondition cond, gpointer data
 	return TRUE;
 }
 
-static int send_getlink(void)
+static int send_getlink(int family)
 {
 	struct nlmsghdr *hdr;
 	struct rtgenmsg *msg;
@@ -1514,7 +1590,7 @@ static int send_getlink(void)
 	return queue_request(hdr);
 }
 
-static int send_getaddr(void)
+static int send_getaddr(int family)
 {
 	struct nlmsghdr *hdr;
 	struct rtgenmsg *msg;
@@ -1530,12 +1606,12 @@ static int send_getaddr(void)
 	hdr->nlmsg_seq = request_seq++;
 
 	msg = (struct rtgenmsg *) NLMSG_DATA(hdr);
-	msg->rtgen_family = AF_INET;
+	msg->rtgen_family = family;
 
 	return queue_request(hdr);
 }
 
-static int send_getroute(void)
+static int send_getroute(int family)
 {
 	struct nlmsghdr *hdr;
 	struct rtgenmsg *msg;
@@ -1551,14 +1627,14 @@ static int send_getroute(void)
 	hdr->nlmsg_seq = request_seq++;
 
 	msg = (struct rtgenmsg *) NLMSG_DATA(hdr);
-	msg->rtgen_family = AF_INET;
+	msg->rtgen_family = family;
 
 	return queue_request(hdr);
 }
 
 static gboolean update_timeout_cb(gpointer user_data)
 {
-	__connman_rtnl_request_update();
+	__connman_rtnl_request_update(AF_INET);
 
 	return TRUE;
 }
@@ -1599,7 +1675,7 @@ unsigned int __connman_rtnl_update_interval_add(unsigned int interval)
 	min = GPOINTER_TO_UINT(g_slist_nth_data(update_list, 0));
 	if (min < update_interval) {
 		update_interval_callback(min);
-		__connman_rtnl_request_update();
+		__connman_rtnl_request_update(AF_INET);
 	}
 
 	return update_interval;
@@ -1623,9 +1699,32 @@ unsigned int __connman_rtnl_update_interval_remove(unsigned int interval)
 	return min;
 }
 
-int __connman_rtnl_request_update(void)
+static bool is_valid_ip_family(int family)
 {
-	return send_getlink();
+	switch (family) {
+	case AF_INET:
+	case AF_INET6:
+	case AF_UNSPEC:
+		return true;
+	default:
+		return false;
+	}
+}
+
+int __connman_rtnl_request_update(int family)
+{
+	if (!is_valid_ip_family(family))
+		return -EINVAL;
+
+	return send_getlink(family);
+}
+
+int connman_rtnl_request_route_update(int family)
+{
+	if (!is_valid_ip_family(family))
+		return -EINVAL;
+
+	return send_getroute(family);
 }
 
 int __connman_rtnl_init(void)
@@ -1670,9 +1769,9 @@ void __connman_rtnl_start(void)
 {
 	DBG("");
 
-	send_getlink();
-	send_getaddr();
-	send_getroute();
+	send_getlink(AF_INET);
+	send_getaddr(AF_INET);
+	send_getroute(AF_INET);
 }
 
 void __connman_rtnl_cleanup(void)

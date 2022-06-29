@@ -551,6 +551,17 @@ noinst_PROGRAMS += unit/test-sailfish_developer_mode
 TESTS += unit/test-sailfish_developer_mode
 endif
 
+if BLACKLIST_MONITOR
+unit_test_blacklist_monitor_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				@GLIB_CFLAGS@
+unit_test_blacklist_monitor_SOURCES = $(backtrace_sources) src/connman.h \
+				src/log.c plugins/blacklist_monitor.c \
+				unit/test-blacklist_monitor.c
+unit_test_blacklist_monitor_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+noinst_PROGRAMS += unit/test-blacklist_monitor
+TESTS += unit/test-blacklist_monitor
+endif
+
 if WISPR
 noinst_PROGRAMS += tools/wispr
 
