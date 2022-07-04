@@ -91,7 +91,7 @@ struct connman_wispr_portal {
 
 static bool wispr_portal_web_result(GWebResult *result, gpointer user_data);
 
-static GHashTable *wispr_portal_list = NULL;
+static GHashTable *wispr_portal_hash = NULL;
 
 static char *online_check_ipv4_url = NULL;
 static char *online_check_ipv6_url = NULL;
@@ -576,7 +576,7 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 	if (index < 0)
 		return;
 
-	wispr_portal = g_hash_table_lookup(wispr_portal_list,
+	wispr_portal = g_hash_table_lookup(wispr_portal_hash,
 					GINT_TO_POINTER(index));
 	if (!wispr_portal)
 		return;
@@ -974,21 +974,21 @@ int __connman_wispr_start(struct connman_service *service,
 
 	DBG("service %p", service);
 
-	if (!wispr_portal_list)
+	if (!wispr_portal_hash)
 		return -EINVAL;
 
 	index = __connman_service_get_index(service);
 	if (index < 0)
 		return -EINVAL;
 
-	wispr_portal = g_hash_table_lookup(wispr_portal_list,
+	wispr_portal = g_hash_table_lookup(wispr_portal_hash,
 					GINT_TO_POINTER(index));
 	if (!wispr_portal) {
 		wispr_portal = g_try_new0(struct connman_wispr_portal, 1);
 		if (!wispr_portal)
 			return -ENOMEM;
 
-		g_hash_table_replace(wispr_portal_list,
+		g_hash_table_replace(wispr_portal_hash,
 					GINT_TO_POINTER(index), wispr_portal);
 	}
 
@@ -1026,14 +1026,14 @@ void __connman_wispr_stop(struct connman_service *service)
 
 	DBG("service %p", service);
 
-	if (!wispr_portal_list)
+	if (!wispr_portal_hash)
 		return;
 
 	index = __connman_service_get_index(service);
 	if (index < 0)
 		return;
 
-	wispr_portal = g_hash_table_lookup(wispr_portal_list,
+	wispr_portal = g_hash_table_lookup(wispr_portal_hash,
 					GINT_TO_POINTER(index));
 	if (!wispr_portal)
 		return;
@@ -1042,14 +1042,14 @@ void __connman_wispr_stop(struct connman_service *service)
 	     service == wispr_portal->ipv4_context->service) ||
 	    (wispr_portal->ipv6_context &&
 	     service == wispr_portal->ipv6_context->service))
-		g_hash_table_remove(wispr_portal_list, GINT_TO_POINTER(index));
+		g_hash_table_remove(wispr_portal_hash, GINT_TO_POINTER(index));
 }
 
 int __connman_wispr_init(void)
 {
 	DBG("");
 
-	wispr_portal_list = g_hash_table_new_full(g_direct_hash,
+	wispr_portal_hash = g_hash_table_new_full(g_direct_hash,
 						g_direct_equal, NULL,
 						free_connman_wispr_portal);
 
@@ -1068,6 +1068,6 @@ void __connman_wispr_cleanup(void)
 {
 	DBG("");
 
-	g_hash_table_destroy(wispr_portal_list);
-	wispr_portal_list = NULL;
+	g_hash_table_destroy(wispr_portal_hash);
+	wispr_portal_hash = NULL;
 }
