@@ -839,7 +839,7 @@ static void proxy_callback(const char *proxy, void *user_data)
 
 	DBG("proxy %s", proxy);
 
-	if (!wp_context)
+	if (!wp_context || !proxy)
 		return;
 
 	wp_context->token = 0;
