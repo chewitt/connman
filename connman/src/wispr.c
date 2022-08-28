@@ -928,7 +928,6 @@ static gboolean no_proxy_callback(gpointer user_data)
 static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 {
 	enum connman_service_proxy_method proxy_method;
-	enum connman_service_type service_type;
 	char *interface = NULL;
 	char **nameservers = NULL;
 	int if_index;
@@ -937,23 +936,6 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 
 	DBG("wispr/portal context %p", wp_context);
 	DBG("service %p", wp_context->service);
-
-	service_type = connman_service_get_type(wp_context->service);
-
-	switch (service_type) {
-	case CONNMAN_SERVICE_TYPE_ETHERNET:
-	case CONNMAN_SERVICE_TYPE_WIFI:
-	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
-	case CONNMAN_SERVICE_TYPE_CELLULAR:
-	case CONNMAN_SERVICE_TYPE_GADGET:
-		break;
-	case CONNMAN_SERVICE_TYPE_UNKNOWN:
-	case CONNMAN_SERVICE_TYPE_SYSTEM:
-	case CONNMAN_SERVICE_TYPE_GPS:
-	case CONNMAN_SERVICE_TYPE_VPN:
-	case CONNMAN_SERVICE_TYPE_P2P:
-		return -EOPNOTSUPP;
-	}
 
 	interface = connman_service_get_interface(wp_context->service);
 	if (!interface)
@@ -1026,12 +1008,27 @@ int __connman_wispr_start(struct connman_service *service,
 {
 	struct connman_wispr_portal_context *wp_context = NULL;
 	struct connman_wispr_portal *wispr_portal = NULL;
-	int index;
+	int index, err;
 
 	DBG("service %p", service);
 
 	if (!wispr_portal_hash)
 		return -EINVAL;
+
+	switch (connman_service_get_type(service)) {
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+		break;
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_VPN:
+	case CONNMAN_SERVICE_TYPE_P2P:
+		return -EOPNOTSUPP;
+	}
 
 	index = __connman_service_get_index(service);
 	if (index < 0)
@@ -1052,16 +1049,20 @@ int __connman_wispr_start(struct connman_service *service,
 		wp_context = wispr_portal->ipv4_context;
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		wp_context = wispr_portal->ipv6_context;
-	else
-		return -EINVAL;
+	else {
+		err = -EINVAL;
+		goto free_wp;
+	}
 
 	/* If there is already an existing context, we wipe it */
 	if (wp_context)
 		wispr_portal_context_unref(wp_context);
 
 	wp_context = create_wispr_portal_context();
-	if (!wp_context)
-		return -ENOMEM;
+	if (!wp_context) {
+		err = -ENOMEM;
+		goto free_wp;
+	}
 
 	wp_context->service = connman_service_ref(service);
 	wp_context->type = type;
@@ -1072,7 +1073,14 @@ int __connman_wispr_start(struct connman_service *service,
 	else
 		wispr_portal->ipv6_context = wp_context;
 
-	return wispr_portal_detect(wp_context);
+	err = wispr_portal_detect(wp_context);
+	if (err)
+		goto free_wp;
+	return 0;
+
+free_wp:
+	g_hash_table_remove(wispr_portal_hash, GINT_TO_POINTER(index));
+	return err;
 }
 
 void __connman_wispr_stop(struct connman_service *service)
