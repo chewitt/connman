@@ -137,7 +137,8 @@ struct connman_service {
 	char *pac;
 	bool wps;
 	bool wps_advertizing;
-	guint online_timeout;
+	guint online_timeout_ipv4;
+	guint online_timeout_ipv6;
 	unsigned int online_check_interval_ipv4;
 	unsigned int online_check_interval_ipv6;
 	bool do_split_routing;
@@ -1438,12 +1439,16 @@ static bool check_proxy_setup(struct connman_service *service)
 
 static void cancel_online_check(struct connman_service *service)
 {
-	if (service->online_timeout == 0)
-		return;
-
-	g_source_remove(service->online_timeout);
-	service->online_timeout = 0;
-	connman_service_unref(service);
+	if (service->online_timeout_ipv4) {
+		g_source_remove(service->online_timeout_ipv4);
+		service->online_timeout_ipv4 = 0;
+		connman_service_unref(service);
+	}
+	if (service->online_timeout_ipv6) {
+		g_source_remove(service->online_timeout_ipv6);
+		service->online_timeout_ipv6 = 0;
+		connman_service_unref(service);
+	}
 }
 
 static void start_online_check(struct connman_service *service,
@@ -1461,7 +1466,7 @@ static void start_online_check(struct connman_service *service,
 	online_check_max_interval =
 		connman_setting_get_uint("OnlineCheckMaxInterval");
 
-	if (type != CONNMAN_IPCONFIG_TYPE_IPV4 || check_proxy_setup(service)) {
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 || check_proxy_setup(service)) {
 		cancel_online_check(service);
 		__connman_service_wispr_start(service, type);
 	}
@@ -6330,19 +6335,19 @@ static void service_rp_filter(struct connman_service *service,
 static void redo_wispr(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
-	service->online_timeout = 0;
-	connman_service_unref(service);
-
 	DBG("Retrying %s WISPr for %p %s",
 		__connman_ipconfig_type2string(type),
 		service, service->name);
 
 	__connman_wispr_start(service, type);
+	connman_service_unref(service);
 }
 
 static gboolean redo_wispr_ipv4(gpointer user_data)
 {
 	struct connman_service *service = user_data;
+
+	service->online_timeout_ipv4 = 0;
 
 	redo_wispr(service, CONNMAN_IPCONFIG_TYPE_IPV4);
 
@@ -6352,6 +6357,8 @@ static gboolean redo_wispr_ipv4(gpointer user_data)
 static gboolean redo_wispr_ipv6(gpointer user_data)
 {
 	struct connman_service *service = user_data;
+
+	service->online_timeout_ipv6 = 0;
 
 	redo_wispr(service, CONNMAN_IPCONFIG_TYPE_IPV6);
 
@@ -6365,6 +6372,10 @@ void __connman_service_online_check(struct connman_service *service,
 	GSourceFunc redo_func;
 	unsigned int *interval;
 	enum connman_service_state current_state;
+	int timeout;
+
+	DBG("service %p type %s success %d\n",
+		service, __connman_ipconfig_type2string(type), success);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;
@@ -6393,8 +6404,12 @@ redo_func:
 	DBG("service %p type %s interval %d", service,
 		__connman_ipconfig_type2string(type), *interval);
 
-	service->online_timeout = g_timeout_add_seconds(*interval * *interval,
+	timeout = g_timeout_add_seconds(*interval * *interval,
 				redo_func, connman_service_ref(service));
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		service->online_timeout_ipv4 = timeout;
+	else
+		service->online_timeout_ipv6 = timeout;
 
 	/* Increment the interval for the next time, set a maximum timeout of
 	 * online_check_max_interval seconds * online_check_max_interval seconds.
