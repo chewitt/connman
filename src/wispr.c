@@ -537,7 +537,8 @@ static bool wispr_route_request(const char *address, int ai_family,
 static void wispr_portal_request_portal(
 		struct connman_wispr_portal_context *wp_context)
 {
-	DBG("");
+	DBG("wp_context %p %s", wp_context,
+		__connman_ipconfig_type2string(wp_context->type));
 
 	wispr_portal_context_ref(wp_context);
 	wp_context->request_id = g_web_request_get(wp_context->web,
@@ -753,7 +754,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		if (length > 0) {
 			g_web_parser_feed_data(wp_context->wispr_parser,
 								chunk, length);
-			wispr_portal_context_unref(wp_context);
+			/* read more data */
 			return true;
 		}
 
@@ -783,8 +784,6 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		if (g_web_result_get_header(result, "X-ConnMan-Status",
 						&str)) {
 			portal_manage_status(result, wp_context);
-			wispr_portal_context_unref(wp_context);
-			return false;
 		} else {
 			wispr_portal_context_ref(wp_context);
 			__connman_agent_request_browser(wp_context->service,
@@ -996,7 +995,8 @@ int __connman_wispr_start(struct connman_service *service,
 	struct connman_wispr_portal *wispr_portal = NULL;
 	int index, err;
 
-	DBG("service %p", service);
+	DBG("service %p %s", service,
+		__connman_ipconfig_type2string(type));
 
 	if (!wispr_portal_hash)
 		return -EINVAL;
