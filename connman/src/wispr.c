@@ -1047,12 +1047,8 @@ int __connman_wispr_start(struct connman_service *service,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		wp_context = wispr_portal->ipv4_context;
-	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+	else
 		wp_context = wispr_portal->ipv6_context;
-	else {
-		err = -EINVAL;
-		goto free_wp;
-	}
 
 	/* If there is already an existing context, we wipe it */
 	if (wp_context)
