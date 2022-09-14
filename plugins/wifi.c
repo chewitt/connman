@@ -2528,6 +2528,25 @@ static bool handle_4way_handshake_failure(GSupplicantInterface *interface,
 	return false;
 }
 
+static bool handle_sae_authentication_failure(struct connman_network *network,
+					      struct wifi_data *wifi)
+{
+	struct wifi_network *network_data = connman_network_get_data(network);
+
+	if (!(network_data->keymgmt & G_SUPPLICANT_KEYMGMT_SAE))
+		return false;
+
+	if (wifi->state != G_SUPPLICANT_STATE_AUTHENTICATING)
+		return false;
+
+	if (wifi->connected)
+		return false;
+
+	connman_network_set_error(network, CONNMAN_NETWORK_ERROR_INVALID_KEY);
+
+	return true;
+}
+
 static void interface_state(GSupplicantInterface *interface)
 {
 	struct connman_network *network;
@@ -2623,6 +2642,13 @@ static void interface_state(GSupplicantInterface *interface)
 		 * psk as wrong */
 		if (handle_4way_handshake_failure(interface,
 						network, wifi))
+			break;
+
+		/*
+		 * On WPA3-SAE authentication, wpa_supplicant goes directly from
+		 * authenticating to disconnected state if the key was invalid.
+		 */
+		if (handle_sae_authentication_failure(network, wifi))
 			break;
 
 		/* See table 8-36 Reason codes in IEEE Std 802.11 */
