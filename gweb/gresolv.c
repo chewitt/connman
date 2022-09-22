@@ -36,6 +36,7 @@
 #include <arpa/inet.h>
 #include <arpa/nameser.h>
 #include <net/if.h>
+#include <ctype.h>
 
 #include "gresolv.h"
 
