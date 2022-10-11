@@ -2586,6 +2586,20 @@ static void enable_fallback(bool enable)
 	}
 }
 
+static unsigned int get_enabled_server_number(void)
+{
+	GSList *list;
+	unsigned int result = 0;
+
+	for (list = server_list; list; list = list->next) {
+		struct server_data *data = list->data;
+
+		if (data->index != -1 && data->enabled == true)
+			result++;
+	}
+	return result;
+}
+
 static struct server_data *create_server(int index,
 					const char *domain, const char *server,
 					int protocol)
@@ -2674,6 +2688,9 @@ static struct server_data *create_server(int index,
 			DBG("Adding DNS server %s", data->server);
 
 			enable_fallback(false);
+		} else if (data->index == -1 && get_enabled_server_number() == 0) {
+			data->enabled = true;
+			DBG("Adding fallback DNS server %s", data->server);
 		}
 
 		server_list = g_slist_append(server_list, data);
@@ -2834,7 +2851,6 @@ int __connman_dnsproxy_append(int index, const char *domain,
 static void remove_server(int index, const char *server, int protocol)
 {
 	struct server_data *data;
-	GSList *list;
 
 	data = find_server(index, server, protocol);
 	if (!data)
@@ -2842,14 +2858,8 @@ static void remove_server(int index, const char *server, int protocol)
 
 	destroy_server(data);
 
-	for (list = server_list; list; list = list->next) {
-		data = list->data;
-
-		if (data->index != -1 && data->enabled == true)
-			return;
-	}
-
-	enable_fallback(true);
+	if (get_enabled_server_number() == 0)
+		enable_fallback(true);
 }
 
 int __connman_dnsproxy_remove(int index, const char *domain,
