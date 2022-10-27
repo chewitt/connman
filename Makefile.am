@@ -438,7 +438,7 @@ testdir = $(pkglibdir)/test
 test_SCRIPTS = $(test_scripts)
 
 if INTERNAL_DNS_BACKEND
-tools_dnsproxy_standalone_CFLAGS = $(src_connmand_CFLAGS) -I$(srcdir)/src
+tools_dnsproxy_standalone_CFLAGS = $(src_connmand_CFLAGS) -I$(srcdir)/src -DDNSPROXY_DEBUG
 tools_dnsproxy_standalone_SOURCES = tools/dnsproxy-standalone.c $(src_connmand_SOURCES)
 # for EXTRA_PROGRAMS the BUILT_SOURCES aren't automatically added as
 # dependency, so let's do it explicitly

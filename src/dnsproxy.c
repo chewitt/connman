@@ -41,7 +41,11 @@
 
 #include "connman.h"
 
-#define debug(fmt...) do { } while (0)
+#ifdef DNSPROXY_DEBUG
+#	define debug(fmt...) do { fprintf(stderr, fmt); fprintf(stderr, "\n"); } while (0)
+#else
+#	define debug(fmt...) do { } while (0)
+#endif
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 struct domain_hdr {
