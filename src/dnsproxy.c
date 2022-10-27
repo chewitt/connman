@@ -391,52 +391,52 @@ static size_t dns_name_length(const unsigned char *buf)
 	return strlen((const char *)buf) + 1;
 }
 
-static void update_cached_ttl(unsigned char *buf, int len, int new_ttl)
+static void update_cached_ttl(unsigned char *ptr, int len, int new_ttl)
 {
-	unsigned char *c;
-	uint16_t w;
-	int l;
+	size_t name_len;
+	const uint32_t raw_ttl = ntohl((uint32_t)new_ttl);
+
+	if (new_ttl < 0)
+		return;
 
 	/* skip the header */
-	c = buf + 12;
-	len -= 12;
+	ptr += DNS_HEADER_SIZE;
+	len -= DNS_HEADER_SIZE;
 
-	/* skip the query, which is a name and 2 16 bit words */
-	l = dns_name_length(c);
-	c += l;
-	len -= l;
-	c += 4;
-	len -= 4;
+	if (len < sizeof(struct domain_question) + 1)
+		return;
+
+	/* skip the query, which is a name and a struct domain_question */
+	name_len = dns_name_length(ptr);
+
+	ptr += name_len + sizeof(struct domain_question);
+	len -= name_len + sizeof(struct domain_question);;
 
 	/* now we get the answer records */
 
 	while (len > 0) {
+		struct domain_rr *rr = NULL;
+		size_t rr_len;
+
 		/* first a name */
-		l = dns_name_length(c);
-		c += l;
-		len -= l;
-		if (len < 0)
-			break;
-		/* then type + class, 2 bytes each */
-		c += 4;
-		len -= 4;
+		name_len = dns_name_length(ptr);
+		ptr += name_len;
+		len -= name_len;
 		if (len < 0)
 			break;
 
-		/* now the 4 byte TTL field */
-		c[0] = new_ttl >> 24 & 0xff;
-		c[1] = new_ttl >> 16 & 0xff;
-		c[2] = new_ttl >> 8 & 0xff;
-		c[3] = new_ttl & 0xff;
-		c += 4;
-		len -= 4;
-		if (len < 0)
+		rr = (void*)ptr;
+		if (len < sizeof(*rr))
+			/* incomplete record */
 			break;
 
-		/* now the 2 byte rdlen field */
-		w = c[0] << 8 | c[1];
-		c += w + 2;
-		len -= w + 2;
+		/* update the TTL field */
+		memcpy(&rr->ttl, &raw_ttl, sizeof(raw_ttl));
+
+		/* skip to the next record */
+		rr_len = sizeof(*rr) + ntohs(rr->rdlen);
+		ptr += rr_len;
+		len -= rr_len;
 	}
 }
 
@@ -623,59 +623,60 @@ out:
 	return FALSE;
 }
 
-static int append_query(unsigned char *buf, unsigned int size,
-				const char *query, const char *domain)
+static int append_data(unsigned char *buf, size_t size, const char *data)
 {
 	unsigned char *ptr = buf;
-	int len;
+	size_t len;
+
+	while (true) {
+		const char *dot = strchr(data, '.');
+		len = dot ? dot - data : strlen(data);
+
+		if (len == 0)
+			break;
+		else if (size < len + 1)
+			return -1;
+
+		*ptr = len;
+		memcpy(ptr + 1, data, len);
+		ptr += len + 1;
+		size -= len + 1;
+
+		if (!dot)
+			break;
+
+		data = dot + 1;
+	}
+
+	return ptr - buf;
+}
+
+static int append_query(unsigned char *buf, size_t size,
+				const char *query, const char *domain)
+{
+	size_t added;
+	size_t left_size = size;
+	int res;
 
 	debug("query %s domain %s", query, domain);
 
-	while (query) {
-		const char *tmp;
+	res = append_data(buf, left_size, query);
+	if (res < 0)
+		return -1;
+	left_size -= res;
 
-		tmp = strchr(query, '.');
-		if (!tmp) {
-			len = strlen(query);
-			if (len == 0)
-				break;
-			*ptr = len;
-			memcpy(ptr + 1, query, len);
-			ptr += len + 1;
-			break;
-		}
+	res = append_data(buf + res, left_size, domain);
+	if (res < 0)
+		return -1;
+	left_size -= res;
 
-		*ptr = tmp - query;
-		memcpy(ptr + 1, query, tmp - query);
-		ptr += tmp - query + 1;
+	if (left_size == 0)
+		return -1;
 
-		query = tmp + 1;
-	}
+	added = size - left_size;
+	*(buf + added) = 0x00;
 
-	while (domain) {
-		const char *tmp;
-
-		tmp = strchr(domain, '.');
-		if (!tmp) {
-			len = strlen(domain);
-			if (len == 0)
-				break;
-			*ptr = len;
-			memcpy(ptr + 1, domain, len);
-			ptr += len + 1;
-			break;
-		}
-
-		*ptr = tmp - domain;
-		memcpy(ptr + 1, domain, tmp - domain);
-		ptr += tmp - domain + 1;
-
-		domain = tmp + 1;
-	}
-
-	*ptr++ = 0x00;
-
-	return ptr - buf;
+	return added;
 }
 
 static bool cache_check_is_valid(struct cache_data *data, time_t current_time)
