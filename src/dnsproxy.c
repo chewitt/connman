@@ -921,7 +921,7 @@ static int get_name(int counter,
 
 static int parse_rr(const unsigned char *buf, const unsigned char *start,
 			const unsigned char *max,
-			unsigned char *response, unsigned int *response_size,
+			unsigned char *response, size_t *response_size,
 			uint16_t *type, uint16_t *class, int *ttl, uint16_t *rdlen,
 			const unsigned char **end,
 			char *name, size_t max_name)
@@ -982,26 +982,38 @@ static bool check_alias(GSList *aliases, const char *name)
 	return false;
 }
 
-static int parse_response(unsigned char *buf, int buflen,
-			char *question, int qlen,
+/*
+ * Parses the DNS response packet found in 'buf' consisting of 'buflen' bytes.
+ *
+ * The parsed question label, response type and class, ttl and number of
+ * answer sections are output parameters. The response output buffer will
+ * receive all matching resource records to be cached.
+ *
+ * Return value is < 0 on error (negative errno) or zero on success.
+ */
+static int parse_response(const unsigned char *buf, size_t buflen,
+			char *question, size_t qlen,
 			uint16_t *type, uint16_t *class, int *ttl,
-			unsigned char *response, unsigned int *response_len,
+			unsigned char *response, size_t *response_len,
 			uint16_t *answers)
 {
 	struct domain_hdr *hdr = (void *) buf;
 	struct domain_question *q;
-	const unsigned char *ptr;
-	uint16_t qdcount = ntohs(hdr->qdcount);
-	uint16_t ancount = ntohs(hdr->ancount);
-	int err, i;
-	uint16_t qtype, qclass;
-	const unsigned char *next = NULL;
-	unsigned int maxlen = *response_len;
-	GSList *aliases = NULL, *list;
-	char name[NS_MAXDNAME + 1];
+	uint16_t qtype;
+	int err = -ENOMSG;
+	uint16_t ancount, qclass;
+	GSList *aliases = NULL;
+	const size_t maxlen = *response_len;
 
-	if (buflen < 12)
+	*response_len = 0;
+	*answers = 0;
+
+	if (buflen < DNS_HEADER_SIZE)
 		return -EINVAL;
+
+	const uint16_t qdcount = ntohs(hdr->qdcount);
+	const unsigned char *ptr = buf + DNS_HEADER_SIZE;
+	const unsigned char *eptr = buf + buflen;
 
 	debug("qr %d qdcount %d", hdr->qr, qdcount);
 
@@ -1009,28 +1021,28 @@ static int parse_response(unsigned char *buf, int buflen,
 	if (hdr->qr != 1 || qdcount != 1)
 		return -EINVAL;
 
-	ptr = buf + sizeof(struct domain_hdr);
-
-	strncpy(question, (char *) ptr, qlen);
+	/*
+	 * NOTE: currently the *caller* ensures that the `question' buffer is
+	 * always zero terminated.
+	 */
+	strncpy(question, (const char *) ptr, MIN(qlen, buflen - DNS_HEADER_SIZE));
 	qlen = strlen(question);
 	ptr += qlen + 1; /* skip \0 */
+
+	if ((eptr - ptr) < sizeof(struct domain_question))
+		return -EINVAL;
 
 	q = (void *) ptr;
 	qtype = ntohs(q->type);
 
 	/* We cache only A and AAAA records */
-	if (qtype != 1 && qtype != 28)
+	if (qtype != DNS_TYPE_A && qtype != DNS_TYPE_AAAA)
 		return -ENOMSG;
 
+	ptr += sizeof(struct domain_question); /* advance to answers section */
+
+	ancount = ntohs(hdr->ancount);
 	qclass = ntohs(q->class);
-
-	ptr += 2 + 2; /* ptr points now to answers */
-
-	err = -ENOMSG;
-	*response_len = 0;
-	*answers = 0;
-
-	memset(name, 0, sizeof(name));
 
 	/*
 	 * We have a bunch of answers (like A, AAAA, CNAME etc) to
@@ -1038,7 +1050,8 @@ static int parse_response(unsigned char *buf, int buflen,
 	 * resource records. Only A and AAAA records are cached, all
 	 * the other records in answers are skipped.
 	 */
-	for (i = 0; i < ancount; i++) {
+	for (uint16_t i = 0; i < ancount; i++) {
+		char name[NS_MAXDNAME + 1] = {0};
 		/*
 		 * Get one address at a time to this buffer.
 		 * The max size of the answer is
@@ -1046,24 +1059,27 @@ static int parse_response(unsigned char *buf, int buflen,
 		 *   4 (ttl) + 2 (rdlen) + addr (16 or 4) = 28
 		 * for A or AAAA record.
 		 * For CNAME the size can be bigger.
+		 * TODO: why are we using the MAXCDNAME constant as buffer
+		 * size then?
 		 */
-		unsigned char rsp[NS_MAXCDNAME];
-		unsigned int rsp_len = sizeof(rsp) - 1;
-		int ret;
+		unsigned char rsp[NS_MAXCDNAME] = {0};
+		size_t rsp_len = sizeof(rsp) - 1;
+		const unsigned char *next = NULL;
 		uint16_t rdlen;
 
-		memset(rsp, 0, sizeof(rsp));
-
-		ret = parse_rr(buf, ptr, buf + buflen, rsp, &rsp_len,
+		int ret = parse_rr(buf, ptr, buf + buflen, rsp, &rsp_len,
 			type, class, ttl, &rdlen, &next, name,
 			sizeof(name) - 1);
 		if (ret != 0) {
 			err = ret;
-			goto out;
+			break;
 		}
 
+		/* set pointer to the next RR for the next iteration */
+		ptr = next;
+
 		/*
-		 * Now rsp contains compressed or uncompressed resource
+		 * Now rsp contains a compressed or an uncompressed resource
 		 * record. Next we check if this record answers the question.
 		 * The name var contains the uncompressed label.
 		 * One tricky bit is the CNAME records as they alias
@@ -1075,8 +1091,6 @@ static int parse_response(unsigned char *buf, int buflen,
 		 * looking for.
 		 */
 		if (*class != qclass) {
-			ptr = next;
-			next = NULL;
 			continue;
 		}
 
@@ -1101,7 +1115,7 @@ static int parse_response(unsigned char *buf, int buflen,
 		 * address of ipv6.l.google.com. For caching purposes this
 		 * should not cause any issues.
 		 */
-		if (*type == 5 && strncmp(question, name, qlen) == 0) {
+		if (*type == DNS_TYPE_CNAME && strncmp(question, name, qlen) == 0) {
 			/*
 			 * So now the alias answered the question. This is
 			 * not very useful from caching point of view as
@@ -1125,8 +1139,6 @@ static int parse_response(unsigned char *buf, int buflen,
 					name, sizeof(name) - 1, &name_len);
 			if (ret != 0) {
 				/* just ignore the error at this point */
-				ptr = next;
-				next = NULL;
 				continue;
 			}
 
@@ -1138,12 +1150,8 @@ static int parse_response(unsigned char *buf, int buflen,
 			 */
 			aliases = g_slist_prepend(aliases, g_strdup(name));
 
-			ptr = next;
-			next = NULL;
 			continue;
-		}
-
-		if (*type == qtype) {
+		} else if (*type == qtype) {
 			/*
 			 * We found correct type (A or AAAA)
 			 */
@@ -1160,7 +1168,7 @@ static int parse_response(unsigned char *buf, int buflen,
 				 */
 				if (*response_len + rsp_len > maxlen) {
 					err = -ENOBUFS;
-					goto out;
+					break;
 				}
 				memcpy(response + *response_len, rsp, rsp_len);
 				*response_len += rsp_len;
@@ -1168,13 +1176,9 @@ static int parse_response(unsigned char *buf, int buflen,
 				err = 0;
 			}
 		}
-
-		ptr = next;
-		next = NULL;
 	}
 
-out:
-	for (list = aliases; list; list = list->next)
+	for (GSList *list = aliases; list; list = list->next)
 		g_free(list->data);
 	g_slist_free(aliases);
 
@@ -1380,7 +1384,7 @@ static int cache_update(struct server_data *srv, unsigned char *msg,
 	char question[NS_MAXDNAME + 1];
 	unsigned char response[NS_MAXDNAME + 1];
 	unsigned char *ptr;
-	unsigned int rsplen;
+	size_t rsplen;
 	bool new_entry = true;
 	time_t current_time;
 
