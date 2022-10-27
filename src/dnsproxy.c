@@ -1882,45 +1882,70 @@ out:
 	return NULL;
 }
 
-static int strip_domains(char *name, char *answers, int maxlen)
+/*
+ * removes the qualified domain name part from the given answer sections
+ * starting at 'answers', consisting of 'length' bytes.
+ *
+ * 'name' points the start of the unqualified host label including the leading
+ * length octet.
+ *
+ * returns the new (possibly shorter) length of remaining payload in the
+ * answers buffer, or a negative (errno) value to indicate error conditions.
+ */
+static int strip_domains(const char *name, char *answers, size_t length)
 {
 	uint16_t data_len;
+	struct domain_rr *rr;
+	/* length of the name label including the length header octet */
 	const size_t name_len = strlen(name);
-	const char *start = answers, *end = answers + maxlen;
+	const char *end = answers + length;
 
-	while (maxlen > 0) {
+	while (answers < end) {
 		char *ptr = strstr(answers, name);
 		if (ptr) {
 			char *domain = ptr + name_len;
 
+			/* this now points to the domain part length octet. */
 			if (*domain) {
+				/*
+				 * length of the rest of the labels up to the
+				 * null label (zero byte).
+				 */
 				const size_t domain_len = strlen(domain);
+				char *remaining = domain + domain_len;
 
-				memmove(answers + name_len,
-					domain + domain_len,
-					end - (domain + domain_len));
+				/*
+				 * now shift the rest of the answer sections
+				 * to the left to get rid of the domain label
+				 * part
+				 */
+				memmove(ptr + name_len,
+					remaining,
+					end - remaining);
 
 				end -= domain_len;
-				maxlen -= domain_len;
+				length -= domain_len;
 			}
-		} else {
-			ptr = answers;
 		}
 
+		/* skip to the next answer section */
+
+		/* the labels up to the root null label */
 		answers += strlen(answers) + 1;
-		answers += 2 + 2 + 4;  /* skip type, class and ttl fields */
-
-		data_len = answers[0] << 8 | answers[1];
-		answers += 2; /* skip the length field */
-
-		if (answers + data_len > end)
+		/* the fixed part of the RR */
+		rr = (void*)answers;
+		if (answers + sizeof(*rr) > end)
 			return -EINVAL;
-
+		data_len = htons(rr->rdlen);
+		/* skip the rest of the RR */
+		answers += sizeof(*rr);
 		answers += data_len;
-		maxlen -= answers - ptr;
 	}
 
-	return end - start;
+	if (answers > end)
+		return -EINVAL;
+
+	return length;
 }
 
 static int forward_dns_reply(unsigned char *reply, int reply_len, int protocol,
