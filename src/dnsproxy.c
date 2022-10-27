@@ -229,6 +229,9 @@ struct domain_rr {
 #define DNS_HEADER_SIZE sizeof(struct domain_hdr)
 #define DNS_HEADER_TCP_EXTRA_BYTES 2
 #define DNS_TCP_HEADER_SIZE DNS_HEADER_SIZE + DNS_HEADER_TCP_EXTRA_BYTES
+#define DNS_QUESTION_SIZE sizeof(struct domain_question)
+#define DNS_RR_SIZE sizeof(struct domain_rr)
+#define DNS_QTYPE_QCLASS_SIZE sizeof(struct qtype_qclass)
 
 enum dns_type {
 	/* IPv4 address 32-bit */
@@ -432,14 +435,14 @@ static void update_cached_ttl(unsigned char *ptr, int len, int new_ttl)
 	ptr += DNS_HEADER_SIZE;
 	len -= DNS_HEADER_SIZE;
 
-	if (len < sizeof(struct domain_question) + 1)
+	if (len < DNS_QUESTION_SIZE + 1)
 		return;
 
 	/* skip the query, which is a name and a struct domain_question */
 	name_len = dns_name_length(ptr);
 
-	ptr += name_len + sizeof(struct domain_question);
-	len -= name_len + sizeof(struct domain_question);;
+	ptr += name_len + DNS_QUESTION_SIZE;
+	len -= name_len + DNS_QUESTION_SIZE;
 
 	/* now we get the answer records */
 
@@ -973,10 +976,10 @@ static int parse_rr(const unsigned char *buf, const unsigned char *start,
 	if (*ttl < 0)
 		return -EINVAL;
 
-	memcpy(response + offset, *end, sizeof(struct domain_rr));
+	memcpy(response + offset, *end, DNS_RR_SIZE);
 
-	offset += sizeof(struct domain_rr);
-	*end += sizeof(struct domain_rr);
+	offset += DNS_RR_SIZE;
+	*end += DNS_RR_SIZE;
 
 	if ((offset + *rdlen) > *response_size)
 		return -ENOBUFS;
@@ -1049,7 +1052,7 @@ static int parse_response(const unsigned char *buf, size_t buflen,
 	qlen = strlen(question);
 	ptr += qlen + 1; /* skip \0 */
 
-	if ((eptr - ptr) < sizeof(struct domain_question))
+	if ((eptr - ptr) < DNS_QUESTION_SIZE)
 		return -EINVAL;
 
 	q = (void *) ptr;
@@ -1059,7 +1062,7 @@ static int parse_response(const unsigned char *buf, size_t buflen,
 	if (qtype != DNS_TYPE_A && qtype != DNS_TYPE_AAAA)
 		return -ENOMSG;
 
-	ptr += sizeof(struct domain_question); /* advance to answers section */
+	ptr += DNS_QUESTION_SIZE; /* advance to answers section */
 
 	ancount = ntohs(hdr->ancount);
 	qclass = ntohs(q->class);
@@ -1588,7 +1591,7 @@ static int cache_update(struct server_data *srv, const unsigned char *msg, size_
 	q = (void *)ptr;
 	q->type = htons(type);
 	q->class = htons(class);
-	ptr += sizeof(struct domain_question);
+	ptr += DNS_QUESTION_SIZE;
 
 	memcpy(ptr, response, rsplen);
 
@@ -2155,7 +2158,7 @@ static struct request_data* lookup_request(
 
 	debug("Received %zd bytes (id 0x%04x)", len, hdr->id);
 
-	if (len < sizeof(struct domain_hdr) + offset)
+	if (len < DNS_HEADER_SIZE + offset)
 		return NULL;
 
 	req = find_request(hdr->id);
@@ -3080,11 +3083,11 @@ static int parse_request(unsigned char *buf, size_t len,
 	static const unsigned char OPT_EDNS0_TYPE[2] = { 0x00, 0x29 };
 	struct domain_hdr *hdr = (void *) buf;
 	uint16_t qdcount, ancount, nscount, arcount;
-	unsigned char *ptr = buf + sizeof(struct domain_hdr);
-	size_t remain = len - sizeof(struct domain_hdr);
+	unsigned char *ptr = buf + DNS_HEADER_SIZE;
+	size_t remain = len - DNS_HEADER_SIZE;
 	size_t used = 0;
 
-	if (len < sizeof(*hdr) + sizeof(struct qtype_qclass)) {
+	if (len < DNS_HEADER_SIZE + DNS_QTYPE_QCLASS_SIZE) {
 		DBG("Dropped DNS request with short length %zd", len);
 		return -EINVAL;
 	}
@@ -3146,7 +3149,7 @@ static int parse_request(unsigned char *buf, size_t len,
 		remain -= label_len + 1;
 	}
 
-	if (arcount && remain >= sizeof(struct domain_rr) + 1 && !ptr[0] &&
+	if (arcount && remain >= DNS_RR_SIZE + 1 && !ptr[0] &&
 		ptr[1] == OPT_EDNS0_TYPE[0] && ptr[2] == OPT_EDNS0_TYPE[1]) {
 		struct domain_rr *edns0 = (struct domain_rr *)(ptr + 1);
 
