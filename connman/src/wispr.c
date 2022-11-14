@@ -129,10 +129,12 @@ static void connman_wispr_message_init(struct connman_wispr_message *msg)
 
 static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 {
-	DBG("wp_context %p",wp_context);
+	DBG("wp_context %p", wp_context);
+
 	while (wp_context->route_list) {
 		if (!wp_context->route_list->data)
-		continue;
+			continue;
+
 		struct wispr_route *route = wp_context->route_list->data;
 
 		DBG("free route to %s if %d type %d", route->address,
@@ -491,7 +493,7 @@ static void portal_manage_status(GWebResult *result,
 	 * __connman_wispr_start which would reinitialize the wispr context
 	 * so we better free it beforehand to avoid deallocating it twice. */
 	service = connman_service_ref(wp_context->service);
-	free_connman_wispr_portal_context(wp_context);
+	wispr_portal_context_unref(wp_context);
 
 	__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_ONLINE, type);
@@ -780,10 +782,12 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		g_web_parser_end_data(wp_context->wispr_parser);
 
-//		if (wp_context->wispr_msg.message_type >= 0) {
-//			if (wispr_manage_message(result, wp_context))
-//				goto done;
-//		}
+		/* No idea why this is commented out but let it be
+		if (wp_context->wispr_msg.message_type >= 0) {
+			if (wispr_manage_message(result, wp_context))
+				goto done;
+		}
+		*/
 	}
 
 	status = g_web_result_get_status(result);
@@ -801,12 +805,17 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 				wp_context->status_url, wp_context);
 		break;
 	case 200:
-//		if (wp_context->wispr_msg.message_type >= 0)
-//			break;
+		/* No idea why this is commented out but let it be.
+		if (wp_context->wispr_msg.message_type >= 0)
+			break;
+		*/
 
 		if (g_web_result_get_header(result, "X-ConnMan-Status",
 						&str)) {
-			// Cancel browser requests if useragent has not returned anything
+			/*
+			 * Cancel browser requests if useragent has not
+			 * returned anything
+			 */
 			connman_agent_cancel(wp_context->service);
 			portal_manage_status(result, wp_context);
 		} else {
@@ -818,13 +827,18 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		break;
 	case 204:
-		// Cancel browser requests if useragent has not returned anything
+		/*
+		 * Cancel browser requests if user agent has not returned
+		 * anything
+		 */
 		connman_agent_cancel(wp_context->service);
 		portal_manage_status(result, wp_context);
 		return false;
 	case 302:
-	DBG("tls %d, Location header %d",(!g_web_supports_tls() ), (!g_web_result_get_header(result, "Location",
-										&redirect)));
+		DBG("tls %d, Location header %d", (!g_web_supports_tls()),
+				(!g_web_result_get_header(result, "Location",
+						&redirect)));
+
 		if (!g_web_supports_tls() ||
 			!g_web_result_get_header(result, "Location",
 							&redirect)) {
@@ -865,10 +879,11 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	default:
 		break;
 	}
-	if (!skip_failed && __connman_service_online_check_failed(wp_context->service,
-		wp_context->type) == 0) {
+
+	if (!skip_failed && __connman_service_online_check_failed(
+			wp_context->service, wp_context->type) == 0) {
 		wispr_portal_error(wp_context);
-		free_connman_wispr_portal_context(wp_context);
+		wispr_portal_context_unref(wp_context);
 		return false;
 	}
 
@@ -968,10 +983,12 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 
 	if (wp_context->type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		g_web_set_address_family(wp_context->web, AF_INET);
-		wp_context->status_url = connman_setting_get_string(CONF_STATUS_URL_IPV4);
+		wp_context->status_url =
+			connman_setting_get_string(CONF_STATUS_URL_IPV4);
 	} else {
 		g_web_set_address_family(wp_context->web, AF_INET6);
-		wp_context->status_url = connman_setting_get_string(CONF_STATUS_URL_IPV6);
+		wp_context->status_url =
+			connman_setting_get_string(CONF_STATUS_URL_IPV6);
 	}
 
 	for (i = 0; nameservers[i]; i++)
