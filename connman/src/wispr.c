@@ -608,9 +608,9 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 	struct connman_wispr_portal *wispr_portal;
 	int index;
 
-	DBG("authentication_done %d", authentication_done);
+	DBG("");
 
-	if (!service || !wp_context || !authentication_done)
+	if (!service || !wp_context)
 		return;
 
 	/*
