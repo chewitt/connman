@@ -4,7 +4,7 @@ import sys
 import dbus
 
 def print_usage():
-	print "Usage: %s <service> <target service>" % (sys.argv[0])
+	print("Usage: %s <service> <target service>" % (sys.argv[0]))
 
 
 if (len(sys.argv) < 2):
@@ -20,8 +20,8 @@ path2 = "/net/connman/service/" + sys.argv[2]
 service2 = dbus.Interface(bus.get_object('net.connman', path2),
 					'net.connman.Service')
 
-print "Moving %s before %s" % (sys.argv[1], sys.argv[2])
+print("Moving %s before %s" % (sys.argv[1], sys.argv[2]))
 
 service.MoveBefore(service2)
 
-print
+print()

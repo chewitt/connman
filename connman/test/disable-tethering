@@ -4,7 +4,7 @@ import sys
 import dbus
 
 if (len(sys.argv) != 2):
-	print "Usage: %s type" % (sys.argv[0])
+	print("Usage: %s type" % (sys.argv[0]))
 	sys.exit(1)
 
 bus = dbus.SystemBus()
@@ -18,10 +18,10 @@ def technology_disable_tethering(path, tech_type):
 
 	properties = tech.GetProperties()
 
-	for key in properties.keys():
+	for key in list(properties.keys()):
 		if key in ["Type"]:
 			if properties[key] == tech_type:
-				print "Disabling %s tethering" % tech_type
+				print("Disabling %s tethering" % tech_type)
 				tech.SetProperty("Tethering", dbus.Boolean(0))
 
 				return tech_type
@@ -37,4 +37,4 @@ for path,_ in technologies:
 		break;
 
 if tech == None:
-	print "Failed to disable %s tethering" % (sys.argv[1])
+	print("Failed to disable %s tethering" % (sys.argv[1]))

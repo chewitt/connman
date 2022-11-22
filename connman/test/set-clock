@@ -4,7 +4,7 @@ import sys
 import dbus
 
 def print_usage():
-	print "Usage: %s TimeUpdates|TimezoneUpdates manual|auto" % (sys.argv[0])
+	print("Usage: %s TimeUpdates|TimezoneUpdates manual|auto" % (sys.argv[0]))
 	sys.exit(1)
 
 
@@ -26,7 +26,7 @@ bus = dbus.SystemBus()
 clock = dbus.Interface(bus.get_object('net.connman', '/'),
 					'net.connman.Clock')
 
-print "Setting %s to %s" % (sys.argv[1], sys.argv[2])
+print("Setting %s to %s" % (sys.argv[1], sys.argv[2]))
 
 clock.SetProperty(sys.argv[1], make_variant(sys.argv[2]),
 		  signature=dbus.Signature('sv'))

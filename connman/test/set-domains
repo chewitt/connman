@@ -4,7 +4,7 @@ import sys
 import dbus
 
 if (len(sys.argv) < 2):
-	print "Usage: %s <service> [domain*]" % (sys.argv[0])
+	print("Usage: %s <service> [domain*]" % (sys.argv[0]))
 	sys.exit(1)
 
 bus = dbus.SystemBus()
@@ -14,7 +14,7 @@ service = dbus.Interface(bus.get_object('net.connman', path),
 
 properties = service.GetProperties()
 
-print "Setting domains to %s" % (sys.argv[2:])
+print("Setting domains to %s" % (sys.argv[2:]))
 
 service.SetProperty("Domains.Configuration", 
 	dbus.Array(sys.argv[2:], signature=dbus.Signature('s')))

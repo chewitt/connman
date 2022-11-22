@@ -9,4 +9,4 @@ manager = dbus.Interface(bus.get_object('net.connman', "/"),
 
 properties = manager.GetProperties()
 
-print "System is %s" % (properties["State"])
+print("System is %s" % (properties["State"]))
