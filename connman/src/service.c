@@ -5750,8 +5750,27 @@ static gboolean connect_timeout(gpointer user_data)
 
 	if (service->network)
 		__connman_network_disconnect(service->network);
-	else if (service->provider)
+	else if (service->provider) {
+		/*
+		 * Remove timeout when the VPN is waiting for user input in
+		 * association state. By default the VPN agent timeout is
+		 * 300s whereas default connection timeout is 120s. Provider
+		 * will start connect timeout for the service when it enters
+		 * configuration state.
+		 */
+		const char *statestr = connman_provider_get_string(
+					service->provider, "State");
+		if (!g_strcmp0(statestr, "association")) {
+			DBG("VPN provider %p is waiting for VPN agent, "
+						"stop connect timeout",
+						service->provider);
+			return G_SOURCE_REMOVE;
+		}
+
 		connman_provider_disconnect(service->provider);
+	}
+
+
 
 	if (service->pending) {
 		DBusMessage *reply;
@@ -5777,7 +5796,27 @@ static gboolean connect_timeout(gpointer user_data)
 				CONNMAN_SERVICE_CONNECT_REASON_USER)
 		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
 
-	return FALSE;
+	return G_SOURCE_REMOVE;
+}
+
+void __connman_service_start_connect_timeout(struct connman_service *service,
+								bool restart)
+{
+	DBG("");
+
+	if (!service)
+		return;
+
+	if (!restart && service->timeout)
+		return;
+
+	if (restart && service->timeout) {
+		DBG("cancel running connect timeout");
+		g_source_remove(service->timeout);
+	}
+
+	service->timeout = connman_wakeup_timer_add_seconds(CONNECT_TIMEOUT,
+				connect_timeout, service);
 }
 
 static DBusMessage *connect_service(DBusConnection *conn,
@@ -8354,9 +8393,12 @@ int __connman_service_connect(struct connman_service *service,
 		return 0;
 
 	if (err == -EINPROGRESS) {
-		if (service->timeout == 0)
-			service->timeout = connman_wakeup_timer_add_seconds(
-				CONNECT_TIMEOUT, connect_timeout, service);
+		/*
+		 * VPN will start connect timeout when it enters CONFIGURATION
+		 * state.
+		 */
+		if (service->type != CONNMAN_SERVICE_TYPE_VPN)
+			__connman_service_start_connect_timeout(service, false);
 
 		return -EINPROGRESS;
 	}
