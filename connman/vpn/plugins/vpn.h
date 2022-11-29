@@ -38,6 +38,7 @@ enum vpn_state {
 	VPN_STATE_DISCONNECT    = 4,
 	VPN_STATE_FAILURE       = 5,
 	VPN_STATE_AUTH_FAILURE  = 6,
+	VPN_STATE_ASSOCIATION   = 7,
 };
 
 struct vpn_driver {
