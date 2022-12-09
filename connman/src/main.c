@@ -518,7 +518,7 @@ static void parse_config(GKeyFile *config)
 	parse_perm(config, group, CONF_UMASK, &connman_settings.umask);
 
 	connman_settings.ipv4_status_url = __connman_config_get_string(config,
-					group, CONF_STATUS_URL_IPV4, &error);
+					group, CONF_STATUS_URL_IPV4, NULL);
 
 	connman_settings.ipv6_status_url = __connman_config_get_string(config,
 					group, CONF_STATUS_URL_IPV6, NULL);
