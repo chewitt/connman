@@ -54,7 +54,7 @@ is established (meaning VPN client has managed to create a connection
 to VPN server), then State property is set to "ready" and PropertyChanged
 signal is sent. If the connection cannot be established, then
 State property is set to "failure".
-After successfull connection, the relevant connection properties are sent
+After successful connection, the relevant connection properties are sent
 by PropertyChanged signal; like IPv[4|6] information, the index of the
 VPN tunneling interface (if there is any), nameserver information,
 server specified routes etc.
@@ -66,7 +66,9 @@ VPN agent interface described in vpn-agent-api.txt is used for
 interaction between the connectivity UI and ConnMan. A VPN agent
 registered via Management interface gets requests from the VPN plugins
 to input credentials or other authentication information for the VPN
-connection and offers information about the VPN to be connected.
+connection and offers information about the VPN to be connected. When
+waiting for input via VPN agent the state of the VPN is "association"
+and after getting the input the state transitions to "connect".
 
 In addition to basic credentials, there are additional types of optional
 and control parameters. The user can dictate whether to store the
