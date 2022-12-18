@@ -1172,7 +1172,7 @@ int __connman_ipconfig_gateway_add(struct connman_ipconfig *ipconfig)
 
 	DBG("");
 
-	if (!ipconfig->address || !ipconfig->address->gateway)
+	if (!ipconfig->address)
 		return -EINVAL;
 
 	service = __connman_service_lookup_from_index(ipconfig->index);
