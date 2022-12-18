@@ -78,6 +78,7 @@ static char *default_blacklist[] = {
 	"ifb",
 	"ve-",
 	"vb-",
+	"ham",
 	NULL
 };
 
