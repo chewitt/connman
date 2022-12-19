@@ -48,6 +48,7 @@ enum connman_provider_state {
 	CONNMAN_PROVIDER_STATE_READY         = 3,
 	CONNMAN_PROVIDER_STATE_DISCONNECT    = 4,
 	CONNMAN_PROVIDER_STATE_FAILURE       = 5,
+	CONNMAN_PROVIDER_STATE_ASSOCIATION   = 6,
 };
 
 enum connman_provider_error {

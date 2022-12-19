@@ -218,6 +218,9 @@ static int vpn_set_state(struct vpn_provider *provider,
 	case VPN_PROVIDER_STATE_IDLE:
 		data->state = VPN_STATE_IDLE;
 		break;
+	case VPN_PROVIDER_STATE_ASSOCIATION:
+		data->state = VPN_STATE_ASSOCIATION;
+		break;
 	case VPN_PROVIDER_STATE_CONNECT:
 	case VPN_PROVIDER_STATE_READY:
 		data->state = VPN_STATE_CONNECT;
@@ -279,7 +282,30 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 	DBG("provider %p driver %s state %d", provider, name, state);
 
 	switch (state) {
+	case VPN_STATE_ASSOCIATION:
+		/*
+		 * If plugin states it should be still waiting for VPN agent
+		 * we revert the state to association only if previous was
+		 * CONNECT state.
+		 */
+		if (data->state == VPN_STATE_CONNECT) {
+			data->state = VPN_STATE_ASSOCIATION;
+			vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_ASSOCIATION);
+		} else if (data->state != VPN_STATE_ASSOCIATION) {
+			connman_warn("Invalid %s vpn_notify() state transition "
+					"from %d to %d (ASSOCIATION)",
+					vpn_driver_data->name, data->state,
+					state);
+		}
+		break;
 	case VPN_STATE_CONNECT:
+		if (data->state != VPN_STATE_CONNECT) {
+			data->state = VPN_STATE_CONNECT;
+			vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_CONNECT);
+		}
+		/* fall through */
 	case VPN_STATE_READY:
 		if (data->state == VPN_STATE_READY) {
 			/*
@@ -549,6 +575,7 @@ static int vpn_connect(struct vpn_provider *provider,
 		data->state = VPN_STATE_IDLE;
 		break;
 
+	case VPN_STATE_ASSOCIATION:
 	case VPN_STATE_CONNECT:
 		return -EINPROGRESS;
 
@@ -609,7 +636,7 @@ static int vpn_connect(struct vpn_provider *provider,
 	DBG("%s started with dev %s",
 		vpn_driver_data->provider_driver.name, data->if_name);
 
-	data->state = VPN_STATE_CONNECT;
+	data->state = VPN_STATE_ASSOCIATION;
 
 	return -EINPROGRESS;
 
