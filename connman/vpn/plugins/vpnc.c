@@ -418,6 +418,8 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 	if ((condition & G_IO_IN) &&
 		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
 							G_IO_STATUS_NORMAL) {
+		bool known_error = false;
+
 		str[strlen(str) - 1] = '\0';
 
 		for (i = 0; auth_failures[i]; i++) {
@@ -426,6 +428,7 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 
 				vpn_provider_indicate_error(data->provider,
 					VPN_PROVIDER_ERROR_AUTH_FAILED);
+				known_error = true;
 			}
 		}
 
@@ -435,8 +438,12 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 
 				vpn_provider_indicate_error(data->provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+				known_error = true;
 			}
 		}
+
+		if (!known_error)
+			connman_error("VPNC: %s", str);
 
 		g_free(str);
 	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
