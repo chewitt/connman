@@ -100,8 +100,12 @@ enum connctx_handler_id {
 #define ONLINE_CHECK_SEC  (2)
 /* Timeout for delayed set connected call, in milliseconds. */
 #define DELAYED_CONNECT_TIMEOUT_MS (100)
-/* Wait for approx 2s for address information from ofono. */
-#define DELAYED_CONNECT_LIMIT (2000 / DELAYED_CONNECT_TIMEOUT_MS)
+/*
+ *  Wait for approx 5s for address information from ofono. This defines the
+ *  amount of cycles for delayed connect to run with the defined
+ *  DELAYED_CONNECT_TIMEOUT_MS wait set for one cycle.
+ */
+#define DELAYED_CONNECT_LIMIT (5000 / DELAYED_CONNECT_TIMEOUT_MS)
 
 struct modem_data {
 	OfonoModem *modem;
