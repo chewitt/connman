@@ -5580,6 +5580,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 			service_indicate_state(service);
 			/* fall through */
 		case -EINPROGRESS:
+		case -EALREADY:
 			autoconnectable_vpns = true;
 			break;
 		default:
@@ -8389,10 +8390,12 @@ int __connman_service_connect(struct connman_service *service,
 
 	service->connect_reason = reason;
 
-	if (err >= 0)
+	switch (err) {
+	case 0:
 		return 0;
-
-	if (err == -EINPROGRESS) {
+	case -EALREADY:
+		return -EALREADY;
+	case -EINPROGRESS:
 		/*
 		 * VPN will start connect timeout when it enters CONFIGURATION
 		 * state.
@@ -8401,6 +8404,8 @@ int __connman_service_connect(struct connman_service *service,
 			__connman_service_start_connect_timeout(service, false);
 
 		return -EINPROGRESS;
+	default:
+		break;
 	}
 
 	if (service->network)
