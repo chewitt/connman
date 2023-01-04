@@ -154,6 +154,7 @@ static void free_private_data(struct vc_private_data *data)
 	if (vpn_provider_get_plugin_data(data->provider) == data)
 		vpn_provider_set_plugin_data(data->provider, NULL);
 
+	vc_connect_done(data, EIO);
 	vpn_provider_unref(data->provider);
 
 	g_free(data->if_name);
