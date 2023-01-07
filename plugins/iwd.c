@@ -41,7 +41,15 @@ static GDBusClient *client;
 static GDBusProxy *agent_proxy;
 static GHashTable *adapters;
 static GHashTable *devices;
+/*
+ * Mapping from dbus path -> struct iwd_network, tracking the set of Network
+ * objects seen by iwd.
+ */
 static GHashTable *networks;
+/*
+ * Mapping from dbus path -> struct iwd_network, tracking the set of iwd
+ * KnownNetwork objects.
+ */
 static GHashTable *known_networks;
 static GHashTable *stations;
 static GHashTable *access_points;
@@ -84,6 +92,11 @@ struct iwd_device {
 	struct connman_device *device;
 };
 
+/*
+ * Structure tracking an net.connman.iwd.Network D-Bus object.
+ *
+ * This is mapped one-to-one to a connman_network object.
+ */
 struct iwd_network {
 	GDBusProxy *proxy;
 	char *path;
@@ -95,10 +108,17 @@ struct iwd_network {
 
 	struct iwd_device *iwdd;
 	struct connman_network *network;
-	/* service's autoconnect */
+	/*
+	 * connman_service's autoconnect.
+	 *
+	 * See Note [Managing autoconnect state] for more details.
+	 */
 	bool cm_autoconnect;
 };
 
+/*
+ * Structure tracking a net.connman.iwd.KnownNetwork D-Bus object.
+ */
 struct iwd_known_network {
 	GDBusProxy *proxy;
 	char *path;
@@ -109,7 +129,11 @@ struct iwd_known_network {
 	bool iwd_auto_connect;
 	int auto_connect_id;
 
-	/* service's autoconnect */
+	/*
+	 * connman_service's autoconnect.
+	 *
+	 * See Note [Managing autoconnect state] for more details.
+	 */
 	bool cm_autoconnect;
 };
 
@@ -1153,10 +1177,57 @@ static void network_property_change(GDBusProxy *proxy, const char *name,
 
 		iwdkn = g_hash_table_lookup(known_networks,
 					iwdn->known_network);
-		if (iwdkn)
+		if (iwdkn) {
+			/* See Note [Managing autoconnect state] */
+			iwdkn->cm_autoconnect = iwdn->cm_autoconnect;
 			update_auto_connect(iwdkn);
+		}
 	}
 }
+
+/*
+ * Note [Managing autoconnect state]:
+ *
+ * We need to set the iwd_known_network's cm_autoconnect status from the
+ * iwd_network, which has in turn been set to the corresponding
+ * connman_service's state when it first appeared (due to
+ * __connman_service_create_from_network).
+ *
+ * The management of the autoconnect state between ConnMan and its plugins and
+ * iwd is rather subtle and prone to bugs:
+ * - ConnMan itself determines the autoconnect state in struct connman_service,
+ *   which we cannot directly see; we only see cm_network_set_autoconnect
+ *   callbacks.
+ *
+ * - The iwd plugin maintains an independent state machine tracking iwd's view of
+ *   the world, which processes events in a non atomic fashion; for
+ *   instance, a iwd.KnownNetwork created event will appear before the
+ *   corresponding PropertyChanged setting the KnownNetwork property of the
+ *   iwd.Network corresponding to the created iwd.KnownNetwork.
+ *
+ * A typical flow of a network being newly connected to looks like so:
+ * - An iwd.Network appears, and add_network registers a connman_network
+ *   structure with ConnMan. ConnMan then in turn creates a service via
+ *   __connman_service_create_from_network.
+ *
+ * - The iwd plugin receives a callback from ConnMan to set the autoconnect
+ *   state, setting the cm_autoconnect state of the iwd_network. At this point,
+ *   there is no iwd_known_network yet.
+ *
+ * - ConnMan receives a Connect() request on the connman.Service, which is
+ *   forwarded to the iwd plugin via cm_network_connect. The iwd plugin calls
+ *   Connect() on the corresponding iwd.Network (possibly using the iwd
+ *   plugin's agent to get credentials if necessary).
+ *
+ * - Around the time that the connection completes, a iwd.KnownNetwork created
+ *   event appears, followed by a PropertyChanged event noting the change in
+ *   the iwd.Network's KnownNetwork property.
+ *
+ *   This is the first time that we can associate the iwd.KnownNetwork with the
+ *   corresponding iwd.Network and iwd_network. We have the ConnMan-side
+ *   autoconnect status in the iwd_network structure at this point, so we
+ *   synchronize the autoconnect state with iwd here.
+ */
 
 static unsigned char calculate_strength(int strength)
 {
@@ -1742,6 +1813,16 @@ static void create_known_network(GDBusProxy *proxy)
 		iwdkn->name, iwdkn->type, iwdkn->hidden,
 		iwdkn->last_connected_time, iwdkn->iwd_auto_connect);
 
+	/*
+	 * Although we initialize the autoconnect state of this
+	 * iwd_known_network here, it is only initialized in the case of
+	 * networks that already existed prior to startup: in the
+	 * case of a new iwd.KnownNetwork appearing, we are called before the
+	 * iwd_network.known_network field is initialized by a subsequent
+	 * PropertyChanged event.
+	 *
+	 * See Note [Managing autoconnect state].
+	 */
 	init_auto_connect(iwdkn);
 
 	g_dbus_proxy_set_property_watch(iwdkn->proxy,
