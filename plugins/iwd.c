@@ -1714,7 +1714,7 @@ static void init_auto_connect(struct iwd_known_network *iwdkn)
 	}
 }
 
-static void create_know_network(GDBusProxy *proxy)
+static void create_known_network(GDBusProxy *proxy)
 {
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_known_network *iwdkn;
@@ -1825,7 +1825,7 @@ static void object_added(GDBusProxy *proxy, void *user_data)
 	else if (!strcmp(interface, IWD_NETWORK_INTERFACE))
 		create_network(proxy);
 	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
-		create_know_network(proxy);
+		create_known_network(proxy);
 	else if (!strcmp(interface, IWD_STATION_INTERFACE))
 		create_station(proxy);
 	else if (!strcmp(interface, IWD_AP_INTERFACE))
