@@ -539,6 +539,12 @@ void __connman_ipconfig_ipv6_set_force_disabled(
 					bool force_disabled);
 bool __connman_ipconfig_ipv6_get_force_disabled(
 					struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_ipv6_get_accept_ra(struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_ipv6_set_accept_ra(struct connman_ipconfig *ipconfig,
+					int value);
+bool __connman_ipconfig_ipv6_get_ndproxy(struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_ipv6_set_ndproxy(struct connman_ipconfig *ipconfig,
+					bool enable);
 
 int __connman_ipconfig_set_rp_filter();
 void __connman_ipconfig_unset_rp_filter(int old_value);
