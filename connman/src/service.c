@@ -7087,6 +7087,12 @@ __connman_service_get_ipconfig(struct connman_service *service, int family)
 
 }
 
+struct connman_ipconfig *connman_service_get_ipconfig(
+				struct connman_service *service, int family)
+{
+	return __connman_service_get_ipconfig(service, family);
+}
+
 enum connman_ipconfig_method connman_service_get_ipconfig_method(
 						struct connman_service *service,
 						enum connman_ipconfig_type type)

@@ -152,6 +152,8 @@ void connman_service_create_ip4config(struct connman_service *service,
 								int index);
 void connman_service_create_ip6config(struct connman_service *service,
 								int index);
+struct connman_ipconfig *connman_service_get_ipconfig(
+				struct connman_service *service, int family);
 
 enum connman_ipconfig_method connman_service_get_ipconfig_method(
 					struct connman_service *service,
