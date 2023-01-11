@@ -354,3 +354,8 @@ if BLACKLIST_MONITOR
 builtin_modules += blacklist_monitor
 builtin_sources += plugins/blacklist_monitor.c
 endif
+
+if CLAT
+builtin_modules += clat
+builtin_sources += plugins/clat.c
+endif

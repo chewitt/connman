@@ -201,7 +201,8 @@ This package provides OpenFortiNet VPN plugin for connman.
     --enable-systemd \
     --with-tmpfilesdir=%{_prefix}/lib/tmpfiles.d \
     runstatedir=/run \
-    --enable-blacklist-monitor
+    --enable-blacklist-monitor \
+    --enable-clat
 
 %make_build
 

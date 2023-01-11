@@ -597,6 +597,11 @@ AC_ARG_ENABLE(blacklist-monitor,
 			[enable_blacklist_monitor=${enableval}], [enable_blacklist_monitor="no"])
 AM_CONDITIONAL(BLACKLIST_MONITOR, test "${enable_blacklist_monitor}" != "no")
 
+AC_ARG_ENABLE(clat,
+	AC_HELP_STRING([--enable-clat], [enable CLAT plugin]),
+			[enable_clat=${enableval}], [enable_clat="no"])
+AM_CONDITIONAL(CLAT, test "${enable_clat}" != "no")
+
 if (test "${enable_client}" != "no"); then
 	AC_CHECK_HEADERS(readline/readline.h, dummy=yes,
 		AC_MSG_ERROR(readline header files are required))
