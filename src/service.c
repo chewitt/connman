@@ -156,6 +156,7 @@ static struct connman_ipconfig *create_ip6config(struct connman_service *service
 		int index);
 static void dns_changed(struct connman_service *service);
 static void vpn_auto_connect(void);
+static void trigger_autoconnect(struct connman_service *service);
 
 struct find_data {
 	const char *path;
@@ -5624,6 +5625,9 @@ int __connman_service_set_favorite_delayed(struct connman_service *service,
 	service->favorite = favorite;
 
 	favorite_changed(service);
+	/* If native autoconnect is in use, the favorite state may affect the
+	 * autoconnect state, so it needs to be rerun. */
+	trigger_autoconnect(service);
 
 	if (!delay_ordering) {
 
