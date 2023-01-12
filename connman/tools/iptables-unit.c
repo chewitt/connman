@@ -134,6 +134,51 @@ struct connman_service *connman_service_lookup_from_identifier(
 	return NULL;
 }
 
+struct connman_network *connman_service_get_network(
+					struct connman_service *service)
+{
+	return NULL;
+}
+
+struct connman_ipconfig *connman_service_get_ipconfig(
+					struct connman_service *service,
+					int family)
+{
+	return NULL;
+}
+
+struct connman_service *
+connman_service_ref_debug(struct connman_service *service,
+			const char *file, int line, const char *caller)
+{
+	return NULL;
+}
+
+/**
+ * connman_service_unref:
+ * @service: service structure
+ *
+ * Decrease reference counter of service and release service if no
+ * longer needed.
+ */
+void connman_service_unref_debug(struct connman_service *service,
+			const char *file, int line, const char *caller)
+{
+	return;
+}
+
+bool connman_network_is_configured(struct connman_network *network,
+					enum connman_ipconfig_type type)
+{
+	g_assert(network);
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 ||
+					type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		return true;
+
+	return false;
+}
+
 const char *__connman_technology_get_tethering_ident(
 				struct connman_technology *tech)
 {
@@ -187,6 +232,11 @@ enum connman_service_state connman_service_get_state(
 						struct connman_service *service)
 {
 	return 0;
+}
+
+const char *connman_setting_get_string(const char *key)
+{
+	return NULL;
 }
 
 // DBus dummies
@@ -317,6 +367,63 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 	va_end(args);
 
 	return reply;
+}
+
+int __connman_ipconfig_ipv6_get_accept_ra(struct connman_ipconfig *ipconfig)
+{
+	return 0;
+}
+
+int __connman_ipconfig_ipv6_set_accept_ra(struct connman_ipconfig *ipconfig,
+								int value)
+{
+	return 0;
+}
+
+bool __connman_ipconfig_ipv6_get_forwarding(struct connman_ipconfig *ipconfig)
+{
+	return true;
+}
+
+int __connman_ipconfig_ipv6_set_forwarding(struct connman_ipconfig *ipconfig,
+								bool enable)
+{
+	return 0;
+}
+
+bool __connman_ipconfig_ipv6_get_ndproxy(struct connman_ipconfig *ipconfig)
+{
+	return true;
+}
+
+int __connman_ipconfig_ipv6_set_ndproxy(struct connman_ipconfig *ipconfig,
+								bool enable)
+{
+	return 0;
+}
+
+int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig)
+{
+	return 1;
+}
+
+struct connman_ipaddress *connman_ipconfig_get_ipaddress(
+					struct connman_ipconfig *ipconfig)
+{
+	return NULL;
+}
+
+enum connman_ipconfig_type connman_ipconfig_get_config_type(
+					struct connman_ipconfig *ipconfig)
+{
+	return CONNMAN_IPCONFIG_TYPE_UNKNOWN;
+}
+
+int connman_ipaddress_get_ip(struct connman_ipaddress *ipaddress,
+					const char **address,
+					unsigned char *netmask_prefix_length)
+{
+	return 0;
 }
 
 static guint watch_id = 69;
