@@ -50,6 +50,8 @@ static unsigned int global_offlinemode_override; /* Technology bitmask */
 struct connman_access_tech_policy *tech_access_policy;
 static unsigned int enable_delayed_ids[MAX_CONNMAN_SERVICE_TYPES] = { 0 };
 
+static char *global_regdom = NULL;
+
 struct connman_rfkill {
 	unsigned int index;
 	enum connman_service_type type;
@@ -366,7 +368,13 @@ int connman_technology_set_regdom(const char *alpha2)
 					driver->set_regdom(technology, alpha2);
 			}
 		}
+
+		/* Save regdom for this technology */
+		connman_technology_regdom_notify(technology, alpha2);
 	}
+
+	g_free(global_regdom);
+	global_regdom = g_strdup(alpha2);
 
 	return 0;
 }
@@ -385,6 +393,22 @@ static struct connman_technology *technology_find(enum connman_service_type type
 	}
 
 	return NULL;
+}
+
+const char *__connman_technology_get_regdom(enum connman_service_type type)
+{
+	struct connman_technology *technology;
+
+	DBG("type %d/%s", type, get_name(type));
+
+	technology = technology_find(type);
+	if (!technology)
+		return NULL;
+
+	if (technology->regdom)
+		return technology->regdom;
+
+	return global_regdom;
 }
 
 bool connman_technology_get_wifi_tethering(const char **ssid,
@@ -1434,6 +1458,7 @@ static struct connman_technology *technology_get(enum connman_service_type type)
 	technology_load(technology);
 	technology_list = g_slist_prepend(technology_list, technology);
 	technology->driver_list = tech_drivers;
+	technology->regdom = g_strdup(global_regdom);
 
 	for (list = tech_drivers; list; list = list->next) {
 		driver = list->data;
@@ -2322,4 +2347,6 @@ void __connman_technology_cleanup(void)
 
 	__connman_access_tech_policy_free(tech_access_policy);
 	tech_access_policy = NULL;
+
+	g_free(global_regdom);
 }
