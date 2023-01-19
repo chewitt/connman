@@ -92,6 +92,14 @@ int connman_inet_ipv6_get_route_addresses(int index, char **network,
 							char **netmask,
 							char **destination);
 
+struct nd_neighbor_advert *hdr;
+typedef void (*connman_inet_ns_cb_t) (struct nd_neighbor_advert *reply,
+					unsigned int length,
+					struct in6_addr *addr,
+					void *user_data);
+int connman_inet_ipv6_do_dad(int index, int timeout_ms,struct in6_addr *addr,
+				connman_inet_ns_cb_t callback, void *user_data);
+
 #ifdef __cplusplus
 }
 #endif

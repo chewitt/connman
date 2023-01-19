@@ -2061,7 +2061,7 @@ static gboolean ns_timeout_cb(gpointer user_data)
 		return FALSE;
 
 	if (data->callback) {
-		__connman_inet_ns_cb_t cb = data->callback;
+		connman_inet_ns_cb_t cb = data->callback;
 		cb(NULL, 0, &data->addr.sin6_addr, data->user_data);
 	}
 
@@ -2079,7 +2079,7 @@ static int icmpv6_nd_recv(int fd, struct xs_cb_data *data)
 	struct nd_neighbor_advert *hdr;
 	struct sockaddr_in6 saddr;
 	ssize_t len;
-	__connman_inet_ns_cb_t cb = data->callback;
+	connman_inet_ns_cb_t cb = data->callback;
 
 	DBG("");
 
@@ -2142,7 +2142,7 @@ cleanup:
 
 int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
 				struct in6_addr *addr,
-				__connman_inet_ns_cb_t callback,
+				connman_inet_ns_cb_t callback,
 				void *user_data)
 {
 	struct xs_cb_data *data;
@@ -2221,6 +2221,15 @@ int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
 	}
 
 	return err;
+}
+
+int connman_inet_ipv6_do_dad(int index, int timeout_ms,
+				struct in6_addr *addr,
+				connman_inet_ns_cb_t callback,
+				void *user_data)
+{
+	return __connman_inet_ipv6_do_dad(index, timeout_ms, addr, callback,
+					user_data);
 }
 
 GSList *__connman_inet_ipv6_get_prefixes(struct nd_router_advert *hdr,
