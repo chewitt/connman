@@ -324,18 +324,11 @@ int __connman_provider_connect(struct connman_provider *provider,
 
 	switch (err) {
 	case 0:
-		return 0;
-
+	case -EALREADY:
+		break;
 	case -EINPROGRESS:
 		provider_indicate_state(provider,
 					CONNMAN_SERVICE_STATE_ASSOCIATION);
-		/* fall through */
-	/*
-	 * Return EINPROGRESS also for when there is an existing pending call.
-	 * The state should not be indicated again but the real state is
-	 * still in progress for the provider.
-	 */
-	case -EALREADY:
 		return -EINPROGRESS;
 	}
 

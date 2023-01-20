@@ -84,8 +84,7 @@ struct {
 	{ "VPNC.CiscoPort", "Cisco UDP Encapsulation Port", "0", OPT_STRING,
 									true },
 	{ "VPNC.AppVersion", "Application version", NULL, OPT_STRING, true },
-	{ "VPNC.NATTMode", "NAT Traversal Mode", "cisco-udp", OPT_STRING,
-									true },
+	{ "VPNC.NATTMode", "NAT Traversal Mode", "natt", OPT_STRING, true },
 	{ "VPNC.DPDTimeout", "DPD idle timeout (our side)", NULL, OPT_STRING,
 									true },
 	{ "VPNC.SingleDES", "Enable Single DES", NULL, OPT_BOOLEAN, true },
@@ -154,6 +153,7 @@ static void free_private_data(struct vc_private_data *data)
 	if (vpn_provider_get_plugin_data(data->provider) == data)
 		vpn_provider_set_plugin_data(data->provider, NULL);
 
+	vc_connect_done(data, EIO);
 	vpn_provider_unref(data->provider);
 
 	g_free(data->if_name);
@@ -418,6 +418,8 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 	if ((condition & G_IO_IN) &&
 		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
 							G_IO_STATUS_NORMAL) {
+		bool known_error = false;
+
 		str[strlen(str) - 1] = '\0';
 
 		for (i = 0; auth_failures[i]; i++) {
@@ -426,6 +428,7 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 
 				vpn_provider_indicate_error(data->provider,
 					VPN_PROVIDER_ERROR_AUTH_FAILED);
+				known_error = true;
 			}
 		}
 
@@ -435,8 +438,12 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 
 				vpn_provider_indicate_error(data->provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+				known_error = true;
 			}
 		}
+
+		if (!known_error)
+			connman_error("VPNC: %s", str);
 
 		g_free(str);
 	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
