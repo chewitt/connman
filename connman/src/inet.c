@@ -47,6 +47,8 @@
 #include <ctype.h>
 #include <ifaddrs.h>
 #include <linux/fib_rules.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
 #include "connman.h"
 #include <gdhcp/gdhcp.h>
@@ -3265,4 +3267,90 @@ int __connman_inet_get_address_netmask(int ifindex,
 out:
 	close(sk);
 	return ret;
+}
+
+static int ipv6_neigbour_proxy(int index, bool enable, const char *ipv6_address,
+						unsigned char ipv6_prefixlen)
+{
+	struct sockaddr_nl nladdr;
+	struct nlmsghdr *nlh;
+	struct ndmsg *ndm;
+	struct rtattr *attr;
+	char buf[4096] = { 0 };
+	ssize_t len;
+	int sk;
+	int err = -EINVAL;
+
+	if (index < 0 || !ipv6_address)
+		return -EINVAL;
+
+	sk = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+	if (sk < 0)
+		goto out;
+
+	memset(&nladdr, 0, sizeof(nladdr));
+	nladdr.nl_family = AF_NETLINK;
+
+	nlh = (struct nlmsghdr *)buf;
+	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+	nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+	nlh->nlmsg_type = enable ? RTM_NEWNEIGH : RTM_DELNEIGH;
+
+	ndm = (struct ndmsg *)NLMSG_DATA(nlh);
+	ndm->ndm_family = AF_INET6;
+	ndm->ndm_state = NUD_PERMANENT;
+	ndm->ndm_ifindex = index;
+	ndm->ndm_type = RTN_UNICAST;
+	ndm->ndm_flags = NTF_PROXY;
+
+	attr = (struct rtattr *)(buf + NLMSG_ALIGN(nlh->nlmsg_len));
+	attr->rta_type = NDA_DST;
+	attr->rta_len = RTA_LENGTH(sizeof(struct in6_addr));
+
+	if (!inet_pton(AF_INET6, ipv6_address, RTA_DATA(attr))) {
+		connman_error("Invalid ndproxy IPv6 address %s", ipv6_address);
+		goto out;
+	}
+
+	nlh->nlmsg_len = NLMSG_ALIGN(nlh->nlmsg_len) +
+					RTA_LENGTH(sizeof(struct in6_addr));
+
+	len = sendto(sk, nlh, nlh->nlmsg_len, 0, (struct sockaddr *) &nladdr,
+							sizeof(nladdr));
+	if (len == -1) {
+		err = -errno;
+		connman_error("neighbour proxy %s request failed: %d/%s",
+							enable ? "add" : "del",
+							-errno,
+							strerror(errno));
+		goto out;
+	}
+
+	if ((unsigned int)len != nlh->nlmsg_len) {
+		connman_error("Sent %d bytes, msg truncated", err);
+		goto out;
+	}
+
+	err = 0;
+
+out:
+	close(sk);
+
+	return err;
+}
+
+int __connman_inet_add_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen)
+{
+	DBG("index %d IPv6 address %s", index, ipv6_address);
+
+	return ipv6_neigbour_proxy(index, true, ipv6_address, ipv6_prefixlen);
+}
+
+int __connman_inet_del_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen)
+{
+	DBG("index %d IPv6 address %s", index, ipv6_address);
+
+	return ipv6_neigbour_proxy(index, false, ipv6_address, ipv6_prefixlen);
 }

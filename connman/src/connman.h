@@ -256,6 +256,11 @@ int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex, const 
 int __connman_inet_get_address_netmask(int ifindex,
 		struct sockaddr_in *address, struct sockaddr_in *netmask);
 
+int __connman_inet_add_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen);
+int __connman_inet_del_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen);
+
 #include <connman/resolver.h>
 
 int __connman_resolver_init(gboolean dnsproxy);
