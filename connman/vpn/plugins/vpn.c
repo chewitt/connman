@@ -282,25 +282,8 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 	DBG("provider %p driver %s state %d", provider, name, state);
 
 	switch (state) {
-	case VPN_STATE_ASSOCIATION:
-		/*
-		 * If plugin states it should be still waiting for VPN agent
-		 * we revert the state to association only if previous was
-		 * CONNECT state.
-		 */
-		if (data->state == VPN_STATE_CONNECT) {
-			data->state = VPN_STATE_ASSOCIATION;
-			vpn_provider_set_state(provider,
-						VPN_PROVIDER_STATE_ASSOCIATION);
-		} else if (data->state != VPN_STATE_ASSOCIATION) {
-			connman_warn("Invalid %s vpn_notify() state transition "
-					"from %d to %d (ASSOCIATION)",
-					vpn_driver_data->name, data->state,
-					state);
-		}
-		break;
 	case VPN_STATE_CONNECT:
-		if (data->state != VPN_STATE_CONNECT) {
+		if (data->state == VPN_STATE_ASSOCIATION) {
 			data->state = VPN_STATE_CONNECT;
 			vpn_provider_set_state(provider,
 						VPN_PROVIDER_STATE_CONNECT);
@@ -364,6 +347,14 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 	case VPN_STATE_UNKNOWN:
 		break;
 
+	/* State transition to ASSOCIATION via notify is not allowed */
+	case VPN_STATE_ASSOCIATION:
+		connman_warn("Invalid %s vpn_notify() state transition "
+					"from %d to %d (ASSOCIATION)."
+					"VPN provider %p is disconnected",
+					vpn_driver_data->name, data->state,
+					state, provider);
+		/* fall through */
 	case VPN_STATE_IDLE:
 	case VPN_STATE_DISCONNECT:
 	case VPN_STATE_FAILURE:
@@ -766,6 +757,27 @@ static int vpn_route_env_parse(struct vpn_provider *provider, const char *key,
 	return 0;
 }
 
+static bool vpn_uses_vpn_agent(struct vpn_provider *provider)
+{
+	struct vpn_driver_data *vpn_driver_data = NULL;
+	const char *name = NULL;
+
+	if (!provider)
+		return false;
+
+	name = vpn_provider_get_driver_name(provider);
+	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
+
+	if (vpn_driver_data && vpn_driver_data->vpn_driver->uses_vpn_agent)
+		return vpn_driver_data->vpn_driver->uses_vpn_agent(provider);
+
+	/*
+	 * Default to using the VPN agent, in cases where the function is not
+	 * implemented. The use of VPN agent must be explicitly dropped.
+	 */
+	return true;
+}
+
 int vpn_register(const char *name, const struct vpn_driver *vpn_driver,
 			const char *program)
 {
@@ -794,6 +806,7 @@ int vpn_register(const char *name, const struct vpn_driver *vpn_driver,
 	data->provider_driver.save = vpn_save;
 	data->provider_driver.set_state = vpn_set_state;
 	data->provider_driver.route_env_parse = vpn_route_env_parse;
+	data->provider_driver.uses_vpn_agent = vpn_uses_vpn_agent;
 
 	if (!driver_hash)
 		driver_hash = g_hash_table_new_full(g_str_hash,
