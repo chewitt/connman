@@ -87,10 +87,11 @@ struct clat_data {
 #define IPv4ADDR_NETMASK		29		/* from RFC 7335 */
 #define CLAT_INADDR_ANY		"0.0.0.0"
 #define CLAT_IPv4_METRIC		2049		/* Set as value -1 */
+#define CLAT_IPv4_ROUTE_MTU		1260		/* from clatd */
 #define CLAT_IPv6_METRIC		1024
 #define CLAT_SUFFIX			"c1a7"
 
-#define PREFIX_DAD_TIMEOUT		10000		/* 10 seconds */
+#define PREFIX_QUERY_TIMEOUT		10000		/* 10 seconds */
 #define DAD_TIMEOUT			600000		/* 10 minutes */
 
 static const char GLOBAL_PREFIX[] = "64:ff9b::";
@@ -357,8 +358,6 @@ static void clat_data_clear(struct clat_data *data)
 		return;
 
 	DBG("data %p", data);
-
-	destroy_task(data);
 
 	g_free(data->isp_64gateway);
 	data->isp_64gateway = NULL;
@@ -696,7 +695,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 		break;
 	case -EHOSTDOWN:
 		DBG("failed to resolv %s, CLAT is not started", WKN_ADDRESS);
-		new_state = CLAT_STATE_FAILURE;
+		new_state = CLAT_STATE_STOPPED;
 		break;
 	default:
 		DBG("failed to assign prefix, error %d", err);
@@ -785,7 +784,7 @@ static int clat_task_start_periodic_query(struct clat_data *data)
 		return -EALREADY;
 	}
 
-	data->prefix_query_id = g_timeout_add(PREFIX_DAD_TIMEOUT,
+	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_TIMEOUT,
 							run_prefix_query, data);
 	if (data->prefix_query_id <= 0) {
 		connman_error("CLAT failed to start periodic prefix query");
@@ -913,12 +912,6 @@ static int clat_task_pre_configure(struct clat_data *data)
 	DBG("Address IPv6 %s/%u -> CLAT address %s", data->ipv6address,
 					data->ipv6_prefixlen, data->address);
 
-	err = connman_nat6_prepare(ipconfig, TAYGA_CLAT_DEVICE, true);
-	if (err) {
-		connman_warn("CLAT failed to prepare nat and firewall %d", err);
-		return err;
-	}
-
 	clat_create_tayga_config(data);
 
 	if (create_task(data))
@@ -967,6 +960,7 @@ static char *cidr_to_str(unsigned char cidr_netmask)
 
 static int clat_task_start_tayga(struct clat_data *data)
 {
+	struct connman_ipconfig *ipconfig;
 	struct connman_ipaddress *ipaddress;
 	char *netmask = NULL;
 	int err;
@@ -988,6 +982,20 @@ static int clat_task_start_tayga(struct clat_data *data)
 		return err;
 	}
 
+	ipconfig = connman_service_get_ipconfig(data->service, AF_INET6);
+	if (!ipconfig) {
+		DBG("No IPv6 ipconfig");
+		return -ENOENT;
+	}
+
+	err = connman_nat6_prepare(ipconfig, data->address,
+						data->addr_prefixlen,
+						TAYGA_CLAT_DEVICE, true);
+	if (err) {
+		connman_warn("CLAT failed to prepare nat and firewall %d", err);
+		return err;
+	}
+
 	//$ ip route add 2a00:e18:8000:6cd::c1a7 dev clat
 	// TODO default route or...?
 	connman_inet_add_ipv6_network_route_with_metric(index, data->address,
@@ -1006,7 +1014,8 @@ static int clat_task_start_tayga(struct clat_data *data)
 	connman_inet_add_network_route_with_metric(index, CLAT_INADDR_ANY,
 							CLAT_INADDR_ANY,
 							CLAT_INADDR_ANY,
-							CLAT_IPv4_METRIC);
+							CLAT_IPv4_METRIC,
+							CLAT_IPv4_ROUTE_MTU);
 	connman_ipaddress_free(ipaddress);
 	g_free(netmask);
 
@@ -1102,7 +1111,8 @@ static int clat_task_post_configure(struct clat_data *data)
 
 	ipconfig = connman_service_get_ipconfig(data->service, AF_INET6);
 	if (ipconfig)
-		connman_nat6_restore(ipconfig);
+		connman_nat6_restore(ipconfig, data->address,
+							data->addr_prefixlen);
 
 	DBG("ipconfig %p", ipconfig);
 
@@ -1144,6 +1154,17 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 {
 	struct clat_data *data = user_data;
 	int err;
+
+	if (!data) {
+		DBG("data gone, exit code %d after CLAT exit", exit_code);
+
+		if (task) {
+			DBG("destroying task %p", task);
+			connman_task_destroy(task);
+		}
+
+		return;
+	}
 
 	DBG("state %d/%s", data->state, state2string(data->state));
 
@@ -1295,7 +1316,11 @@ static int clat_run_task(struct clat_data *data)
 			data->state = CLAT_STATE_FAILURE;
 		}
 
-		data->state = CLAT_STATE_IDLE;
+		/*
+		 * RESTART comes after prefix query has been done, go directly
+		 * to PRE_CONFIGURE state.
+		 */
+		data->state = CLAT_STATE_PRE_CONFIGURE;
 		break;
 	}
 
