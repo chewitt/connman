@@ -778,8 +778,11 @@ int connman_inet_add_ipv6_network_route_with_metric(int index, const char *host,
 
 	rt.rtmsg_flags = RTF_UP;
 
-	/* Add host flag for route only when not setting a default route. */
-	if (!__connman_inet_is_any_addr(host, AF_INET6))
+	/*
+	 * Add host flag for a route a non-default route that is to a  single
+	 * IPv6 host address.
+	 */
+	if (!__connman_inet_is_any_addr(host, AF_INET6) && prefix_len == 128)
 		rt.rtmsg_flags |= RTF_HOST;
 
 	/*
