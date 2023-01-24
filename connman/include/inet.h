@@ -45,7 +45,13 @@ int connman_inet_add_host_route(int index, const char *host, const char *gateway
 int connman_inet_del_host_route(int index, const char *host);
 int connman_inet_add_network_route(int index, const char *host, const char *gateway,
 					const char *netmask);
+int connman_inet_add_network_route_with_metric(int index, const char *host,
+					const char *gateway,
+					const char *netmask, short metric,
+					unsigned long mtu);
 int connman_inet_del_network_route(int index, const char *host);
+int connman_inet_del_network_route_with_metric(int index, const char *host,
+					short metric);
 int connman_inet_clear_gateway_address(int index, const char *gateway);
 int connman_inet_set_gateway_interface(int index);
 int connman_inet_clear_gateway_interface(int index);
