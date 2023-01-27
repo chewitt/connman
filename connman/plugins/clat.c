@@ -31,6 +31,7 @@
 #include "../include/nat.h"
 #include <connman/notifier.h>
 #include <connman/rtnl.h>
+#include <connman/setting.h>
 
 #include <gweb/gresolv.h>
 
@@ -77,6 +78,8 @@ struct clat_data {
 	int err_ch_id;
 	GIOChannel *out_ch;
 	GIOChannel *err_ch;
+
+	bool tethering_on;
 };
 
 #define DEFAULT_TAYGA_BIN		"/usr/local/bin/tayga"
@@ -91,7 +94,7 @@ struct clat_data {
 #define CLAT_IPv6_METRIC		1024
 #define CLAT_SUFFIX			"c1a7"
 
-#define PREFIX_QUERY_TIMEOUT		10000		/* 10 seconds */
+#define PREFIX_QUERY_TIMEOUT		600000		/* 10 seconds */
 #define DAD_TIMEOUT			600000		/* 10 minutes */
 
 static const char GLOBAL_PREFIX[] = "64:ff9b::";
@@ -103,6 +106,7 @@ static struct {
 	bool resolv_always_succeeds;
 	bool clat_device_use_netmask;
 	bool tayga_use_ipv6_conf;
+	bool tayga_use_strict_frag_hdr;
 } clat_settings = {
 	.tayga_bin = NULL,
 
@@ -117,6 +121,9 @@ static struct {
 
 	/* Write IPv6 address of the interface used to the tayga config */
 	.tayga_use_ipv6_conf = false,
+
+	/* Value for strict-frag-hdr, defaults on */
+	.tayga_use_strict_frag_hdr = true,
 };
 
 #define CLATCONFIGFILE			CONFIGDIR "/clat.conf"
@@ -125,6 +132,7 @@ static struct {
 #define CONF_RESOLV_ALWAYS_SUCCEEDS	"ResolvAlwaysSucceeds"
 #define CONF_CLAT_USE_NETMASK		"ClatDeviceUseNetmask"
 #define CONF_TAYGA_USE_IPV6_CONF	"TaygaRequiresIPv6Address"
+#define CONF_TAYGA_USE_STRICT_FRAG_HDR	"TaygaStrictFragHdr"
 
 struct clat_data *__data = NULL;
 
@@ -201,6 +209,14 @@ static void parse_clat_config(GKeyFile *config)
 						&error);
 	if (!error)
 		clat_settings.tayga_use_ipv6_conf = boolean;
+
+	g_clear_error(&error);
+
+	boolean = g_key_file_get_boolean(config, group,
+						CONF_TAYGA_USE_STRICT_FRAG_HDR,
+						&error);
+	if (!error)
+		clat_settings.tayga_use_strict_frag_hdr = boolean;
 
 	g_clear_error(&error);
 }
@@ -443,6 +459,16 @@ static int clat_create_tayga_config(struct clat_data *data)
 	 */
 	g_string_append_printf(str, "map %s %s\n", CLAT_IPv4ADDR,
 						data->address);
+
+	/* ippool.c apparently defaults to 24 subnet */
+	g_string_append_printf(str, "dynamic-pool %s/%u\n",
+				connman_setting_get_string(
+					"TetheringSubnetBlock"),
+				24);
+
+	g_string_append_printf(str, "strict-frag-hdr %s\n",
+				clat_settings.tayga_use_strict_frag_hdr ?
+					"on" : "off");
 
 	buf = g_string_free(str, FALSE);
 
@@ -1214,6 +1240,39 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 	clat_data_clear(data);
 }
 
+static void setup_double_nat(struct clat_data *data)
+{
+	int err;
+
+	if (!data)
+		return;
+
+	if (data->tethering_on && data->state == CLAT_STATE_RUNNING) {
+		DBG("tethering enabled when CLAT is running, override nat");
+
+		err = connman_nat_enable_double_nat_override(TAYGA_CLAT_DEVICE,
+						"192.0.0.0", IPv4ADDR_NETMASK);
+		if (err && err != -EINPROGRESS)
+			connman_error("Failed to setup double nat for tether");
+	} else {
+		DBG("Remove nat override");
+		connman_nat_disable_double_nat_override(TAYGA_CLAT_DEVICE);
+	}
+}
+
+static void stop_running(struct clat_data *data)
+{
+	if (!data)
+		return;
+
+	clat_task_stop_periodic_query(data);
+	clat_task_stop_dad(data);
+	clat_task_stop_online_check(data);
+
+	data->tethering_on = false;
+	setup_double_nat(data);
+}
+
 static int clat_run_task(struct clat_data *data)
 {
 	int fd_out;
@@ -1266,9 +1325,7 @@ static int clat_run_task(struct clat_data *data)
 	/* If either running or stopped state and run is called do cleanup */
 	case CLAT_STATE_RUNNING:
 	case CLAT_STATE_STOPPED:
-		clat_task_stop_periodic_query(data);
-		clat_task_stop_dad(data);
-		clat_task_stop_online_check(data);
+		stop_running(data);
 
 		err = clat_task_post_configure(data);
 		if (err) {
@@ -1294,9 +1351,7 @@ static int clat_run_task(struct clat_data *data)
 			connman_error("CLAT failed to create post-configure "
 						"task in failure state");
 
-		clat_task_stop_periodic_query(data);
-		clat_task_stop_dad(data);
-		clat_task_stop_online_check(data);
+		stop_running(data);
 
 		/* Remain in failure state, can be started via clat_start(). */
 		data->state = CLAT_STATE_FAILURE;
@@ -1355,6 +1410,8 @@ static int clat_run_task(struct clat_data *data)
 		data->err_ch_id = g_io_add_watch(data->err_ch,
 						G_IO_IN | G_IO_ERR | G_IO_HUP,
 						io_channel_cb, data);
+
+		setup_double_nat(data);
 	}
 
 	DBG("in state %d/%s", data->state, state2string(data->state));
@@ -1717,11 +1774,22 @@ onlinecheck:
 	}
 }
 
+static void clat_tethering_changed(struct connman_technology *tech, bool on)
+{
+	struct clat_data *data = get_data();
+
+	/* We just need to know if tethering is enabled or not */
+	data->tethering_on = on;
+
+	setup_double_nat(data);
+}
+
 static struct connman_notifier clat_notifier = {
 	.name			= "clat",
 	.ipconfig_changed	= clat_ipconfig_changed,
 	.default_changed	= clat_default_changed,
 	.service_state_changed	= clat_service_state_changed,
+	.tethering_changed	= clat_tethering_changed,
 };
 
 static int clat_init(void)
