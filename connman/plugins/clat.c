@@ -117,7 +117,7 @@ static struct {
 	.resolv_always_succeeds = false,
 
 	/* Add netmask to the CLAT device IPv4 address */
-	.clat_device_use_netmask = false,
+	.clat_device_use_netmask = true,
 
 	/* Write IPv6 address of the interface used to the tayga config */
 	.tayga_use_ipv6_conf = false,
@@ -812,7 +812,7 @@ static int clat_task_start_periodic_query(struct clat_data *data)
 
 	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_TIMEOUT,
 							run_prefix_query, data);
-	if (data->prefix_query_id <= 0) {
+	if (!data->prefix_query_id) {
 		connman_error("CLAT failed to start periodic prefix query");
 		return -EINVAL;
 	}
@@ -1076,7 +1076,9 @@ static gboolean clat_task_run_dad(gpointer user_data)
 	unsigned char addr[sizeof(struct in6_addr)];
 	int err = 0;
 
-	DBG("");
+	DBG("data %p", data);
+
+	data->dad_id = 0;
 
 	if (inet_pton(AF_INET6, data->address, addr) != 1) {
 		connman_error("failed to pton address %s", data->address);
@@ -1091,7 +1093,11 @@ static gboolean clat_task_run_dad(gpointer user_data)
 		return G_SOURCE_REMOVE;
 	}
 
-	return G_SOURCE_CONTINUE;
+	data->dad_id = g_timeout_add(DAD_TIMEOUT, clat_task_run_dad, data);
+	if (!data->dad_id)
+		connman_error("CLAT failed to start DAD timeout");
+
+	return G_SOURCE_REMOVE;
 }
 
 static int clat_task_start_dad(struct clat_data *data)
@@ -1103,9 +1109,9 @@ static int clat_task_start_dad(struct clat_data *data)
 		return 0;
 	}
 
-	data->dad_id = g_timeout_add(DAD_TIMEOUT, clat_task_run_dad, data);
-
-	if (data->dad_id <= 0) {
+	/* Do DAD initially right away and then with DAD_TIMEOUT interval */
+	data->dad_id = g_timeout_add(0, clat_task_run_dad, data);
+	if (!data->dad_id) {
 		connman_error("CLAT failed to start DAD timeout");
 		return -EINVAL;
 	}
@@ -1117,7 +1123,7 @@ static int clat_task_stop_dad(struct clat_data *data)
 {
 	DBG("");
 
-	if (data->dad_id)
+	if (data->dad_id > 0)
 		g_source_remove(data->dad_id);
 
 	data->dad_id = 0;
@@ -1535,6 +1541,7 @@ static void clat_ipconfig_changed(struct connman_service *service,
 
 	DBG("service %p ipconfig %p", service, ipconfig);
 
+	/* TODO Support WLAN and VPN as well */
 	if (service != data->service || connman_service_get_type(service) !=
 						CONNMAN_SERVICE_TYPE_CELLULAR) {
 		DBG("Not tracking service %p/%s or not cellular", service,
@@ -1664,6 +1671,7 @@ static void clat_service_state_changed(struct connman_service *service,
 	char *ifname;
 	int err;
 
+	// TODO Support also WLAN and VPN
 	if (!service || connman_service_get_type(service) !=
 						CONNMAN_SERVICE_TYPE_CELLULAR)
 		return;
