@@ -20,6 +20,7 @@ Requires:   libglibutil >= 1.0.21
 Requires:   libdbusaccess >= 1.0.2
 Requires:   libgsupplicant >= 1.0.17
 Requires:   glib2 >= 2.62
+Requires:   tayga >= 0.9.2
 Requires(preun): systemd
 Requires(post): systemd
 Requires(postun): systemd
