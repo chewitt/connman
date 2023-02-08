@@ -572,7 +572,11 @@ static struct prefix_entry *new_prefix_entry(const char *address)
 
 	g_strfreev(tokens);
 
-	if (entry->prefixlen > 128 || entry->prefixlen < 16) {
+	/*
+	 * Addresses with < 16 prefixlen should not be possible, also ignore
+	 * single address prefixes as there is no room for additional address.
+	 */
+	if (entry->prefixlen > 120 || entry->prefixlen < 16) {
 		DBG("Invalid prefixlen %u", entry->prefixlen);
 		g_free(entry);
 		return NULL;
@@ -642,7 +646,7 @@ static int assign_clat_prefix(struct clat_data *data, char **results)
 
 	/* A prefix exists already */
 	if (data->clat_prefix) {
-		if (g_strcmp0(data->clat_prefix, entry->prefix) &&
+		if (g_strcmp0(data->clat_prefix, entry->prefix) ||
 				data->clat_prefixlen != entry->prefixlen) {
 			DBG("changing existing prefix %s/%u -> %s/%u",
 						data->clat_prefix,
@@ -807,12 +811,21 @@ static gboolean run_prefix_query(gpointer user_data)
 	if (!data)
 		return G_SOURCE_REMOVE;
 
+	data->prefix_query_id = 0;
+
 	if (clat_task_do_prefix_query(data)) {
 		DBG("failed to run prefix query");
 		return G_SOURCE_REMOVE;
 	}
 
-	return G_SOURCE_CONTINUE;
+	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_TIMEOUT,
+							run_prefix_query, data);
+	if (!data->prefix_query_id) {
+		connman_error("CLAT failed to continue periodic prefix query");
+		return G_SOURCE_REMOVE;
+	}
+
+	return G_SOURCE_REMOVE;
 }
 
 static int clat_task_start_periodic_query(struct clat_data *data)
