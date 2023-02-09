@@ -68,6 +68,7 @@ struct clat_data {
 	GResolv *resolv;
 	guint resolv_query_id;
 	guint remove_resolv_id;
+	guint resolv_timeouts;
 
 	guint dad_id;
 	guint prefix_query_id;
@@ -96,7 +97,9 @@ struct clat_data {
 #define CLAT_IPv6_METRIC		1024		/* from clatd */
 #define CLAT_IPv6_SUFFIX		"c1a7"
 
-#define PREFIX_QUERY_TIMEOUT		600000		/* 10 seconds */
+#define PREFIX_QUERY_TIMEOUT		600000		/* 10 minutes */
+#define PREFIX_QUERY_RETRY_TIMEOUT	10000		/* 10 seconds */
+#define PREFIX_QUERY_MAX_RETRY_TIMEOUT	6		/* Try 6 times if TO */
 #define DAD_TIMEOUT			600000		/* 10 minutes */
 
 /* Globally defined and assigned prefix */
@@ -675,12 +678,15 @@ static int assign_clat_prefix(struct clat_data *data, char **results)
 	return err;
 }
 
+static int clat_task_start_periodic_query(struct clat_data *data);
+static int clat_task_restart_periodic_query(struct clat_data *data);
+
 static void prefix_query_cb(GResolvResultStatus status,
 					char **results, gpointer user_data)
 {
 	struct clat_data *data = user_data;
 	enum clat_state new_state = data->state;
-	int err;
+	int err = 0;
 
 	DBG("state %d/%s status %d GResolv %p", data->state,
 						state2string(data->state),
@@ -699,21 +705,45 @@ static void prefix_query_cb(GResolvResultStatus status,
 	data->remove_resolv_id = g_timeout_add(0, remove_resolv, data);
 	data->resolv_query_id = 0;
 
-	if (status != G_RESOLV_RESULT_STATUS_SUCCESS) {
-		if (clat_settings.resolv_always_succeeds) {
-			gchar **override = g_new0(char*, 1);
-
-			DBG("ignore resolv result %d", status);
-
-			override[0] = g_strdup("64:ff9b::/96");
-			err = assign_clat_prefix(data, override);
-			g_strfreev(override);
-		} else {
-			err = -EHOSTDOWN;
-		}
-	} else {
+	switch (status) {
+	case G_RESOLV_RESULT_STATUS_SUCCESS:
 		DBG("resolv of %s success, parse prefix", WKN_ADDRESS);
 		err = assign_clat_prefix(data, results);
+		data->resolv_timeouts = 0;
+		break;
+	/* request timeouts not an error, try again */
+	case G_RESOLV_RESULT_STATUS_NO_RESPONSE:
+		err = -ETIMEDOUT;
+		data->resolv_timeouts++;
+		break;
+	/* server had an issue, try again */
+	case G_RESOLV_RESULT_STATUS_SERVER_FAILURE:
+		err = -EHOSTDOWN;
+		break;
+	/* Consider these as non-continuable errors */
+	case G_RESOLV_RESULT_STATUS_ERROR:
+	case G_RESOLV_RESULT_STATUS_FORMAT_ERROR:
+	case G_RESOLV_RESULT_STATUS_NAME_ERROR:
+	case G_RESOLV_RESULT_STATUS_NOT_IMPLEMENTED:
+		err = -EINVAL;
+		break;
+	case G_RESOLV_RESULT_STATUS_REFUSED:
+		err = -ECONNREFUSED;
+		break;
+	case G_RESOLV_RESULT_STATUS_NO_ANSWER:
+		err = -ENOENT;
+		break;
+	}
+
+	if (status != G_RESOLV_RESULT_STATUS_SUCCESS &&
+					clat_settings.resolv_always_succeeds) {
+		gchar **override = g_new0(char*, 1);
+
+		DBG("ignore resolv result %d", status);
+
+		override[0] = g_strdup("64:ff9b::/96");
+		err = assign_clat_prefix(data, override);
+		g_strfreev(override);
 	}
 
 	switch (err) {
@@ -732,17 +762,42 @@ static void prefix_query_cb(GResolvResultStatus status,
 		new_state = CLAT_STATE_RESTART;
 		break;
 	case -EHOSTDOWN:
-		DBG("failed to resolv %s, CLAT is not started", WKN_ADDRESS);
-		if (is_running(data->state))
+		if (is_running(data->state)) {
+			DBG("failed to resolv %s, CLAT is stopped",
+								WKN_ADDRESS);
 			new_state = CLAT_STATE_STOPPED;
+		} else {
+			new_state = CLAT_STATE_FAILURE;
+		}
 
-		/* Go back to idle if doing initial query */
-		if (data->state == CLAT_STATE_PREFIX_QUERY)
-			new_state = CLAT_STATE_IDLE;
+		break;
+	case -ETIMEDOUT:
+		if (data->resolv_timeouts > PREFIX_QUERY_MAX_RETRY_TIMEOUT) {
+			DBG("resolv timeout limit reached, CLAT is stopped");
+			new_state = CLAT_STATE_STOPPED;
+			break;
+		}
+
+		/* Start periodic query if this is the initial query */
+		if (data->state == CLAT_STATE_PREFIX_QUERY) {
+			DBG("failed to resolv %s during initial query, "
+						"continue periodic query",
+						WKN_ADDRESS);
+			clat_task_start_periodic_query(data);
+			return;
+		}
+
+		if (is_running(data->state)) {
+			DBG("query timeouted, retry after %d seconds",
+						PREFIX_QUERY_RETRY_TIMEOUT);
+			clat_task_restart_periodic_query(data);
+		} else {
+			new_state = CLAT_STATE_FAILURE;
+		}
 
 		break;
 	default:
-		DBG("failed to assign prefix, error %d", err);
+		DBG("failed to assign prefix/resolv host, error %d", err);
 		new_state = CLAT_STATE_FAILURE;
 		break;
 	}
@@ -771,13 +826,6 @@ static int clat_task_do_prefix_query(struct clat_data *data)
 {
 	DBG("");
 
-	/*
-	 * TODO handle this
-	 if (connman_inet_check_ipaddress(data->isp_64gateway) > 0) {
-		
-		return -EINVAL;
-	}*/
-
 	if (data->resolv_query_id > 0) {
 		DBG("previous query was running, abort it");
 		remove_resolv(data);
@@ -802,6 +850,17 @@ static int clat_task_do_prefix_query(struct clat_data *data)
 	return 0;
 }
 
+static guint get_pq_timeout(struct clat_data *data)
+{
+	if (!data)
+		return 0;
+
+	if (data->state == CLAT_STATE_PREFIX_QUERY)
+		return PREFIX_QUERY_RETRY_TIMEOUT;
+
+	return PREFIX_QUERY_TIMEOUT;
+}
+
 static gboolean run_prefix_query(gpointer user_data)
 {
 	struct clat_data *data = user_data;
@@ -818,14 +877,31 @@ static gboolean run_prefix_query(gpointer user_data)
 		return G_SOURCE_REMOVE;
 	}
 
-	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_TIMEOUT,
+	data->prefix_query_id = g_timeout_add(get_pq_timeout(data),
 							run_prefix_query, data);
-	if (!data->prefix_query_id) {
+	if (!data->prefix_query_id)
 		connman_error("CLAT failed to continue periodic prefix query");
-		return G_SOURCE_REMOVE;
-	}
 
 	return G_SOURCE_REMOVE;
+}
+
+static int clat_task_restart_periodic_query(struct clat_data *data)
+{
+	DBG("");
+
+	if (data->prefix_query_id > 0) {
+		DBG("Already running, stop old");
+		g_source_remove(data->prefix_query_id);
+	}
+
+	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_RETRY_TIMEOUT,
+							run_prefix_query, data);
+	if (!data->prefix_query_id) {
+		connman_error("CLAT failed to re-start periodic prefix query");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int clat_task_start_periodic_query(struct clat_data *data)
@@ -841,7 +917,7 @@ static int clat_task_start_periodic_query(struct clat_data *data)
 	 * TODO: make this do the queries with AAAA DNS TTL - 10s, i.e., 10s
 	 * before the record expires as stated by RFC.
 	 */
-	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_TIMEOUT,
+	data->prefix_query_id = g_timeout_add(get_pq_timeout(data),
 							run_prefix_query, data);
 	if (!data->prefix_query_id) {
 		connman_error("CLAT failed to start periodic prefix query");
@@ -1409,21 +1485,17 @@ static int clat_run_task(struct clat_data *data)
 	case CLAT_STATE_FAILURE:
 		DBG("CLAT entered failure state, stop all that is running");
 
-		destroy_task(data);
+		stop_running(data);
 
 		/* Do post configure if the interface is up */
 		err = clat_task_post_configure(data);
-		if (err && err != -ENODEV)
+		if (err && err != -ENODEV) {
 			connman_error("CLAT failed to create post-configure "
 						"task in failure state");
+			break;
+		}
 
-		stop_running(data);
-
-		/* Remain in failure state, can be started via clat_start(). */
-		data->state = CLAT_STATE_FAILURE;
-
-		if (err)
-			return err;
+		data->state = CLAT_STATE_POST_CONFIGURE;
 
 		break;
 	}
@@ -1670,7 +1742,8 @@ static int try_clat_start(struct clat_data *data)
 	}
 
 	if (data->ifindex < 0) {
-		DBG("Interface not up, not starting clat");
+		DBG("Interface not up (index %d), not starting clat",
+						data->ifindex);
 		return -ENODEV;
 	}
 
@@ -1717,13 +1790,13 @@ static void clat_ipconfig_changed(struct connman_service *service,
 	if (connman_ipconfig_get_config_type(ipconfig) ==
 						CONNMAN_IPCONFIG_TYPE_IPV4 &&
 						has_ipv4_address(service)) {
-		DBG("cellular/wifi %p has IPv4 config, stop CLAT", service);
+		DBG("cellular %p has IPv4 config, stop CLAT", service);
 		clat_stop(data);
 		return;
 	}
 
 	if (data->service != connman_service_get_default()) {
-		DBG("cellular/wifi service %p is not default, stop CLAT",
+		DBG("cellular service %p is not default, stop CLAT",
 								data->service);
 		clat_stop(data);
 		return;
@@ -1812,7 +1885,7 @@ static void clat_service_state_changed(struct connman_service *service,
 	if (!service || !is_supported_service_type(service))
 		return;
 
-	DBG("cellular/wifi service %p", service);
+	DBG("cellular service %p", service);
 
 	data = get_data();
 
