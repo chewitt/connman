@@ -545,12 +545,13 @@ static struct prefix_entry *new_prefix_entry(const char *address)
 	if (!address)
 		return NULL;
 
-	tokens = g_strsplit(address, "/", 2);
 	entry = g_new0(struct prefix_entry, 1);
 	if (!entry)
 		return NULL;
 
 	DBG("entry %p", entry);
+
+	tokens = g_strsplit(address, "/", 2);
 
 	/* Result has a global prefix */
 	if (g_str_has_prefix(address, GLOBAL_PREFIX)) {
@@ -565,7 +566,7 @@ static struct prefix_entry *new_prefix_entry(const char *address)
 	} else {
 		DBG("address does not contain a valid prefix");
 		free_prefix_entry(entry);
-		return NULL;
+		entry = NULL;
 	}
 	/*
 	 * TODO: Check the prefixlenght from other than ones with GLOBAL_PREFIX
@@ -575,13 +576,16 @@ static struct prefix_entry *new_prefix_entry(const char *address)
 
 	g_strfreev(tokens);
 
+	if (!entry)
+		return NULL;
+
 	/*
 	 * Addresses with < 16 prefixlen should not be possible, also ignore
 	 * single address prefixes as there is no room for additional address.
 	 */
 	if (entry->prefixlen > 120 || entry->prefixlen < 16) {
 		DBG("Invalid prefixlen %u", entry->prefixlen);
-		g_free(entry);
+		free_prefix_entry(entry);
 		return NULL;
 	}
 
@@ -737,11 +741,12 @@ static void prefix_query_cb(GResolvResultStatus status,
 
 	if (status != G_RESOLV_RESULT_STATUS_SUCCESS &&
 					clat_settings.resolv_always_succeeds) {
-		gchar **override = g_new0(char*, 1);
+		gchar **override = g_new0(char*, 2);
 
 		DBG("ignore resolv result %d", status);
 
 		override[0] = g_strdup("64:ff9b::/96");
+		override[1] = NULL;
 		err = assign_clat_prefix(data, override);
 		g_strfreev(override);
 	}
@@ -997,6 +1002,7 @@ static int derive_ipv6_address(struct clat_data *data, const char *ipv6_addr,
 	 * https://github.com/toreanderson/clatd/blob/master/clatd#L442
 	 * 
 	 */
+	g_free(data->address);
 	data->address = g_strconcat(ipv6prefix, "::", CLAT_IPv6_SUFFIX, NULL);
 	data->addr_prefixlen = 128;
 
@@ -1032,6 +1038,8 @@ static int clat_task_pre_configure(struct clat_data *data)
 	}
 
 	DBG("IPv6 %s prefixlen %u", address, prefixlen);
+
+	g_free(data->ipv6address);
 	data->ipv6address = g_strdup(address);
 	data->ipv6_prefixlen = prefixlen;
 
