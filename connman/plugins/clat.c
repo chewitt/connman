@@ -50,6 +50,12 @@ enum clat_state {
 	CLAT_STATE_RESTART,
 };
 
+enum tethering_state {
+	TETHERING_UNSET = 0,
+	TETHERING_ON,
+	TETHERING_OFF,
+};
+
 struct clat_data {
 	struct connman_service *service;
 	struct connman_task *task;
@@ -78,7 +84,7 @@ struct clat_data {
 	GIOChannel *out_ch;
 	GIOChannel *err_ch;
 
-	bool tethering_on;
+	enum tethering_state tethering;
 	bool do_restart;
 };
 
@@ -320,12 +326,18 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 	const char *type = (source == data->out_ch ? "STDOUT" :
 				(source == data->err_ch ? "STDERR" : "NaN"));
 
-	if ((condition & G_IO_IN) &&
-		g_io_channel_read_line(source, &str, NULL, NULL, NULL) ==
-							G_IO_STATUS_NORMAL) {
+	if (condition & (G_IO_IN | G_IO_PRI)) {
+		GIOStatus status;
+
+		status = g_io_channel_read_line(source, &str, NULL, NULL, NULL);
+		if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_EOF) {
+			DBG("cannot read line, status %d", status);
+			return G_SOURCE_CONTINUE;
+		}
+
 		str[strlen(str) - 1] = '\0';
 
-		connman_error("CLAT %s: %s", clat_settings.tayga_bin, str);
+		connman_info("CLAT %s: %s", clat_settings.tayga_bin, str);
 
 		g_free(str);
 	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
@@ -1393,7 +1405,8 @@ static void setup_double_nat(struct clat_data *data)
 	if (!data)
 		return;
 
-	if (data->tethering_on && data->state == CLAT_STATE_RUNNING) {
+	if (data->tethering == TETHERING_ON &&
+					data->state == CLAT_STATE_RUNNING) {
 		DBG("tethering enabled when CLAT is running, override nat");
 
 		err = connman_nat_enable_double_nat_override(TAYGA_CLAT_DEVICE,
@@ -1401,7 +1414,7 @@ static void setup_double_nat(struct clat_data *data)
 						CLAT_IPv4ADDR_NETMASK);
 		if (err && err != -EINPROGRESS)
 			connman_error("Failed to setup double nat for tether");
-	} else {
+	} else if (data->tethering == TETHERING_OFF) {
 		DBG("Remove nat override");
 		connman_nat_disable_double_nat_override(TAYGA_CLAT_DEVICE);
 	}
@@ -1409,6 +1422,8 @@ static void setup_double_nat(struct clat_data *data)
 
 static void stop_running(struct clat_data *data)
 {
+	enum tethering_state tethering;
+
 	if (!data)
 		return;
 
@@ -1416,8 +1431,11 @@ static void stop_running(struct clat_data *data)
 	clat_task_stop_dad(data);
 	clat_task_stop_online_check(data);
 
-	data->tethering_on = false;
+	/* When stopping always disable double nat but backup tethering state */
+	tethering = data->tethering;
+	data->tethering = TETHERING_OFF;
 	setup_double_nat(data);
+	data->tethering = tethering;
 }
 
 static int clat_run_task(struct clat_data *data)
@@ -1576,6 +1594,9 @@ static int clat_stop(struct clat_data *data)
 		return -EALREADY;
 	}
 
+	if (data->state == CLAT_STATE_PREFIX_QUERY)
+		clat_task_stop_periodic_query(data);
+
 	if (data->task)
 		connman_task_stop(data->task);
 	else
@@ -1636,7 +1657,7 @@ static void clat_del_rtnl_gateway(int index, const char *dst,
 	/* We lost our gateway, shut down clat */
 	if (!g_strcmp0(data->isp_64gateway, gateway)) {
 		DBG("CLAT gateway %s gone", data->isp_64gateway);
-		clat_stop(data);
+		//clat_stop(data);
 	}
 }
 
@@ -1675,7 +1696,8 @@ static bool is_supported_service_type(struct connman_service *service)
 	return false;
 }
 
-static bool has_ipv4_address(struct connman_service *service)
+static bool has_ip_address(struct connman_service *service,
+						enum connman_ipconfig_type type)
 {
 	struct connman_ipconfig *ipconfig;
 	struct connman_ipaddress *ipaddress;
@@ -1683,30 +1705,43 @@ static bool has_ipv4_address(struct connman_service *service)
 	const char *address;
 	unsigned char prefixlen;
 	int err;
+	int v;
 
-	ipconfig = connman_service_get_ipconfig(service, AF_INET);
-	DBG("IPv4 ipconfig %p", ipconfig);
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		ipconfig = connman_service_get_ipconfig(service, AF_INET);
+		v = 4;
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		ipconfig = connman_service_get_ipconfig(service, AF_INET6);
+		v = 6;
+		break;
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		return false;
+	}
+
+	DBG("IPv%d ipconfig %p", v, ipconfig);
 
 	ipaddress = connman_ipconfig_get_ipaddress(ipconfig);
-	DBG("IPv4 ipaddress %p", ipaddress);
+	DBG("IPv%d ipaddress %p", v, ipaddress);
 
 	err = connman_ipaddress_get_ip(ipaddress, &address, &prefixlen);
 	if (err) {
-		DBG("IPv4 is not configured on service %p", service);
+		DBG("IPv%d is not configured on service %p", v, service);
 		return false;
 	}
 
 	if (!address) {
-		DBG("no IPv4 address on service %p", service);
+		DBG("no IPv%d address on service %p", v, service);
 		return false;
 	}
 
-	method = connman_service_get_ipconfig_method(service,
-						CONNMAN_IPCONFIG_TYPE_IPV4);
+	method = connman_service_get_ipconfig_method(service, type);
 	switch (method) {
 	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
 	case CONNMAN_IPCONFIG_METHOD_OFF:
-		DBG("IPv4 method unknown/off, address is old");
+		DBG("IPv%d method unknown/off, address is old", v);
 		return false;
 	case CONNMAN_IPCONFIG_METHOD_FIXED:
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
@@ -1715,7 +1750,7 @@ static bool has_ipv4_address(struct connman_service *service)
 		break;
 	}
 
-	DBG("IPv4 address %s set for service %p", address, service);
+	DBG("IPv%d address %s set for service %p", v, address, service);
 	return true;
 }
 
@@ -1744,6 +1779,11 @@ static int try_clat_start(struct clat_data *data)
 		return -ENONET;
 	}
 
+	if (!connman_network_get_connected(network)) {
+		DBG("Network not connected yet, not starting clat");
+		return -ENONET;
+	}
+
 	if (data->ifindex < 0) {
 		DBG("ifindex not set, get it from network");
 		data->ifindex = connman_network_get_index(network);
@@ -1766,7 +1806,8 @@ static int try_clat_start(struct clat_data *data)
 	/* Network may have DHCP/AUTO set without address */
 	if (connman_network_is_configured(network,
 					CONNMAN_IPCONFIG_TYPE_IPV4) &&
-					has_ipv4_address(data->service)) {
+					has_ip_address(data->service, 
+						CONNMAN_IPCONFIG_TYPE_IPV4)) {
 		DBG("Service %p has IPv4 address on interface %d, not "
 						"starting CLAT", data->service,
 						data->ifindex);
@@ -1781,12 +1822,11 @@ static void clat_ipconfig_changed(struct connman_service *service,
 {
 	struct connman_network *network;
 	struct clat_data *data = get_data();
-	int err;
-
-	if (service || !data->service)
-		return;
 
 	DBG("service %p ipconfig %p", service, ipconfig);
+
+	if (!service || !data->service)
+		return;
 
 	/* TODO Support VPN as well */
 	if (service != data->service || !is_supported_service_type(service)) {
@@ -1796,9 +1836,23 @@ static void clat_ipconfig_changed(struct connman_service *service,
 	}
 
 	if (connman_ipconfig_get_config_type(ipconfig) ==
-						CONNMAN_IPCONFIG_TYPE_IPV4 &&
-						has_ipv4_address(service)) {
+					CONNMAN_IPCONFIG_TYPE_IPV4 &&
+					has_ip_address(service,
+						CONNMAN_IPCONFIG_TYPE_IPV4)) {
 		DBG("cellular %p has IPv4 config, stop CLAT", service);
+		clat_stop(data);
+		return;
+	}
+
+	/*
+	 * When service loses its IPv6 address we need to stop. When service
+	 * goes offline ipconfig may have been removed.
+	 */
+	if ((connman_ipconfig_get_config_type(ipconfig) ==
+					CONNMAN_IPCONFIG_TYPE_IPV6) &&
+					!has_ip_address(service,
+						CONNMAN_IPCONFIG_TYPE_IPV6)) {
+		DBG("cellular %p has lost IPv6 config, stop CLAT", service);
 		clat_stop(data);
 		return;
 	}
@@ -1816,13 +1870,6 @@ static void clat_ipconfig_changed(struct connman_service *service,
 		clat_stop(data);
 		return;
 	}
-
-	if (is_valid_start_state(connman_service_get_state(data->service))) {
-		DBG("service %p ready|online, start CLAT", data->service);
-		err = try_clat_start(data);
-		if (err && err != -EALREADY)
-			connman_error("CLAT failed to start, error %d", err);
-	}
 }
 
 static void clat_default_changed(struct connman_service *service)
@@ -1830,6 +1877,7 @@ static void clat_default_changed(struct connman_service *service)
 	struct connman_network *network;
 	struct clat_data *data;
 	enum connman_service_state state;
+	enum connman_ipconfig_type type = CONNMAN_IPCONFIG_TYPE_IPV4;
 	int err;
 
 	if (!service)
@@ -1873,9 +1921,8 @@ static void clat_default_changed(struct connman_service *service)
 		return;
 	}
 
-	if (connman_network_is_configured(network,
-					CONNMAN_IPCONFIG_TYPE_IPV4) &&
-					has_ipv4_address(data->service)) {
+	if (connman_network_is_configured(network, type) &&
+					has_ip_address(data->service, type)) {
 		DBG("IPv4 is configured on network %p, stop CLAT",
 							network);
 		clat_stop(data);
@@ -1973,7 +2020,7 @@ static void clat_tethering_changed(struct connman_technology *tech, bool on)
 	struct clat_data *data = get_data();
 
 	/* We just need to know if tethering is enabled or not */
-	data->tethering_on = on;
+	data->tethering = on ? TETHERING_ON : TETHERING_OFF;
 
 	setup_double_nat(data);
 }
