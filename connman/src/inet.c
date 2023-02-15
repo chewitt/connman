@@ -1496,6 +1496,55 @@ int connman_inet_create_tunnel(char **iface)
 	return fd;
 }
 
+static int set_tun(const char *ifname, int flags, bool tun_up)
+{
+	struct ifreq ifr;
+	int err;
+	int fd;
+
+	if (!ifname || !*ifname)
+		return -EINVAL;
+
+	fd = open("/dev/net/tun", O_RDWR | O_CLOEXEC);
+	if (fd < 0) {
+		err = -errno;
+		connman_error("Failed to open /dev/net/tun to device %s: %s",
+						ifname, strerror(errno));
+		return err;
+	}
+
+	memset(&ifr, 0, sizeof(ifr));
+	ifr.ifr_flags = flags | IFF_NO_PI;
+	sprintf(ifr.ifr_name, "%s", ifname);
+
+	if (ioctl(fd, TUNSETIFF, &ifr) < 0) {
+		err = -errno;
+		connman_error("Failed to TUNSETIFF for device %s to it: %s",
+						ifname, strerror(errno));
+		return err;
+	}
+
+	if (ioctl(fd, TUNSETPERSIST, (int)tun_up) < 0) {
+		err = -errno;
+		connman_error("Failed to set tun device %s %spersistent: %s",
+						ifname, tun_up ? "" : "non",
+						strerror(errno));
+		return err;
+	}
+
+	return 0;
+}
+
+int connman_inet_rmtun(const char *ifname, int flags)
+{
+	return set_tun(ifname, flags, false);
+}
+
+int connman_inet_mktun(const char *ifname, int flags)
+{
+	return set_tun(ifname, flags, true);
+}
+
 /*
  * This callback struct is used when sending router and neighbor
  * solicitation and advertisement messages.
