@@ -318,16 +318,50 @@ static void close_io_channel(struct clat_data *data, GIOChannel *channel)
 	}
 }
 
+static int clat_run_task(struct clat_data *data);
+
+static int force_rmtun(const char *ifname)
+{
+	int index;
+	int err;
+
+	index = connman_inet_ifindex(ifname);
+	if (index < 0) {
+		connman_error("Cannot force-remove %s, no such interface",
+									ifname);
+		return -ENODEV;
+	}
+
+	err = connman_inet_ifdown(index);
+	if (err && err != -EALREADY)
+		connman_error("Cannot put %s down, trying to remove anyway",
+									ifname);
+
+	err = connman_inet_rmtun(TAYGA_CLAT_DEVICE);
+	if (err) {
+		connman_error("Failed to remove tun device %s",	ifname);
+		return err;
+	}
+
+	DBG("Forcefully removed persistent tun device %s", ifname);
+
+	return 0;
+}
+
 static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 			gpointer user_data)
 {
 	struct clat_data *data = user_data;
+	const char dev_busy_suffix[] = "aborting: Device or resource busy";
+	const char bad_state_suffix[] = "File descriptor in bad state";
 	char *str;
 	const char *type = (source == data->out_ch ? "STDOUT" :
 				(source == data->err_ch ? "STDERR" : "NaN"));
+	int err;
 
 	if (condition & (G_IO_IN | G_IO_PRI)) {
 		GIOStatus status;
+		bool restart = false;
 
 		status = g_io_channel_read_line(source, &str, NULL, NULL, NULL);
 		if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_EOF) {
@@ -339,7 +373,63 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 
 		connman_info("CLAT %s: %s", clat_settings.tayga_bin, str);
 
+		/* This requires real hard removal of the device */
+		if (g_str_has_suffix(str, dev_busy_suffix)) {
+			switch (data->state) {
+			case CLAT_STATE_IDLE:
+			case CLAT_STATE_PREFIX_QUERY:
+			case CLAT_STATE_RUNNING:
+			case CLAT_STATE_RESTART:
+				connman_warn("State machine invalid, not"
+							"reacting to error");
+				break;
+			/*
+			 * Force remove the device and restart. Restart will
+			 * set the device first to POST_CONFIGURE state and
+			 * fails to remove the nonexistent device resulting in
+			 * stopping this task and returning to state that
+			 * preceeds PRE_CONFIGURE. After running the new task
+			 * when current task exits it starts with old config.
+			 */
+			case CLAT_STATE_PRE_CONFIGURE:
+				err = force_rmtun(TAYGA_CLAT_DEVICE);
+				if (!err)
+					restart = true;
+
+				break;
+			/* It may be possible to read the message late */
+			case CLAT_STATE_STOPPED:
+			case CLAT_STATE_FAILURE:
+			case CLAT_STATE_POST_CONFIGURE:
+				err = force_rmtun(TAYGA_CLAT_DEVICE);
+				if (err)
+					connman_error("Lingering tun device %s",
+							TAYGA_CLAT_DEVICE);
+
+				break;
+			}
+		}
+
+		/*
+		 * Process needs restart, without interface post configure
+		 * only removes the nat6 rules.
+		 */
+		if (g_str_has_suffix(str, bad_state_suffix))
+			restart = true;
+
 		g_free(str);
+
+		if (restart) {
+			data->state = CLAT_STATE_RESTART;
+
+			err = clat_run_task(data);
+			if (err)
+				connman_error("Interface lost and failed to "
+							"run CLAT restart %d",
+							err);
+
+			return G_SOURCE_REMOVE;
+		}
 	} else if (condition & (G_IO_ERR | G_IO_HUP)) {
 		DBG("%s Channel termination", type);
 		close_io_channel(data, source);
@@ -503,8 +593,6 @@ static int clat_create_tayga_config(struct clat_data *data)
 
 	return err;
 }
-
-static int clat_run_task(struct clat_data *data);
 
 static gboolean remove_resolv(gpointer user_data)
 {
@@ -1497,10 +1585,28 @@ static int clat_run_task(struct clat_data *data)
 
 		err = clat_task_post_configure(data);
 		if (err) {
-			connman_error("CLAT failed to create post-configure "
-								"task");
-			break;
+			/* If restarting CLAT the device may be gone already */
+			if (err == -ENODEV && data->do_restart) {
+				DBG("Device %s gone and restart required "
+							"ignore ENODEV err",
+							TAYGA_CLAT_DEVICE);
+				/*
+				 * Reset back to state to run pre configure 
+				 * and stop the task to it call exit function.
+				 * This will make tayga use existing settings.
+				 */
+				data->state = CLAT_STATE_PREFIX_QUERY;
+				if (data->task)
+					connman_task_stop(data->task);
+
+				return 0;
+			} else {
+				connman_error("CLAT failed to create"
+							"post-configure task");
+				break;
+			}
 		}
+
 		data->state = CLAT_STATE_POST_CONFIGURE;
 
 		break;
