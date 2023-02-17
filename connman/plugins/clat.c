@@ -1291,37 +1291,50 @@ void clat_dad_cb(struct nd_neighbor_advert *reply, unsigned int length,
 					struct in6_addr *addr,
 					void *user_data)
 {
-	char ipv6_addr[INET6_ADDRSTRLEN];
+	char ipv6_addr[INET6_ADDRSTRLEN] = { 0 };
 
-	// This reply can be ignored
-	DBG("got reply %p length %u", reply, length);
+	DBG("reply %p length %u", reply, length);
 
-	if (addr && inet_ntop(AF_INET6, addr, ipv6_addr, INET6_ADDRSTRLEN))
-		DBG("IPv6 address %s", ipv6_addr);
+	if (addr) {
+		/* This should not probably happen */
+		if (!inet_ntop(AF_INET6, addr, ipv6_addr, INET6_ADDRSTRLEN)) {
+			DBG("Invalid IPv6 address in DAD reply");
+		}
+	}
 
-	return;
+	/* No reply with zero lenght means success according to dhcpv6.c */
+	if (!reply && !length) {
+		DBG("DAD succeeded for %s", ipv6_addr);
+		return;
+	}
+
+	/* TODO select another address if cannot be DAD'd and restart process */
+	DBG("DAD failed for %s", ipv6_addr);
 }
 
 static gboolean clat_task_run_dad(gpointer user_data)
 {
 	struct clat_data *data = user_data;
-	unsigned char addr[sizeof(struct in6_addr)];
-	int err = 0;
+	struct in6_addr addr = { 0 };
+	int err;
 
 	DBG("data %p", data);
 
 	data->dad_id = 0;
 
-	if (inet_pton(AF_INET6, data->address, addr) != 1) {
+	if (inet_pton(AF_INET6, data->address, &addr) != 1) {
 		connman_error("failed to pton address %s", data->address);
 		return G_SOURCE_REMOVE;
 	}
 
-	err = connman_inet_ipv6_do_dad(data->ifindex, 100,
-						(struct in6_addr *)addr,
-						clat_dad_cb, data);
-	if (err) {
-		connman_error("CLAT failed to send dad: %d", err);
+	err = connman_inet_ipv6_do_dad(data->ifindex, 1000, &addr, clat_dad_cb,
+									data);
+	if (err < 0) {
+		/*
+		 * If the sending of DAD fails consecutive calls will as well,
+		 * stop DAD in such case
+		 */
+		connman_error("CLAT failed to send DAD: %d, stoppped", err);
 		return G_SOURCE_REMOVE;
 	}
 
