@@ -88,6 +88,7 @@ struct clat_data {
 
 	enum tethering_state tethering;
 	bool do_restart;
+	bool task_is_stopping;
 };
 
 #define WKN_ADDRESS "ipv4only.arpa"
@@ -470,6 +471,30 @@ static int create_task(struct clat_data *data)
 	return 0;
 }
 
+static int stop_task(struct clat_data *data)
+{
+	int err;
+
+	if (!data || !data->task)
+		return -ENOENT;
+
+	DBG("task %p", data->task);
+
+	/* Task should be called to stop only once */
+	if (data->task_is_stopping) {
+		DBG("already stopping");
+		return -EALREADY;
+	}
+
+	err = connman_task_stop(data->task);
+	if (err)
+		connman_error("CLAT failed to stop current task");
+	else
+		data->task_is_stopping = true;
+
+	return err;
+}
+
 static int destroy_task(struct clat_data *data)
 {
 	int err;
@@ -479,14 +504,13 @@ static int destroy_task(struct clat_data *data)
 
 	DBG("task %p", data->task);
 
-	err = connman_task_stop(data->task);
-	if (err) {
-		connman_error("CLAT failed to stop current task");
-		return err;
-	}
+	err = stop_task(data);
+	if (err && err != -EALREADY)
+		connman_error("CLAT task stopping failed, continuing anyway");
 
 	connman_task_destroy(data->task);
 	data->task = NULL;
+
 	return 0;
 }
 
@@ -1453,6 +1477,9 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 
 	destroy_task(data);
 
+	/* Reset task stopping after destroy to avoid 2nd call */
+	data->task_is_stopping = false;
+
 	switch (data->state) {
 	case CLAT_STATE_IDLE:
 	case CLAT_STATE_STOPPED:
@@ -1627,8 +1654,10 @@ static int clat_run_task(struct clat_data *data)
 				 */
 				data->do_restart = false;
 				data->state = CLAT_STATE_PREFIX_QUERY;
-				if (data->task)
-					connman_task_stop(data->task);
+				err = stop_task(data);
+				if (err)
+					DBG("Failed to stop task %p, continue",
+								data->task);
 
 				return 0;
 			} else {
@@ -1735,9 +1764,9 @@ static int clat_stop(struct clat_data *data)
 		clat_task_stop_periodic_query(data);
 
 	if (data->task)
-		connman_task_stop(data->task);
-	else
-		data->state = CLAT_STATE_STOPPED;
+		return stop_task(data);
+
+	data->state = CLAT_STATE_STOPPED;
 
 	return 0;
 }
