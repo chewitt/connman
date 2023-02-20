@@ -243,7 +243,7 @@ static void clear_clat_config(void)
 	g_free(clat_settings.tayga_bin);
 }
 
-static bool is_running(enum clat_state state)
+static bool is_running_state(enum clat_state state)
 {
 	switch (state) {
 	case CLAT_STATE_IDLE:
@@ -826,6 +826,14 @@ static int assign_clat_prefix(struct clat_data *data, char **results)
 static int clat_task_start_periodic_query(struct clat_data *data);
 static int clat_task_restart_periodic_query(struct clat_data *data);
 
+static bool clat_is_running(struct clat_data *data)
+{
+	if (!data)
+		return false;
+
+	return is_running_state(data->state);
+}
+
 static void prefix_query_cb(GResolvResultStatus status,
 					char **results, gpointer user_data)
 {
@@ -839,7 +847,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 
 	if (!data->resolv && !data->resolv_query_id) {
 		DBG("resolv was already cleared, running state: %s",
-					is_running(data->state) ? "yes" : "no");
+					clat_is_running(data) ? "yes" : "no");
 		return;
 	}
 
@@ -908,7 +916,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 		new_state = CLAT_STATE_RESTART;
 		break;
 	case -EHOSTDOWN:
-		if (is_running(data->state)) {
+		if (clat_is_running(data)) {
 			DBG("failed to resolv %s, CLAT is stopped",
 								WKN_ADDRESS);
 			new_state = CLAT_STATE_STOPPED;
@@ -933,7 +941,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 			return;
 		}
 
-		if (is_running(data->state)) {
+		if (clat_is_running(data)) {
 			DBG("query timeouted, retry after %d seconds",
 						PREFIX_QUERY_RETRY_TIMEOUT);
 			clat_task_restart_periodic_query(data);
@@ -1739,7 +1747,7 @@ static int clat_start(struct clat_data *data)
 	if (!data)
 		return -EINVAL;
 
-	if (is_running(data->state))
+	if (clat_is_running(data))
 		return -EALREADY;
 
 	data->state = CLAT_STATE_IDLE;
@@ -1755,7 +1763,7 @@ static int clat_stop(struct clat_data *data)
 
 	DBG("state %d/%s", data->state, state2string(data->state));
 
-	if (!is_running(data->state)) {
+	if (!clat_is_running(data)) {
 		DBG("already stopping/stopped");
 		return -EALREADY;
 	}
@@ -2046,12 +2054,18 @@ static void clat_default_changed(struct connman_service *service)
 	enum connman_ipconfig_type type = CONNMAN_IPCONFIG_TYPE_IPV4;
 	int err;
 
-	if (!service)
-		return;
-
 	DBG("service %p", service);
 
 	data = get_data();
+
+	if (!service) {
+		if (clat_is_running(data)) {
+			DBG("CLAT stop with NULL default service");
+			clat_stop(data);
+		}
+
+		return;
+	}
 
 	if (data->service != service) {
 		if (!is_supported_service_type(service)) {
@@ -2070,7 +2084,7 @@ static void clat_default_changed(struct connman_service *service)
 	state = connman_service_get_state(data->service);
 
 	/* Tracked service is the default service but is not running -> start */
-	if (!is_running(data->state) &&	is_valid_start_state(state)) {
+	if (!clat_is_running(data) && is_valid_start_state(state)) {
 		DBG("Tracked service is default, start CLAT");
 
 		err = try_clat_start(data);
@@ -2139,7 +2153,7 @@ static void clat_service_state_changed(struct connman_service *service,
 			return;
 		}
 
-		if (is_running(data->state)) {
+		if (clat_is_running(data)) {
 			DBG("CLAT is already running in state %d/%s",
 						data->state,
 						state2string(data->state));
@@ -2157,7 +2171,7 @@ static void clat_service_state_changed(struct connman_service *service,
 			return;
 		}
 
-		if (!is_running(data->state)) {
+		if (!clat_is_running(data)) {
 			DBG("online, CLAT is not running yet, start it first");
 			break;
 		}
