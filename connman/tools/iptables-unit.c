@@ -147,6 +147,19 @@ struct connman_ipconfig *connman_service_get_ipconfig(
 	return NULL;
 }
 
+struct connman_ipconfig *
+__connman_ipconfig_ref_debug(struct connman_ipconfig *ipconfig,
+				const char *file, int line, const char *caller)
+{
+	return NULL;
+}
+
+void __connman_ipconfig_unref_debug(struct connman_ipconfig *ipconfig,
+				const char *file, int line, const char *caller)
+{
+	return;
+}
+
 struct connman_service *
 connman_service_ref_debug(struct connman_service *service,
 			const char *file, int line, const char *caller)
