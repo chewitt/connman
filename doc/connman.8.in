@@ -95,9 +95,11 @@ to itself by setting nameserver to 127.0.0.1 in \fBresolv.conf\fP(5)
 file or leave DNS management to an external entity, such as
 systemd-resolved. If this is not desired and you want that all programs
 call directly some DNS server, then you can use the \fB--nodnsproxy\fP
-option. If this option is used, then ConnMan is not able to cache the
-DNS queries because the DNS traffic is not going through ConnMan and that
-can cause some extra network traffic.
+option. ConnMan then figures out the DNS server and search domain
+on startup and sets them in \fBresolv.conf\fP(5). If this option is
+used, then ConnMan is not able to cache the DNS queries because the DNS
+traffic is not going through ConnMan and that can cause some extra
+network traffic.
 .SH SEE ALSO
 .BR connmanctl (1), \ connman.conf (5), \ connman-service.config (5), \c
 .BR \ connman-vpn (8)
