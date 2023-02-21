@@ -28,10 +28,15 @@
 #include <connman/service.h>
 #include <connman/task.h>
 #include <connman/dbus.h>
+/*
+ * TODO this header is included with this change. Change to <connman/nat.h
+ * later after merge...
+ */
 #include "../include/nat.h"
 #include <connman/notifier.h>
 #include <connman/rtnl.h>
 #include <connman/setting.h>
+#include <connman/wakeup_timer.h>
 
 #include <gweb/gresolv.h>
 
@@ -1032,7 +1037,7 @@ static gboolean run_prefix_query(gpointer user_data)
 		return G_SOURCE_REMOVE;
 	}
 
-	data->prefix_query_id = g_timeout_add(get_pq_timeout(data),
+	data->prefix_query_id = connman_wakeup_timer_add(get_pq_timeout(data),
 							run_prefix_query, data);
 	if (!data->prefix_query_id)
 		connman_error("CLAT failed to continue periodic prefix query");
@@ -1049,8 +1054,9 @@ static int clat_task_restart_periodic_query(struct clat_data *data)
 		g_source_remove(data->prefix_query_id);
 	}
 
-	data->prefix_query_id = g_timeout_add(PREFIX_QUERY_RETRY_TIMEOUT,
-							run_prefix_query, data);
+	data->prefix_query_id = connman_wakeup_timer_add(
+						PREFIX_QUERY_RETRY_TIMEOUT,
+						run_prefix_query, data);
 	if (!data->prefix_query_id) {
 		connman_error("CLAT failed to re-start periodic prefix query");
 		return -EINVAL;
@@ -1072,7 +1078,7 @@ static int clat_task_start_periodic_query(struct clat_data *data)
 	 * TODO: make this do the queries with AAAA DNS TTL - 10s, i.e., 10s
 	 * before the record expires as stated by RFC.
 	 */
-	data->prefix_query_id = g_timeout_add(get_pq_timeout(data),
+	data->prefix_query_id = connman_wakeup_timer_add(get_pq_timeout(data),
 							run_prefix_query, data);
 	if (!data->prefix_query_id) {
 		connman_error("CLAT failed to start periodic prefix query");
@@ -1378,7 +1384,8 @@ static gboolean clat_task_run_dad(gpointer user_data)
 		return G_SOURCE_REMOVE;
 	}
 
-	data->dad_id = g_timeout_add(DAD_TIMEOUT, clat_task_run_dad, data);
+	data->dad_id = connman_wakeup_timer_add(DAD_TIMEOUT, clat_task_run_dad,
+									data);
 	if (!data->dad_id)
 		connman_error("CLAT failed to start DAD timeout");
 
@@ -1395,7 +1402,7 @@ static int clat_task_start_dad(struct clat_data *data)
 	}
 
 	/* Do DAD initially right away and then with DAD_TIMEOUT interval */
-	data->dad_id = g_timeout_add(0, clat_task_run_dad, data);
+	data->dad_id = connman_wakeup_timer_add(0, clat_task_run_dad, data);
 	if (!data->dad_id) {
 		connman_error("CLAT failed to start DAD timeout");
 		return -EINVAL;
