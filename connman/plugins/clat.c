@@ -60,6 +60,7 @@ enum tethering_state {
 
 struct clat_data {
 	struct connman_service *service;
+	struct connman_ipconfig *ipv6config;
 	struct connman_task *task;
 	enum clat_state state;
 	char *isp_64gateway;
@@ -1278,6 +1279,7 @@ static int clat_task_configure(struct clat_data *data)
 		return -ENOENT;
 	}
 
+	/* Call to nat6 prepare increases the ipconfig reference for itself*/
 	err = connman_nat6_prepare(ipconfig, data->address,
 						data->addr_prefixlen,
 						TAYGA_CLAT_DEVICE, true);
@@ -1286,12 +1288,19 @@ static int clat_task_configure(struct clat_data *data)
 		return err;
 	}
 
-	//$ ip route add 2a00:e18:8000:6cd::c1a7 dev clat
-	// TODO default route or...?
+	/*
+	 * We keep this because the service can reset the pointer to its
+	 * ipconfig before tayga process has properly terminated and ipconfig
+	 * is needed for nat6 restore. As the struct itself is kept by nat.c
+	 * as an added reference we can safely use this between nat6 prepare
+	 * and restore.
+	 */
+	data->ipv6config = ipconfig;
+
 	connman_inet_add_ipv6_network_route_with_metric(index, data->address,
 						NULL, data->addr_prefixlen,
 						CLAT_IPv6_METRIC);
-	//$ ip address add 192.0.0.2 dev clat
+
 	if (clat_settings.clat_device_use_netmask)
 		netmask = cidr_to_str(CLAT_IPv4ADDR_NETMASK);
 
@@ -1299,7 +1308,6 @@ static int clat_task_configure(struct clat_data *data)
 	connman_ipaddress_set_ipv4(ipaddress, CLAT_IPv4ADDR, netmask, NULL);
 	connman_inet_set_address(index, ipaddress);
 
-	//$ ip -4 route add default dev clat
 	/* Set no address, all traffic should be forwarded to the device */
 	connman_inet_add_network_route_with_metric(index, CLAT_IPv4_INADDR_ANY,
 							CLAT_IPv4_INADDR_ANY,
@@ -1410,17 +1418,17 @@ static int clat_task_stop_dad(struct clat_data *data)
 
 static int clat_task_post_configure(struct clat_data *data)
 {
-	struct connman_ipconfig *ipconfig;
 	struct connman_ipaddress *ipaddress;
 	char *netmask = NULL;
 	int index;
 
-	ipconfig = connman_service_get_ipconfig(data->service, AF_INET6);
-	if (ipconfig)
-		connman_nat6_restore(ipconfig, data->address,
-							data->addr_prefixlen);
+	DBG("ipconfig %p", data->ipv6config);
 
-	DBG("ipconfig %p", ipconfig);
+	if (data->ipv6config) {
+		/* Restore releases the reference to ipconfig, set it to NULL */
+		connman_nat6_restore(data->ipv6config);
+		data->ipv6config = NULL;
+	}
 
 	index = connman_inet_ifindex(TAYGA_CLAT_DEVICE);
 	if (index < 0) {
