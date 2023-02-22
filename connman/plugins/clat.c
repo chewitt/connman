@@ -429,14 +429,13 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 
 				break;
 			}
-		}
-
 		/*
 		 * Process needs restart, without interface post configure
 		 * only removes the nat6 rules.
 		 */
-		if (g_str_has_suffix(str, bad_state_suffix))
+		} else if (g_str_has_suffix(str, bad_state_suffix)) {
 			restart = true;
+		}
 
 		g_free(str);
 
@@ -444,10 +443,12 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 			data->state = CLAT_STATE_RESTART;
 
 			err = clat_run_task(data);
-			if (err)
+			if (err) {
 				connman_error("Interface lost and failed to "
 							"run CLAT restart %d",
 							err);
+				clat_stop(data);
+			}
 
 			*id = 0;
 			return G_SOURCE_REMOVE;
@@ -977,8 +978,10 @@ static void prefix_query_cb(GResolvResultStatus status,
 		data->state = new_state;
 
 		err = clat_run_task(data);
-		if (err && err != -EALREADY)
+		if (err && err != -EALREADY) {
 			connman_error("failed to run CLAT, error %d", err);
+			clat_data_clear(data);
+		}
 	}
 }
 
@@ -1528,8 +1531,10 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 		}
 
 		err = clat_run_task(data);
-		if (err && err != -EALREADY)
+		if (err && err != -EALREADY) {
 			connman_error("failed to run CLAT, error %d", err);
+			break;
+		}
 
 		return;
 	case CLAT_STATE_POST_CONFIGURE:
@@ -1544,9 +1549,11 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 			data->do_restart = false;
 
 			err = clat_run_task(data);
-			if (err && err != -EALREADY)
-				connman_error("failed to run CLAT, error %d",
-									err);
+			if (err && err != -EALREADY) {
+				connman_error("failed to run CLAT restart, "
+							"error %d", err);
+				break;
+			}
 
 			return;
 		}
@@ -1677,6 +1684,12 @@ static int clat_run_task(struct clat_data *data)
 				 */
 				data->do_restart = false;
 				data->state = CLAT_STATE_PREFIX_QUERY;
+
+				/*
+				 * This will make sure that the task will stop.
+				 * If post configure reports -ENODEV it has not
+				 * set up the task yet. We can ignore the error.
+				 */
 				err = stop_task(data);
 				if (err)
 					DBG("Failed to stop task %p, continue",
