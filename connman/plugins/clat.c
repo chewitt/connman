@@ -353,6 +353,7 @@ static int force_rmtun(const char *ifname)
 }
 
 static int clat_run_task(struct clat_data *data);
+static int clat_stop(struct clat_data *data);
 
 static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 			gpointer user_data)
@@ -447,7 +448,10 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 				connman_error("Interface lost and failed to "
 							"run CLAT restart %d",
 							err);
-				clat_stop(data);
+				err = clat_stop(data);
+				if (err && err != -EALREADY)
+					connman_error("Stopping CLAT failed %d",
+								err);
 			}
 
 			*id = 0;
@@ -832,6 +836,7 @@ static int assign_clat_prefix(struct clat_data *data, char **results)
 
 static int clat_task_start_periodic_query(struct clat_data *data);
 static int clat_task_restart_periodic_query(struct clat_data *data);
+static int stop_task(struct clat_data *data);
 
 static bool clat_is_running(struct clat_data *data)
 {
@@ -926,16 +931,18 @@ static void prefix_query_cb(GResolvResultStatus status,
 		if (clat_is_running(data)) {
 			DBG("failed to resolv %s, CLAT is stopped",
 								WKN_ADDRESS);
-			new_state = CLAT_STATE_STOPPED;
-		} else {
-			new_state = CLAT_STATE_FAILURE;
+			stop_task(data);
+			return;
 		}
+
+		DBG("failed to resolv %s, set failure state", WKN_ADDRESS);
+		new_state = CLAT_STATE_FAILURE;
 
 		break;
 	case -ETIMEDOUT:
 		if (data->resolv_timeouts > PREFIX_QUERY_MAX_RETRY_TIMEOUT) {
 			DBG("resolv timeout limit reached, CLAT is stopped");
-			new_state = CLAT_STATE_STOPPED;
+			stop_task(data);
 			break;
 		}
 
@@ -952,10 +959,10 @@ static void prefix_query_cb(GResolvResultStatus status,
 			DBG("query timeouted, retry after %d seconds",
 						PREFIX_QUERY_RETRY_TIMEOUT);
 			clat_task_restart_periodic_query(data);
-		} else {
-			new_state = CLAT_STATE_FAILURE;
+			break;
 		}
 
+		new_state = CLAT_STATE_FAILURE;
 		break;
 	default:
 		DBG("failed to assign prefix/resolv host, error %d", err);
