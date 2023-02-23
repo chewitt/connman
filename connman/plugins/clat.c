@@ -992,13 +992,64 @@ static void prefix_query_cb(GResolvResultStatus status,
 	}
 }
 
+static guint get_pq_timeout(struct clat_data *data)
+{
+	if (!data)
+		return 0;
+
+	if (data->state == CLAT_STATE_IDLE)
+		return PREFIX_QUERY_RETRY_TIMEOUT / 10; /* every second */
+
+	if (data->state == CLAT_STATE_PREFIX_QUERY)
+		return PREFIX_QUERY_RETRY_TIMEOUT;
+
+	return PREFIX_QUERY_TIMEOUT;
+}
+
+static int clat_task_start_periodic_query(struct clat_data *data);
+
+static bool has_nameservers_set(struct connman_service *service)
+{
+	char **nss;
+	bool ret;
+
+	if (!service)
+		return false;
+
+	nss = connman_service_get_nameservers(service);
+	if (!nss)
+		return false;
+
+	ret = g_strv_length(nss) > 0 ? true : false;
+	g_strfreev(nss);
+
+	return ret;
+}
+
 static int clat_task_do_prefix_query(struct clat_data *data)
 {
+	int err;
+
 	DBG("");
 
 	if (data->resolv_query_id > 0) {
 		DBG("previous query was running, abort it");
 		remove_resolv(data);
+	}
+
+	data->resolv_query_id = 0;
+
+	/* When getting the initial resolv and no nameservers are set, wait */
+	if (data->state == CLAT_STATE_PREFIX_QUERY &&
+					!has_nameservers_set(data->service)) {
+		DBG("service %p has no nameservers set yet, try again in 1s",
+								data->service);
+
+		err = clat_task_start_periodic_query(data);
+		if (err)
+			return err;
+
+		return -EINPROGRESS;
 	}
 
 	data->resolv = g_resolv_new(0);
@@ -1020,20 +1071,10 @@ static int clat_task_do_prefix_query(struct clat_data *data)
 	return 0;
 }
 
-static guint get_pq_timeout(struct clat_data *data)
-{
-	if (!data)
-		return 0;
-
-	if (data->state == CLAT_STATE_PREFIX_QUERY)
-		return PREFIX_QUERY_RETRY_TIMEOUT;
-
-	return PREFIX_QUERY_TIMEOUT;
-}
-
 static gboolean run_prefix_query(gpointer user_data)
 {
 	struct clat_data *data = user_data;
+	int err;
 
 	DBG("");
 
@@ -1042,8 +1083,9 @@ static gboolean run_prefix_query(gpointer user_data)
 
 	data->prefix_query_id = 0;
 
-	if (clat_task_do_prefix_query(data)) {
-		DBG("failed to run prefix query");
+	err = clat_task_do_prefix_query(data);
+	if (err) {
+		DBG("failed to run prefix query: %d", err);
 		return G_SOURCE_REMOVE;
 	}
 
@@ -1633,7 +1675,7 @@ static int clat_run_task(struct clat_data *data)
 		data->state = CLAT_STATE_PREFIX_QUERY;
 		/* Get the prefix from the ISP NAT service */
 		err = clat_task_do_prefix_query(data);
-		if (err && err != -EALREADY) {
+		if (err && err != -EALREADY && err != -EINPROGRESS) {
 			connman_error("CLAT failed to start prefix query");
 			break;
 		}
