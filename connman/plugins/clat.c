@@ -940,6 +940,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 
 		break;
 	case -ETIMEDOUT:
+	case -ENOENT:
 		if (data->resolv_timeouts > PREFIX_QUERY_MAX_RETRY_TIMEOUT) {
 			DBG("resolv timeout limit reached, CLAT is stopped");
 			stop_task(data);
@@ -955,7 +956,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 			return;
 		}
 
-		if (clat_is_running(data)) {
+		if (clat_is_running(data) && err == -ETIMEDOUT) {
 			DBG("query timeouted, retry after %d seconds",
 						PREFIX_QUERY_RETRY_TIMEOUT);
 			clat_task_restart_periodic_query(data);
