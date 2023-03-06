@@ -976,6 +976,20 @@ static void prefix_query_cb(GResolvResultStatus status,
 	}
 
 	/*
+	 * In case state changes to failure while the task is running let it
+	 * die first to get the cleanup done properly.
+	 */
+	if (data->state == CLAT_STATE_RUNNING &&
+					new_state == CLAT_STATE_FAILURE) {
+		DBG("Stop running CLAT to change state to failure");
+
+		stop_task(data);
+		data->state = new_state;
+
+		return;
+	}
+
+	/*
 	 * Do state transition only when doing initial query or when changing
 	 * state.
 	 */
@@ -1558,10 +1572,20 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 	switch (data->state) {
 	case CLAT_STATE_IDLE:
 	case CLAT_STATE_STOPPED:
-	case CLAT_STATE_FAILURE:
 		DBG("CLAT task exited in state %d/%s", data->state,
 						state2string(data->state));
 		break;
+	/* If the state has been set to failure cleanup is required */
+	case CLAT_STATE_FAILURE:
+		DBG("CLAT task exited, state set to failure, do post config");
+
+		data->state = CLAT_STATE_POST_CONFIGURE;
+
+		err = clat_run_task(data);
+		if (err && err != -EALREADY)
+			connman_error("failed to run CLAT post conf, error %d",
+									err);
+		return;
 	case CLAT_STATE_PREFIX_QUERY:
 	case CLAT_STATE_PRE_CONFIGURE:
 	case CLAT_STATE_RUNNING:
