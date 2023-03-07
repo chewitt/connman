@@ -83,6 +83,7 @@ struct clat_data {
 	guint resolv_query_id;
 	guint remove_resolv_id;
 	guint resolv_timeouts;
+	guint resolv_errors;
 
 	guint dad_id;
 	guint prefix_query_id;
@@ -113,7 +114,7 @@ struct clat_data {
 #define CLAT_IPv6_SUFFIX		"c1a7"
 
 #define PREFIX_QUERY_TIMEOUT		600000		/* 10 minutes */
-#define PREFIX_QUERY_RETRY_TIMEOUT	10000		/* 10 seconds */
+#define PREFIX_QUERY_RETRY_TIMEOUT	2000		/* Retry in 2 seconds */
 #define PREFIX_QUERY_MAX_RETRY_TIMEOUT	6		/* Try 6 times if TO */
 #define DAD_TIMEOUT			600000		/* 10 minutes */
 
@@ -354,6 +355,7 @@ static int force_rmtun(const char *ifname)
 
 static int clat_run_task(struct clat_data *data);
 static int clat_stop(struct clat_data *data);
+static int stop_task(struct clat_data *data);
 
 static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 			gpointer user_data)
@@ -443,11 +445,19 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 		if (restart) {
 			data->state = CLAT_STATE_RESTART;
 
-			err = clat_run_task(data);
-			if (err) {
-				connman_error("Interface lost and failed to "
-							"run CLAT restart %d",
-							err);
+			/*
+			 * When task is running stop it and do restart in exit
+			 * function.
+			 */
+			if (data->state == CLAT_STATE_RUNNING)
+				err = stop_task(data);
+			else
+				err = clat_run_task(data);
+
+			if (err && err != -EALREADY) {
+				connman_error("Interface lost and failed to do "
+						"CLAT restart %d. Stop CLAT",
+						err);
 				err = clat_stop(data);
 				if (err && err != -EALREADY)
 					connman_error("Stopping CLAT failed %d",
@@ -558,6 +568,9 @@ static void clat_data_clear(struct clat_data *data)
 	data->ifindex = -1;
 
 	data->state = CLAT_STATE_IDLE;
+
+	data->resolv_timeouts = 0;
+	data->resolv_errors = 0;
 }
 
 static void clat_data_free(struct clat_data *data)
@@ -875,6 +888,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 		DBG("resolv of %s success, parse prefix", WKN_ADDRESS);
 		err = assign_clat_prefix(data, results);
 		data->resolv_timeouts = 0;
+		data->resolv_errors = 0;
 		break;
 	/* request timeouts not an error, try again */
 	case G_RESOLV_RESULT_STATUS_NO_RESPONSE:
@@ -897,6 +911,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 		break;
 	case G_RESOLV_RESULT_STATUS_NO_ANSWER:
 		err = -ENOENT;
+		data->resolv_errors++;
 		break;
 	}
 
@@ -941,10 +956,19 @@ static void prefix_query_cb(GResolvResultStatus status,
 		break;
 	case -ETIMEDOUT:
 	case -ENOENT:
+		DBG("timeouts %d errors %d", data->resolv_timeouts,
+							data->resolv_errors);
+
 		if (data->resolv_timeouts > PREFIX_QUERY_MAX_RETRY_TIMEOUT) {
 			DBG("resolv timeout limit reached, CLAT is stopped");
-			stop_task(data);
-			break;
+			clat_stop(data);
+			return;
+		}
+
+		if (data->resolv_errors > PREFIX_QUERY_MAX_RETRY_TIMEOUT) {
+			DBG("resolv error limit reached, CLAT is stopped");
+			clat_stop(data);
+			return;
 		}
 
 		/* Start periodic query if this is the initial query */
@@ -956,11 +980,16 @@ static void prefix_query_cb(GResolvResultStatus status,
 			return;
 		}
 
-		if (clat_is_running(data) && err == -ETIMEDOUT) {
-			DBG("query timeouted, retry after %d seconds",
-						PREFIX_QUERY_RETRY_TIMEOUT);
+		/*
+		 * If timeout or possibly lost response happens when CLAT is
+		 * running repeat the query up to the
+		 * PREFIX_QUERY_MAX_RETRY_TIMEOUT limit.
+		 */
+		if (clat_is_running(data)) {
+			DBG("query timeouted/lost, retry after %d seconds",
+					PREFIX_QUERY_RETRY_TIMEOUT/1000);
 			clat_task_restart_periodic_query(data);
-			break;
+			return;
 		}
 
 		new_state = CLAT_STATE_FAILURE;
@@ -980,9 +1009,8 @@ static void prefix_query_cb(GResolvResultStatus status,
 	 * In case state changes to failure while the task is running let it
 	 * die first to get the cleanup done properly.
 	 */
-	if (data->state == CLAT_STATE_RUNNING &&
-					new_state == CLAT_STATE_FAILURE) {
-		DBG("Stop running CLAT to change state to failure");
+	if (data->state == CLAT_STATE_RUNNING) {
+		DBG("Stop running CLAT to change state to %d", new_state);
 
 		stop_task(data);
 		data->state = new_state;
@@ -1637,6 +1665,11 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 		break;
 	case CLAT_STATE_RESTART:
 		DBG("CLAT task return when restarting");
+
+		err = clat_run_task(data);
+		if (err && err != -EALREADY)
+			connman_error("failed to start CLAT in restart state, "
+							"error %d", err);
 		return;
 	}
 
@@ -1745,39 +1778,56 @@ static int clat_run_task(struct clat_data *data)
 		stop_running(data);
 
 		err = clat_task_post_configure(data);
-		if (err) {
-			/* If restarting CLAT the device may be gone already */
-			if (err == -ENODEV && data->do_restart) {
-				DBG("Device %s gone and restart required "
-							"ignore ENODEV err",
-							TAYGA_CLAT_DEVICE);
-				/*
-				 * Reset back to state to run pre configure 
-				 * and stop the task to it call exit function.
-				 * This will make tayga use existing settings.
-				 */
-				data->do_restart = false;
-				data->state = CLAT_STATE_PREFIX_QUERY;
-
-				/*
-				 * This will make sure that the task will stop.
-				 * If post configure reports -ENODEV it has not
-				 * set up the task yet. We can ignore the error.
-				 */
-				err = stop_task(data);
-				if (err)
-					DBG("Failed to stop task %p, continue",
-								data->task);
-
-				return 0;
-			} else {
-				connman_error("CLAT failed to create"
-							"post-configure task");
-				break;
-			}
+		if (!err) {
+			data->state = CLAT_STATE_POST_CONFIGURE;
+			break;
 		}
 
-		data->state = CLAT_STATE_POST_CONFIGURE;
+		/* If restarting CLAT the device may be gone already */
+		if (err == -ENODEV && data->do_restart) {
+			DBG("Device %s gone and restart required ignore ENODEV",
+							TAYGA_CLAT_DEVICE);
+			/*
+			 * Reset back to state to run pre configure and stop
+			 * the task to it call exit function. This will make
+			 * tayga use existing settings.
+			 */
+			data->do_restart = false;
+			data->state = CLAT_STATE_PREFIX_QUERY;
+
+			/*
+			 * This will make sure that the task will stop. If post
+			 * configure reports -ENODEV it has not set up the task
+			 * yet. We can ignore the error.
+			 */
+			err = stop_task(data);
+			if (err == -ENOENT) {
+				/*
+				 * When there was no task to stop the process
+				 * needs to be started.
+				 */
+				DBG("Restart CLAT into pre configure state");
+
+				err = clat_run_task(data);
+				if (err)
+					connman_error("Failed to restart CLAT");
+
+				return err;
+			} else if (err) {
+				connman_error("Failed to stop task %p, error "
+							"%d/%s, continue",
+							data->task, err,
+							strerror(-err));
+			} else {
+				/* Task exit will do the state transition */
+				return 0;
+			}
+		} else {
+			connman_error("CLAT failed to create post-configure "
+							"task, error %d/%s",
+							err, strerror(-err));
+			return err;
+		}
 
 		break;
 	case CLAT_STATE_POST_CONFIGURE:
