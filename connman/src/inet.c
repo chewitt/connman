@@ -1499,7 +1499,7 @@ int connman_inet_create_tunnel(char **iface)
 static int set_tun(const char *ifname, int flags, bool tun_up)
 {
 	struct ifreq ifr;
-	int err;
+	int err = 0;
 	int fd;
 
 	if (!ifname || !*ifname)
@@ -1507,10 +1507,9 @@ static int set_tun(const char *ifname, int flags, bool tun_up)
 
 	fd = open("/dev/net/tun", O_RDWR | O_CLOEXEC);
 	if (fd < 0) {
-		err = -errno;
 		connman_error("Failed to open /dev/net/tun to device %s: %s",
 						ifname, strerror(errno));
-		return err;
+		return -errno;
 	}
 
 	memset(&ifr, 0, sizeof(ifr));
@@ -1521,7 +1520,7 @@ static int set_tun(const char *ifname, int flags, bool tun_up)
 		err = -errno;
 		connman_error("Failed to TUNSETIFF for device %s to it: %s",
 						ifname, strerror(errno));
-		return err;
+		goto out;
 	}
 
 	if (ioctl(fd, TUNSETPERSIST, (int)tun_up) < 0) {
@@ -1529,10 +1528,12 @@ static int set_tun(const char *ifname, int flags, bool tun_up)
 		connman_error("Failed to set tun device %s %spersistent: %s",
 						ifname, tun_up ? "" : "non",
 						strerror(errno));
-		return err;
 	}
 
-	return 0;
+out:
+	close(fd);
+
+	return err;
 }
 
 int connman_inet_rmtun(const char *ifname, int flags)
