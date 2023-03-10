@@ -47,6 +47,8 @@
 #include <ctype.h>
 #include <ifaddrs.h>
 #include <linux/fib_rules.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 
 #include "connman.h"
 #include <gdhcp/gdhcp.h>
@@ -536,17 +538,19 @@ int connman_inet_del_host_route(int index, const char *host)
 	return connman_inet_del_network_route(index, host);
 }
 
-int connman_inet_add_network_route(int index, const char *host,
+int connman_inet_add_network_route_with_metric(int index, const char *host,
 					const char *gateway,
-					const char *netmask)
+					const char *netmask,
+					short metric,
+					unsigned long mtu)
 {
 	struct ifreq ifr;
 	struct rtentry rt;
 	struct sockaddr_in addr;
 	int sk, err = 0;
 
-	DBG("index %d host %s gateway %s netmask %s", index,
-		host, gateway, netmask);
+	DBG("index %d host %s gateway %s netmask %s metric %d mtu %ld", index,
+		host, gateway, netmask, metric, mtu);
 
 	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (sk < 0) {
@@ -567,6 +571,14 @@ int connman_inet_add_network_route(int index, const char *host,
 
 	memset(&rt, 0, sizeof(rt));
 	rt.rt_flags = RTF_UP;
+
+	if (metric)
+		rt.rt_metric = metric;
+
+	if (mtu) {
+		rt.rt_mtu = mtu;
+		rt.rt_mss = mtu - 40; /* MSS is 40b smaller than MTU */
+	}
 
 	/*
 	 * Set RTF_GATEWAY only when gateway is set and the gateway IP address
@@ -619,7 +631,16 @@ out:
 	return err;
 }
 
-int connman_inet_del_network_route(int index, const char *host)
+int connman_inet_add_network_route(int index, const char *host,
+					const char *gateway,
+					const char *netmask)
+{
+	return connman_inet_add_network_route_with_metric(index, host,
+					gateway, netmask, 0, 0);
+}
+
+int connman_inet_del_network_route_with_metric(int index, const char *host,
+					short metric)
 {
 	struct ifreq ifr;
 	struct rtentry rt;
@@ -648,6 +669,9 @@ int connman_inet_del_network_route(int index, const char *host)
 	memset(&rt, 0, sizeof(rt));
 	rt.rt_flags = RTF_UP | RTF_HOST;
 
+	if (metric)
+		rt.rt_metric = metric;
+
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = inet_addr(host);
@@ -666,6 +690,11 @@ out:
 							strerror(-err));
 
 	return err;
+}
+
+int connman_inet_del_network_route(int index, const char *host)
+{
+	return connman_inet_del_network_route_with_metric(index, host, 0);
 }
 
 int connman_inet_del_ipv6_network_route_with_metric(int index, const char *host,
@@ -749,8 +778,11 @@ int connman_inet_add_ipv6_network_route_with_metric(int index, const char *host,
 
 	rt.rtmsg_flags = RTF_UP;
 
-	/* Add host flag for route only when not setting a default route. */
-	if (!__connman_inet_is_any_addr(host, AF_INET6))
+	/*
+	 * Add host flag for a route a non-default route that is to a  single
+	 * IPv6 host address.
+	 */
+	if (!__connman_inet_is_any_addr(host, AF_INET6) && prefix_len == 128)
 		rt.rtmsg_flags |= RTF_HOST;
 
 	/*
@@ -1464,6 +1496,56 @@ int connman_inet_create_tunnel(char **iface)
 	return fd;
 }
 
+static int set_tun(const char *ifname, int flags, bool tun_up)
+{
+	struct ifreq ifr;
+	int err = 0;
+	int fd;
+
+	if (!ifname || !*ifname)
+		return -EINVAL;
+
+	fd = open("/dev/net/tun", O_RDWR | O_CLOEXEC);
+	if (fd < 0) {
+		connman_error("Failed to open /dev/net/tun to device %s: %s",
+						ifname, strerror(errno));
+		return -errno;
+	}
+
+	memset(&ifr, 0, sizeof(ifr));
+	ifr.ifr_flags = flags | IFF_NO_PI;
+	sprintf(ifr.ifr_name, "%s", ifname);
+
+	if (ioctl(fd, TUNSETIFF, &ifr) < 0) {
+		err = -errno;
+		connman_error("Failed to TUNSETIFF for device %s to it: %s",
+						ifname, strerror(errno));
+		goto out;
+	}
+
+	if (ioctl(fd, TUNSETPERSIST, (int)tun_up) < 0) {
+		err = -errno;
+		connman_error("Failed to set tun device %s %spersistent: %s",
+						ifname, tun_up ? "" : "non",
+						strerror(errno));
+	}
+
+out:
+	close(fd);
+
+	return err;
+}
+
+int connman_inet_rmtun(const char *ifname, int flags)
+{
+	return set_tun(ifname, flags, false);
+}
+
+int connman_inet_mktun(const char *ifname, int flags)
+{
+	return set_tun(ifname, flags, true);
+}
+
 /*
  * This callback struct is used when sending router and neighbor
  * solicitation and advertisement messages.
@@ -2061,7 +2143,7 @@ static gboolean ns_timeout_cb(gpointer user_data)
 		return FALSE;
 
 	if (data->callback) {
-		__connman_inet_ns_cb_t cb = data->callback;
+		connman_inet_ns_cb_t cb = data->callback;
 		cb(NULL, 0, &data->addr.sin6_addr, data->user_data);
 	}
 
@@ -2079,7 +2161,7 @@ static int icmpv6_nd_recv(int fd, struct xs_cb_data *data)
 	struct nd_neighbor_advert *hdr;
 	struct sockaddr_in6 saddr;
 	ssize_t len;
-	__connman_inet_ns_cb_t cb = data->callback;
+	connman_inet_ns_cb_t cb = data->callback;
 
 	DBG("");
 
@@ -2142,7 +2224,7 @@ cleanup:
 
 int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
 				struct in6_addr *addr,
-				__connman_inet_ns_cb_t callback,
+				connman_inet_ns_cb_t callback,
 				void *user_data)
 {
 	struct xs_cb_data *data;
@@ -2221,6 +2303,15 @@ int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
 	}
 
 	return err;
+}
+
+int connman_inet_ipv6_do_dad(int index, int timeout_ms,
+				struct in6_addr *addr,
+				connman_inet_ns_cb_t callback,
+				void *user_data)
+{
+	return __connman_inet_ipv6_do_dad(index, timeout_ms, addr, callback,
+					user_data);
 }
 
 GSList *__connman_inet_ipv6_get_prefixes(struct nd_router_advert *hdr,
@@ -3256,4 +3347,90 @@ int __connman_inet_get_address_netmask(int ifindex,
 out:
 	close(sk);
 	return ret;
+}
+
+static int ipv6_neigbour_proxy(int index, bool enable, const char *ipv6_address,
+						unsigned char ipv6_prefixlen)
+{
+	struct sockaddr_nl nladdr;
+	struct nlmsghdr *nlh;
+	struct ndmsg *ndm;
+	struct rtattr *attr;
+	char buf[4096] = { 0 };
+	ssize_t len;
+	int sk;
+	int err = -EINVAL;
+
+	if (index < 0 || !ipv6_address)
+		return -EINVAL;
+
+	sk = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+	if (sk < 0)
+		goto out;
+
+	memset(&nladdr, 0, sizeof(nladdr));
+	nladdr.nl_family = AF_NETLINK;
+
+	nlh = (struct nlmsghdr *)buf;
+	nlh->nlmsg_len = NLMSG_LENGTH(sizeof(struct ndmsg));
+	nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+	nlh->nlmsg_type = enable ? RTM_NEWNEIGH : RTM_DELNEIGH;
+
+	ndm = (struct ndmsg *)NLMSG_DATA(nlh);
+	ndm->ndm_family = AF_INET6;
+	ndm->ndm_state = NUD_PERMANENT;
+	ndm->ndm_ifindex = index;
+	ndm->ndm_type = RTN_UNICAST;
+	ndm->ndm_flags = NTF_PROXY;
+
+	attr = (struct rtattr *)(buf + NLMSG_ALIGN(nlh->nlmsg_len));
+	attr->rta_type = NDA_DST;
+	attr->rta_len = RTA_LENGTH(sizeof(struct in6_addr));
+
+	if (!inet_pton(AF_INET6, ipv6_address, RTA_DATA(attr))) {
+		connman_error("Invalid ndproxy IPv6 address %s", ipv6_address);
+		goto out;
+	}
+
+	nlh->nlmsg_len = NLMSG_ALIGN(nlh->nlmsg_len) +
+					RTA_LENGTH(sizeof(struct in6_addr));
+
+	len = sendto(sk, nlh, nlh->nlmsg_len, 0, (struct sockaddr *) &nladdr,
+							sizeof(nladdr));
+	if (len == -1) {
+		err = -errno;
+		connman_error("neighbour proxy %s request failed: %d/%s",
+							enable ? "add" : "del",
+							-errno,
+							strerror(errno));
+		goto out;
+	}
+
+	if ((unsigned int)len != nlh->nlmsg_len) {
+		connman_error("Sent %d bytes, msg truncated", err);
+		goto out;
+	}
+
+	err = 0;
+
+out:
+	close(sk);
+
+	return err;
+}
+
+int __connman_inet_add_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen)
+{
+	DBG("index %d IPv6 address %s", index, ipv6_address);
+
+	return ipv6_neigbour_proxy(index, true, ipv6_address, ipv6_prefixlen);
+}
+
+int __connman_inet_del_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen)
+{
+	DBG("index %d IPv6 address %s", index, ipv6_address);
+
+	return ipv6_neigbour_proxy(index, false, ipv6_address, ipv6_prefixlen);
 }

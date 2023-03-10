@@ -651,6 +651,44 @@ static gboolean modem_is_network_configured(struct modem_data *md)
 	return TRUE;
 }
 
+static void modem_ipaddress_setup(struct modem_data *md)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig = NULL;
+	struct connman_ipaddress *ipaddress;
+
+	if (!md)
+		return;
+
+	switch (md->connctx->protocol) {
+	case OFONO_CONNCTX_PROTOCOL_IP:
+		DBG("IPv4 only, set IPv6 off");
+		service = connman_service_lookup_from_network(md->network);
+		ipconfig = connman_service_get_ipconfig(service, AF_INET6);
+		/* This may interfere with ofono
+		 * connman_network_set_ipv6_method(md->network,
+		 * 				CONNMAN_IPCONFIG_METHOD_OFF);
+		 */
+		break;
+	case OFONO_CONNCTX_PROTOCOL_IPV6:
+		DBG("IPv6 only, set IPv4 off");
+		service = connman_service_lookup_from_network(md->network);
+		ipconfig = connman_service_get_ipconfig(service, AF_INET);
+		/* This may interfere with ofono
+		 * connman_network_set_ipv4_method(md->network,
+		 * 				CONNMAN_IPCONFIG_METHOD_OFF);
+		 */
+		break;
+	case OFONO_CONNCTX_PROTOCOL_DUAL:
+	case OFONO_CONNCTX_PROTOCOL_NONE:
+	case OFONO_CONNCTX_PROTOCOL_UNKNOWN:
+		return;
+	}
+
+	ipaddress = connman_ipconfig_get_ipaddress(ipconfig);
+	connman_ipaddress_clear(ipaddress);
+}
+
 static void modem_ensure_dual_mode_configuration(struct modem_data *md)
 {
 	bool ipv4_configured;
@@ -705,6 +743,7 @@ static gboolean modem_delayed_set_connected(gpointer data)
 		modem_ensure_dual_mode_configuration(md);
 
 	connman_network_set_connected(md->network, TRUE);
+	modem_ipaddress_setup(md);
 
 	md->delayed_set_connected_id = 0;
 	md->delayed_set_connected_attempts = 0;
@@ -728,6 +767,7 @@ static void modem_set_connected(struct modem_data *md)
 
 	if (modem_is_network_configured(md)) {
 		connman_network_set_connected(md->network, TRUE);
+		modem_ipaddress_setup(md);
 	} else {
 		DBG("%p init delayed connect, modem network not ready", md);
 

@@ -443,6 +443,52 @@ static int set_rp_filter(int value)
 	return write_ipv4_conf_value(NULL, "rp_filter", value);
 }
 
+static int set_ipv6_accept_ra(gchar *ifname, int value)
+{
+	switch (value) {
+	case -1:
+		value = 0;
+		/* fall through */
+	case 0:
+	case 1:
+	case 2:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return write_ipv6_conf_value(ifname, "accept_ra", value);
+}
+
+static int get_ipv6_accept_ra(gchar *ifname)
+{
+	int value;
+
+	if (read_ipv6_conf_value(ifname, "accept_ra", &value) < 0)
+		value = -EINVAL;
+
+	return value;
+}
+
+static int set_ipv6_ndproxy(gchar *ifname, bool enable)
+{
+	int value = enable ? 1 : 0;
+
+	DBG("%s %d", ifname, value);
+
+	return write_ipv6_conf_value(ifname, "proxy_ndp", value);
+}
+
+static int get_ipv6_ndproxy(gchar *ifname)
+{
+	int value;
+
+	if (read_ipv6_conf_value(ifname, "proxy_ndp", &value) < 0)
+		value = -EINVAL;
+
+	return value;
+}
+
 int __connman_ipconfig_set_rp_filter()
 {
 	int value;
@@ -1169,6 +1215,15 @@ const char *__connman_ipconfig_get_gateway_from_index(int index,
 	return NULL;
 }
 
+struct connman_ipaddress *connman_ipconfig_get_ipaddress(
+					struct connman_ipconfig *ipconfig)
+{
+	if (!ipconfig)
+		return NULL;
+	
+	return ipconfig->address;
+}
+
 void __connman_ipconfig_set_index(struct connman_ipconfig *ipconfig, int index)
 {
 	ipconfig->index = index;
@@ -1815,6 +1870,86 @@ bool __connman_ipconfig_get_ipv6_support()
 {
 	return is_ipv6_supported;
 }
+
+int __connman_ipconfig_ipv6_get_accept_ra(struct connman_ipconfig *ipconfig)
+{
+	char *ifname;
+	int value;
+
+	if (!ipconfig || ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
+		return -EINVAL;
+
+	ifname = connman_inet_ifname(ipconfig->index);
+	if (!ifname)
+		return -ENOENT;
+
+	value = get_ipv6_accept_ra(ifname);
+	g_free(ifname);
+
+	return value;
+}
+
+int __connman_ipconfig_ipv6_set_accept_ra(struct connman_ipconfig *ipconfig,
+								int value)
+{
+	char *ifname;
+	int err = 0;
+
+	if (!ipconfig || ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
+		return -EINVAL;
+
+	ifname = connman_inet_ifname(ipconfig->index);
+	if (!ifname)
+		return -ENOENT;
+
+	/* Returns the amount of chars written */
+	if (set_ipv6_accept_ra(ifname, value) != 1)
+		err = -EPERM;
+
+	g_free(ifname);
+
+	return err;
+}
+
+bool __connman_ipconfig_ipv6_get_ndproxy(struct connman_ipconfig *ipconfig)
+{
+	char *ifname;
+	int value;
+
+	if (!ipconfig)
+		return false;
+
+	ifname = connman_inet_ifname(ipconfig->index);
+	if (!ifname)
+		return false;
+
+	value = get_ipv6_ndproxy(ifname);
+	g_free(ifname);
+
+	return value == 1 ? true : false;
+}
+
+int __connman_ipconfig_ipv6_set_ndproxy(struct connman_ipconfig *ipconfig,
+								bool enable)
+{
+	char *ifname;
+	int err = 0;
+
+	if (!ipconfig)
+		return -EINVAL;
+
+	ifname = connman_inet_ifname(ipconfig->index);
+	if (!ifname)
+		return -ENOENT;
+
+	if (set_ipv6_ndproxy(ifname, enable) != 1)
+		err = -EPERM;
+
+	g_free(ifname);
+
+	return err;
+}
+
 
 bool __connman_ipconfig_is_usable(struct connman_ipconfig *ipconfig)
 {

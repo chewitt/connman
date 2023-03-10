@@ -189,13 +189,9 @@ int __connman_inet_ipv6_send_rs(int index, int timeout,
 int __connman_inet_ipv6_send_ra(int index, struct in6_addr *src_addr,
 				GSList *prefixes, int router_lifetime);
 
-typedef void (*__connman_inet_ns_cb_t) (struct nd_neighbor_advert *reply,
-					unsigned int length,
-					struct in6_addr *addr,
-					void *user_data);
 int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
 			struct in6_addr *addr,
-			__connman_inet_ns_cb_t callback, void *user_data);
+			connman_inet_ns_cb_t callback, void *user_data);
 
 typedef void (*__connman_inet_recv_rs_cb_t) (struct nd_router_solicit *reply,
 					unsigned int length, void *user_data);
@@ -259,6 +255,11 @@ int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex, const ch
 int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex, const char *gateway);
 int __connman_inet_get_address_netmask(int ifindex,
 		struct sockaddr_in *address, struct sockaddr_in *netmask);
+
+int __connman_inet_add_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen);
+int __connman_inet_del_ipv6_neigbour_proxy(int index, const char *ipv6_address,
+						unsigned char ipv6_prefixlen);
 
 #include <connman/resolver.h>
 
@@ -539,6 +540,12 @@ void __connman_ipconfig_ipv6_set_force_disabled(
 					bool force_disabled);
 bool __connman_ipconfig_ipv6_get_force_disabled(
 					struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_ipv6_get_accept_ra(struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_ipv6_set_accept_ra(struct connman_ipconfig *ipconfig,
+					int value);
+bool __connman_ipconfig_ipv6_get_ndproxy(struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_ipv6_set_ndproxy(struct connman_ipconfig *ipconfig,
+					bool enable);
 
 int __connman_ipconfig_set_rp_filter();
 void __connman_ipconfig_unset_rp_filter(int old_value);

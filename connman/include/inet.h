@@ -45,7 +45,13 @@ int connman_inet_add_host_route(int index, const char *host, const char *gateway
 int connman_inet_del_host_route(int index, const char *host);
 int connman_inet_add_network_route(int index, const char *host, const char *gateway,
 					const char *netmask);
+int connman_inet_add_network_route_with_metric(int index, const char *host,
+					const char *gateway,
+					const char *netmask, short metric,
+					unsigned long mtu);
 int connman_inet_del_network_route(int index, const char *host);
+int connman_inet_del_network_route_with_metric(int index, const char *host,
+					short metric);
 int connman_inet_clear_gateway_address(int index, const char *gateway);
 int connman_inet_set_gateway_interface(int index);
 int connman_inet_clear_gateway_interface(int index);
@@ -75,6 +81,9 @@ int connman_inet_clear_ipv6_gateway_interface(int index);
 int connman_inet_add_to_bridge(int index, const char *bridge);
 int connman_inet_remove_from_bridge(int index, const char *bridge);
 
+int connman_inet_rmtun(const char *ifname, int flags);
+int connman_inet_mktun(const char *ifname, int flags);
+
 int connman_inet_set_mtu(int index, int mtu);
 int connman_inet_setup_tunnel(char *tunnel, int mtu);
 int connman_inet_create_tunnel(char **iface);
@@ -91,6 +100,14 @@ int connman_inet_get_route_addresses(int index, char **network, char **netmask,
 int connman_inet_ipv6_get_route_addresses(int index, char **network,
 							char **netmask,
 							char **destination);
+
+struct nd_neighbor_advert *hdr;
+typedef void (*connman_inet_ns_cb_t) (struct nd_neighbor_advert *reply,
+					unsigned int length,
+					struct in6_addr *addr,
+					void *user_data);
+int connman_inet_ipv6_do_dad(int index, int timeout_ms,struct in6_addr *addr,
+				connman_inet_ns_cb_t callback, void *user_data);
 
 #ifdef __cplusplus
 }
