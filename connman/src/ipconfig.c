@@ -1224,6 +1224,43 @@ struct connman_ipaddress *connman_ipconfig_get_ipaddress(
 	return ipconfig->address;
 }
 
+bool connman_ipconfig_has_ipaddress_set(struct connman_ipconfig *ipconfig)
+{
+	struct connman_ipaddress *ipaddress;
+	const char *address;
+	unsigned char prefixlen;
+	int err;
+
+	DBG("ipconfig %p", ipconfig);
+
+	/* Returns NULL if ipconfig is NULL */
+	ipaddress = connman_ipconfig_get_ipaddress(ipconfig);
+
+	/* Returns error only when ipaddress is NULL, i.e., NULL safe */
+	err = connman_ipaddress_get_ip(ipaddress, &address, &prefixlen);
+	if (err)
+		return false;
+
+	if (!address)
+		return false;
+
+	switch (ipconfig->method) {
+	/* The address may still be there but the method dictates here */
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+		return false;
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+		break;
+	}
+
+	DBG("IP address %s set", address);
+
+	return true;
+}
+
 void __connman_ipconfig_set_index(struct connman_ipconfig *ipconfig, int index)
 {
 	ipconfig->index = index;

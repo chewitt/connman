@@ -56,6 +56,7 @@ enum connman_ipconfig_type connman_ipconfig_get_config_type(
 					struct connman_ipconfig *ipconfig);
 struct connman_ipaddress *connman_ipconfig_get_ipaddress(
 					struct connman_ipconfig *ipconfig);
+bool connman_ipconfig_has_ipaddress_set(struct connman_ipconfig *ipconfig);
 
 #ifdef __cplusplus
 }
