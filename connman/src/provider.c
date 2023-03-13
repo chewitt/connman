@@ -130,9 +130,12 @@ int __connman_provider_set_ipv6_for_connected(
 	struct connman_service *service;
 	struct connman_service *transport;
 	struct connman_ipconfig *ipconfig;
+	struct connman_ipconfig *tp_ipconfig;
 	enum connman_service_state state;
 	const char *transport_ident;
 	bool single_connected_tech;
+	int index4;
+	int index6;
 
 	if (ipv6_change_running)
 		return -EALREADY;
@@ -177,16 +180,51 @@ int __connman_provider_set_ipv6_for_connected(
 	transport_ident = __connman_provider_get_transport_ident(provider);
 	transport = connman_service_lookup_from_identifier(transport_ident);
 
+	switch (connman_service_get_type(transport)) {
 	/*
 	 * Do not disable IPv6 for a VPN that has a VPN as transport with
 	 * IPv6 enabled.
 	 */
-	if (connman_service_get_type(transport) == CONNMAN_SERVICE_TYPE_VPN) {
-		struct connman_ipconfig *tp_ipconfig;
-		
+	case CONNMAN_SERVICE_TYPE_VPN:
 		tp_ipconfig = __connman_service_get_ip6config(transport);
 		if (__connman_ipconfig_ipv6_is_enabled(tp_ipconfig))
 			return 0;
+		
+		break;
+	/*
+	 * Or for a transport that does not have IPv4 address set. This may
+	 * be the case that a DNS64 is in use with the help of a plugin and
+	 * data will be tunneled over IPv6 in which case it must stay on.
+	 * Similarly in dual index (interface) support IPv6 is the tunnel.
+	 */
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+		tp_ipconfig = __connman_service_get_ip4config(transport);
+		if (!tp_ipconfig)
+			return 0;
+
+		if (!connman_ipconfig_has_ipaddress_set(tp_ipconfig)) {
+			DBG("transport %p has no IPv4 set, not disabling IPv6",
+								transport);
+			return 0;
+		}
+
+		index4 = __connman_ipconfig_get_index(tp_ipconfig);
+
+		tp_ipconfig = __connman_service_get_ip6config(transport);
+		index6 = __connman_ipconfig_get_index(tp_ipconfig);
+
+		if (index4 != -1 && index6 != -1 && index4 != index6) {
+			DBG("transport %p has two interfaces: IPv4 %d IPv6 %d. "
+						"Not disabling IPv6", transport,
+						index4, index6);
+			return 0;
+		}
+
+		break;
+	default:
+		break;
 	}
 
 	single_connected_tech =
