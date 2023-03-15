@@ -647,7 +647,7 @@ int connman_inet_del_network_route_with_metric(int index, const char *host,
 	struct sockaddr_in addr;
 	int sk, err = 0;
 
-	DBG("index %d host %s", index, host);
+	DBG("index %d host %s metric %d", index, host, metric);
 
 	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (sk < 0) {
@@ -667,7 +667,14 @@ int connman_inet_del_network_route_with_metric(int index, const char *host,
 	DBG("ifname %s", ifr.ifr_name);
 
 	memset(&rt, 0, sizeof(rt));
-	rt.rt_flags = RTF_UP | RTF_HOST;
+	rt.rt_flags = RTF_UP;
+
+	/*
+	 * Set host flag only for host routes. INADDR_ANY routes will not get
+	 * removed with the RTF_HOST flag set.
+	 */
+	if (!connman_inet_is_any_addr(host, AF_INET))
+		rt.rt_flags |= RTF_HOST;
 
 	if (metric)
 		rt.rt_metric = metric;
