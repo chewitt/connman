@@ -41,7 +41,7 @@
 
 #define ETC_SYSCONFIG_CLOCK	"/etc/sysconfig/clock"
 #define USR_SHARE_ZONEINFO	"/usr/share/zoneinfo"
-#define USR_SHARE_ZONEINFO_MAP	USR_SHARE_ZONEINFO "/zone1970.tab"
+#define USR_SHARE_ZONEINFO_MAP	USR_SHARE_ZONEINFO "/zone.tab"
 
 static char *read_key_file(const char *pathname, const char *key)
 {
