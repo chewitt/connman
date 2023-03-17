@@ -7120,6 +7120,24 @@ enum connman_ipconfig_method connman_service_get_ipconfig_method(
 	return CONNMAN_IPCONFIG_METHOD_UNKNOWN;
 }
 
+const char *connman_service_get_vpn_transport_identifier(
+						struct connman_service *service)
+{
+	if (!service || service->type != CONNMAN_SERVICE_TYPE_VPN)
+		return NULL;
+
+	return __connman_provider_get_transport_ident(service->provider);
+}
+
+struct connman_provider *connman_service_get_vpn_provider(
+						struct connman_service *service)
+{
+	if (!service || service->type != CONNMAN_SERVICE_TYPE_VPN)
+		return NULL;
+
+	return service->provider;
+}
+
 bool __connman_service_is_connected_state(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {

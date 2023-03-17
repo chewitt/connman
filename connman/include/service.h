@@ -158,6 +158,10 @@ struct connman_ipconfig *connman_service_get_ipconfig(
 enum connman_ipconfig_method connman_service_get_ipconfig_method(
 					struct connman_service *service,
 					enum connman_ipconfig_type type);
+const char *connman_service_get_vpn_transport_identifier(
+					struct connman_service *service);
+struct connman_provider *connman_service_get_vpn_provider(
+					struct connman_service *service);
 #ifdef __cplusplus
 }
 #endif
