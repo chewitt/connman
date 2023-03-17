@@ -1186,7 +1186,7 @@ unsigned int __connman_ipconfig_get_flags_from_index(int index)
 }
 
 const char *__connman_ipconfig_get_gateway_from_index(int index,
-	enum connman_ipconfig_type type)
+					enum connman_ipconfig_type type)
 {
 	struct connman_ipdevice *ipdevice;
 
@@ -1213,6 +1213,12 @@ const char *__connman_ipconfig_get_gateway_from_index(int index,
 	}
 
 	return NULL;
+}
+
+const char *connman_ipconfig_get_gateway_from_index(int index,
+					enum connman_ipconfig_type type)
+{
+	return __connman_ipconfig_get_gateway_from_index(index, type);
 }
 
 struct connman_ipaddress *connman_ipconfig_get_ipaddress(
@@ -1574,6 +1580,11 @@ int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig)
 		return -1;
 
 	return ipconfig->index;
+}
+
+int connman_ipconfig_get_index(struct connman_ipconfig *ipconfig)
+{
+	return __connman_ipconfig_get_index(ipconfig);
 }
 
 /**
