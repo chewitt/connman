@@ -940,7 +940,7 @@ static void set_disconnected(struct connman_network *network)
 {
 	struct connman_ipconfig *ipconfig_ipv4, *ipconfig_ipv6;
 	enum connman_ipconfig_method ipv4_method, ipv6_method;
-	enum connman_service_state state;
+	enum connman_service_state state_ipv4, state_ipv6;
 	struct connman_service *service;
 
 	service = connman_service_lookup_from_network(network);
@@ -1006,18 +1006,18 @@ static void set_disconnected(struct connman_network *network)
 	 * or in failure. It does not make sense to go to disconnect
 	 * state if we were not connected.
 	 */
-	state = __connman_service_ipconfig_get_state(service,
+	state_ipv4 = __connman_service_ipconfig_get_state(service,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
-	if (state != CONNMAN_SERVICE_STATE_IDLE &&
-			state != CONNMAN_SERVICE_STATE_FAILURE)
+	if (state_ipv4 != CONNMAN_SERVICE_STATE_IDLE &&
+				state_ipv4 != CONNMAN_SERVICE_STATE_FAILURE)
 		__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_DISCONNECT,
 					CONNMAN_IPCONFIG_TYPE_IPV4);
 
-	state = __connman_service_ipconfig_get_state(service,
+	state_ipv6 = __connman_service_ipconfig_get_state(service,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
-	if (state != CONNMAN_SERVICE_STATE_IDLE &&
-				state != CONNMAN_SERVICE_STATE_FAILURE)
+	if (state_ipv6 != CONNMAN_SERVICE_STATE_IDLE &&
+				state_ipv6 != CONNMAN_SERVICE_STATE_FAILURE)
 		__connman_service_ipconfig_indicate_state(service,
 					CONNMAN_SERVICE_STATE_DISCONNECT,
 					CONNMAN_IPCONFIG_TYPE_IPV6);
@@ -1041,10 +1041,14 @@ static void set_disconnected(struct connman_network *network)
 		}
 	}
 
-	__connman_service_ipconfig_indicate_state(service,
+	if (state_ipv4 != CONNMAN_SERVICE_STATE_IDLE &&
+				state_ipv4 != CONNMAN_SERVICE_STATE_FAILURE)
+		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_IDLE,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
 
+	if (state_ipv6 != CONNMAN_SERVICE_STATE_IDLE &&
+				state_ipv6 != CONNMAN_SERVICE_STATE_FAILURE)
 	__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_IDLE,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
