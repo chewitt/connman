@@ -3241,6 +3241,9 @@ int __connman_service_check_passphrase(enum connman_service_security security,
 	return 0;
 }
 
+static void set_error(struct connman_service *service,
+					enum connman_service_error error);
+
 int __connman_service_set_passphrase(struct connman_service *service,
 					const char *passphrase)
 {
@@ -3264,6 +3267,10 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	if (service->network)
 		connman_network_set_string(service->network, "WiFi.Passphrase",
 				service->passphrase);
+
+	if (service->hidden_service &&
+			service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
+		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
 
 	return 0;
 }
@@ -3616,9 +3623,6 @@ void __connman_service_wispr_start(struct connman_service *service,
 
 	__connman_wispr_start(service, type);
 }
-
-static void set_error(struct connman_service *service,
-					enum connman_service_error error);
 
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
@@ -6822,6 +6826,13 @@ int __connman_service_connect(struct connman_service *service,
 			if (service->hidden) {
 				pending = service->pending;
 				service->pending = NULL;
+			}
+
+			if (service->hidden_service &&
+			service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY) {
+				__connman_service_indicate_error(service,
+					CONNMAN_SERVICE_ERROR_INVALID_KEY);
+				return err;
 			}
 
 			err = __connman_agent_request_passphrase_input(service,
