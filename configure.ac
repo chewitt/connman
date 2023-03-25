@@ -135,14 +135,6 @@ AC_ARG_ENABLE(l2tp,
 	AC_HELP_STRING([--enable-l2tp], [enable l2tp support]),
 			[enable_l2tp=${enableval}], [enable_l2tp="no"])
 if (test "${enable_l2tp}" != "no"); then
-	if (test -z "${path_pppd}"); then
-		AC_PATH_PROG(PPPD, [pppd], [/usr/sbin/pppd], $PATH:/sbin:/usr/sbin)
-	else
-		PPPD="${path_pppd}"
-		AC_SUBST(PPPD)
-	fi
-	AC_CHECK_HEADERS(pppd/pppd.h, dummy=yes,
-			AC_MSG_ERROR(ppp header files are required))
 	if (test -z "${path_l2tp}"); then
 		AC_PATH_PROG(L2TP, [xl2tpd], [/usr/sbin/xl2tpd], $PATH:/sbin:/usr/sbin)
 	else
@@ -160,14 +152,6 @@ AC_ARG_ENABLE(pptp,
 	AC_HELP_STRING([--enable-pptp], [enable pptp support]),
 			[enable_pptp=${enableval}], [enable_pptp="no"])
 if (test "${enable_pptp}" != "no"); then
-	if (test -z "${path_pppd}"); then
-		AC_PATH_PROG(PPPD, [pppd], [/usr/sbin/pppd], $PATH:/sbin:/usr/sbin)
-	else
-		PPPD="${path_pppd}"
-		AC_SUBST(PPPD)
-	fi
-	AC_CHECK_HEADERS(pppd/pppd.h, dummy=yes,
-			AC_MSG_ERROR(ppp header files are required))
 	if (test -z "${path_pptp}"); then
 		AC_PATH_PROG(PPTP, [pptp], [/usr/sbin/pptp], $PATH:/sbin:/usr/sbin)
 	else
@@ -177,6 +161,34 @@ if (test "${enable_pptp}" != "no"); then
 fi
 AM_CONDITIONAL(PPTP, test "${enable_pptp}" != "no")
 AM_CONDITIONAL(PPTP_BUILTIN, test "${enable_pptp}" = "builtin")
+
+if (test "${enable_pptp}" != "no" || test "${enable_l2tp}" != "no"); then
+
+	if (test -z "${path_pppd}"); then
+		AC_PATH_PROG(PPPD, [pppd], [/usr/sbin/pppd], $PATH:/sbin:/usr/sbin)
+	else
+		PPPD="${path_pppd}"
+		AC_SUBST(PPPD)
+	fi
+	AC_CHECK_HEADERS(pppd/pppd.h, dummy=yes,
+			AC_MSG_ERROR(ppp header files are required))
+	AC_CHECK_HEADERS([pppd/chap.h pppd/chap-new.h pppd/chap_ms.h])
+
+	PKG_CHECK_EXISTS([pppd],
+	    [AS_VAR_SET([pppd_pkgconfig_support],[yes])])
+
+	PPPD_VERSION=2.4.9
+	if test x"$pppd_pkgconfig_support" = xyes; then
+	    PPPD_VERSION=`$PKG_CONFIG --modversion pppd`
+	fi
+
+	AC_DEFINE_UNQUOTED([PPP_VERSION(x,y,z)],
+	    [((x & 0xFF) << 16 | (y & 0xFF) << 8 | (z & 0xFF) << 0)],
+	    [Macro to help determine the particular version of pppd])
+	PPP_VERSION=$(echo $PPPD_VERSION | sed -e "s/\./\,/g")
+	AC_DEFINE_UNQUOTED(WITH_PPP_VERSION, PPP_VERSION($PPP_VERSION),
+	    [The real version of pppd represented as an int])
+fi
 
 AC_CHECK_HEADERS(resolv.h, dummy=yes,
 	AC_MSG_ERROR(resolver header files are required))

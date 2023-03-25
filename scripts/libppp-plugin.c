@@ -29,13 +29,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <pppd/pppd.h>
-#include <pppd/fsm.h>
-#include <pppd/ipcp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include <dbus/dbus.h>
+
+#include "libppp-compat.h"
 
 #define INET_ADDRES_LEN (INET_ADDRSTRLEN + 5)
 #define INET_DNS_LEN	(2*INET_ADDRSTRLEN + 9)
@@ -47,7 +46,7 @@ static char *path;
 static DBusConnection *connection;
 static int prev_phase;
 
-char pppd_version[] = VERSION;
+char pppd_version[] = PPPD_VERSION;
 
 int plugin_init(void);
 
@@ -170,7 +169,7 @@ static void ppp_up(void *data, int arg)
 			DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_STRING_AS_STRING
 			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &dict);
 
-	append(&dict, "INTERNAL_IFNAME", ifname);
+	append(&dict, "INTERNAL_IFNAME", ppp_ifname());
 
 	inet_ntop(AF_INET, &ipcp_gotoptions[0].ouraddr, buf, INET_ADDRSTRLEN);
 	append(&dict, "INTERNAL_IP4_ADDRESS", buf);
@@ -309,9 +308,9 @@ int plugin_init(void)
 	chap_check_hook = ppp_have_secret;
 	pap_check_hook = ppp_have_secret;
 
-	add_notifier(&ip_up_notifier, ppp_up, NULL);
-	add_notifier(&phasechange, ppp_phase_change, NULL);
-	add_notifier(&exitnotify, ppp_exit, connection);
+	ppp_add_notify(NF_IP_UP, ppp_up, NULL);
+	ppp_add_notify(NF_PHASE_CHANGE, ppp_phase_change, NULL);
+	ppp_add_notify(NF_EXIT, ppp_exit, connection);
 
 	return 0;
 }
