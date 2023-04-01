@@ -886,7 +886,7 @@ static inline void print_attr(struct rtattr *attr, const char *name)
 		print("  attr %d (len %d)\n", attr->rta_type, len);
 }
 
-static void rtnl_link(struct nlmsghdr *hdr)
+static void rtnl_link(struct nlmsghdr *hdr, bool *has_master)
 {
 	struct ifinfomsg *msg;
 	struct rtattr *attr;
@@ -928,6 +928,7 @@ static void rtnl_link(struct nlmsghdr *hdr)
 			print_attr(attr, "priority");
 			break;
 		case IFLA_MASTER:
+			*has_master = true;
 			print_attr(attr, "master");
 			break;
 		case IFLA_WIRELESS:
@@ -960,12 +961,17 @@ static void rtnl_link(struct nlmsghdr *hdr)
 
 static void rtnl_newlink(struct nlmsghdr *hdr)
 {
+	bool has_master = false;
 	struct ifinfomsg *msg = (struct ifinfomsg *) NLMSG_DATA(hdr);
 
-	rtnl_link(hdr);
+	rtnl_link(hdr, &has_master);
 
 	if (hdr->nlmsg_type == IFLA_WIRELESS)
 		connman_warn_once("Obsolete WEXT WiFi driver detected");
+
+	/* ignore RTM_NEWLINK when adding interface to bridge */
+	if (has_master)
+		return;
 
 	process_newlink(msg->ifi_type, msg->ifi_index, msg->ifi_flags,
 				msg->ifi_change, msg, IFA_PAYLOAD(hdr));
@@ -973,9 +979,14 @@ static void rtnl_newlink(struct nlmsghdr *hdr)
 
 static void rtnl_dellink(struct nlmsghdr *hdr)
 {
+	bool has_master = false;
 	struct ifinfomsg *msg = (struct ifinfomsg *) NLMSG_DATA(hdr);
 
-	rtnl_link(hdr);
+	rtnl_link(hdr, &has_master);
+
+	/* ignore RTM_DELLINK when removing interface from bridge */
+	if (has_master)
+		return;
 
 	process_dellink(msg->ifi_type, msg->ifi_index, msg->ifi_flags,
 				msg->ifi_change, msg, IFA_PAYLOAD(hdr));
