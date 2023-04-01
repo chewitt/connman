@@ -577,7 +577,7 @@ int __connman_ntp_start(char *server, __connman_ntp_cb_t callback,
 		return -EINVAL;
 
 	if (ntp_data) {
-		connman_warn("ntp_data is not NULL (timerserver %s)",
+		connman_warn("ntp_data is not NULL (timeserver %s)",
 			ntp_data->timeserver);
 		free_ntp_data(ntp_data);
 	}
