@@ -413,6 +413,9 @@ static void ts_reset(struct connman_service *service)
 
 	g_slist_free_full(timeservers_list, g_free);
 
+	g_slist_free_full(ts_list, g_free);
+	ts_list = NULL;
+
 	timeservers_list = __connman_timeserver_get_all(service);
 
 	__connman_service_timeserver_changed(service, timeservers_list);
