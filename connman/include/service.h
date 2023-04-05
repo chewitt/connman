@@ -154,6 +154,15 @@ void connman_service_create_ip6config(struct connman_service *service,
 								int index);
 struct connman_ipconfig *connman_service_get_ipconfig(
 				struct connman_service *service, int family);
+int connman_service_reset_ipconfig_to_address(struct connman_service *service,
+					enum connman_service_state *new_state,
+					enum connman_ipconfig_type type,
+					enum connman_ipconfig_method new_method,
+					int index,
+					const char *address,
+					const char *netmask,
+					const char *gateway,
+					const unsigned char prefixlen);
 
 enum connman_ipconfig_method connman_service_get_ipconfig_method(
 					struct connman_service *service,

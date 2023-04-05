@@ -4560,12 +4560,55 @@ static void do_auto_connect(struct connman_service *service,
 	vpn_auto_connect();
 }
 
+static int reset_ipconfig(struct connman_service *service,
+					struct connman_ipconfig *ipconfig,
+					struct connman_ipconfig *new_ipconfig,
+					enum connman_ipconfig_type type,
+					enum connman_ipconfig_method new_method,
+					enum connman_service_state state,
+					enum connman_service_state *new_state)
+{
+	enum connman_ipconfig_method old_method;
+
+	if (!service || !ipconfig || !new_ipconfig)
+		return -EINVAL;
+
+	old_method = __connman_ipconfig_get_method(ipconfig);
+
+	if (is_connecting_state(service, state) ||
+					is_connected_state(service, state))
+		__connman_network_clear_ipconfig(service->network, ipconfig);
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		service->ipconfig_ipv4 = new_ipconfig;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		service->ipconfig_ipv6 = new_ipconfig;
+
+	if (is_connecting_state(service, state) ||
+					is_connected_state(service, state))
+		__connman_ipconfig_enable(new_ipconfig);
+
+	if (new_state && new_method != old_method) {
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+			*new_state = service->state_ipv4;
+		else
+			*new_state = service->state_ipv6;
+
+		settings_changed(service, new_ipconfig);
+		address_updated(service, type);
+
+		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+	}
+
+	return 0;
+}
+
 int __connman_service_reset_ipconfig(struct connman_service *service,
 		enum connman_ipconfig_type type, DBusMessageIter *array,
 		enum connman_service_state *new_state)
 {
 	struct connman_ipconfig *ipconfig, *new_ipconfig;
-	enum connman_ipconfig_method old_method, new_method;
+	enum connman_ipconfig_method new_method;
 	enum connman_service_state state;
 	int err = 0, index;
 
@@ -4583,7 +4626,6 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 	if (!ipconfig)
 		return -ENXIO;
 
-	old_method = __connman_ipconfig_get_method(ipconfig);
 	index = __connman_ipconfig_get_index(ipconfig);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
@@ -4608,30 +4650,86 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 
 	__connman_ipconfig_unref(ipconfig);
 
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		service->ipconfig_ipv4 = new_ipconfig;
-	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
-		service->ipconfig_ipv6 = new_ipconfig;
+	err = reset_ipconfig(service, ipconfig, new_ipconfig, type, new_method,
+							state, new_state);
 
-	if (is_connecting_state(service, state) ||
-					is_connected_state(service, state))
-		__connman_ipconfig_enable(new_ipconfig);
-
-	if (new_state && new_method != old_method) {
-		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-			*new_state = service->state_ipv4;
-		else
-			*new_state = service->state_ipv6;
-
-		settings_changed(service, new_ipconfig);
-		address_updated(service, type);
-
-		do_auto_connect(service, CONNMAN_SERVICE_CONNECT_REASON_AUTO);
-	}
+	__connman_ipconfig_unref(ipconfig);
 
 	DBG("err %d ipconfig %p type %d method %d state %s", err,
 		new_ipconfig, type, new_method,
 		!new_state  ? "-" : state2string(*new_state));
+
+	return err;
+}
+
+int connman_service_reset_ipconfig_to_address(struct connman_service *service,
+					enum connman_service_state *new_state,
+					enum connman_ipconfig_type type,
+					enum connman_ipconfig_method new_method,
+					int index,
+					const char *address,
+					const char *netmask,
+					const char *gateway,
+					const unsigned char prefix_length)
+{
+	struct connman_ipconfig *ipconfig;
+	struct connman_ipconfig *new_ipconfig;
+	enum connman_service_state state;
+	int err = 0;
+
+	if (!service)
+		return -EINVAL;
+
+	DBG("service %p new state %p type %d new_method %d", service,
+					new_state, type, new_method);
+	DBG("index %d address %s netmask %s gateway %s prefix length %u",
+					index, address, netmask, gateway,
+					prefix_length);
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		ipconfig = service->ipconfig_ipv4;
+		state = service->state_ipv4;
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		ipconfig = service->ipconfig_ipv6;
+		state = service->state_ipv6;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (!ipconfig)
+		return -ENXIO;
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		new_ipconfig = create_ip4config(service, index, new_method);
+	else
+		new_ipconfig = create_ip6config(service, index);
+
+	err = __connman_ipconfig_set_config_from_address(new_ipconfig,
+					new_method, address, netmask, gateway,
+					prefix_length);
+	if (err) {
+		DBG("Failed to set IPv%d config %s/%s/%s with method %d",
+				type == CONNMAN_IPCONFIG_TYPE_IPV4 ? 4 : 6,
+				address, netmask, gateway, new_method);
+		return err;
+	}
+
+	err = reset_ipconfig(service, ipconfig, new_ipconfig, type, new_method,
+							state, new_state);
+
+	__connman_ipconfig_unref(ipconfig);
+
+	DBG("err %d ipconfig %p type %d method %d state %s", err,
+				new_ipconfig, type, new_method,
+				!new_state ? "-" : state2string(*new_state));
+
+	err = __connman_network_enable_ipconfig(service->network, new_ipconfig);
+	if (err)
+		DBG("cannot enable ipconfig %p for network %p", new_ipconfig,
+							service->network);
 
 	return err;
 }
