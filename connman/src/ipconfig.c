@@ -2472,6 +2472,87 @@ void __connman_ipconfig_append_ipv4config(struct connman_ipconfig *ipconfig,
 				DBUS_TYPE_STRING, &ipconfig->address->gateway);
 }
 
+static int set_config(struct connman_ipconfig *ipconfig,
+					enum connman_ipconfig_method method,
+					const char *address,
+					const char *netmask,
+					const char *gateway,
+					unsigned char prefix_length,
+					const char *privacy_string,
+					int privacy)
+{
+	int type = -1;
+
+	if (!ipconfig)
+		return -EINVAL;
+
+	switch (method) {
+	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+		return -EINVAL;
+
+	case CONNMAN_IPCONFIG_METHOD_OFF:
+		ipconfig->method = method;
+
+		break;
+
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+		if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
+			return -EOPNOTSUPP;
+
+		ipconfig->method = method;
+		if (privacy_string)
+			ipconfig->ipv6_privacy_config = privacy;
+
+		break;
+
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		switch (ipconfig->type) {
+		case CONNMAN_IPCONFIG_TYPE_IPV4:
+			type = AF_INET;
+			break;
+		case CONNMAN_IPCONFIG_TYPE_IPV6:
+			type = AF_INET6;
+			break;
+		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+		case CONNMAN_IPCONFIG_TYPE_ALL:
+			type = -1;
+			break;
+		}
+
+		if ((address && connman_inet_check_ipaddress(address)
+						!= type) ||
+				(netmask &&
+				connman_inet_check_ipaddress(netmask)
+						!= type) ||
+				(gateway &&
+				connman_inet_check_ipaddress(gateway)
+						!= type))
+			return -EINVAL;
+
+		ipconfig->method = method;
+
+		if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV4)
+			connman_ipaddress_set_ipv4(ipconfig->address,
+						address, netmask, gateway);
+		else
+			return connman_ipaddress_set_ipv6(
+					ipconfig->address, address,
+						prefix_length, gateway);
+
+		break;
+
+	case CONNMAN_IPCONFIG_METHOD_DHCP:
+		if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV4)
+			return -EOPNOTSUPP;
+
+		ipconfig->method = method;
+		break;
+	}
+
+	return 0;
+}
+
 int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *array)
 {
@@ -2480,7 +2561,6 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 		*privacy_string = NULL;
 	int prefix_length = 0, privacy = 0;
 	DBusMessageIter dict;
-	int type = -1;
 
 	DBG("ipconfig %p", ipconfig);
 
@@ -2556,71 +2636,20 @@ int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 		method, address, netmask, gateway, prefix_length,
 		privacy_string);
 
-	switch (method) {
-	case CONNMAN_IPCONFIG_METHOD_UNKNOWN:
-	case CONNMAN_IPCONFIG_METHOD_FIXED:
-		return -EINVAL;
+	return set_config(ipconfig, method, address, netmask, gateway,
+				prefix_length, privacy_string, privacy);
+}
 
-	case CONNMAN_IPCONFIG_METHOD_OFF:
-		ipconfig->method = method;
-
-		break;
-
-	case CONNMAN_IPCONFIG_METHOD_AUTO:
-		if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV6)
-			return -EOPNOTSUPP;
-
-		ipconfig->method = method;
-		if (privacy_string)
-			ipconfig->ipv6_privacy_config = privacy;
-
-		break;
-
-	case CONNMAN_IPCONFIG_METHOD_MANUAL:
-		switch (ipconfig->type) {
-		case CONNMAN_IPCONFIG_TYPE_IPV4:
-			type = AF_INET;
-			break;
-		case CONNMAN_IPCONFIG_TYPE_IPV6:
-			type = AF_INET6;
-			break;
-		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
-		case CONNMAN_IPCONFIG_TYPE_ALL:
-			type = -1;
-			break;
-		}
-
-		if ((address && connman_inet_check_ipaddress(address)
-						!= type) ||
-				(netmask &&
-				connman_inet_check_ipaddress(netmask)
-						!= type) ||
-				(gateway &&
-				connman_inet_check_ipaddress(gateway)
-						!= type))
-			return -EINVAL;
-
-		ipconfig->method = method;
-
-		if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV4)
-			connman_ipaddress_set_ipv4(ipconfig->address,
-						address, netmask, gateway);
-		else
-			return connman_ipaddress_set_ipv6(
-					ipconfig->address, address,
-						prefix_length, gateway);
-
-		break;
-
-	case CONNMAN_IPCONFIG_METHOD_DHCP:
-		if (ipconfig->type != CONNMAN_IPCONFIG_TYPE_IPV4)
-			return -EOPNOTSUPP;
-
-		ipconfig->method = method;
-		break;
-	}
-
-	return 0;
+int __connman_ipconfig_set_config_from_address(
+					struct connman_ipconfig *ipconfig,
+					enum connman_ipconfig_method method,
+					const char *address,
+					const char *netmask,
+					const char *gateway,
+					unsigned char prefix_length)
+{
+	return set_config(ipconfig, method, address, netmask, gateway,
+							prefix_length, NULL, 0);
 }
 
 void __connman_ipconfig_append_ethernet(struct connman_ipconfig *ipconfig,
