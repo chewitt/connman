@@ -1982,13 +1982,20 @@ struct connman_service *connman_service_get_default(void)
 bool __connman_service_index_is_default(int index)
 {
 	struct connman_service *service;
+	int index4;
+	int index6;
 
 	if (index < 0)
 		return false;
 
 	service = connman_service_get_default();
+	if (!service)
+		return false;
 
-	return __connman_service_get_index(service) == index;
+	index4 = __connman_ipconfig_get_index(service->ipconfig_ipv4);
+	index6 = __connman_ipconfig_get_index(service->ipconfig_ipv6);
+
+	return index4 == index || index6 == index;
 }
 
 static struct connman_service *get_connected_default_service()
