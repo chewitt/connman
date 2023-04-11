@@ -672,6 +672,7 @@ void __connman_technology_remove_interface(enum connman_service_type type,
 				int index, const char *ident);
 void __connman_technology_notify_regdom_by_device(struct connman_device *device,
 						int result, const char *alpha2);
+const char *__connman_technology_get_regdom(enum connman_service_type type);
 const char *__connman_technology_get_tethering_ident(
 					struct connman_technology *tech);
 enum connman_service_type __connman_technology_get_type(

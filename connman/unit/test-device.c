@@ -243,6 +243,11 @@ int __connman_technology_enabled(enum connman_service_type type)
 	}
 }
 
+const char *__connman_technology_get_regdom(enum connman_service_type type)
+{
+	return NULL;
+}
+
 // rtnl dummies
 
 static unsigned int watch_id = 42;
