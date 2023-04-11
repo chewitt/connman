@@ -605,8 +605,11 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 					const char *error, void *user_data)
 {
 	struct connman_wispr_portal_context *wp_context = user_data;
-	struct connman_wispr_portal *wispr_portal;
-	int index;
+	struct connman_wispr_portal *wispr_portal4;
+	struct connman_wispr_portal *wispr_portal6;
+	struct connman_ipconfig *ipconfig;
+	int index4;
+	int index6;
 
 	DBG("");
 
@@ -617,17 +620,24 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 	 * No way to cancel this if wp_context has been freed, so we lookup
 	 * from the service and check that this is still the right context.
 	 */
-	index = __connman_service_get_index(service);
-	if (index < 0)
+	ipconfig = __connman_service_get_ip4config(service);
+	index4 = __connman_ipconfig_get_index(ipconfig);
+
+	ipconfig = __connman_service_get_ip6config(service);
+	index6 = __connman_ipconfig_get_index(ipconfig);
+
+	if (index4 < 0 && index6 < 0)
 		return;
 
-	wispr_portal = g_hash_table_lookup(wispr_portal_hash,
-					GINT_TO_POINTER(index));
-	if (!wispr_portal)
+	wispr_portal4 = g_hash_table_lookup(wispr_portal_hash,
+					GINT_TO_POINTER(index4));
+	wispr_portal6 = g_hash_table_lookup(wispr_portal_hash,
+					GINT_TO_POINTER(index6));
+	if (!wispr_portal4 && !wispr_portal6)
 		return;
 
-	if (wp_context != wispr_portal->ipv4_context &&
-		wp_context != wispr_portal->ipv6_context)
+	if (wp_context != wispr_portal4->ipv4_context &&
+				wp_context != wispr_portal6->ipv6_context)
 		return;
 
 	if (!authentication_done) {
