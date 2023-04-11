@@ -66,7 +66,8 @@ Only manage these network interfaces. By default all network interfaces
 are managed.
 .TP
 .BR \-I\ \fIinterface \fR[,...],\  \-\-nodevice= \fIinterface \fR[,...]
-Never manage these network interfaces.
+Never manage these network interfaces. The option can be a pattern
+containing "*" and "?" characters.
 .TP
 .BI \-p\  plugin \fR[,...],\ \fB\-\-plugin= plugin \fR[,...]
 Load these plugins only. The option can be a pattern containing
