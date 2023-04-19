@@ -4644,12 +4644,6 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 		new_method = __connman_ipconfig_get_method(new_ipconfig);
 	}
 
-	if (is_connecting_state(service, state) ||
-					is_connected_state(service, state))
-		__connman_network_clear_ipconfig(service->network, ipconfig);
-
-	__connman_ipconfig_unref(ipconfig);
-
 	err = reset_ipconfig(service, ipconfig, new_ipconfig, type, new_method,
 							state, new_state);
 
@@ -8268,6 +8262,48 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 	__connman_timeserver_sync(service);
 
 	return service_indicate_state(service);
+}
+
+int connman_service_ipconfig_indicate_state(struct connman_service *service,
+					enum connman_service_state new_state,
+					enum connman_ipconfig_type type,
+					bool notify_settings_change)
+{
+	int err;
+
+	DBG("service %p new state %d type %d notify %d", service, new_state,
+						type, notify_settings_change);
+
+	err = __connman_service_ipconfig_indicate_state(service, new_state,
+						type);
+
+	/*
+	 * By default ipconfig change does not send IP address settings change.
+	 * This allows to enforce the notification when the state is connected.
+	 */
+	if ((!err || err == -EALREADY) &&
+				is_connected_state(service, new_state) &&
+				notify_settings_change) {
+		switch(type) {
+		case CONNMAN_IPCONFIG_TYPE_IPV4:
+			DBG("IPv4 settings changed");
+			settings_changed(service, service->ipconfig_ipv4);
+			break;
+		case CONNMAN_IPCONFIG_TYPE_IPV6:
+			DBG("IPv6 settings changed");
+			settings_changed(service, service->ipconfig_ipv6);
+			break;
+		default:
+			DBG("unknown type %d", type);
+			break;
+		}
+
+		address_updated(service, type);
+	} else {
+		DBG("err %d", err);
+	}
+
+	return err;
 }
 
 static bool prepare_network(struct connman_service *service)
