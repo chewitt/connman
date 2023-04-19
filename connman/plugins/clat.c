@@ -355,6 +355,7 @@ static int force_rmtun(const char *ifname)
 
 static int clat_run_task(struct clat_data *data);
 static int clat_stop(struct clat_data *data);
+static void clat_change_state(struct clat_data *data, enum clat_state state);
 static int stop_task(struct clat_data *data);
 
 static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
@@ -443,11 +444,11 @@ static gboolean io_channel_cb(GIOChannel *source, GIOCondition condition,
 		g_free(str);
 
 		if (restart) {
-			data->state = CLAT_STATE_RESTART;
+			clat_change_state(data, CLAT_STATE_RESTART);
 
 			/*
 			 * When task is running stop it and do restart in exit
-			 * function.
+			 * function. TODO: fix this ?
 			 */
 			if (data->state == CLAT_STATE_RUNNING)
 				err = stop_task(data);
@@ -594,6 +595,67 @@ static struct clat_data *clat_data_init()
 	data->ifindex = -1;
 
 	return data;
+}
+
+static void clat_change_state(struct clat_data *data, enum clat_state state)
+{
+	enum connman_service_state service_state =
+						CONNMAN_SERVICE_STATE_UNKNOWN;
+
+	if (!data)
+		return;
+
+	if (data->state == state) {
+		DBG("State already set to %d/%s - not indicating ipconf change",
+						state, state2string(state));
+		return;
+	}
+
+	DBG("%d/%s -> %d/%s", data->state, state2string(data->state), state,
+							state2string(state));
+
+	data->state = state;
+
+	if (!data->service)
+		return;
+
+	switch (state) {
+	case CLAT_STATE_PREFIX_QUERY:
+		/* Cannot do this because of combined state */
+		//service_state = CONNMAN_SERVICE_STATE_ASSOCIATION;
+		return;
+	case CLAT_STATE_PRE_CONFIGURE:
+		/* Cannot do this because of combined state */
+		//service_state = CONNMAN_SERVICE_STATE_CONFIGURATION;
+		return;
+	case CLAT_STATE_RUNNING:
+		service_state = CONNMAN_SERVICE_STATE_READY;
+		break;
+	case CLAT_STATE_POST_CONFIGURE:
+		/* Cannot do this because of combined state */
+		//service_state = CONNMAN_SERVICE_STATE_DISCONNECT;
+		return;
+	case CLAT_STATE_IDLE:
+	case CLAT_STATE_STOPPED:
+		service_state = CONNMAN_SERVICE_STATE_IDLE;
+		break;
+	case CLAT_STATE_FAILURE:
+		service_state = CONNMAN_SERVICE_STATE_FAILURE;
+		break;
+	case CLAT_STATE_RESTART:
+	default:
+		return;
+	}
+
+	if (service_state != CONNMAN_SERVICE_STATE_UNKNOWN) {
+		DBG("Indicate service %p IPv4 ipconfig state %d", data->service,
+						service_state);
+		connman_service_ipconfig_indicate_state(data->service,
+						service_state,
+						CONNMAN_IPCONFIG_TYPE_IPV4,
+						true);
+	}
+
 }
 
 static int clat_create_tayga_config(struct clat_data *data)
@@ -1013,7 +1075,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 		DBG("Stop running CLAT to change state to %d", new_state);
 
 		stop_task(data);
-		data->state = new_state;
+		clat_change_state(data, new_state);
 
 		return;
 	}
@@ -1025,7 +1087,7 @@ static void prefix_query_cb(GResolvResultStatus status,
 	if (data->state == CLAT_STATE_PREFIX_QUERY ||
 						data->state != new_state) {
 		DBG("State progress or state change");
-		data->state = new_state;
+		clat_change_state(data, new_state);
 
 		err = clat_run_task(data);
 		if (err && err != -EALREADY) {
@@ -1449,6 +1511,8 @@ static int clat_task_configure(struct clat_data *data)
 						NULL,
 						0);
 
+	g_free(netmask);
+
 	if (err) {
 		connman_error("Failed to set CLAT IPv4 address for service %p",
 								data->service);
@@ -1460,16 +1524,13 @@ static int clat_task_configure(struct clat_data *data)
 
 	ipconfig = connman_service_get_ipconfig(data->service, AF_INET);
 	ipaddress = connman_ipconfig_get_ipaddress(ipconfig);
-	if (ipaddress) {
-		connman_inet_set_address(index, ipaddress);
-		g_free(netmask);
-	}
-
 	if (!ipaddress) {
 		connman_error("No IPv4config on service %p cannot setup CLAT",
 								data->service);
 		return -ENOENT;
 	}
+
+	connman_inet_set_address(index, ipaddress);
 
 	err = setup_ipv4_default_route(data, true);
 	if (err && err != -EALREADY) {
@@ -1682,7 +1743,7 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 	case CLAT_STATE_FAILURE:
 		DBG("CLAT task exited, state set to failure, do post config");
 
-		data->state = CLAT_STATE_POST_CONFIGURE;
+		clat_change_state(data, CLAT_STATE_POST_CONFIGURE);
 
 		err = clat_run_task(data);
 		if (err && err != -EALREADY)
@@ -1698,9 +1759,9 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 			 * do restart.
 			 */
 			if (data->state == CLAT_STATE_RUNNING)
-				data->state = CLAT_STATE_RESTART;
+				clat_change_state(data, CLAT_STATE_RESTART);
 			else
-				data->state = CLAT_STATE_FAILURE;
+				clat_change_state(data, CLAT_STATE_FAILURE);
 		} else {
 			DBG("run next state %d/%s", data->state + 1,
 						state2string(data->state + 1));
@@ -1721,7 +1782,7 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 			 * PRE_CONFIGURE state.
 			 */
 			DBG("CLAT process restarting");
-			data->state = CLAT_STATE_PREFIX_QUERY;
+			clat_change_state(data, CLAT_STATE_PREFIX_QUERY);
 			data->do_restart = false;
 
 			err = clat_run_task(data);
@@ -1735,7 +1796,7 @@ static void clat_task_exit(struct connman_task *task, int exit_code,
 		}
 
 		DBG("CLAT process ended");
-		data->state = CLAT_STATE_STOPPED;
+		clat_change_state(data, CLAT_STATE_STOPPED);
 		break;
 	case CLAT_STATE_RESTART:
 		DBG("CLAT task return when restarting");
@@ -1802,6 +1863,7 @@ static void stop_running(struct clat_data *data)
 
 static int clat_run_task(struct clat_data *data)
 {
+	enum clat_state new_state = CLAT_STATE_IDLE;
 	int fd_out;
 	int fd_err;
 	int err = 0;
@@ -1810,7 +1872,8 @@ static int clat_run_task(struct clat_data *data)
 
 	switch (data->state) {
 	case CLAT_STATE_IDLE:
-		data->state = CLAT_STATE_PREFIX_QUERY;
+		clat_change_state(data, CLAT_STATE_PREFIX_QUERY);
+
 		/* Get the prefix from the ISP NAT service */
 		err = clat_task_do_prefix_query(data);
 		if (err && err != -EALREADY && err != -EINPROGRESS) {
@@ -1828,7 +1891,8 @@ static int clat_run_task(struct clat_data *data)
 			break;
 		}
 
-		data->state = CLAT_STATE_PRE_CONFIGURE;
+		new_state = CLAT_STATE_PRE_CONFIGURE;
+
 		break;
 	case CLAT_STATE_PRE_CONFIGURE:
 		err = clat_task_configure(data);
@@ -1837,7 +1901,7 @@ static int clat_run_task(struct clat_data *data)
 			break;
 		}
 
-		data->state = CLAT_STATE_RUNNING;
+		new_state = CLAT_STATE_RUNNING;
 
 		err = clat_task_start_periodic_query(data);
 		if (err && err != -EALREADY)
@@ -1859,7 +1923,7 @@ static int clat_run_task(struct clat_data *data)
 
 		err = clat_task_post_configure(data);
 		if (!err) {
-			data->state = CLAT_STATE_POST_CONFIGURE;
+			new_state = CLAT_STATE_POST_CONFIGURE;
 			break;
 		}
 
@@ -1873,7 +1937,23 @@ static int clat_run_task(struct clat_data *data)
 			 * tayga use existing settings.
 			 */
 			data->do_restart = false;
-			data->state = CLAT_STATE_PREFIX_QUERY;
+
+			/*
+			 *TODO might be unnecessary/dangerous to indicate
+			 * disconnect manually here since states are
+			 * combined and disconnect is dominant.
+			 */
+			/*connman_service_ipconfig_indicate_state(data->service,
+					CONNMAN_SERVICE_STATE_DISCONNECT,
+					CONNMAN_IPCONFIG_TYPE_IPV4);*/
+
+			/* Set idle, IPv6 state is used */
+			connman_service_ipconfig_indicate_state(data->service,
+					CONNMAN_SERVICE_STATE_IDLE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+
+			clat_change_state(data, CLAT_STATE_PREFIX_QUERY);
 
 			/*
 			 * This will make sure that the task will stop. If post
@@ -1912,7 +1992,7 @@ static int clat_run_task(struct clat_data *data)
 		break;
 	case CLAT_STATE_POST_CONFIGURE:
 		connman_warn("CLAT run task called in post-configure state");
-		data->state = CLAT_STATE_STOPPED;
+		clat_change_state(data, CLAT_STATE_STOPPED);
 		return 0;
 	case CLAT_STATE_FAILURE:
 		DBG("CLAT entered failure state, stop all that is running");
@@ -1927,7 +2007,13 @@ static int clat_run_task(struct clat_data *data)
 			break;
 		}
 
-		data->state = CLAT_STATE_POST_CONFIGURE;
+		new_state = CLAT_STATE_POST_CONFIGURE;
+
+		/* Failure state is set if both have failed */
+		connman_service_ipconfig_indicate_state(data->service,
+					CONNMAN_SERVICE_STATE_FAILURE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
 
 		break;
 	}
@@ -1941,9 +2027,13 @@ static int clat_run_task(struct clat_data *data)
 	if (err) {
 		connman_error("CLAT task failed to run, error %d/%s",
 							err, strerror(-err));
-		data->state = CLAT_STATE_FAILURE;
+		clat_change_state(data, CLAT_STATE_FAILURE);
 		destroy_task(data);
 	} else {
+		DBG("CLAT changing state to %d/%s", new_state,
+						state2string(new_state));
+		clat_change_state(data, new_state);
+
 		if (data->out_ch)
 			close_io_channel(data, data->out_ch);
 
@@ -1982,7 +2072,7 @@ static int clat_start(struct clat_data *data)
 	if (clat_is_running(data))
 		return -EALREADY;
 
-	data->state = CLAT_STATE_IDLE;
+	clat_change_state(data, CLAT_STATE_IDLE);
 	clat_run_task(data);
 
 	return 0;
@@ -2044,15 +2134,10 @@ static int clat_stop(struct clat_data *data)
 	if (data->task)
 		return stop_task(data);
 
-	data->state = CLAT_STATE_STOPPED;
+	clat_change_state(data, CLAT_STATE_STOPPED);
 
 	return 0;
 }
-
-/*static int clat_failure(struct clat_data *data)
-{
-	return 0;
-}*/
 
 static void clat_new_rtnl_gateway(int index, const char *dst,
 						const char *gateway, int metric,
@@ -2412,7 +2497,7 @@ static int set_clat_service(struct clat_data *data,
 	data->service = service;
 
 	if (restart) {
-		data->state = CLAT_STATE_RESTART;
+		clat_change_state(data, CLAT_STATE_RESTART);
 		err = clat_run_task(data);
 		if (err) {
 			connman_error("Changing tracked service and failed to "
