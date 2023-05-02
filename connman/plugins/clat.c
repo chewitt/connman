@@ -98,7 +98,7 @@ struct clat_data {
 	bool vpn_mode_on;
 };
 
-#define WKN_ADDRESS "ipv4only.arpa"
+#define WKN_ADDRESS			"ipv4only.arpa"
 #define DEFAULT_TAYGA_BIN		"/usr/sbin/tayga"
 #define TAYGA_CLAT_DEVICE		"clat"
 #define TAYGA_CONF			"tayga.conf"
@@ -938,6 +938,9 @@ static void prefix_query_cb(GResolvResultStatus status,
 		return;
 	}
 
+	if (data->vpn_mode_on)
+		DBG("Received query result in VPN mode");
+
 	/*
 	 * We cannot unref the resolver here as resolv struct is manipulated
 	 * by gresolv.c after we return from this callback.
@@ -1188,6 +1191,11 @@ static gboolean run_prefix_query(gpointer user_data)
 
 	data->prefix_query_id = 0;
 
+	if (data->vpn_mode_on) {
+		DBG("Skip prefix query in VPN mode");
+		return G_SOURCE_REMOVE;
+	}
+
 	err = clat_task_do_prefix_query(data);
 	if (err) {
 		DBG("failed to run prefix query: %d", err);
@@ -1417,11 +1425,15 @@ static int setup_ipv4_default_route(struct clat_data *data, bool enable)
 	int index;
 	int err;
 
+	DBG("%s default route", enable ? "enable" : "disable");
+
 	index = connman_inet_ifindex(TAYGA_CLAT_DEVICE);
 	if (index < 0) {
-		DBG("index %d name %s", index, TAYGA_CLAT_DEVICE);
+		DBG("No CLAT device");
 		return -ENODEV;
 	}
+
+	DBG("index %d name %s", index, TAYGA_CLAT_DEVICE);
 
 	if (data->ipv4_default_route_on == enable)
 		return -EALREADY;
@@ -2566,9 +2578,10 @@ static void clat_default_changed(struct connman_service *service)
 			}
 
 			if (data->vpn_mode_on) {
-				DBG("VPN mode on -> off");
+				DBG("VPN mode on -> off, start periodic query");
 				set_vpn_service(data, NULL);
 				data->vpn_mode_on = false;
+				clat_task_start_periodic_query(data);
 			}
 
 			break;
@@ -2602,16 +2615,18 @@ static void clat_default_changed(struct connman_service *service)
 				DBG("Dropped IPv4 default route for VPN");
 			}
 
-			DBG("VPN mode on");
+			DBG("VPN mode on, stop prefix query");
 			data->vpn_mode_on = true;
+			clat_task_stop_periodic_query(data);
 
 			return;
 		case CLAT_SERVICE_IGNORE:
 			if (data->vpn_mode_on) {
-				DBG("VPN mode on -> off");
+				DBG("VPN mode on -> off, start prefix query");
 
 				set_vpn_service(data, NULL);
 				data->vpn_mode_on = false;
+				clat_task_start_periodic_query(data);
 			}
 
 			DBG("Tracked service %p is not default or valid, "
@@ -2659,9 +2674,10 @@ static void clat_default_changed(struct connman_service *service)
 						!data->ipv4_default_route_on) {
 
 		if (data->vpn_mode_on) {
-			DBG("VPN mode on -> off");
+			DBG("VPN mode on -> off, start periodic query");
 			set_vpn_service(data, NULL);
 			data->vpn_mode_on = false;
+			clat_task_start_periodic_query(data);
 		}
 
 		err = setup_ipv4_default_route(data, true);
