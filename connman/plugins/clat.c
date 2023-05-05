@@ -66,7 +66,8 @@ struct clat_data {
 	struct connman_task *task;
 	struct connman_service *vpn_service;
 	enum clat_state state;
-	char *isp_64gateway;
+	char *isp_ipv6_gw;
+	int isp_ipv6_gw_metric;
 
 	char *config_path;
 	char *clat_prefix;
@@ -127,6 +128,7 @@ static struct {
 	bool dad_enabled;
 	bool resolv_always_succeeds;
 	bool clat_device_use_netmask;
+	bool clat_device_setup_default_route;
 	bool tayga_use_ipv6_conf;
 	bool tayga_use_strict_frag_hdr;
 } clat_settings = {
@@ -141,6 +143,9 @@ static struct {
 	/* Add netmask to the CLAT device IPv4 address, default on */
 	.clat_device_use_netmask = true,
 
+	/* Setup default route with a metric by CLAT plugin, default off */
+	.clat_device_setup_default_route = false,
+
 	/* Write IPv6 address of the interface to tayga config, default off */
 	.tayga_use_ipv6_conf = false,
 
@@ -153,6 +158,7 @@ static struct {
 #define CONF_DAD_ENABLED		"EnableDAD"
 #define CONF_RESOLV_ALWAYS_SUCCEEDS	"ResolvAlwaysSucceeds"
 #define CONF_CLAT_USE_NETMASK		"ClatDeviceUseNetmask"
+#define CONF_CLAT_SET_DEFAULT_ROUTE	"ClatDeviceSetDefaultRoute"
 #define CONF_TAYGA_USE_IPV6_CONF	"TaygaRequiresIPv6Address"
 #define CONF_TAYGA_USE_STRICT_FRAG_HDR	"TaygaStrictFragHdr"
 
@@ -225,6 +231,14 @@ static void parse_clat_config(GKeyFile *config)
 						&error);
 	if (!error)
 		clat_settings.clat_device_use_netmask = boolean;
+
+	g_clear_error(&error);
+
+	boolean = g_key_file_get_boolean(config, group,
+						CONF_CLAT_SET_DEFAULT_ROUTE,
+						&error);
+	if (!error)
+		clat_settings.clat_device_setup_default_route = boolean;
 
 	g_clear_error(&error);
 
@@ -548,8 +562,9 @@ static void clat_data_clear(struct clat_data *data)
 
 	DBG("data %p", data);
 
-	g_free(data->isp_64gateway);
-	data->isp_64gateway = NULL;
+	g_free(data->isp_ipv6_gw);
+	data->isp_ipv6_gw = NULL;
+	data->isp_ipv6_gw_metric = 0;
 
 	g_free(data->config_path);
 	data->config_path = NULL;
@@ -1166,7 +1181,7 @@ static int clat_task_do_prefix_query(struct clat_data *data)
 		return -ENOMEM;
 	}
 
-	DBG("Trying to resolv %s gateway %s", WKN_ADDRESS, data->isp_64gateway);
+	DBG("Trying to resolv %s gateway %s", WKN_ADDRESS, data->isp_ipv6_gw);
 
 	g_resolv_set_address_family(data->resolv, AF_INET6);
 	data->resolv_query_id = g_resolv_lookup_hostname(data->resolv,
@@ -1425,6 +1440,11 @@ static int setup_ipv4_default_route(struct clat_data *data, bool enable)
 	int index;
 	int err;
 
+	if (!clat_settings.clat_device_setup_default_route) {
+		DBG("disabled by config");
+		goto out;
+	}
+
 	DBG("%s default route", enable ? "enable" : "disable");
 
 	index = connman_inet_ifindex(TAYGA_CLAT_DEVICE);
@@ -1454,6 +1474,7 @@ static int setup_ipv4_default_route(struct clat_data *data, bool enable)
 	if (err)
 		return err;
 
+out:
 	data->ipv4_default_route_on = enable;
 	return 0;
 }
@@ -1608,7 +1629,7 @@ static gboolean clat_task_run_dad(gpointer user_data)
 		 * If the sending of DAD fails consecutive calls will as well,
 		 * stop DAD in such case
 		 */
-		connman_error("CLAT failed to send DAD: %d, stoppped", err);
+		connman_error("CLAT failed to send DAD: %d, stopped", err);
 		return G_SOURCE_REMOVE;
 	}
 
@@ -2124,6 +2145,118 @@ static void set_vpn_service(struct clat_data *data,
 		data->vpn_service = connman_service_ref(vpn_service);
 }
 
+static void setup_vpn_mode(struct clat_data *data, bool vpn_mode_on)
+{
+	int err;
+
+	DBG("VPN mode %s -> %s", data->vpn_mode_on ? "on" : "off",
+				vpn_mode_on ? "on" : "off");
+
+	if (data->vpn_mode_on == vpn_mode_on) {
+		DBG("already set");
+		return;
+	}
+
+	/* On -> Off */
+	if (data->vpn_mode_on && !vpn_mode_on) {
+		set_vpn_service(data, NULL);
+		data->vpn_mode_on = false;
+
+		DBG("VPN mode off, start periodic query");
+		clat_task_start_periodic_query(data);
+
+		if (!data->clat_prefix || !data->isp_ipv6_gw) {
+			DBG("Cannot cleanup VPN IPv6 routes gw %s prefix %s",
+							data->isp_ipv6_gw,
+							data->clat_prefix);
+			return;
+		}
+
+		DBG("Cleanup VPN IPv6 route to %s, restore default via %s",
+						data->clat_prefix,
+						data->isp_ipv6_gw);
+
+		/* index, host, prefixlen */
+		err = connman_inet_del_ipv6_network_route_with_metric(
+						data->ifindex,
+						data->clat_prefix,
+						data->clat_prefixlen,
+						data->isp_ipv6_gw_metric);
+		if (err)
+			DBG("failed to delete IPv6 network route");
+
+		DBG("Set tracked service interface index %d as IPv6 gateway",
+							data->ifindex);
+
+		err = connman_inet_set_ipv6_gateway_interface(data->ifindex);
+		if (err)
+			DBG("failed to set index %d as IPv6 gateway",
+							data->ifindex);
+
+		DBG("Add IPv6 default route gw %s metric %d", data->isp_ipv6_gw,
+						data->isp_ipv6_gw_metric);
+
+		err = connman_inet_add_ipv6_network_route_with_metric(
+						data->ifindex,
+						"::",
+						data->isp_ipv6_gw,
+						0, /* no prefixlen on default */
+						data->isp_ipv6_gw_metric);
+		if (err)
+			DBG("failed to add IPv6 default route");
+	/* Off -> on */
+	} else {
+		DBG("VPN mode on, stop prefix query");
+		data->vpn_mode_on = true;
+		clat_task_stop_periodic_query(data);
+
+		if (!data->isp_ipv6_gw || !data->clat_prefix) {
+			DBG("Cannot setup CLAT VPN routes, gw %s prefix %s",
+							data->isp_ipv6_gw,
+							data->clat_prefix);
+			return;
+		}
+
+		DBG("Setup CLAT VPN route to %s via %s",
+						data->clat_prefix,
+						data->isp_ipv6_gw);
+
+		/* index, host, gateway, prefixlen */
+		err = connman_inet_add_ipv6_network_route_with_metric(
+						data->ifindex,
+						data->clat_prefix,
+						data->isp_ipv6_gw,
+						data->clat_prefixlen,
+						data->isp_ipv6_gw_metric);
+		if (err)
+			DBG("failed to add IPv6 route via CLAT prefix");
+
+		DBG("Clear IPv6 gateway interface %d", data->ifindex);
+
+		err = connman_inet_clear_ipv6_gateway_interface(data->ifindex);
+		if (err)
+			DBG("failed to clear IPv6 gateway interface for VPN");
+
+		DBG("Clear IPv6 gateway address %s", data->isp_ipv6_gw);
+
+		err = connman_inet_clear_ipv6_gateway_address(data->ifindex,
+						data->isp_ipv6_gw);
+		if (err)
+			DBG("failed to clear IPv6 gateway address");
+
+		DBG("Delete IPv6 default route");
+
+		/* index, host, prefixlen */
+		err = connman_inet_del_ipv6_network_route_with_metric(
+						data->ifindex,
+						"::",
+						0,
+						data->isp_ipv6_gw_metric);
+		if (err)
+			DBG("failed to delete IPv6 default route");
+	}
+}
+
 static int clat_stop(struct clat_data *data)
 {
 	if (!data)
@@ -2132,8 +2265,8 @@ static int clat_stop(struct clat_data *data)
 	DBG("state %d/%s", data->state, state2string(data->state));
 
 	/* Do not leave the VPN hanging */
-	set_vpn_service(data, NULL);
-	data->vpn_mode_on = false;
+	if (data->vpn_mode_on)
+		setup_vpn_mode(data, false);
 
 	if (!clat_is_running(data)) {
 		DBG("already stopping/stopped");
@@ -2157,26 +2290,30 @@ static void clat_new_rtnl_gateway(int index, const char *dst,
 {
 	struct clat_data *data = get_data();
 
-	DBG("%d dst %s gateway %s metric %d", index, dst, gateway, metric);
+	DBG("%d dst %s gateway %s metric %d rtm_protocol %u", index, dst,
+						gateway, metric, rtm_protocol);
 
 	/* Not the device we are monitoring. */
-	if (index != data->ifindex)
-		return;
-
-	if (rtm_protocol != RTPROT_RA && rtm_protocol != RTPROT_DHCP) {
-		DBG("rtm_protocol not RA|DHCP");
+	if (index != data->ifindex) {
+		DBG("Not from tracked service index %d, ignore", data->ifindex);
 		return;
 	}
 
-	/*if (!connman_inet_is_any_addr(dst, AF_INET6)) {
-		DBG("dst %s != IPv6 ANY: %s", dst, IPV6_ANY);
+	if (rtm_protocol != RTPROT_RA && rtm_protocol != RTPROT_DHCP) {
+		DBG("rtm_protocol not RA|DHCP, ignore");
 		return;
-	}*/
+	}
 
-	g_free(data->isp_64gateway);
-	data->isp_64gateway = g_strdup(gateway);
+	if (!connman_inet_is_any_addr(dst, AF_INET6)) {
+		DBG("dst %s != IPv6 ANY, ignore", dst);
+		return;
+	}
 
-	// TODO: perhaps store also dst and metric?
+	g_free(data->isp_ipv6_gw);
+	data->isp_ipv6_gw = g_strdup(gateway);
+	data->isp_ipv6_gw_metric = metric;
+
+	DBG("CLAT IPv6 gateway set: %s", gateway);
 }
 
 static void clat_del_rtnl_gateway(int index, const char *dst,
@@ -2184,8 +2321,14 @@ static void clat_del_rtnl_gateway(int index, const char *dst,
 						unsigned char rtm_protocol)
 {
 	struct clat_data *data = get_data();
-	
-	DBG("%d dst %s gateway %s metric %d", index, dst, gateway, metric);
+
+	DBG("%d dst %s gateway %s metric %d rtm_protocol %u", index, dst,
+						gateway, metric, rtm_protocol);
+
+	if (data->vpn_mode_on) {
+		DBG("Ignore removal of IPv6 gateway in VPN mode");
+		return;
+	}
 
 	if (index != data->ifindex)
 		return;
@@ -2195,10 +2338,18 @@ static void clat_del_rtnl_gateway(int index, const char *dst,
 		return;
 	}
 
-	/* We lost our gateway, shut down clat */
-	if (!g_strcmp0(data->isp_64gateway, gateway)) {
-		DBG("CLAT gateway %s gone", data->isp_64gateway);
-		//clat_stop(data);
+	if (!connman_inet_is_any_addr(dst, AF_INET6)) {
+		DBG("dst %s != IPv6 ANY, ignore", dst);
+		return;
+	}
+
+	if (!g_strcmp0(data->isp_ipv6_gw, gateway) &&
+					data->isp_ipv6_gw_metric == metric) {
+		DBG("CLAT IPv6 gateway %s gone", data->isp_ipv6_gw);
+
+		g_free(data->isp_ipv6_gw);
+		data->isp_ipv6_gw = NULL;
+		data->isp_ipv6_gw_metric = 0;
 	}
 }
 
@@ -2577,12 +2728,8 @@ static void clat_default_changed(struct connman_service *service)
 				clat_data_clear(data);
 			}
 
-			if (data->vpn_mode_on) {
-				DBG("VPN mode on -> off, start periodic query");
-				set_vpn_service(data, NULL);
-				data->vpn_mode_on = false;
-				clat_task_start_periodic_query(data);
-			}
+			if (data->vpn_mode_on)
+				setup_vpn_mode(data, false);
 
 			break;
 		/*
@@ -2615,19 +2762,12 @@ static void clat_default_changed(struct connman_service *service)
 				DBG("Dropped IPv4 default route for VPN");
 			}
 
-			DBG("VPN mode on, stop prefix query");
-			data->vpn_mode_on = true;
-			clat_task_stop_periodic_query(data);
+			setup_vpn_mode(data, true);
 
 			return;
 		case CLAT_SERVICE_IGNORE:
-			if (data->vpn_mode_on) {
-				DBG("VPN mode on -> off, start prefix query");
-
-				set_vpn_service(data, NULL);
-				data->vpn_mode_on = false;
-				clat_task_start_periodic_query(data);
-			}
+			if (data->vpn_mode_on)
+				setup_vpn_mode(data, false);
 
 			DBG("Tracked service %p is not default or valid, "
 								"stop CLAT",
@@ -2673,12 +2813,8 @@ static void clat_default_changed(struct connman_service *service)
 	if (data->state == CLAT_STATE_RUNNING && is_valid_start_state(state) &&
 						!data->ipv4_default_route_on) {
 
-		if (data->vpn_mode_on) {
-			DBG("VPN mode on -> off, start periodic query");
-			set_vpn_service(data, NULL);
-			data->vpn_mode_on = false;
-			clat_task_start_periodic_query(data);
-		}
+		if (data->vpn_mode_on)
+			setup_vpn_mode(data, false);
 
 		err = setup_ipv4_default_route(data, true);
 		if (err && err != -EALREADY) {
@@ -2705,6 +2841,8 @@ static void clat_service_state_changed(struct connman_service *service,
 	int err;
 
 	data = get_data();
+
+	DBG("service %p state %d", service, state);
 
 	/*
 	 * State changes are monitored only on the accepted type service or
@@ -2796,6 +2934,9 @@ onlinecheck:
 		err = clat_task_start_online_check(data);
 		if (err && err != -EALREADY)
 			connman_error("CLAT failed to do online check");
+
+		/* Ensure VPN mode is off when tracked service is online */
+		setup_vpn_mode(data, false);
 	}
 }
 
