@@ -231,6 +231,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 	DBusMessageIter iter, dict;
 	const char *reason, *context, *key, *value;
 	char *address = NULL, *gateway = NULL, *peer = NULL, *netmask = NULL;
+	char *untrusted_gateway = NULL;
 	struct connman_ipaddress *ipaddress;
 	GSList *nameserver_list = NULL;
 	struct ov_private_data *data = vpn_provider_get_plugin_data(provider);
@@ -299,6 +300,9 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		if (!strcmp(key, "trusted_ip"))
 			gateway = g_strdup(value);
 
+		if (!strcmp(key, "untrusted_ip"))
+			untrusted_gateway = g_strdup(value);
+
 		if (!strcmp(key, "ifconfig_local"))
 			address = g_strdup(value);
 
@@ -330,10 +334,24 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 		g_slist_free_full(nameserver_list, free_ns_entry);
 		g_free(address);
 		g_free(gateway);
+		g_free(untrusted_gateway);
 		g_free(peer);
 		g_free(netmask);
 
 		return VPN_STATE_FAILURE;
+	}
+
+	/*
+	 * Use the actual IP set as "untrusted_ip" if "trusted_ip" is omitted.
+	 * "trusted_ip" is set when the peer has been authenticated and the
+	 * authentication might be in process when this script is called.
+	 */
+	if (!gateway && untrusted_gateway) {
+		gateway = untrusted_gateway;
+		untrusted_gateway = NULL;
+
+		connman_warn("OpenVPN using \"untrusted_ip\" as gateway. "
+					"Peer has not been authenticated yet");
 	}
 
 	connman_ipaddress_set_ipv4(ipaddress, address, netmask, gateway);
@@ -370,6 +388,7 @@ static int ov_notify(DBusMessage *msg, struct vpn_provider *provider)
 
 	g_free(address);
 	g_free(gateway);
+	g_free(untrusted_gateway);
 	g_free(peer);
 	g_free(netmask);
 	connman_ipaddress_free(ipaddress);
