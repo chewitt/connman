@@ -1624,7 +1624,7 @@ static gboolean clat_task_run_dad(gpointer user_data)
 
 	err = connman_inet_ipv6_do_dad(data->ifindex, 1000, &addr, clat_dad_cb,
 									data);
-	if (err < 0) {
+	if (err < 0 && err != -EPERM) {
 		/*
 		 * If the sending of DAD fails consecutive calls will as well,
 		 * stop DAD in such case
