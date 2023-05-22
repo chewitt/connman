@@ -2504,6 +2504,25 @@ static bool is_valid_start_state(enum connman_service_state state)
 				state == CONNMAN_SERVICE_STATE_ONLINE;
 }
 
+static void update_clat_service_index(struct clat_data *data)
+{
+	struct connman_network *network;
+	int index;
+
+	network = connman_service_get_network(data->service);
+	if (!network)
+		return;
+
+	index = connman_network_get_index(network);
+	if (data->ifindex == index)
+		return;
+
+	DBG("service %p network %p index %d -> %d", data->service, network,
+							data->ifindex, index);
+
+	data->ifindex = index;
+}
+
 static int try_clat_start(struct clat_data *data)
 {
 	struct connman_network *network;
@@ -2528,10 +2547,7 @@ static int try_clat_start(struct clat_data *data)
 		return -ENONET;
 	}
 
-	if (data->ifindex < 0) {
-		DBG("ifindex not set, get it from network");
-		data->ifindex = connman_network_get_index(network);
-	}
+	update_clat_service_index(data);
 
 	if (data->ifindex < 0) {
 		DBG("Interface not up (index %d), not starting clat",
@@ -2632,6 +2648,8 @@ static void clat_ipconfig_changed(struct connman_service *service,
 		clat_stop(data);
 		return;
 	}
+
+	update_clat_service_index(data);
 }
 
 static int set_clat_service(struct clat_data *data,
@@ -2645,8 +2663,14 @@ static int set_clat_service(struct clat_data *data,
 	if (!data || !service)
 		return -EINVAL;
 
-	if (data->service == service)
+	if (data->service == service) {
+		/*
+		 * Update only the index since service can remain the same but
+		 * index may be changed by, e.g., ofono
+		 */
+		update_clat_service_index(data);
 		return -EALREADY;
+	}
 
 	if (data->service && data->state == CLAT_STATE_RUNNING) {
 		DBG("Service changed from %p/%s to %p/%s, do restart",
@@ -2658,6 +2682,7 @@ static int set_clat_service(struct clat_data *data,
 	}
 
 	data->service = service;
+	update_clat_service_index(data);
 
 	if (restart) {
 		clat_change_state(data, CLAT_STATE_RESTART);
