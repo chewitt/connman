@@ -9893,9 +9893,24 @@ void __connman_service_unload_services(gchar **services, int len)
 
 		switch (connman_service_get_type(service)) {
 		case CONNMAN_SERVICE_TYPE_WIFI:
-			if (service->network)
+			/*
+			 * Stop all DHCPs before removing the service. This is
+			 * to ensure that in cases where two users have the
+			 * same network saved and DHCP is still pending for
+			 * reply it is not left in that state. This may be
+			 * possible in scenario where user change happens
+			 * rapidly before the network is connected -> stopping
+			 * of the DHCPs may not have been executed.
+			 */
+			if (service->ipconfig_ipv4)
+				__connman_dhcp_stop(service->ipconfig_ipv4);
+
+			if (service->network) {
+				__connman_dhcpv6_stop(service->network);
 				__connman_service_remove_from_network(
 							service->network);
+			}
+
 			break;
 		case CONNMAN_SERVICE_TYPE_VPN:
 			break;
