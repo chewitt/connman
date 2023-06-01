@@ -3458,14 +3458,17 @@ static void wifi_device_on_5(struct wifi_device *dev)
 
 static void wifi_device_on_4(GSupplicantInterface *iface, void *data)
 {
-	if (iface->valid) {
-		struct wifi_device *dev = data;
+	struct wifi_device *dev = data;
 
+	if (iface->valid) {
 		/* remove_handlers also zeros the event id */
 		gsupplicant_interface_remove_handlers(dev->iface,
 			dev->iface_event_id + DEVICE_INTERFACE_EVENT_VALID, 1);
 
 		wifi_device_on_5(dev);
+	} else {
+		DBG("failed to enable device, interface not valid");
+		wifi_device_set_state(dev, WIFI_DEVICE_UNDEFINED);
 	}
 }
 
