@@ -289,7 +289,7 @@ DAPolicy* da_policy_new_full(const char* spec, const DA_ACTION* actions)
 // Needed to control permissions independent of reality
 void da_policy_unref(DAPolicy* policy)
 {
-	g_assert_cmphex((uint)policy, ==, POLICY_FAKE_POINTER);
+	g_assert_cmphex(GPOINTER_TO_UINT(policy), ==, POLICY_FAKE_POINTER);
 }
 
 // Replaces function from libdbusaccess/src/dbusaccess_policy.c
@@ -297,7 +297,7 @@ void da_policy_unref(DAPolicy* policy)
 DA_ACCESS da_policy_check(const DAPolicy* policy, const DACred* cred,
 			  guint action, const char* arg, DA_ACCESS def)
 {
-	g_assert_cmphex((uint)policy, ==, POLICY_FAKE_POINTER);
+	g_assert_cmphex(GPOINTER_TO_UINT(policy), ==, POLICY_FAKE_POINTER);
 
 	return test_access;
 }
