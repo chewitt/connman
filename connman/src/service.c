@@ -2015,6 +2015,19 @@ static struct connman_service *get_connected_default_service()
 	return NULL;
 }
 
+static bool service_send_default_changed(struct connman_service *service)
+{
+	const char *path = service ? service->path : "";
+
+	DBG("service %p path %s", service, path);
+
+	return connman_dbus_property_changed_basic(CONNMAN_MANAGER_PATH,
+				CONNMAN_MANAGER_INTERFACE,
+				"DefaultService",
+				DBUS_TYPE_STRING,
+				&path);
+}
+
 static void print_service(struct connman_service *service, void *user_data)
 {
 	if (service)
@@ -2104,6 +2117,7 @@ static void default_changed(void)
 	}
 
 	__connman_notifier_default_changed(service);
+	service_send_default_changed(service);
 }
 
 static void state_changed(struct connman_service *service)
