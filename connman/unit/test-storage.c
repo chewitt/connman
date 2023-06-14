@@ -3239,7 +3239,7 @@ static void storage_test_user_change14()
 	/* connman_storage_update_finalize_cb modifies the contents of the *
 	 * registered callbacks list. To make the test idempotent, we copy *
 	 * the finalize_callback struct to a new address.                  */
-	callbacks = g_memdup(&finalize_callback,
+	callbacks = g_memdup2(&finalize_callback,
 				sizeof(struct connman_storage_callbacks));
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);

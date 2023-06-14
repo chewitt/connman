@@ -1114,7 +1114,7 @@ static int send_dhcpv6_msg(GDHCPClient *dhcp_client, int type, char *msg)
 
 	ret = dhcpv6_send_packet(dhcp_client->ifindex, packet, ptr - buf);
 
-	debug(dhcp_client, "sent %d pkt %p len %d", ret, packet, ptr - buf);
+	debug(dhcp_client, "sent %d pkt %p len %zd", ret, packet, ptr - buf);
 	return ret;
 }
 

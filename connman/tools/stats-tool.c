@@ -38,6 +38,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -226,7 +227,8 @@ static void stats_print_record(struct stats_record *rec)
 	char buffer[30];
 
 	strftime(buffer, 30, "%d-%m-%Y %T", localtime(&rec->ts));
-	printf("%p %lld %s %01d %llu %llu %llu %llu %llu %llu %llu %llu %d\n",
+	printf("%p %lld %s %01d %"PRIu64" %"PRIu64" %"PRIu64" %"PRIu64" %"
+		PRIu64" %"PRIu64" %"PRIu64" %"PRIu64" %d\n",
 		rec, (long long int)rec->ts, buffer,
 		rec->roaming,
 		rec->data.rx_packets,
@@ -316,21 +318,21 @@ static void stats_print_entries(struct stats_file *file)
 static void stats_print_rec_diff(struct stats_record *begin,
 					struct stats_record *end)
 {
-	printf("\trx_packets: %llu\n",
+	printf("\trx_packets:  %"PRIu64"\n",
 		end->data.rx_packets - begin->data.rx_packets);
-	printf("\ttx_packets: %llu\n",
+	printf("\ttx_packets:  %"PRIu64"\n",
 		end->data.tx_packets - begin->data.tx_packets);
-	printf("\trx_bytes:   %llu\n",
+	printf("\trx_bytes:    %"PRIu64"\n",
 		end->data.rx_bytes - begin->data.rx_bytes);
-	printf("\ttx_bytes:   %llu\n",
+	printf("\ttx_bytes:    %"PRIu64"\n",
 		end->data.tx_bytes - begin->data.tx_bytes);
-	printf("\trx_errors:  %llu\n",
+	printf("\trx_errors:   %"PRIu64"\n",
 		end->data.rx_errors - begin->data.rx_errors);
-	printf("\ttx_errors:  %llu\n",
+	printf("\ttx_errors:   %"PRIu64"\n",
 		end->data.tx_errors - begin->data.tx_errors);
-	printf("\trx_dropped: %llu\n",
+	printf("\trx_dropped:  %"PRIu64"\n",
 		end->data.rx_dropped - begin->data.rx_dropped);
-	printf("\ttx_dropped: %llu\n",
+	printf("\ttx_dropped:  %"PRIu64"\n",
 		end->data.tx_dropped - begin->data.tx_dropped);
 	printf("\ttime:       %d\n",
 		end->data.time - begin->data.time);
