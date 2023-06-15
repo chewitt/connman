@@ -13,7 +13,7 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h \
 			include/technology.h include/iptables_ext.h \
-			include/dbus.h gdbus/gdbus.h
+			include/dbus.h gdbus/gdbus.h include/nat.h
 
 if VPN
 include_HEADERS += include/task.h include/setting.h \

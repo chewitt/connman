@@ -2913,9 +2913,11 @@ static void dnsproxy_offline_mode(bool enabled)
 
 static void dnsproxy_default_changed(struct connman_service *service)
 {
+	struct connman_ipconfig *ipconfig;
 	bool server_enabled = false;
 	GSList *list;
-	int index;
+	int index4;
+	int index6;
 	int vpn_index;
 
 	DBG("service %p", service);
@@ -2929,21 +2931,29 @@ static void dnsproxy_default_changed(struct connman_service *service)
 		return;
 	}
 
-	index = __connman_service_get_index(service);
-	if (index < 0)
+	ipconfig = __connman_service_get_ip4config(service);
+	index4 = __connman_ipconfig_get_index(ipconfig);
+
+	ipconfig = __connman_service_get_ip6config(service);
+	index6 = __connman_ipconfig_get_index(ipconfig);
+
+	if (index4 < 0 && index6 < 0)
 		return;
 
 	/*
 	 * In case non-split-routed VPN is set as split routed the DNS servers
 	 * the VPN must be enabled as well, when the transport becomes the
-	 * default service.
+	 * default service. Try first with IPv4 and then attempt using IPv6 if
+	 * not set. VPN can be either or.
 	 */
-	vpn_index = __connman_connection_get_vpn_index(index);
+	vpn_index = __connman_connection_get_vpn_index(index4);
+	if (vpn_index < 0)
+		vpn_index = __connman_connection_get_vpn_index(index6);
 
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
 
-		if (data->index == index) {
+		if (data->index == index4 || data->index == index6) {
 			DBG("Enabling DNS server %s", data->server);
 			data->enabled = true;
 			server_enabled = true;

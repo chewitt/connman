@@ -500,6 +500,13 @@ void __connman_ipconfig_append_ipv6config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter);
 int __connman_ipconfig_set_config(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *array);
+int __connman_ipconfig_set_config_from_address(
+					struct connman_ipconfig *ipconfig,
+					enum connman_ipconfig_method method,
+					const char *address,
+					const char *netmask,
+					const char *gateway,
+					unsigned char prefix_length);
 void __connman_ipconfig_append_ethernet(struct connman_ipconfig *ipconfig,
 							DBusMessageIter *iter);
 enum connman_ipconfig_method __connman_ipconfig_get_method(

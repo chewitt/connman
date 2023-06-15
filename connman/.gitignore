@@ -43,6 +43,7 @@ plugins/connman.policy
 scripts/connman
 scripts/vpn-script
 scripts/openvpn-script
+scripts/openconnect-script
 scripts/connman_resolvconf.conf
 client/connmanctl
 tools/wispr
@@ -55,6 +56,7 @@ tools/wpad-test
 tools/resolv-test
 tools/polkit-test
 tools/ip6tables-test
+tools/ip6tables-unit
 tools/iptables-test
 tools/iptables-unit
 tools/dnsproxy-test
@@ -87,6 +89,11 @@ unit/test-iptables
 unit/test-device
 unit/test-storage
 unit/test-systemd_login
+unit/test-vpn-util
+unit/test-blacklist_monitor
+unit/test-clat
+unit/*.log
+unit/*.trs
 
 *.gcda
 *.gcno

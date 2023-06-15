@@ -165,7 +165,8 @@ static void set_configuration(struct connman_network *network,
 					type);
 }
 
-static void dhcp_success(struct connman_network *network)
+static void dhcp_success(struct connman_network *network,
+					struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig_ipv4;
@@ -176,6 +177,10 @@ static void dhcp_success(struct connman_network *network)
 		goto err;
 
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (ipconfig_ipv4 != ipconfig) {
+		DBG("ignore result, ipconfig has changed");
+		return;
+	}
 
 	DBG("lease acquired for ipconfig %p", ipconfig_ipv4);
 
@@ -199,7 +204,8 @@ err:
 				CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
 }
 
-static void dhcp_failure(struct connman_network *network)
+static void dhcp_failure(struct connman_network *network,
+					struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
 	struct connman_ipconfig *ipconfig_ipv4;
@@ -209,6 +215,10 @@ static void dhcp_failure(struct connman_network *network)
 		return;
 
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (ipconfig_ipv4 != ipconfig) {
+		DBG("ignore failure, ipconfig has changed");
+		return;
+	}
 
 	DBG("lease lost for ipconfig %p", ipconfig_ipv4);
 
@@ -226,9 +236,9 @@ static void dhcp_callback(struct connman_ipconfig *ipconfig,
 	network->connecting = false;
 
 	if (success)
-		dhcp_success(network);
+		dhcp_success(network, ipconfig);
 	else
-		dhcp_failure(network);
+		dhcp_failure(network, ipconfig);
 }
 
 static int set_connected_manual(struct connman_network *network)
