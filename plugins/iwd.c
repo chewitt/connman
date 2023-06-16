@@ -90,6 +90,10 @@ struct iwd_device {
 	char *mode;
 
 	struct connman_device *device;
+
+	char *network;
+	char *pending_network;
+	bool disconnecting;
 };
 
 /*
@@ -243,12 +247,6 @@ static void update_network_connected(struct iwd_network *iwdn)
 	connman_network_set_connected(iwdn->network, true);
 }
 
-static void update_network_disconnected(struct iwd_network *iwdn)
-{
-	DBG("interface name %s", iwdn->name);
-	connman_network_set_connected(iwdn->network, false);
-}
-
 static void cm_network_connect_cb(DBusMessage *message, void *user_data)
 {
 	const char *path = user_data;
@@ -279,21 +277,58 @@ static void cm_network_connect_cb(DBusMessage *message, void *user_data)
 	update_network_connected(iwdn);
 }
 
+static void abort_pending_network(struct iwd_device *iwdd,
+					enum connman_network_error error)
+{
+	struct iwd_network *iwdn;
+
+	if (!iwdd->pending_network)
+		return;
+
+	iwdn = g_hash_table_lookup(networks, iwdd->pending_network);
+	if (iwdn)
+		connman_network_set_error(iwdn->network, error);
+
+	g_free(iwdd->pending_network);
+	iwdd->pending_network = NULL;
+}
+
 static int cm_network_connect(struct connman_network *network)
 {
 	struct iwd_network *iwdn = connman_network_get_data(network);
+	struct iwd_device *iwdd;
+	int err;
 
-	if (!iwdn)
+	if (!iwdn || !iwdn->iwdd)
 		return -EINVAL;
+
+	iwdd = iwdn->iwdd;
+	if (iwdd->disconnecting) {
+		if (g_strcmp0(iwdn->path, iwdd->pending_network)) {
+			abort_pending_network(iwdd,
+					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
+			iwdd->pending_network = g_strdup(iwdn->path);
+		}
+		return -EINPROGRESS;
+	}
 
 	if (!g_dbus_proxy_method_call(iwdn->proxy, "Connect",
 			NULL, cm_network_connect_cb,
-			g_strdup(iwdn->path), g_free))
-		return -EIO;
+			g_strdup(iwdn->path), g_free)) {
+		err = -EIO;
+		goto out;
+	}
 
 	connman_network_set_associating(iwdn->network, true);
 
-	return -EINPROGRESS;
+	g_free(iwdd->network);
+	iwdd->network = g_strdup(iwdn->path);
+
+	err = -EINPROGRESS;
+
+out:
+	abort_pending_network(iwdd, CONNMAN_NETWORK_ERROR_UNKNOWN);
+	return err;
 }
 
 static void cm_network_forget_cb(DBusMessage *message, void *user_data)
@@ -336,6 +371,45 @@ static int cm_network_forget(struct connman_network *network)
 	return 0;
 }
 
+static void update_network_disconnected(struct iwd_network *iwdn)
+{
+	struct iwd_network *iwdn_pending = NULL;
+	struct iwd_device *iwdd;
+
+	if (!iwdn || !iwdn->iwdd)
+		return;
+
+	iwdd = iwdn->iwdd;
+
+	DBG("interface name %s", iwdn->name);
+
+	if (iwdd->pending_network) {
+		iwdn_pending =
+			g_hash_table_lookup(networks, iwdd->pending_network);
+	}
+
+	if (!iwdn_pending || g_strcmp0(iwdn->path, iwdd->pending_network))
+		connman_network_set_connected(iwdn->network, false);
+
+	iwdd->disconnecting = false;
+
+	if (g_strcmp0(iwdn->path, iwdd->network)) {
+		if (!g_strcmp0(iwdn->path, iwdd->pending_network)) {
+			abort_pending_network(iwdd,
+					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
+		}
+		DBG("current wifi network has changed since disconnection");
+		return;
+	}
+
+	g_free(iwdd->network);
+	iwdd->network = NULL;
+
+	if (iwdn_pending) {
+		cm_network_connect(iwdn_pending->network);
+	}
+}
+
 static void cm_network_disconnect_cb(DBusMessage *message, void *user_data)
 {
 	const char *path = user_data;
@@ -344,6 +418,9 @@ static void cm_network_disconnect_cb(DBusMessage *message, void *user_data)
 	iwdn = g_hash_table_lookup(networks, path);
 	if (!iwdn)
 		return;
+
+	if (iwdn->iwdd)
+		iwdn->iwdd->disconnecting = false;
 
 	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
 		const char *dbus_error = dbus_message_get_error_name(message);
@@ -369,11 +446,16 @@ static int cm_network_disconnect(struct connman_network *network)
 {
 	struct iwd_network *iwdn = connman_network_get_data(network);
 	struct iwd_station *iwds;
+	struct iwd_device *iwdd;
 
-	if (!iwdn && !iwdn->iwdd)
+	if (!iwdn || !iwdn->iwdd)
 		return -EINVAL;
 
-	iwds = g_hash_table_lookup(stations, iwdn->iwdd->path);
+	iwdd = iwdn->iwdd;
+	if (iwdd->disconnecting)
+		return -EALREADY;
+
+	iwds = g_hash_table_lookup(stations, iwdd->path);
 	if (!iwds)
 		return -EIO;
 
@@ -382,6 +464,8 @@ static int cm_network_disconnect(struct connman_network *network)
 	if (!g_dbus_proxy_method_call(iwds->proxy, "Disconnect",
 			NULL, cm_network_disconnect_cb, g_strdup(iwdn->path), g_free))
 		return -EIO;
+
+	iwdd->disconnecting = true;
 
 	return 0;
 }
@@ -582,6 +666,12 @@ static void device_powered_cb(const DBusError *error, void *user_data)
 	}
 
 	connman_device_set_powered(iwdd->device, cbd->powered);
+
+	if (!cbd->powered) {
+		abort_pending_network(iwdd,
+					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
+		iwdd->disconnecting = false;
+	}
 out:
 	g_free(cbd->path);
 	g_free(cbd);
@@ -1424,6 +1514,10 @@ static void device_free(gpointer data)
 	g_free(iwdd->adapter);
 	g_free(iwdd->name);
 	g_free(iwdd->address);
+
+	g_free(iwdd->network);
+	g_free(iwdd->pending_network);
+
 	g_free(iwdd);
 }
 
