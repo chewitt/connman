@@ -2975,8 +2975,10 @@ static void dnsproxy_default_changed(struct connman_service *service)
 static void dnsproxy_service_state_changed(struct connman_service *service,
 			enum connman_service_state state)
 {
+	struct connman_ipconfig *ipconfig;
 	GSList *list;
-	int index;
+	int index4;
+	int index6;
 
 	switch (state) {
 	case CONNMAN_SERVICE_STATE_DISCONNECT:
@@ -2991,7 +2993,12 @@ static void dnsproxy_service_state_changed(struct connman_service *service,
 		return;
 	}
 
-	index = __connman_service_get_index(service);
+	ipconfig = __connman_service_get_ip4config(service);
+	index4 = __connman_ipconfig_get_index(ipconfig);
+
+	ipconfig = __connman_service_get_ip6config(service);
+	index6 = __connman_ipconfig_get_index(ipconfig);
+
 	list = server_list;
 
 	while (list) {
@@ -3000,8 +3007,8 @@ static void dnsproxy_service_state_changed(struct connman_service *service,
 		/* Get next before the list is changed by destroy_server() */
 		list = list->next;
 
-		if (data->index == index) {
-			DBG("removing server data of index %d", index);
+		if (data->index == index4 || data->index == index6) {
+			DBG("removing server data of index %d", data->index);
 			destroy_server(data);
 		}
 	}
