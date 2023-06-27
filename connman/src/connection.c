@@ -423,9 +423,6 @@ static struct gateway_data *add_gateway(struct connman_service *service,
 static void set_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type)
 {
-	struct connman_ipconfig *ipconfig;
-	int index4;
-	int index6;
 	int status4 = 0;
 	int status6 = 0;
 	bool do_ipv4 = false;
@@ -471,25 +468,19 @@ static void set_default_gateway(struct gateway_data *data,
 		return;
 	}
 
-	ipconfig = __connman_service_get_ip4config(data->service);
-	index4 = __connman_ipconfig_get_index(ipconfig);
-
 	if (do_ipv4 && data->ipv4_gateway &&
 			g_strcmp0(data->ipv4_gateway->gateway,
 							"0.0.0.0") == 0) {
-		if (connman_inet_set_gateway_interface(index4) < 0)
+		if (connman_inet_set_gateway_interface(data->index4) < 0)
 			return;
 		data->ipv4_gateway->active = true;
 		goto done;
 	}
 
-	ipconfig = __connman_service_get_ip6config(data->service);
-	index6 = __connman_ipconfig_get_index(ipconfig);
-
 	if (do_ipv6 && data->ipv6_gateway &&
 			g_strcmp0(data->ipv6_gateway->gateway,
 							"::") == 0) {
-		if (connman_inet_set_ipv6_gateway_interface(index6) < 0)
+		if (connman_inet_set_ipv6_gateway_interface(data->index6) < 0)
 			return;
 		data->ipv6_gateway->active = true;
 		goto done;
@@ -497,11 +488,13 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv6 && data->ipv6_gateway)
 		status6 = __connman_inet_add_default_to_table(RT_TABLE_MAIN,
-					index6, data->ipv6_gateway->gateway);
+					data->index6,
+					data->ipv6_gateway->gateway);
 
 	if (do_ipv4 && data->ipv4_gateway)
 		status4 = __connman_inet_add_default_to_table(RT_TABLE_MAIN,
-					index4, data->ipv4_gateway->gateway);
+					data->index4,
+					data->ipv4_gateway->gateway);
 
 	if (status4 < 0 || status6 < 0)
 		return;

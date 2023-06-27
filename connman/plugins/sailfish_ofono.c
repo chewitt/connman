@@ -958,7 +958,7 @@ static void connctx_settings_changed(OfonoConnCtx *connctx, void *arg)
 
 	index = modem_configure(arg);
 
-	if (!md->network)
+	if (!md->network || index < 0)
 		return;
 
 	if (index != connman_network_get_index(md->network)) {
