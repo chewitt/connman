@@ -7876,6 +7876,10 @@ static int service_indicate_state(struct connman_service *service)
 		default_changed();
 	}
 
+	if (new_state == CONNMAN_SERVICE_STATE_READY &&
+				service->type == CONNMAN_SERVICE_TYPE_VPN)
+		default_changed();
+
 	return 0;
 }
 
