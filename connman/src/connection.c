@@ -54,7 +54,8 @@ struct gateway_data {
 
 static GHashTable *gateway_hash = NULL;
 
-static struct gateway_config *find_gateway(int index, const char *gateway)
+static struct gateway_config *find_gateway(int index4, int index6,
+							const char *gateway)
 {
 	GHashTableIter iter;
 	gpointer value, key;
@@ -67,12 +68,12 @@ static struct gateway_config *find_gateway(int index, const char *gateway)
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		struct gateway_data *data = value;
 
-		if (data->ipv4_gateway && data->index4 == index &&
+		if (data->ipv4_gateway && data->index4 == index4 &&
 				g_str_equal(data->ipv4_gateway->gateway,
 					gateway))
 			return data->ipv4_gateway;
 
-		if (data->ipv6_gateway && data->index6 == index &&
+		if (data->ipv6_gateway && data->index6 == index6 &&
 				g_str_equal(data->ipv6_gateway->gateway,
 					gateway))
 			return data->ipv6_gateway;
@@ -407,9 +408,11 @@ static struct gateway_data *add_gateway(struct connman_service *service,
 		disable_gateway(old, type);
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 			data->ipv6_gateway = old->ipv6_gateway;
+			data->index6 = old->index6;
 			old->ipv6_gateway = NULL;
 		} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
 			data->ipv4_gateway = old->ipv4_gateway;
+			data->index4 = old->index4;
 			old->ipv4_gateway = NULL;
 		}
 	}
@@ -440,7 +443,10 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv4 && data->ipv4_gateway &&
 					data->ipv4_gateway->vpn) {
-		connman_inet_set_gateway_interface(data->index4);
+		if (connman_inet_set_gateway_interface(data->index4) < 0)
+			DBG("cannot set VPN as gateway interface, index %d",
+							data->index4);
+
 		data->ipv4_gateway->active = true;
 
 		DBG("set %p index %d vpn %s index %d phy %s",
@@ -455,7 +461,10 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv6 && data->ipv6_gateway &&
 					data->ipv6_gateway->vpn) {
-		connman_inet_set_ipv6_gateway_interface(data->index6);
+		if (connman_inet_set_ipv6_gateway_interface(data->index6) < 0)
+			DBG("cannot set VPN as gateway interface, index %d",
+							data->index6);
+
 		data->ipv6_gateway->active = true;
 
 		DBG("set %p index %d vpn %s index %d phy %s",
@@ -472,7 +481,8 @@ static void set_default_gateway(struct gateway_data *data,
 			g_strcmp0(data->ipv4_gateway->gateway,
 							"0.0.0.0") == 0) {
 		if (connman_inet_set_gateway_interface(data->index4) < 0)
-			return;
+			DBG("cannot set v4 gateway interface index %d",
+								data->index4);
 		data->ipv4_gateway->active = true;
 		goto done;
 	}
@@ -481,7 +491,9 @@ static void set_default_gateway(struct gateway_data *data,
 			g_strcmp0(data->ipv6_gateway->gateway,
 							"::") == 0) {
 		if (connman_inet_set_ipv6_gateway_interface(data->index6) < 0)
-			return;
+			DBG("cannot set v6 gateway interface index %d",
+								data->index6);
+
 		data->ipv6_gateway->active = true;
 		goto done;
 	}
@@ -646,7 +658,7 @@ static void connection_newgateway(int index, const char *gateway)
 
 	DBG("index %d gateway %s", index, gateway);
 
-	config = find_gateway(index, gateway);
+	config = find_gateway(index, -1, gateway);
 	if (!config)
 		return;
 
@@ -725,7 +737,7 @@ static void connection_delgateway(int index, const char *gateway)
 
 	DBG("index %d gateway %s", index, gateway);
 
-	config = find_gateway(index, gateway);
+	config = find_gateway(index, -1, gateway);
 	if (config)
 		config->active = false;
 
@@ -740,7 +752,7 @@ static struct connman_rtnl connection_rtnl = {
 	.delgateway	= connection_delgateway,
 };
 
-static struct gateway_data *find_active_gateway(void)
+static struct gateway_data *find_active_gateway(enum connman_ipconfig_type type)
 {
 	GHashTableIter iter;
 	gpointer value, key;
@@ -752,11 +764,11 @@ static struct gateway_data *find_active_gateway(void)
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		struct gateway_data *data = value;
 
-		if (data->ipv4_gateway &&
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV4 && data->ipv4_gateway &&
 				data->ipv4_gateway->active)
 			return data;
 
-		if (data->ipv6_gateway &&
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV6 && data->ipv6_gateway &&
 				data->ipv6_gateway->active)
 			return data;
 	}
@@ -857,7 +869,7 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	if (!new_gateway)
 		return -EINVAL;
 
-	active_gateway = find_active_gateway();
+	active_gateway = find_active_gateway(type);
 
 	DBG("active %p index4 %d index6 %d new %p", active_gateway,
 		active_gateway ? active_gateway->index4 : -1,
@@ -1031,7 +1043,6 @@ bool __connman_connection_update_gateway(void)
 
 		if (active_gateway->ipv4_gateway &&
 				active_gateway->ipv4_gateway->active) {
-
 			unset_default_gateway(active_gateway,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
 			updated = true;
@@ -1039,7 +1050,6 @@ bool __connman_connection_update_gateway(void)
 
 		if (active_gateway->ipv6_gateway &&
 				active_gateway->ipv6_gateway->active) {
-
 			unset_default_gateway(active_gateway,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 			updated = true;

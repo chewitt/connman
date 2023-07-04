@@ -725,7 +725,10 @@ int connman_inet_del_ipv6_network_route_with_metric(int index, const char *host,
 		goto out;
 	}
 
-	rt.rtmsg_flags = RTF_UP | RTF_HOST;
+	rt.rtmsg_flags = RTF_UP;
+
+	if (!connman_inet_is_any_addr(host, AF_INET6))
+		rt.rtmsg_flags |= RTF_HOST;
 
 	rt.rtmsg_metric = metric;
 	rt.rtmsg_ifindex = index;
@@ -980,7 +983,7 @@ int connman_inet_set_ipv6_gateway_interface(int index)
 
 out:
 	if (err < 0)
-		connman_error("Setting default interface route failed (%s)",
+		connman_error("Setting default IPv6 interface route failed (%s)",
 							strerror(-err));
 
 	return err;

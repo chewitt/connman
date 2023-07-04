@@ -2931,24 +2931,34 @@ static void dnsproxy_default_changed(struct connman_service *service)
 		return;
 	}
 
-	ipconfig = __connman_service_get_ip4config(service);
-	index4 = __connman_ipconfig_get_index(ipconfig);
+	if (connman_service_get_type(service) == CONNMAN_SERVICE_TYPE_VPN) {
+		/* VPN is either or take both to be sure */
+		index4 = index6 = -1;
+		vpn_index = __connman_service_get_index(service);
 
-	ipconfig = __connman_service_get_ip6config(service);
-	index6 = __connman_ipconfig_get_index(ipconfig);
+		if (vpn_index < 0)
+			return;
+	} else {
 
-	if (index4 < 0 && index6 < 0)
-		return;
+		ipconfig = __connman_service_get_ip4config(service);
+		index4 = __connman_ipconfig_get_index(ipconfig);
 
-	/*
-	 * In case non-split-routed VPN is set as split routed the DNS servers
-	 * the VPN must be enabled as well, when the transport becomes the
-	 * default service. Try first with IPv4 and then attempt using IPv6 if
-	 * not set. VPN can be either or.
-	 */
-	vpn_index = __connman_connection_get_vpn_index(index4);
-	if (vpn_index < 0)
-		vpn_index = __connman_connection_get_vpn_index(index6);
+		ipconfig = __connman_service_get_ip6config(service);
+		index6 = __connman_ipconfig_get_index(ipconfig);
+
+		if (index4 < 0 && index6 < 0)
+			return;
+
+		/*
+		 * In case non-split-routed VPN is set as split routed the DNS
+		 * servers the VPN must be enabled as well, when the transport
+		 * becomes the default service. Try first with IPv4 and then
+		 * attempt using IPv6 if not set. VPN can be either or.
+		 */
+		vpn_index = __connman_connection_get_vpn_index(index4);
+		if (vpn_index < 0)
+			vpn_index = __connman_connection_get_vpn_index(index6);
+	}
 
 	for (list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;
