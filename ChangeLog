@@ -1,3 +1,19 @@
+ver 1.42:
+	Fix issue with iwd and signal strength calculation.
+	Fix issue with iwd and handling service removal.
+	Fix issue with iwd and handling new connections.
+	Fix issue with handling default online check URL.
+	Fix issue with handling nameservers refresh.
+	Fix issue with handling proxy from DHCP lease.
+	Fix issue with handling multiple proxies from PAC.
+	Fix issue with handling manual time update changes.
+	Fix issue with handling invalid gateway routes.
+	Fix issue with handling hidden WiFi agent requests.
+	Fix issue with handling WiFi SAE authentication failure.
+	Fix issue with handling DNS Proxy and TCP server replies.
+	Add support for regulatory domain following timezone.
+	Add support for localtime configuration option.
+
 ver 1.41:
 	Fix issue with RTNL netlink message alignment.
 	Fix issue with dnsproxy and timeout for TCP feature.
