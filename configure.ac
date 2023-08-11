@@ -1,5 +1,5 @@
-AC_PREREQ(2.60)
-AC_INIT(connman, 1.42)
+AC_PREREQ([2.69])
+AC_INIT([connman], [1.42])
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -19,7 +19,7 @@ COMPILER_FLAGS
 AC_SUBST(abs_top_srcdir)
 AC_SUBST(abs_top_builddir)
 
-AC_LANG_C
+AC_LANG([C])
 AC_USE_SYSTEM_EXTENSIONS
 
 AC_PROG_CC_C99
@@ -491,4 +491,5 @@ AM_CONDITIONAL(INTERNAL_DNS_BACKEND, test "${dns_backend}" = "internal")
 AM_CONDITIONAL(SYSTEMD_RESOLVED_DNS_BACKEND, test "${dns_backend}" = "systemd-resolved")
 AC_MSG_RESULT(${dns_backend})
 
-AC_OUTPUT(Makefile include/version.h connman.pc)
+AC_CONFIG_FILES(Makefile include/version.h connman.pc)
+AC_OUTPUT
