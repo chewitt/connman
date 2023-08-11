@@ -543,6 +543,8 @@ endif
 
 EXTRA_DIST += vpn/connman-task.te
 
+EXTRA_DIST += scripts/libppp-compat.h
+
 do_subst = $(AM_V_GEN)$(SED) \
 		-e 's,[@]prefix[@],$(prefix),g' \
 		-e 's,[@]sbindir[@],$(sbindir),g' \
