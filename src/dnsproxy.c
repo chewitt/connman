@@ -383,7 +383,7 @@ static void dummy_resolve_func(GResolvResultStatus status,
  * Refresh a DNS entry, but also age the hit count a bit */
 static void refresh_dns_entry(struct cache_entry *entry, char *name)
 {
-	int age = 1;
+	unsigned int age = 1;
 
 	if (!ipv4_resolve) {
 		ipv4_resolve = g_resolv_new(0);
@@ -485,9 +485,11 @@ static void send_cached_response(int sk, const unsigned char *ptr, size_t len,
 	 * so skip them for UDP.
 	 */
 	const size_t skip_bytes = offset ? 0 : DNS_HEADER_TCP_EXTRA_BYTES;
+	size_t dns_len;
+
 	ptr += skip_bytes;
 	len -= skip_bytes;
-	const size_t dns_len = protocol == IPPROTO_UDP ? len : ntohs(*((uint16_t*)ptr));
+	dns_len = protocol == IPPROTO_UDP ? len : ntohs(*((uint16_t*)ptr));
 
 
 	if (len < DNS_HEADER_SIZE)
@@ -847,14 +849,19 @@ static void create_cache(void)
 
 static struct cache_entry *cache_check(gpointer request, uint16_t *qtype, int proto)
 {
+	const char *question;
+	size_t offset;
+	const struct domain_question *q;
+	uint16_t type;
+	struct cache_entry *entry;
+
 	if (!request)
 		return NULL;
 
-	const char *question = request + protocol_offset(proto) + DNS_HEADER_SIZE;
-	const size_t offset = strlen(question) + 1;
-	const struct domain_question *q = (void *) (question + offset);
-	const uint16_t type = ntohs(q->type);
-	struct cache_entry *entry;
+	question = request + protocol_offset(proto) + DNS_HEADER_SIZE;
+	offset = strlen(question) + 1;
+	q = (void *) (question + offset);
+	type = ntohs(q->type);
 
 	/* We only cache either A (1) or AAAA (28) requests */
 	if (type != DNS_TYPE_A && type != DNS_TYPE_AAAA)
@@ -1028,6 +1035,9 @@ static int parse_response(const unsigned char *buf, size_t buflen,
 	uint16_t ancount, qclass;
 	GSList *aliases = NULL;
 	const size_t maxlen = *response_len;
+	uint16_t qdcount;
+	const unsigned char *ptr;
+	const unsigned char *eptr;
 
 	*response_len = 0;
 	*answers = 0;
@@ -1035,9 +1045,9 @@ static int parse_response(const unsigned char *buf, size_t buflen,
 	if (buflen < DNS_HEADER_SIZE)
 		return -EINVAL;
 
-	const uint16_t qdcount = ntohs(hdr->qdcount);
-	const unsigned char *ptr = buf + DNS_HEADER_SIZE;
-	const unsigned char *eptr = buf + buflen;
+	qdcount = ntohs(hdr->qdcount);
+	ptr = buf + DNS_HEADER_SIZE;
+	eptr = buf + buflen;
 
 	debug("qr %d qdcount %d", hdr->qr, qdcount);
 
@@ -2010,40 +2020,47 @@ static int dns_reply_fixup_domains(
 	int new_an_len;
 	const struct domain_hdr *hdr = (void *)(reply + offset);
 	const char *eom = reply + reply_len;
-	const uint16_t header_len = offset + DNS_HEADER_SIZE;
+	uint16_t header_len = offset + DNS_HEADER_SIZE;
+	uint16_t domain_len;
+	struct qtype_qclass *qtc;
+	uint16_t dns_type;
+	uint16_t dns_class;
+	uint16_t section_counts[3];
+	const char *ptr;
+	uint8_t host_len;
+	const char *domain;
+
 	/* full header plus at least one byte for the hostname length */
 	if (reply_len < header_len + 1)
 		return -EINVAL;
 
-	const uint16_t section_counts[] = {
-		hdr->ancount,
-		hdr->nscount,
-		hdr->arcount
-	};
+	section_counts[0] = hdr->ancount;
+	section_counts[1] = hdr->nscount;
+	section_counts[2] = hdr->arcount;
 
 	/*
 	 * length octet of the hostname.
 	 * ->hostname.domain.net
 	 */
-	const char *ptr = reply + header_len;
-	const uint8_t host_len = *ptr;
-	const char *domain = ptr + host_len + 1;
+	ptr = reply + header_len;
+	host_len = *ptr;
+	domain = ptr + host_len + 1;
 	if (domain >= eom)
 		return -EINVAL;
 
-	const uint16_t domain_len = host_len ? strnlen(domain, eom - domain) : 0;
+	domain_len = host_len ? strnlen(domain, eom - domain) : 0;
 
 	/*
 	 * If the query type is anything other than A or AAAA, then bail out
 	 * and pass the message as is.  We only want to deal with IPv4 or IPv6
 	 * addresses.
 	 */
-	const struct qtype_qclass *qtc = (void*)(domain + domain_len + 1);
+	qtc = (void*)(domain + domain_len + 1);
 	if (((const char*)(qtc + 1)) > eom)
 		return -EINVAL;
 
-	const uint16_t dns_type = ntohs(qtc->qtype);
-	const uint16_t dns_class = ntohs(qtc->qclass);
+	dns_type = ntohs(qtc->qtype);
+	dns_class = ntohs(qtc->qclass);
 
 	if (domain_len == 0) {
 		/* nothing to do */
@@ -3288,9 +3305,12 @@ read_another:
 	 */
 	entry = cache_check(client->buf, &qtype, IPPROTO_TCP);
 	if (entry) {
-		debug("cache hit %s type %s", query, qtype == DNS_TYPE_A ? "A" : "AAAA");
-		struct cache_data *data = qtype == DNS_TYPE_A ?
-			entry->ipv4 : entry->ipv6;
+		struct cache_data *data;
+
+		debug("cache hit %s type %s", query,
+					qtype == DNS_TYPE_A ? "A" : "AAAA");
+
+		data = qtype == DNS_TYPE_A ? entry->ipv4 : entry->ipv6;
 
 		if (data) {
 			int ttl_left = data->valid_until - time(NULL);
@@ -3401,6 +3421,13 @@ static gboolean tcp_client_event(GIOChannel *channel, GIOCondition condition,
 {
 	struct tcp_partial_client_data *client = user_data;
 	int client_sk = g_io_channel_unix_get_fd(channel);
+	int len;
+	struct sockaddr_in6 client_addr6;
+	socklen_t client_addr6_len = sizeof(client_addr6);
+	struct sockaddr_in client_addr4;
+	socklen_t client_addr4_len = sizeof(client_addr4);
+	void *client_addr;
+	socklen_t *client_addr_len;
 
 	if (condition & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
 		g_hash_table_remove(partial_tcp_req_table,
@@ -3409,13 +3436,6 @@ static gboolean tcp_client_event(GIOChannel *channel, GIOCondition condition,
 		connman_error("Error with TCP client %d channel", client_sk);
 		return FALSE;
 	}
-
-	struct sockaddr_in6 client_addr6;
-	socklen_t client_addr6_len = sizeof(client_addr6);
-	struct sockaddr_in client_addr4;
-	socklen_t client_addr4_len = sizeof(client_addr4);
-	void *client_addr;
-	socklen_t *client_addr_len;
 
 	switch (client->family) {
 	case AF_INET:
@@ -3433,7 +3453,7 @@ static gboolean tcp_client_event(GIOChannel *channel, GIOCondition condition,
 		return FALSE;
 	}
 
-	const int len = recvfrom(client_sk, client->buf + client->buf_end,
+	len = recvfrom(client_sk, client->buf + client->buf_end,
 			TCP_MAX_BUF_LEN - client->buf_end, 0,
 			client_addr, client_addr_len);
 	if (len < 0) {
@@ -3924,7 +3944,9 @@ static void destroy_tcp_listener(struct listener_data *ifdata)
 
 static int create_listener(struct listener_data *ifdata)
 {
-	int err = create_dns_listener(IPPROTO_UDP, ifdata);
+	int index, err;
+
+	err = create_dns_listener(IPPROTO_UDP, ifdata);
 	if ((err & UDP_FAILED) == UDP_FAILED)
 		return -EIO;
 
@@ -3934,7 +3956,7 @@ static int create_listener(struct listener_data *ifdata)
 		return -EIO;
 	}
 
-	int index = connman_inet_ifindex("lo");
+	index = connman_inet_ifindex("lo");
 	if (ifdata->index == index) {
 		if ((err & IPv6_FAILED) != IPv6_FAILED)
 			__connman_resolvfile_append(index, NULL, "::1");
