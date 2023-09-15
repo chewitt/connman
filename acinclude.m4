@@ -57,9 +57,16 @@ AC_DEFUN([COMPILER_FLAGS], [
 		CFLAGS+=" -Wdeclaration-after-statement"
 		CFLAGS+=" -Wmissing-declarations"
 		CFLAGS+=" -Wredundant-decls"
-                if ( $CC -v 2>/dev/null | grep "gcc version" ); then
-                        CFLAGS+=" -Wcast-align"
-                fi
-		CFLAGS="$CFLAGS -DG_DISABLE_DEPRECATED"
+		CFLAGS+=" -DG_DISABLE_DEPRECATED"
 	fi
+
+	if (test "$CC" = "clang"); then
+		CFLAGS+=" -Wno-unknown-warning-option"
+		CFLAGS+=" -Wno-unknown-pragmas"
+	fi
+
+	if (test "$CC" = "gcc"); then
+		CFLAGS="$CFLAGS -Wcast-align"
+	fi
+
 ])
