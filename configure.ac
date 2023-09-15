@@ -42,9 +42,13 @@ gl_CONFIGMAKE_PREP
 AC_ARG_ENABLE(optimization, AS_HELP_STRING([--disable-optimization],
 			[disable code optimization through compiler]), [
 	if (test "${enableval}" = "no"); then
-		CFLAGS="$CFLAGS -O0 -U_FORTIFY_SOURCE"
+		CFLAGS="$CFLAGS -O0"
 	fi
 ])
+
+if (test "${enable_optimization}" != "no"); then
+	CFLAGS+=" -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2"
+fi
 
 AC_ARG_ENABLE(debug, AS_HELP_STRING([--enable-debug],
 			[enable compiling with debugging information]), [

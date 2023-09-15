@@ -48,7 +48,7 @@ AC_DEFUN([AC_PROG_CC_UBSAN], [
 
 AC_DEFUN([COMPILER_FLAGS], [
 	if (test "${CFLAGS}" = ""); then
-		CFLAGS="-Wall -O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2"
+		CFLAGS="-Wall -fsigned-char -fno-exceptions"
 	fi
 	if (test "$USE_MAINTAINER_MODE" = "yes"); then
 		CFLAGS+=" -Werror -Wextra"
