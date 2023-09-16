@@ -819,6 +819,9 @@ static bool load_service_from_keyfile(GKeyFile *keyfile,
 	groups = g_key_file_get_groups(keyfile, NULL);
 
 	for (i = 0; groups[i]; i++) {
+		if (g_strcmp0(groups[i], "global") == 0)
+			continue;
+
 		if (!g_str_has_prefix(groups[i], "service_")) {
 			connman_warn("Ignore group named '%s' because prefix "
 				"is not 'service_'", groups[i]);
