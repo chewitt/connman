@@ -599,6 +599,8 @@ static void parse_config(GKeyFile *config)
 	if (!error)
 		connman_settings.regdom_follows_timezone = boolean;
 
+	g_clear_error(&error);
+
 	string = __connman_config_get_string(config, "General",
 				CONF_RESOLV_CONF, &error);
 	if (!error)
@@ -801,6 +803,9 @@ char *connman_setting_get_string(const char *key)
 		return connman_settings.localtime ?
 			connman_settings.localtime : DEFAULT_LOCALTIME;
 
+	if (g_str_equal(key, CONF_RESOLV_CONF))
+		return connman_settings.resolv_conf;
+
 	return NULL;
 }
 
@@ -841,9 +846,6 @@ bool connman_setting_get_bool(const char *key)
 
 	if (g_str_equal(key, CONF_REGDOM_FOLLOWS_TIMEZONE))
 		return connman_settings.regdom_follows_timezone;
-
-	if (g_str_equal(key, CONF_RESOLV_CONF))
-		return connman_settings.resolv_conf;
 
 	return false;
 }
