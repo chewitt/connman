@@ -2952,22 +2952,6 @@ void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,
 	provider->auth_error_limit = limit;
 }
 
-bool __vpn_provider_check_routes(struct vpn_provider *provider)
-{
-	if (!provider)
-		return false;
-
-	if (provider->user_routes &&
-			g_hash_table_size(provider->user_routes) > 0)
-		return true;
-
-	if (provider->routes &&
-			g_hash_table_size(provider->routes) > 0)
-		return true;
-
-	return false;
-}
-
 void *vpn_provider_get_data(struct vpn_provider *provider)
 {
 	return provider->driver_data;
