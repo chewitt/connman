@@ -87,7 +87,6 @@ struct connman_network {
 		void *ssid;
 		int ssid_len;
 		char *mode;
-		unsigned short channel;
 		char *security;
 		char *passphrase;
 		char *eap;
@@ -2119,14 +2118,6 @@ uint16_t connman_network_get_frequency(struct connman_network *network)
 	return network->frequency;
 }
 
-int connman_network_set_wifi_channel(struct connman_network *network,
-						uint16_t channel)
-{
-	network->wifi.channel = channel;
-
-	return 0;
-}
-
 int connman_network_set_autoconnect(struct connman_network *network,
 				bool autoconnect)
 {
@@ -2140,11 +2131,6 @@ bool __connman_network_native_autoconnect(struct connman_network *network)
 	if (!network->driver || !network->driver->set_autoconnect)
 		return false;
 	return true;
-}
-
-uint16_t connman_network_get_wifi_channel(struct connman_network *network)
-{
-	return network->wifi.channel;
 }
 
 /**
