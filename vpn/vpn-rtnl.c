@@ -145,61 +145,6 @@ void vpn_rtnl_remove_watch(unsigned int id)
 	}
 }
 
-static void trigger_rtnl(int index, void *user_data)
-{
-	struct vpn_rtnl *rtnl = user_data;
-
-	if (rtnl->newlink) {
-		unsigned short type = __vpn_ipconfig_get_type_from_index(index);
-		unsigned int flags = __vpn_ipconfig_get_flags_from_index(index);
-
-		rtnl->newlink(type, index, flags, 0);
-	}
-}
-
-static GSList *rtnl_list = NULL;
-
-static gint compare_priority(gconstpointer a, gconstpointer b)
-{
-	const struct vpn_rtnl *rtnl1 = a;
-	const struct vpn_rtnl *rtnl2 = b;
-
-	return rtnl2->priority - rtnl1->priority;
-}
-
-/**
- * vpn_rtnl_register:
- * @rtnl: RTNL module
- *
- * Register a new RTNL module
- *
- * Returns: %0 on success
- */
-int vpn_rtnl_register(struct vpn_rtnl *rtnl)
-{
-	DBG("rtnl %p name %s", rtnl, rtnl->name);
-
-	rtnl_list = g_slist_insert_sorted(rtnl_list, rtnl,
-							compare_priority);
-
-	vpn_ipconfig_foreach(trigger_rtnl, rtnl);
-
-	return 0;
-}
-
-/**
- * vpn_rtnl_unregister:
- * @rtnl: RTNL module
- *
- * Remove a previously registered RTNL module
- */
-void vpn_rtnl_unregister(struct vpn_rtnl *rtnl)
-{
-	DBG("rtnl %p name %s", rtnl, rtnl->name);
-
-	rtnl_list = g_slist_remove(rtnl_list, rtnl);
-}
-
 static const char *operstate2str(unsigned char operstate)
 {
 	switch (operstate) {
@@ -320,13 +265,6 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 					GINT_TO_POINTER(index), interface);
 	}
 
-	for (list = rtnl_list; list; list = list->next) {
-		struct vpn_rtnl *rtnl = list->data;
-
-		if (rtnl->newlink)
-			rtnl->newlink(type, index, flags, change);
-	}
-
 	for (list = watch_list; list; list = list->next) {
 		struct watch_data *watch = list->data;
 
@@ -344,7 +282,6 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 	struct rtnl_link_stats stats;
 	unsigned char operstate = 0xff;
 	const char *ifname = NULL;
-	GSList *list;
 
 	memset(&stats, 0, sizeof(stats));
 	extract_link(msg, bytes, NULL, &ifname, NULL, &operstate, &stats);
@@ -353,13 +290,6 @@ static void process_dellink(unsigned short type, int index, unsigned flags,
 		connman_info("%s {dellink} index %d operstate %u <%s>",
 						ifname, index, operstate,
 						operstate2str(operstate));
-
-	for (list = rtnl_list; list; list = list->next) {
-		struct vpn_rtnl *rtnl = list->data;
-
-		if (rtnl->dellink)
-			rtnl->dellink(type, index, flags, change);
-	}
 
 	switch (type) {
 	case ARPHRD_ETHER:
@@ -426,7 +356,6 @@ static void extract_ipv6_route(struct rtmsg *msg, int bytes, int *index,
 static void process_newroute(unsigned char family, unsigned char scope,
 						struct rtmsg *msg, int bytes)
 {
-	GSList *list;
 	char dststr[INET6_ADDRSTRLEN], gatewaystr[INET6_ADDRSTRLEN];
 	int index = -1;
 
@@ -463,21 +392,12 @@ static void process_newroute(unsigned char family, unsigned char scope,
 
 		if (!IN6_IS_ADDR_UNSPECIFIED(&dst))
 			return;
-	} else
-		return;
-
-	for (list = rtnl_list; list; list = list->next) {
-		struct vpn_rtnl *rtnl = list->data;
-
-		if (rtnl->newgateway)
-			rtnl->newgateway(index, gatewaystr);
 	}
 }
 
 static void process_delroute(unsigned char family, unsigned char scope,
 						struct rtmsg *msg, int bytes)
 {
-	GSList *list;
 	char dststr[INET6_ADDRSTRLEN], gatewaystr[INET6_ADDRSTRLEN];
 	int index = -1;
 
@@ -514,14 +434,6 @@ static void process_delroute(unsigned char family, unsigned char scope,
 
 		if (!IN6_IS_ADDR_UNSPECIFIED(&dst))
 			return;
-	} else
-		return;
-
-	for (list = rtnl_list; list; list = list->next) {
-		struct vpn_rtnl *rtnl = list->data;
-
-		if (rtnl->delgateway)
-			rtnl->delgateway(index, gatewaystr);
 	}
 }
 

@@ -40,24 +40,6 @@ unsigned int vpn_rtnl_add_newlink_watch(int index,
 
 void vpn_rtnl_remove_watch(unsigned int id);
 
-#define VPN_RTNL_PRIORITY_LOW      -100
-#define VPN_RTNL_PRIORITY_DEFAULT     0
-#define VPN_RTNL_PRIORITY_HIGH      100
-
-struct vpn_rtnl {
-	const char *name;
-	int priority;
-	void (*newlink) (unsigned short type, int index,
-					unsigned flags, unsigned change);
-	void (*dellink) (unsigned short type, int index,
-					unsigned flags, unsigned change);
-	void (*newgateway) (int index, const char *gateway);
-	void (*delgateway) (int index, const char *gateway);
-};
-
-int vpn_rtnl_register(struct vpn_rtnl *rtnl);
-void vpn_rtnl_unregister(struct vpn_rtnl *rtnl);
-
 #ifdef __cplusplus
 }
 #endif
