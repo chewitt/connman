@@ -807,18 +807,6 @@ const char *__connman_service_get_nameserver(struct connman_service *service);
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url);
 
-void __connman_service_set_identity(struct connman_service *service,
-					const char *identity);
-void __connman_service_set_anonymous_identity(struct connman_service *service,
-					const char *anonymous_identity);
-void __connman_service_set_subject_match(struct connman_service *service,
-					const char *subject_match);
-void __connman_service_set_altsubject_match(struct connman_service *service,
-					const char *altsubject_match);
-void __connman_service_set_domain_suffix_match(struct connman_service *service,
-					const char *domain_suffix_match);
-void __connman_service_set_domain_match(struct connman_service *service,
-					const char *domain_match);
 void __connman_service_set_agent_identity(struct connman_service *service,
 						const char *agent_identity);
 int __connman_service_set_passphrase(struct connman_service *service,
