@@ -125,7 +125,6 @@ struct connman_service {
 	char *private_key_passphrase;
 	char *phase2;
 	DBusMessage *pending;
-	DBusMessage *provider_pending;
 	guint timeout;
 	struct connman_stats stats;
 	struct connman_stats stats_roaming;
@@ -3893,12 +3892,6 @@ static void reply_pending(struct connman_service *service, int error)
 		connman_dbus_reply_pending(service->pending, error, NULL);
 		service->pending = NULL;
 	}
-
-	if (service->provider_pending) {
-		connman_dbus_reply_pending(service->provider_pending,
-				error, service->path);
-		service->provider_pending = NULL;
-	}
 }
 
 static void service_complete(struct connman_service *service)
@@ -4370,30 +4363,6 @@ static void vpn_auto_connect(void)
 
 	vpn_autoconnect_id =
 		g_idle_add(run_vpn_auto_connect, NULL);
-}
-
-bool
-__connman_service_is_provider_pending(struct connman_service *service)
-{
-	if (!service)
-		return false;
-
-	if (service->provider_pending)
-		return true;
-
-	return false;
-}
-
-void __connman_service_set_provider_pending(struct connman_service *service,
-							DBusMessage *msg)
-{
-	if (service->provider_pending) {
-		DBG("service %p provider pending msg %p already exists",
-			service, service->provider_pending);
-		return;
-	}
-
-	service->provider_pending = msg;
 }
 
 static void check_pending_msg(struct connman_service *service)
@@ -6134,7 +6103,7 @@ int __connman_service_indicate_error(struct connman_service *service,
 
 int __connman_service_clear_error(struct connman_service *service)
 {
-	DBusMessage *pending, *provider_pending;
+	DBusMessage *pending;
 
 	DBG("service %p", service);
 
@@ -6146,8 +6115,6 @@ int __connman_service_clear_error(struct connman_service *service)
 
 	pending = service->pending;
 	service->pending = NULL;
-	provider_pending = service->provider_pending;
-	service->provider_pending = NULL;
 
 	__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_IDLE,
@@ -6158,7 +6125,6 @@ int __connman_service_clear_error(struct connman_service *service)
 						CONNMAN_IPCONFIG_TYPE_IPV4);
 
 	service->pending = pending;
-	service->provider_pending = provider_pending;
 
 	return 0;
 }

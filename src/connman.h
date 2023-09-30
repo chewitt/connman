@@ -755,9 +755,6 @@ int __connman_service_disconnect(struct connman_service *service);
 void __connman_service_set_active_session(bool enable, GSList *list);
 void __connman_service_auto_connect(enum connman_service_connect_reason reason);
 bool __connman_service_remove(struct connman_service *service);
-bool __connman_service_is_provider_pending(struct connman_service *service);
-void __connman_service_set_provider_pending(struct connman_service *service,
-							DBusMessage *msg);
 void __connman_service_set_hidden_data(struct connman_service *service,
 				gpointer user_data);
 void __connman_service_return_error(struct connman_service *service,
