@@ -85,7 +85,7 @@ enum connman_network_type connman_network_get_type(struct connman_network *netwo
 const char *connman_network_get_identifier(struct connman_network *network);
 
 void connman_network_set_index(struct connman_network *network, int index);
-int connman_network_get_index(struct connman_network *network);
+int connman_network_get_index(const struct connman_network *network);
 
 void connman_network_set_group(struct connman_network *network,
 						const char *group);

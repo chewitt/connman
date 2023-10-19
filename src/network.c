@@ -1403,7 +1403,7 @@ done:
  *
  * Get index number of network
  */
-int connman_network_get_index(struct connman_network *network)
+int connman_network_get_index(const struct connman_network *network)
 {
 	return network->index;
 }

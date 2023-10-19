@@ -94,7 +94,7 @@ int connman_provider_indicate_error(struct connman_provider *provider,
 					enum connman_provider_error error);
 
 void connman_provider_set_index(struct connman_provider *provider, int index);
-int connman_provider_get_index(struct connman_provider *provider);
+int connman_provider_get_index(const struct connman_provider *provider);
 
 void connman_provider_set_data(struct connman_provider *provider, void *data);
 void *connman_provider_get_data(struct connman_provider *provider);

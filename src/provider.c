@@ -535,7 +535,7 @@ done:
 	provider->index = index;
 }
 
-int connman_provider_get_index(struct connman_provider *provider)
+int connman_provider_get_index(const struct connman_provider *provider)
 {
 	return provider->index;
 }
