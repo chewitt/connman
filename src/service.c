@@ -1459,12 +1459,6 @@ static void start_online_check(struct connman_service *service,
 			"Default service remains in READY state.");
 		return;
 	}
-	enable_online_to_ready_transition =
-		connman_setting_get_bool("EnableOnlineToReadyTransition");
-	online_check_initial_interval =
-		connman_setting_get_uint("OnlineCheckInitialInterval");
-	online_check_max_interval =
-		connman_setting_get_uint("OnlineCheckMaxInterval");
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 || check_proxy_setup(service)) {
 		cancel_online_check(service);
@@ -7731,6 +7725,13 @@ int __connman_service_init(void)
 	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
 
 	remove_unprovisioned_services();
+
+	enable_online_to_ready_transition =
+		connman_setting_get_bool("EnableOnlineToReadyTransition");
+	online_check_initial_interval =
+		connman_setting_get_uint("OnlineCheckInitialInterval");
+	online_check_max_interval =
+		connman_setting_get_uint("OnlineCheckMaxInterval");
 
 	return 0;
 }
