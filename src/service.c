@@ -1601,6 +1601,20 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
+/**
+ *  @brief
+ *    Start HTTP-based Internet reachability probes if the specified
+ *    service is connected.
+ *
+ *  This attempts to start IPv4 and/or IPv6 HTTP-based Internet
+ *  reachability probes if the IPv4 state or IPv6 state is connected
+ *  (that is, "ready" or "online").
+ *
+ *  @param[in]  service  A pointer to a mutable service on which to start
+ *                       reachability probes if the IPv4 or IPv6 state
+ *                       is "connected" (that is, "ready" or "online").
+ *
+ */
 static void start_wispr_if_connected(struct connman_service *service)
 {
 	if (!connman_setting_get_bool("EnableOnlineCheck")) {
