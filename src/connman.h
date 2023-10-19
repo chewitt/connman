@@ -334,7 +334,7 @@ void __connman_ipconfig_unref_debug(struct connman_ipconfig *ipconfig,
 void *__connman_ipconfig_get_data(struct connman_ipconfig *ipconfig);
 void __connman_ipconfig_set_data(struct connman_ipconfig *ipconfig, void *data);
 
-int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig);
+int __connman_ipconfig_get_index(const struct connman_ipconfig *ipconfig);
 
 void __connman_ipconfig_set_ops(struct connman_ipconfig *ipconfig,
 				const struct connman_ipconfig_ops *ops);

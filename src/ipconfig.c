@@ -1388,7 +1388,7 @@ void __connman_ipconfig_set_data(struct connman_ipconfig *ipconfig, void *data)
  *
  * Get interface index
  */
-int __connman_ipconfig_get_index(struct connman_ipconfig *ipconfig)
+int __connman_ipconfig_get_index(const struct connman_ipconfig *ipconfig)
 {
 	if (!ipconfig)
 		return -1;
