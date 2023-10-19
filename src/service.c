@@ -1601,7 +1601,7 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
-static void start_wispr_when_connected(struct connman_service *service)
+static void start_wispr_if_connected(struct connman_service *service)
 {
 	if (!connman_setting_get_bool("EnableOnlineCheck")) {
 		connman_info("Online check disabled. "
@@ -1644,7 +1644,7 @@ static void default_changed(void)
 				connman_setting_get_bool("AllowDomainnameUpdates"))
 			__connman_utsname_set_domainname(service->domainname);
 
-		start_wispr_when_connected(service);
+		start_wispr_if_connected(service);
 
 		/*
 		 * Connect VPN automatically when new default service
@@ -3657,7 +3657,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 		dns_configuration_changed(service);
 
-		start_wispr_when_connected(service);
+		start_wispr_if_connected(service);
 
 		service_save(service);
 	} else if (g_str_equal(name, "Timeservers.Configuration")) {
