@@ -393,10 +393,9 @@ static int set_ipv6_privacy(gchar *ifname, int value)
 
 static int get_rp_filter(void)
 {
-	int value;
+	int value = -EINVAL;
 
-	if (read_ipv4_conf_value(NULL, "rp_filter", &value) < 0)
-		value = -EINVAL;
+	read_ipv4_conf_value(NULL, "rp_filter", &value);
 
 	return value;
 }
