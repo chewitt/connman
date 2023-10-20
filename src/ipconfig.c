@@ -346,7 +346,7 @@ static int write_ipv6_conf_value(const char *ifname, const char *suffix,
 
 static bool get_ipv6_state(gchar *ifname)
 {
-	int disabled;
+	int disabled = 1;
 	bool enabled = false;
 
 	if (read_ipv6_conf_value(ifname, "disable_ipv6", &disabled) > 0)
