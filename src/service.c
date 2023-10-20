@@ -3051,8 +3051,10 @@ int __connman_service_timeserver_remove(struct connman_service *service,
 	for (i = 0, j = 0; i < len; i++) {
 		if (g_strcmp0(service->timeservers[i], timeserver) != 0) {
 			servers[j] = g_strdup(service->timeservers[i]);
-			if (!servers[j])
+			if (!servers[j]) {
+				g_strfreev(servers);
 				return -ENOMEM;
+			}
 			j++;
 		}
 	}
