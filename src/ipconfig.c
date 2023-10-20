@@ -366,13 +366,12 @@ static int set_ipv6_state(gchar *ifname, bool enable)
 
 static int get_ipv6_privacy(gchar *ifname)
 {
-	int value;
+	int value = 0;
 
 	if (!ifname)
-		return 0;
+		return value;
 
-	if (read_ipv6_conf_value(ifname, "use_tempaddr", &value) < 0)
-		value = 0;
+	read_ipv6_conf_value(ifname, "use_tempaddr", &value);
 
 	return value;
 }
