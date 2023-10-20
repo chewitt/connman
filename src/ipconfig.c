@@ -40,6 +40,14 @@
 
 #include "connman.h"
 
+/* Linux reverse path filtering (rp_filter) validation setting values.
+ */
+enum {
+	__CONNMAN_LINUX_RP_FILTER_SETTING_NO_VALIDATION          = 0,
+	__CONNMAN_LINUX_RP_FILTER_SETTING_STRICT_MODE_VALIDATION = 1,
+	__CONNMAN_LINUX_RP_FILTER_SETTING_LOOSE_MODE_VALIDATION  = 2,
+};
+
 struct connman_ipconfig {
 	int refcount;
 	int index;
@@ -404,11 +412,11 @@ static int set_rp_filter(int value)
 	/* 0 = no validation, 1 = strict mode, 2 = loose mode */
 	switch (value) {
 	case -1:
-		value = 0;
+		value = __CONNMAN_LINUX_RP_FILTER_SETTING_NO_VALIDATION;
 		/* fall through */
-	case 0:
-	case 1:
-	case 2:
+	case __CONNMAN_LINUX_RP_FILTER_SETTING_NO_VALIDATION:
+	case __CONNMAN_LINUX_RP_FILTER_SETTING_STRICT_MODE_VALIDATION:
+	case __CONNMAN_LINUX_RP_FILTER_SETTING_LOOSE_MODE_VALIDATION:
 		break;
 	default:
 		return -EINVAL;
@@ -419,6 +427,7 @@ static int set_rp_filter(int value)
 
 int __connman_ipconfig_set_rp_filter()
 {
+	const int default_value = __CONNMAN_LINUX_RP_FILTER_SETTING_LOOSE_MODE_VALIDATION;
 	int value;
 
 	value = get_rp_filter();
@@ -426,10 +435,10 @@ int __connman_ipconfig_set_rp_filter()
 	if (value < 0)
 		return value;
 
-	set_rp_filter(2);
+	set_rp_filter(default_value);
 
-	connman_info("rp_filter set to 2 (loose mode routing), "
-			"old value was %d", value);
+	connman_info("rp_filter set to %d (loose mode routing), "
+			"old value was %d", default_value, value);
 
 	return value;
 }
