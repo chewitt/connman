@@ -107,7 +107,9 @@ unsigned int connman_proxy_lookup(const char *interface, const char *url,
 {
 	struct proxy_lookup *lookup;
 
-	DBG("interface %s url %s", interface, url);
+	DBG("interface %s url %s service %p (%s)",
+		interface, url,
+		service, connman_service_get_identifier(service));
 
 	if (!interface)
 		return 0;

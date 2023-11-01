@@ -921,8 +921,11 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 	int err = 0;
 	int i;
 
-	DBG("wispr/portal context %p service %p", wp_context,
-		wp_context->service);
+	DBG("wispr/portal context %p service %p (%s) type %d (%s)",
+		wp_context,
+		wp_context->service,
+		connman_service_get_identifier(wp_context->service),
+		wp_context->type, __connman_ipconfig_type2string(wp_context->type));
 
 	interface = connman_service_get_interface(wp_context->service);
 	if (!interface)
@@ -995,8 +998,9 @@ int __connman_wispr_start(struct connman_service *service,
 	struct connman_wispr_portal *wispr_portal = NULL;
 	int index, err;
 
-	DBG("service %p %s", service,
-		__connman_ipconfig_type2string(type));
+	DBG("service %p (%s) type %d (%s)",
+		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type));
 
 	if (!wispr_portal_hash)
 		return -EINVAL;
@@ -1070,7 +1074,7 @@ void __connman_wispr_stop(struct connman_service *service)
 	struct connman_wispr_portal *wispr_portal;
 	int index;
 
-	DBG("service %p", service);
+	DBG("service %p (%s)", service, connman_service_get_identifier(service));
 
 	if (!wispr_portal_hash)
 		return;

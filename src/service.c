@@ -3531,7 +3531,10 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
-	DBG("service %p type %s", service, __connman_ipconfig_type2string(type));
+	DBG("service %p (%s) type %d (%s)",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_interval_ipv4 =
@@ -4609,8 +4612,11 @@ static void downgrade_state(struct connman_service *service)
 	if (!service)
 		return;
 
-	DBG("service %p state4 %d state6 %d", service, service->state_ipv4,
-						service->state_ipv6);
+	DBG("service %p (%s) state4 %d (%s) state6 %d (%s)",
+		service,
+		connman_service_get_identifier(service),
+		service->state_ipv4, state2string(service->state_ipv4),
+		service->state_ipv6, state2string(service->state_ipv6));
 
 	if (service->state_ipv4 == CONNMAN_SERVICE_STATE_ONLINE)
 		__connman_service_ipconfig_indicate_state(service,
@@ -5894,8 +5900,9 @@ static int service_indicate_state(struct connman_service *service)
 	old_state = service->state;
 	new_state = combine_state(service->state_ipv4, service->state_ipv6);
 
-	DBG("service %p old %s - new %s/%s => %s",
+	DBG("service %p (%s) old %s - new %s/%s => %s",
 					service,
+					connman_service_get_identifier(service),
 					state2string(old_state),
 					state2string(service->state_ipv4),
 					state2string(service->state_ipv6),
@@ -6268,8 +6275,11 @@ void __connman_service_online_check(struct connman_service *service,
 	enum connman_service_state current_state;
 	int timeout;
 
-	DBG("service %p type %s success %d\n",
-		service, __connman_ipconfig_type2string(type), success);
+	DBG("service %p (%s) type %d (%s) success %d\n",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		success);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;
@@ -6295,8 +6305,9 @@ void __connman_service_online_check(struct connman_service *service,
 	}
 
 redo_func:
-	DBG("service %p type %s interval %d", service,
-		__connman_ipconfig_type2string(type), *interval);
+	DBG("service %p (%s) type %d (%s) interval %d", service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type), *interval);
 
 	timeout = g_timeout_add_seconds(*interval * *interval,
 				redo_func, connman_service_ref(service));

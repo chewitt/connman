@@ -131,7 +131,7 @@ int __connman_wpad_start(struct connman_service *service)
 	int index;
 	int i;
 
-	DBG("service %p", service);
+	DBG("service %p (%s)", service, connman_service_get_identifier(service));
 
 	if (!wpad_list)
 		return -EINVAL;
