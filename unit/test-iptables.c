@@ -210,8 +210,6 @@ void xtables_option_mfcall(struct xtables_match *m)
 	if (test_config_type & TEST_CONFIG_MFCALL_FAIL)
 		call_error("xtables_option_mfcall");
 
-	m = &xt_match;
-
 	return;
 }
 
@@ -221,8 +219,6 @@ void xtables_option_tfcall(struct xtables_target *t)
 
 	if (test_config_type & TEST_CONFIG_TFCALL_FAIL)
 		call_error("xtables_option_tfcall");
-
-	t = &xt_target;
 
 	return;
 }
@@ -235,8 +231,6 @@ void xtables_option_mpcall(unsigned int c, char **argv, bool invert,
 	if (test_config_type & TEST_CONFIG_MPCALL_FAIL)
 		call_error("xtables_option_mpcall");
 
-	m = &xt_match;
-
 	return;
 }
 
@@ -247,8 +241,6 @@ void xtables_option_tpcall(unsigned int c, char **argv, bool invert,
 
 	if (test_config_type & TEST_CONFIG_TPCALL_FAIL)
 		call_error("xtables_option_tpcall");
-
-	t = &xt_target;
 
 	return;
 }
