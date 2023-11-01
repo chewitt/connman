@@ -4271,7 +4271,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 		is_connected(def_service->state))) {
 
 		DBG("stopped, default service %s connected %d",
-			def_service ? def_service->identifier : "NULL",
+			connman_service_get_identifier(def_service),
 			def_service ? is_connected(def_service->state) : -1);
 		goto out;
 	}
@@ -6369,7 +6369,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		return -EALREADY;
 
 	DBG("service %p (%s) old state %d (%s) new state %d (%s) type %d (%s)",
-		service, service ? service->identifier : NULL,
+		service, connman_service_get_identifier(service),
 		old_state, state2string(old_state),
 		new_state, state2string(new_state),
 		type, __connman_ipconfig_type2string(type));
