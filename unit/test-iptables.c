@@ -69,13 +69,13 @@ static void set_test_config(enum configtype type)
 #define IP6T_SO_GET_INFO		(IP6T_BASE_CTL)
 #define IP6T_SO_GET_ENTRIES		(IP6T_BASE_CTL + 1)
 
-int static xt_match_parse(int c, char **argv, int invert, unsigned int *flags,
+static int xt_match_parse(int c, char **argv, int invert, unsigned int *flags,
 			const void *entry, struct xt_entry_match **match)
 {
 	return 0;
 }
 
-int static xt_target_parse(int c, char **argv, int invert, unsigned int *flags,
+static int xt_target_parse(int c, char **argv, int invert, unsigned int *flags,
 			const void *entry, struct xt_entry_target **targetinfo)
 {
 	return 0;
