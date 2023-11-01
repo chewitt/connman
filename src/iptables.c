@@ -1259,6 +1259,19 @@ static void update_hooks(struct connman_iptables *table, GList *chain_head,
 	}
 }
 
+static bool connman_iptables_entry_is_valid(
+				const struct connman_iptables_entry *new_entry)
+{
+	if (!new_entry ||
+		((new_entry->type != AF_INET) || (new_entry->type != AF_INET6)) ||
+		((new_entry->type == AF_INET) && !new_entry->entry) ||
+		((new_entry->type == AF_INET6) && !new_entry->entry6)) {
+		return false;
+	}
+
+	return true;
+}
+
 static struct connman_iptables_entry *prepare_rule_inclusion(
 				struct connman_iptables *table,
 				struct iptables_ip *ip,
@@ -1283,16 +1296,8 @@ static struct connman_iptables_entry *prepare_rule_inclusion(
 
 	new_entry = new_rule(ip, target_name, xt_t, xt_rm);
 
-	switch (new_entry->type) {
-	case AF_INET:
-		if (new_entry->entry)
-			break;
-	case AF_INET6:
-		if (new_entry->entry6)
-			break;
-	default:
+	if (!connman_iptables_entry_is_valid(new_entry))
 		goto err;
-	}
 
 	update_hooks(table, chain_head, new_entry);
 
@@ -1337,17 +1342,7 @@ static int iptables_append_rule(struct connman_iptables *table,
 	new_entry = prepare_rule_inclusion(table, ip, chain_name, target_name,
 					xt_t, &builtin, xt_rm, false);
 
-	if (!new_entry)
-		return -EINVAL;
-
-	switch (new_entry->type) {
-	case AF_INET:
-		if (new_entry->entry)
-			break;
-	case AF_INET6:
-		if (new_entry->entry6)
-			break;
-	default:
+	if (!connman_iptables_entry_is_valid(new_entry)) {
 		ret = -EINVAL;
 		goto err;
 	}
@@ -1391,17 +1386,7 @@ static int iptables_insert_rule(struct connman_iptables *table,
 	new_entry = prepare_rule_inclusion(table, ip, chain_name, target_name,
 					xt_t, &builtin, xt_rm, true);
 
-	if (!new_entry)
-		return -EINVAL;
-
-	switch (new_entry->type) {
-	case AF_INET:
-		if (new_entry->entry)
-			break;
-	case AF_INET6:
-		if (new_entry->entry6)
-			break;
-	default:
+	if (!connman_iptables_entry_is_valid(new_entry)) {
 		ret = -EINVAL;
 		goto err;
 	}
