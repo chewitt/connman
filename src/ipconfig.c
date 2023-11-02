@@ -269,6 +269,45 @@ static const char *scope2str(unsigned char scope)
 #define PROC_IPV4_CONF_PREFIX "/proc/sys/net/ipv4/conf"
 #define PROC_IPV6_CONF_PREFIX "/proc/sys/net/ipv6/conf"
 
+/**
+ *  @brief
+ *    Get the file system configuration value associated with the
+ *    composed prefix, optional network interface name, and suffix
+ *    path components.
+ *
+ *  This attempts to read and return the file system (ostensibly from
+ *  the Linux proc file system) configuration value associated with
+ *  the composed combination of the specified prefix, optional network
+ *  interface name, and suffix path components. If the network
+ *  interface name is null, then "all" is used. The composed path name
+ *  will look like "prefix/<ifname|all>/suffix".
+ *
+ *  @param[in]   prefix  A pointer to the immutable null-terminated C
+ *                       string containing the prefix component(s) of
+ *                       the file system path for which to get the
+ *                       configuration value.
+ *  @param[in]   ifname  An optional pointer to the immutable null-
+ *                       terminated C string containing the network
+ *                       interface name to use as the path component
+ *                       between @a prefix and @a suffix. If null,
+ *                       "all" will be used.
+ *  @param[in]   suffix  A pointer to the immutable null-terminated C
+ *                       string containing the suffix component(s) of
+ *                       the file system path for which to get the
+ *                       configuration value.
+ *  @param[out]  value   A pointer to storage to be populated with the
+ *                       read configuration value, if successful.
+ *
+ *  @retval  1         If successful.
+ *  @retval  0         If no configuration value was successfully read.
+ *  @retval  -ENOMEM   If memory could not be allocated for the
+ *                     configuration path name to be read.
+ *  @retval  -ENOENT   The composed configuration path name does not
+ *                     exist.
+ *  @retval  -EACCESS  The current process does not have permission
+ *                     to access the composed configuration path name.
+ *
+ */
 static int read_conf_value(const char *prefix, const char *ifname,
 					const char *suffix, int *value)
 {
@@ -276,11 +315,14 @@ static int read_conf_value(const char *prefix, const char *ifname,
 	FILE *f;
 	int err;
 
+	// Build the file system path name from the specified,
+	// null-terminated variable argument component list.
+
 	path = g_build_filename(prefix, ifname ? ifname : "all", suffix, NULL);
 	if (!path)
 		return -ENOMEM;
 
-	errno = 0;
+	errno = 0; /* Avoid stale errno values with fopen */
 	f = fopen(path, "r");
 	if (!f) {
 		err = -errno;
@@ -302,12 +344,84 @@ static int read_conf_value(const char *prefix, const char *ifname,
 	return err;
 }
 
+/**
+ *  @brief
+ *    Get the Linux proc file system configuration value associated
+ *    with the composed /proc/sys/net/ipv4/conf prefix, optional
+ *    network interface name, and suffix path components.
+ *
+ *  This attempts to read and return the file system (ostensibly from
+ *  the Linux proc file system) configuration value associated with
+ *  the composed combination of the /proc/sys/net/ipv4/conf prefix,
+ *  optional network interface name, and suffix path components. If
+ *  the network interface name is null, then "all" is used. The
+ *  composed path name will look like "/proc/sys/net/ipv4/conf/
+ *  <ifname|all>/suffix".
+ *
+ *  @param[in]   ifname  An optional pointer to the immutable null-
+ *                       terminated C string containing the network
+ *                       interface name to use as the path component
+ *                       between @a prefix and @a suffix. If null,
+ *                       "all" will be used.
+ *  @param[in]   suffix  A pointer to the immutable null-terminated C
+ *                       string containing the suffix component(s) of
+ *                       the file system path for which to get the
+ *                       configuration value.
+ *  @param[out]  value   A pointer to storage to be populated with the
+ *                       read configuration value, if successful.
+ *
+ *  @retval  1         If successful.
+ *  @retval  0         If no configuration value was successfully read.
+ *  @retval  -ENOMEM   If memory could not be allocated for the
+ *                     configuration path name to be read.
+ *  @retval  -ENOENT   The composed configuration path name does not
+ *                     exist.
+ *  @retval  -EACCESS  The current process does not have permission
+ *                     to access the composed configuration path name.
+ *
+ */
 static int read_ipv4_conf_value(const char *ifname, const char *suffix,
 								int *value)
 {
 	return read_conf_value(PROC_IPV4_CONF_PREFIX, ifname, suffix, value);
 }
 
+/**
+ *  @brief
+ *    Get the Linux proc file system configuration value associated
+ *    with the composed /proc/sys/net/ipv6/conf prefix, optional
+ *    network interface name, and suffix path components.
+ *
+ *  This attempts to read and return the file system (ostensibly from
+ *  the Linux proc file system) configuration value associated with
+ *  the composed combination of the /proc/sys/net/ipv6/conf prefix,
+ *  optional network interface name, and suffix path components. If
+ *  the network interface name is null, then "all" is used. The
+ *  composed path name will look like "/proc/sys/net/ipv6/conf/
+ *  <ifname|all>/suffix".
+ *
+ *  @param[in]   ifname  An optional pointer to the immutable null-
+ *                       terminated C string containing the network
+ *                       interface name to use as the path component
+ *                       between @a prefix and @a suffix. If null,
+ *                       "all" will be used.
+ *  @param[in]   suffix  A pointer to the immutable null-terminated C
+ *                       string containing the suffix component(s) of
+ *                       the file system path for which to get the
+ *                       configuration value.
+ *  @param[out]  value   A pointer to storage to be populated with the
+ *                       read configuration value, if successful.
+ *
+ *  @retval  1         If successful.
+ *  @retval  0         If no configuration value was successfully read.
+ *  @retval  -ENOMEM   If memory could not be allocated for the
+ *                     configuration path name to be read.
+ *  @retval  -ENOENT   The composed configuration path name does not
+ *                     exist.
+ *  @retval  -EACCESS  The current process does not have permission
+ *                     to access the composed configuration path name.
+ *
+ */
 static int read_ipv6_conf_value(const char *ifname, const char *suffix,
 								int *value)
 {
@@ -372,6 +486,24 @@ static int set_ipv6_state(const gchar *ifname, bool enable)
 	return write_ipv6_conf_value(ifname, "disable_ipv6", disabled);
 }
 
+/**
+ *  @brief
+ *    Return the IPv6 address privacy setting from the Linux kernel
+ *    proc file system for the specified network interface name.
+ *
+ *  This attempts to read and return the IPv6 address privacy setting
+ *  (that is, "use_tempaddr") from the Linux kernel proc file system
+ *  for the specified network interface name.
+ *
+ *  @param[in]  ifname  A pointer to the immutable null-terminated C
+ *                      string of the network interface name for which
+ *                      to return the IPv6 privacy setting.
+ *
+ *  @retval  <= 0  IPv6 address privacy is disabled.
+ *  @retval     1  IPv6 address privacy is enabled.
+ *  @retval     2  IPv6 address privacy is preferred.
+ *
+ */
 static int get_ipv6_privacy(const gchar *ifname)
 {
 	int value = 0;
@@ -398,6 +530,22 @@ static int set_ipv6_privacy(const gchar *ifname, int value)
 	return write_ipv6_conf_value(ifname, "use_tempaddr", value);
 }
 
+/**
+ *  @brief
+ *    Return the IPv4 reverse path routing validation setting from the
+ *    Linux kernel proc file system.
+ *
+ *  This attempts to read and return the IPv6 address privacy setting
+ *  (that is, "rp_filter") from the Linux kernel proc file system.
+ *
+ *  @retval  -EINVAL  The setting could not be read.
+ *  @retval  0        No reverse path routing validation is in effect.
+ *  @retval  1        Strict mode reverse path routing validation is
+ *                    in effect.
+ *  @retval  2        Loose mode reverse path routing validation is
+ *                    in effect.
+ *
+ */
 static int get_rp_filter(void)
 {
 	int value = -EINVAL;
