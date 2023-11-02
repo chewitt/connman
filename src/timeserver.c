@@ -398,6 +398,23 @@ static void ts_set_nameservers(struct connman_service *service)
 	}
 }
 
+/**
+ *  @brief
+ *    Reset internal time of day synchronization state and initiate
+ *    time of day synchronization with the specified network service.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           object for which a time of day
+ *                           synchronization with time services should
+ *                           be initiated. Name and time servers from
+ *                           this service will be used for time of day
+ *                           synchronization.
+ *
+ *  @sa __connman_timeserver_sync
+ *  @sa __connman_timeserver_conf_update
+ *  @sa __connman_timeserver_system_set
+ *
+ */
 static void ts_reset(struct connman_service *service)
 {
 	DBG("service %p", service);
