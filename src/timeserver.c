@@ -481,6 +481,21 @@ static const char *timeserver_sync_reason2string(
 	return "unknown";
 }
 
+/**
+ *  @brief
+ *    Initiate a time of day synchronization with time services.
+ *
+ *  This initiates a time of day synchronization with time services
+ *  for the specified network service for the provided reason.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           object for which a time of day
+ *                           synchronization with time services should
+ *                           be initiated.
+ *  @param[in]      reason   The reason for the time of day
+ *                           synchronizization request.
+ *
+ */
 void __connman_timeserver_sync(struct connman_service *service,
 			enum connman_timeserver_sync_reason reason)
 {
