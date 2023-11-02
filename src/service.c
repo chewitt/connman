@@ -6424,11 +6424,12 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 	else
 		service->state_ipv6 = new_state;
 
-	if (!is_connected(old_state) && is_connected(new_state))
+	if (!is_connected(old_state) && is_connected(new_state)) {
 		nameserver_add_all(service, type);
 
-	__connman_timeserver_sync(service,
-				CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE);
+		__connman_timeserver_sync(service,
+					CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE);
+	}
 
 	return service_indicate_state(service);
 }
