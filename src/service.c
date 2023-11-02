@@ -5242,6 +5242,33 @@ static gint service_compare_vpn(const struct connman_service *a,
 	return service_compare(transport, service);
 }
 
+/**
+ *  @brief
+ *    Compare two network services against the @a
+ *    PreferredTechnologies priority list.
+ *
+ *  This compares the two specified network services, by their
+ *  technology type, against the @a PreferredTechnologies priority
+ *  list.
+ *
+ *  @param[in]  service_a  A pointer to the first immutable service
+ *                         to compare by its technology type with the
+ *                         @a PreferredTechnologies priority list.
+ *  @param[in]  service_b  A pointer to the second immutable service
+ *                         to compare by its technology type with the
+ *                         @a PreferredTechnologies priority list.
+ *
+ *  @retval   0  If the @a PreferredTechnologies configuration is empty
+ *               or if neither service type matches a technology type
+ *               in the @a PreferredTechnologies list.
+ *  @retval  -1  If @a service_a type matches a technology type
+ *               in the @a PreferredTechnologies list and should sort
+ *               @b before @a service_b.
+ *  @retval   1  If @a service_b type matches a technology type
+ *               in the @a PreferredTechnologies list and should sort
+ *               @b before @a service_a.
+ *
+ */
 static gint service_compare_preferred(const struct connman_service *service_a,
 					const struct connman_service *service_b)
 {
@@ -5261,6 +5288,33 @@ static gint service_compare_preferred(const struct connman_service *service_a,
 	return 0;
 }
 
+/**
+ *  @brief
+ *    Compare two network services against one another.
+ *
+ *  This compares the two specified network services.
+ *
+ *  Services are compared with the following sort criteria:
+ *
+ *    1. State
+ *    2. Favorite status
+ *    3. Type
+ *    4. Strength
+ *    5. Name
+ *
+ *  @param[in]  a  A pointer to the first immutable service
+ *                 to compare.
+ *  @param[in]  b  A pointer to the second immutable service
+ *                 to compare.
+ *
+ *  @retval    0  If service @a a and @a b are equivalent.
+ *  @retval  < 0  If service @a a should sort @b before service @a b.
+ *  @retval  > 0  If service @a b should sort @b before service @a a.
+ *
+ *  @sa service_compare_preferred
+ *  @sa __connman_service_compare
+ *
+ */
 static gint service_compare(gconstpointer a, gconstpointer b)
 {
 	const struct connman_service *service_a = (const void *) a;
@@ -5369,6 +5423,20 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	return g_strcmp0(service_a->name, service_b->name);
 }
 
+/**
+ *  @brief
+ *    Sort the network services list and schedule a "ServicesChanged"
+ *    D-Bus signal.
+ *
+ *  This attempts to sort, if non-null and has more than one element,
+ *  the network services list. On completion of the sort, a D-Bus
+ *  "ServicesChanged" signal is scheduled.
+ *
+ *  @sa service_compare
+ *  @sa service_compare_preferred
+ *  @sa service_schedule_changed
+ *
+ */
 static void service_list_sort(void)
 {
 	if (service_list && service_list->next) {
@@ -5377,6 +5445,26 @@ static void service_list_sort(void)
 	}
 }
 
+/**
+ *  @brief
+ *    Compare two network services against one another.
+ *
+ *  This compares the two specified network services.
+ *
+ *  @param[in]  a  A pointer to the first immutable service
+ *                 to compare.
+ *  @param[in]  b  A pointer to the second immutable service
+ *                 to compare.
+ *
+ *  @retval    0  If service @a a and @a b are equivalent.
+ *  @retval  < 0  If service @a a should sort @b before service @a b.
+ *  @retval  > 0  If service @a b should sort @b before service @a a.
+ *
+ *  @sa service_compare
+ *  @sa service_compare_preferred
+ *  @sa service_list_sort
+ *
+ */
 int __connman_service_compare(const struct connman_service *a,
 					const struct connman_service *b)
 {
