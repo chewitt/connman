@@ -35,6 +35,11 @@
 
 #define TS_RECHECK_INTERVAL     7200
 
+/**
+ *  A strong (that is, uses #connman_service_{ref,unref}) reference to
+ *  the network service currently used for time of day synchronization.
+ *
+ */
 static struct connman_service *ts_service;
 static GSList *timeservers_list = NULL;
 static GSList *ts_list = NULL;
@@ -429,7 +434,16 @@ static void ts_reset(struct connman_service *service)
 
 	ts_recheck_enable();
 
-	ts_service = service;
+	if (ts_service) {
+		connman_service_unref(ts_service);
+		ts_service = NULL;
+	}
+
+	if (service) {
+		connman_service_ref(service);
+		ts_service = service;
+	}
+
 	timeserver_sync_start();
 }
 
@@ -529,7 +543,10 @@ static void timeserver_stop(void)
 {
 	DBG(" ");
 
-	ts_service = NULL;
+	if (ts_service) {
+		connman_service_unref(ts_service);
+		ts_service = NULL;
+	}
 
 	if (resolv) {
 		g_resolv_unref(resolv);
