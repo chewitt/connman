@@ -179,6 +179,27 @@ Range of intervals between two online check requests.
 Please refer to the README for more detailed information.
 Default values are 1 and 12 respectively.
 .TP
+.BI OnlineCheckIntervalStyle=fibonacci\ \fR|\fB\ geometric
+The style or mathematical series function used to compute the actual
+time, in seconds, between two "ready" to "online" HTTP-based Internet
+reachability checks. The value of which may be either "geometric" or
+"fibonacci" with a default value of "geometric".
+
+The "geometric" style or function simply takes the square of the
+online check interval (see OnlineCheckInitialInterval and
+OnlineCheckMaxInterval above). For example, at a check interval of 6,
+the time, in seconds, is 36 (6^2) seconds.
+
+The "fibonacci" style or function takes the value of the Fibonacci
+sequence at the online check interval. For example, at a check interval
+of 6, the time, in seconds, is 8 seconds.
+
+The "fibonacci" series and style is more aggressive in check rate up to 12
+steps (its equivalence point with "geometric" at 144 seconds) than
+"geometric" but backs off far more aggressively past that point reaching
+an hour at interval 19 which "geometric" does not reach until interval
+60.
+.TP
 .BI EnableOnlineToReadyTransition=true\ \fR|\fB\ false
 WARNING: Experimental feature!!!
 In addition to EnableOnlineCheck setting, enable or disable use of HTTP GET

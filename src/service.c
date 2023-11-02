@@ -45,6 +45,8 @@
 #define VPN_AUTOCONNECT_TIMEOUT_STEP 30
 #define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD 270
 
+typedef guint (*online_check_timeout_compute_t)(unsigned int interval);
+
 static DBusConnection *connection = NULL;
 
 static GList *service_list = NULL;
@@ -58,6 +60,8 @@ static bool services_dirty = false;
 static bool enable_online_to_ready_transition = false;
 static unsigned int online_check_initial_interval = 0;
 static unsigned int online_check_max_interval = 0;
+static const char *online_check_timeout_interval_style = NULL;
+static online_check_timeout_compute_t online_check_timeout_compute_func = NULL;
 
 struct connman_stats {
 	bool valid;
@@ -1443,6 +1447,82 @@ static bool check_proxy_setup(struct connman_service *service)
 	}
 
 	return false;
+}
+
+/**
+ *  @brief
+ *    Compute a Fibonacci online check timeout based on the specified
+ *    interval.
+ *
+ *  This computes the Fibonacci online check timeout, in seconds,
+ *  based on the specified interval in a Fibonacci series. For
+ *  example, an interval of 9 yields a timeout of 34 seconds.
+ *
+ *  @note
+ *    As compared to a geometric series, the Fibonacci series is
+ *    slightly less aggressive in backing off up to the equivalence
+ *    point at interval 12, but far more aggressive past that point,
+ *    climbing to past an hour at interval 19 whereas the geometric
+ *    series does not reach that point until interval 60.
+ *
+ *  @param[in]  interval  The interval in the geometric series for
+ *                        which to compute the online check timeout.
+ *
+ *  @returns
+ *    The timeout, in seconds, for the online check.
+ *
+ *  @sa online_check_timeout_compute_fibonacci
+ *
+ */
+static guint online_check_timeout_compute_fibonacci(unsigned int interval)
+{
+	unsigned int i;
+	guint first = 0;
+	guint second = 1;
+	guint timeout_seconds;
+
+	for (i = 0; i <= interval; i++) {
+		timeout_seconds = first;
+
+		first = second;
+
+		second = second + timeout_seconds;
+	}
+
+	return timeout_seconds;
+}
+
+/**
+ *  @brief
+ *    Compute a geometric online check timeout based on the specified
+ *    interval.
+ *
+ *  This computes the geometric online check timeout, in seconds,
+ *  based on the specified interval in a geometric series, where the
+ *  resulting value is interval^2. For example, an interval of 9
+ *  yields a timeout of 81 seconds.
+ *
+ *  @note
+ *    As compared to a Fibonacci series, the geometric series is
+ *    slightly more aggressive in backing off up to the equivalence
+ *    point at interval 12, but far less aggressive past that point,
+ *    only reaching an hour at interval 90 compared to interval 19 for
+ *    Fibonacci for a similar timeout.
+ *
+ *  @param[in]  interval  The interval in the geometric series for
+ *                        which to compute the online check timeout.
+ *
+ *  @returns
+ *    The timeout, in seconds, for the online check.
+ *
+ *  @sa online_check_timeout_compute_fibonacci
+ *
+ */
+static guint online_check_timeout_compute_geometric(unsigned int interval)
+{
+	const guint timeout_seconds = interval * interval;
+
+	return timeout_seconds;
 }
 
 static void cancel_online_check(struct connman_service *service)
@@ -6402,8 +6482,10 @@ static void complete_online_check(struct connman_service *service,
 {
 	GSourceFunc redo_func;
 	unsigned int *interval;
+	guint *timeout;
 	enum connman_service_state current_state;
-	int timeout;
+	guint seconds;
+	guint current_timeout;
 
 	DBG("service %p (%s) type %d (%s) success %d\n",
 		service,
@@ -6413,9 +6495,11 @@ static void complete_online_check(struct connman_service *service,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;
+		timeout = &service->online_timeout_ipv4;
 		redo_func = redo_wispr_ipv4;
 	} else {
 		interval = &service->online_check_interval_ipv6;
+		timeout = &service->online_timeout_ipv6;
 		redo_func = redo_wispr_ipv6;
 	}
 
@@ -6435,19 +6519,23 @@ static void complete_online_check(struct connman_service *service,
 	}
 
 redo_func:
-	DBG("service %p (%s) type %d (%s) interval %d", service,
+	DBG("updating online checkout timeout period");
+
+	seconds = online_check_timeout_compute_func(*interval);
+
+	DBG("service %p (%s) type %d (%s) interval %d style \"%s\" seconds %u",
+		service,
 		connman_service_get_identifier(service),
-		type, __connman_ipconfig_type2string(type), *interval);
+		type, __connman_ipconfig_type2string(type),
+		*interval, online_check_timeout_interval_style, seconds);
 
-	timeout = g_timeout_add_seconds(*interval * *interval,
+	current_timeout = g_timeout_add_seconds(seconds,
 				redo_func, connman_service_ref(service));
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		service->online_timeout_ipv4 = timeout;
-	else
-		service->online_timeout_ipv6 = timeout;
 
-	/* Increment the interval for the next time, set a maximum timeout of
-	 * online_check_max_interval seconds * online_check_max_interval seconds.
+	*timeout = current_timeout;
+
+	/* Increment the interval for the next time, limiting to a maximum
+	 * interval of @a online_check_max_interval.
 	 */
 	if (*interval < online_check_max_interval)
 		(*interval)++;
@@ -7872,6 +7960,13 @@ int __connman_service_init(void)
 
 	enable_online_to_ready_transition =
 		connman_setting_get_bool("EnableOnlineToReadyTransition");
+	online_check_timeout_interval_style =
+		connman_setting_get_string("OnlineCheckIntervalStyle");
+	if (g_strcmp0(online_check_timeout_interval_style, "fibonacci") == 0)
+		online_check_timeout_compute_func = online_check_timeout_compute_fibonacci;
+	else
+		online_check_timeout_compute_func = online_check_timeout_compute_geometric;
+
 	online_check_initial_interval =
 		connman_setting_get_uint("OnlineCheckInitialInterval");
 	online_check_max_interval =

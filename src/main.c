@@ -54,6 +54,12 @@
  */
 #define DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL 1
 #define DEFAULT_ONLINE_CHECK_MAX_INTERVAL 12
+
+#define ONLINE_CHECK_INTERVAL_STYLE_FIBONACCI "fibonacci"
+#define ONLINE_CHECK_INTERVAL_STYLE_GEOMETRIC "geometric"
+
+#define DEFAULT_ONLINE_CHECK_INTERVAL_STYLE ONLINE_CHECK_INTERVAL_STYLE_GEOMETRIC
+
 #define DEFAULT_LOCALTIME "/etc/localtime"
 
 #define MAINFILE "main.conf"
@@ -106,6 +112,7 @@ static struct {
 	char *online_check_ipv6_url;
 	unsigned int online_check_initial_interval;
 	unsigned int online_check_max_interval;
+	char *online_check_interval_style;
 	bool auto_connect_roaming_services;
 	bool acd;
 	bool use_gateways_as_timeservers;
@@ -136,6 +143,7 @@ static struct {
 	.online_check_ipv6_url = NULL,
 	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
 	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
+	.online_check_interval_style = NULL,
 	.auto_connect_roaming_services = false,
 	.acd = false,
 	.use_gateways_as_timeservers = false,
@@ -166,6 +174,7 @@ static struct {
 #define CONF_ONLINE_CHECK_IPV6_URL      "OnlineCheckIPv6URL"
 #define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
 #define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
+#define CONF_ONLINE_CHECK_INTERVAL_STYLE "OnlineCheckIntervalStyle"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
 #define CONF_USE_GATEWAYS_AS_TIMESERVERS "UseGatewaysAsTimeservers"
@@ -197,6 +206,7 @@ static const char *supported_options[] = {
 	CONF_ONLINE_CHECK_IPV6_URL,
 	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
 	CONF_ONLINE_CHECK_MAX_INTERVAL,
+	CONF_ONLINE_CHECK_INTERVAL_STYLE,
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
 	CONF_ACD,
 	CONF_USE_GATEWAYS_AS_TIMESERVERS,
@@ -342,6 +352,8 @@ static void parse_config(GKeyFile *config)
 			g_strdup(DEFAULT_ONLINE_CHECK_IPV4_URL);
 		connman_settings.online_check_ipv6_url =
 			g_strdup(DEFAULT_ONLINE_CHECK_IPV6_URL);
+		connman_settings.online_check_interval_style =
+			g_strdup(DEFAULT_ONLINE_CHECK_INTERVAL_STYLE);
 		return;
 	}
 
@@ -564,6 +576,24 @@ static void parse_config(GKeyFile *config)
 		connman_settings.online_check_max_interval =
 			DEFAULT_ONLINE_CHECK_MAX_INTERVAL;
 	}
+
+	string = __connman_config_get_string(config, "General",
+					CONF_ONLINE_CHECK_INTERVAL_STYLE, &error);
+	if (!error) {
+		if ((g_strcmp0(string, ONLINE_CHECK_INTERVAL_STYLE_FIBONACCI) == 0) ||
+			(g_strcmp0(string, ONLINE_CHECK_INTERVAL_STYLE_GEOMETRIC) == 0)) {
+			connman_settings.online_check_interval_style = string;
+		} else {
+			connman_warn("Incorrect online check interval style [%s]",
+				string);
+			connman_settings.online_check_interval_style =
+				g_strdup(DEFAULT_ONLINE_CHECK_INTERVAL_STYLE);
+		}
+	} else
+		connman_settings.online_check_interval_style =
+			g_strdup(DEFAULT_ONLINE_CHECK_INTERVAL_STYLE);
+
+	g_clear_error(&error);
 
 	boolean = __connman_config_get_bool(config, "General",
 				CONF_AUTO_CONNECT_ROAMING_SERVICES, &error);
@@ -805,6 +835,9 @@ char *connman_setting_get_string(const char *key)
 
 	if (g_str_equal(key, CONF_RESOLV_CONF))
 		return connman_settings.resolv_conf;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_INTERVAL_STYLE))
+		return connman_settings.online_check_interval_style;
 
 	return NULL;
 }

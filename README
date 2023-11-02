@@ -409,9 +409,21 @@ from ipv4.connman.net (for IPv4 connectivity) and ipv6.connman.net
 http://ipv{4|6}.connman.net/online/status.html
 
 When an online check request fails, another one is triggered after a
-longer interval. The intervals follow the square series of numbers
-in a specific range, by default [1, 12], corresponding to the following
-intervals, in seconds: 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121 and 144.
+longer interval. The intervals follows one of two mathemetical
+sequences, depending on the "OnlineCheckIntervalStyle" setting:
+"fibonacci" or "geometric", with a default of "geometric". The
+geometric setting is the square series of numbers in the range
+specified by "OnlineCheckInitialInterval" and "OnlineCheckMaxInterval".
+The default values for "OnlineCheckInitialInterval" and
+"OnlineCheckMaxInterval" are the range [1, 12], which correspond to the
+following "geometric" intervals, in seconds: 1, 4, 9, 16, 25, 36, 49, 64,
+81, 100, 121 and 144 over that range. By contrast, the correspending
+"fibonacci" sequence over that range is 1, 1, 2, 3, 5, 8, 13, 21, 34, 55,
+89, and 144. The "fibonacci" series and style is more aggressive in check
+rate up to 12 steps (its equivalence point with "geometric" at 144 seconds)
+than "geometric" but backs off far more aggressively past that point
+reaching an hour at interval 19 which "geometric" does not reach until
+interval 60.
 
 See connman.conf(5) for the EnableOnlineCheck option, if you need to
 disable the feature.
