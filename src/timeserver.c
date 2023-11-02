@@ -395,6 +395,8 @@ static void ts_set_nameservers(struct connman_service *service)
 
 static void ts_reset(struct connman_service *service)
 {
+	DBG("service %p", service);
+
 	if (!resolv)
 		return;
 
@@ -431,9 +433,30 @@ static void ts_reset(struct connman_service *service)
 	timeserver_sync_start();
 }
 
+static const char *timeserver_sync_reason2string(
+			enum connman_timeserver_sync_reason reason)
+{
+	switch (reason) {
+	case CONNMAN_TIMESERVER_SYNC_REASON_START:
+		return "start";
+	case CONNMAN_TIMESERVER_SYNC_REASON_ADDRESS_UPDATE:
+		return "address update";
+	case CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE:
+		return "state update";
+	case CONNMAN_TIMESERVER_SYNC_REASON_TS_CHANGE:
+		return "timeserver change";
+	}
+
+	return "unknown";
+}
+
 void __connman_timeserver_sync(struct connman_service *service,
 			enum connman_timeserver_sync_reason reason)
 {
+	DBG("service %p (%s) reason %d (%s)",
+		service, connman_service_get_identifier(service),
+		reason, timeserver_sync_reason2string(reason));
+
 	if (!service)
 		return;
 
