@@ -1576,12 +1576,27 @@ static void reset_stats(struct connman_service *service)
 	g_timer_reset(service->stats_roaming.timer);
 }
 
+/**
+ *  @brief
+ *    Return the default service, if any.
+ *
+ *  This attempts to return a pointer to the default service (that is,
+ *  the service with the default route), if any.
+ *
+ *  @returns
+ *    A pointer to the mutable default service, if one exists;
+ *    otherwise, null.
+ *
+ */
 struct connman_service *connman_service_get_default(void)
 {
 	struct connman_service *service;
 
 	if (!service_list)
 		return NULL;
+
+	// Sorting is such that the default service is ALWAYS at the
+	// head of the service list, if one exists.
 
 	service = service_list->data;
 
@@ -1591,6 +1606,26 @@ struct connman_service *connman_service_get_default(void)
 	return service;
 }
 
+/**
+ *  @brief
+ *    Determine whether the specified network interface index belongs
+ *    to the default service.
+ *
+ *  This determines whether or not the specified network interface
+ *  index belongs to the default service (that is, the service with
+ *  the default route).
+ *
+ *  @param[in]  index  The network interface to determine whether it
+ *                     belongs to the default service.
+ *
+ *  @returns
+ *    True if the specified index belongs to the default service;
+ *    otherwise, false.
+ *
+ *  @sa connman_service_get_default
+ *  @sa __connman_service_get_index
+ *
+ */
 bool __connman_service_index_is_default(int index)
 {
 	struct connman_service *service;
