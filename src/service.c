@@ -967,6 +967,11 @@ static bool is_connected(enum connman_service_state state)
 	return false;
 }
 
+static bool is_online(enum connman_service_state state)
+{
+	return state == CONNMAN_SERVICE_STATE_ONLINE;
+}
+
 static bool is_idle(enum connman_service_state state)
 {
 	switch (state) {
@@ -4620,12 +4625,12 @@ static void downgrade_state(struct connman_service *service)
 		service->state_ipv4, state2string(service->state_ipv4),
 		service->state_ipv6, state2string(service->state_ipv6));
 
-	if (service->state_ipv4 == CONNMAN_SERVICE_STATE_ONLINE)
+	if (is_online(service->state_ipv4))
 		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_READY,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
 
-	if (service->state_ipv6 == CONNMAN_SERVICE_STATE_ONLINE)
+	if (is_online(service->state_ipv6))
 		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_READY,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
@@ -4637,7 +4642,7 @@ static void apply_relevant_default_downgrade(struct connman_service *service)
 
 	def_service = connman_service_get_default();
 	if (!def_service || def_service != service ||
-		def_service->state != CONNMAN_SERVICE_STATE_ONLINE)
+		!is_online(def_service->state))
 		return;
 
 	downgrade_state(def_service);
@@ -5295,10 +5300,10 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	if (state_a != state_b) {
 		if (a_connected && b_connected) {
 			/* We prefer online over ready state */
-			if (state_a == CONNMAN_SERVICE_STATE_ONLINE)
+			if (is_online(state_a))
 				return -1;
 
-			if (state_b == CONNMAN_SERVICE_STATE_ONLINE)
+			if (is_online(state_b))
 				return 1;
 		}
 
@@ -5827,7 +5832,7 @@ static void downgrade_connected_services(void)
 		if (!is_connected(up_service->state))
 			continue;
 
-		if (up_service->state == CONNMAN_SERVICE_STATE_ONLINE)
+		if (is_online(up_service->state))
 			return;
 
 		downgrade_state(up_service);
@@ -5915,14 +5920,14 @@ static int service_indicate_state(struct connman_service *service)
 
 	def_service = connman_service_get_default();
 
-	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
+	if (is_online(new_state)) {
 		result = service_update_preferred_order(def_service,
 				service, new_state);
 		if (result == -EALREADY)
 			return result;
 	}
 
-	if (old_state == CONNMAN_SERVICE_STATE_ONLINE)
+	if (is_online(old_state))
 		__connman_notifier_leave_online(service->type);
 
 	if (is_connected(old_state) && !is_connected(new_state))
@@ -6021,7 +6026,7 @@ static int service_indicate_state(struct connman_service *service)
 		domain_changed(service);
 		proxy_changed(service);
 
-		if (old_state != CONNMAN_SERVICE_STATE_ONLINE)
+		if (!is_online(old_state))
 			__connman_notifier_connect(service->type);
 
 		method = __connman_ipconfig_get_method(service->ipconfig_ipv6);
@@ -6090,7 +6095,7 @@ notifier:
 		__connman_notifier_disconnect(service->type);
 	}
 
-	if (new_state == CONNMAN_SERVICE_STATE_ONLINE) {
+	if (is_online(new_state)) {
 		__connman_notifier_enter_online(service->type);
 		default_changed();
 	}
