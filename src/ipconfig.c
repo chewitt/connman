@@ -352,7 +352,7 @@ static int write_ipv6_conf_value(const char *ifname, const char *suffix,
 	return write_conf_value(PROC_IPV6_CONF_PREFIX, ifname, suffix, value);
 }
 
-static bool get_ipv6_state(gchar *ifname)
+static bool get_ipv6_state(const gchar *ifname)
 {
 	int disabled = 1;
 	bool enabled = false;
@@ -363,7 +363,7 @@ static bool get_ipv6_state(gchar *ifname)
 	return enabled;
 }
 
-static int set_ipv6_state(gchar *ifname, bool enable)
+static int set_ipv6_state(const gchar *ifname, bool enable)
 {
 	int disabled = enable ? 0 : 1;
 
@@ -372,7 +372,7 @@ static int set_ipv6_state(gchar *ifname, bool enable)
 	return write_ipv6_conf_value(ifname, "disable_ipv6", disabled);
 }
 
-static int get_ipv6_privacy(gchar *ifname)
+static int get_ipv6_privacy(const gchar *ifname)
 {
 	int value = 0;
 
@@ -387,7 +387,7 @@ static int get_ipv6_privacy(gchar *ifname)
 /* Enable the IPv6 privacy extension for stateless address autoconfiguration.
  * The privacy extension is described in RFC 3041 and RFC 4941
  */
-static int set_ipv6_privacy(gchar *ifname, int value)
+static int set_ipv6_privacy(const gchar *ifname, int value)
 {
 	if (!ifname)
 		return -EINVAL;
