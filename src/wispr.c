@@ -538,8 +538,11 @@ static bool wispr_route_request(const char *address, int ai_family,
 static void wispr_portal_request_portal(
 		struct connman_wispr_portal_context *wp_context)
 {
-	DBG("wp_context %p %s", wp_context,
-		__connman_ipconfig_type2string(wp_context->type));
+	DBG("wispr/portal context %p service %p (%s) type %d (%s)",
+		wp_context,
+		wp_context->service,
+		connman_service_get_identifier(wp_context->service),
+		wp_context->type, __connman_ipconfig_type2string(wp_context->type));
 
 	wispr_portal_context_ref(wp_context);
 	wp_context->request_id = g_web_request_get(wp_context->web,
