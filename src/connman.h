@@ -523,10 +523,15 @@ void __connman_wpad_cleanup(void);
 int __connman_wpad_start(struct connman_service *service);
 void __connman_wpad_stop(struct connman_service *service);
 
+typedef void (*__connman_wispr_cb_t) (struct connman_service *service,
+				enum connman_ipconfig_type type,
+				bool success);
+
 int __connman_wispr_init(void);
 void __connman_wispr_cleanup(void);
 int __connman_wispr_start(struct connman_service *service,
-					enum connman_ipconfig_type type);
+					enum connman_ipconfig_type type,
+					__connman_wispr_cb_t callback);
 void __connman_wispr_stop(struct connman_service *service);
 
 #include <connman/technology.h>
@@ -734,9 +739,6 @@ int __connman_service_set_mdns(struct connman_service *service,
 
 void __connman_service_set_string(struct connman_service *service,
 					const char *key, const char *value);
-void __connman_service_online_check(struct connman_service *service,
-					enum connman_ipconfig_type type,
-					bool success);
 int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 					enum connman_service_state new_state,
 					enum connman_ipconfig_type type);

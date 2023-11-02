@@ -59,6 +59,7 @@ struct connman_wispr_portal_context {
 	int refcount;
 	struct connman_service *service;
 	enum connman_ipconfig_type type;
+	__connman_wispr_cb_t cb;
 	struct connman_wispr_portal *wispr_portal;
 
 	/* Portal/WISPr common */
@@ -483,7 +484,7 @@ static void portal_manage_status(GWebResult *result,
 					CONNMAN_SERVICE_STATE_ONLINE, type);
 
 	if (enable_online_to_ready_transition)
-		__connman_service_online_check(service, type, true);
+		wp_context->cb(service, type, true);
 }
 
 static bool wispr_route_request(const char *address, int ai_family,
@@ -821,8 +822,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		goto done;
 	case 400:
 	case 404:
-		__connman_service_online_check(wp_context->service,
-						wp_context->type, false);
+		wp_context->cb(wp_context->service, wp_context->type, false);
 
 		break;
 	case 505:
@@ -992,17 +992,18 @@ done:
 }
 
 int __connman_wispr_start(struct connman_service *service,
-					enum connman_ipconfig_type type)
+					enum connman_ipconfig_type type,
+					__connman_wispr_cb_t callback)
 {
 	struct connman_wispr_portal_context *wp_context = NULL;
 	struct connman_wispr_portal *wispr_portal = NULL;
 	int index, err;
 
-	DBG("service %p (%s) type %d (%s)",
+	DBG("service %p (%s) type %d (%s) callback %p",
 		service, connman_service_get_identifier(service),
-		type, __connman_ipconfig_type2string(type));
+		type, __connman_ipconfig_type2string(type), callback);
 
-	if (!wispr_portal_hash)
+	if (!wispr_portal_hash || !callback)
 		return -EINVAL;
 
 	switch (connman_service_get_type(service)) {
@@ -1052,6 +1053,7 @@ int __connman_wispr_start(struct connman_service *service,
 
 	wp_context->service = service;
 	wp_context->type = type;
+	wp_context->cb = callback;
 	wp_context->wispr_portal = wispr_portal;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
