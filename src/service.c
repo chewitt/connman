@@ -5210,11 +5210,11 @@ void connman_service_unref_debug(struct connman_service *service,
 
 static gint service_compare(gconstpointer a, gconstpointer b);
 
-static gint service_compare_vpn(struct connman_service *a,
-						struct connman_service *b)
+static gint service_compare_vpn(const struct connman_service *a,
+						const struct connman_service *b)
 {
 	struct connman_provider *provider;
-	struct connman_service *service;
+	const struct connman_service *service;
 	struct connman_service *transport;
 	const char *ident;
 	bool reverse;
@@ -5242,8 +5242,8 @@ static gint service_compare_vpn(struct connman_service *a,
 	return service_compare(transport, service);
 }
 
-static gint service_compare_preferred(struct connman_service *service_a,
-					struct connman_service *service_b)
+static gint service_compare_preferred(const struct connman_service *service_a,
+					const struct connman_service *service_b)
 {
 	unsigned int *tech_array;
 	int i;
@@ -5263,8 +5263,8 @@ static gint service_compare_preferred(struct connman_service *service_a,
 
 static gint service_compare(gconstpointer a, gconstpointer b)
 {
-	struct connman_service *service_a = (void *) a;
-	struct connman_service *service_b = (void *) b;
+	const struct connman_service *service_a = (const void *) a;
+	const struct connman_service *service_b = (const void *) b;
 	enum connman_service_state state_a, state_b;
 	bool a_connected, b_connected;
 	gint strength;
