@@ -4977,7 +4977,7 @@ static void service_free(gpointer user_data)
 	struct connman_service *service = user_data;
 	char *path = service->path;
 
-	DBG("service %p", service);
+	DBG("service %p (%s)", service, connman_service_get_identifier(service));
 
 	reply_pending(service, ENOENT);
 
