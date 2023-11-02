@@ -2645,8 +2645,7 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	connman_dbus_dict_append_array(dict, "Nameservers.Configuration",
 				DBUS_TYPE_STRING, append_dnsconfig, service);
 
-	if (service->state == CONNMAN_SERVICE_STATE_READY ||
-			service->state == CONNMAN_SERVICE_STATE_ONLINE)
+	if (is_connected(service->state))
 		list = __connman_timeserver_get_all(service);
 	else
 		list = NULL;
