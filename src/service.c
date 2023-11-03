@@ -6106,6 +6106,11 @@ static int service_update_preferred_order(struct connman_service *default_servic
 		struct connman_service *new_service,
 		enum connman_service_state new_state)
 {
+	DBG("default_service %p (%s) new_service %p (%s) new_state %d (%s)",
+		default_service, connman_service_get_identifier(default_service),
+		new_service, connman_service_get_identifier(new_service),
+		new_state, state2string(new_state));
+
 	if (!default_service || default_service == new_service)
 		return 0;
 
