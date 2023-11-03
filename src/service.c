@@ -6102,6 +6102,36 @@ static void downgrade_connected_services(void)
 	}
 }
 
+/**
+ *  @brief
+ *    Potentially change the network service list order of the default
+ *    network service and the specified network service.
+ *
+ *  This attempts to switch the order of the specified services in the
+ *  network service list if and only if a) the services are non-null,
+ *  b) do not have pointer equivalence, and c) if @a new_service
+ *  should sort before @a default_service according to the @a
+ *  PreferredTechnologies list.
+ *
+ *  @param[in,out]  default_service  A pointer to the mutable, default
+ *                                   network service to potentially
+ *                                   demote in the network service
+ *                                   list to @b after @a new_service.
+ *  @param[in,out]  new_service      A pointer to the mutable service
+ *                                   to potentially promote in the
+ *                                   network service list to @b before
+ *                                   @a default_service.
+ *  @param[in]      new_state        The pending network service state
+ *                                   of @a new_service that is
+ *                                   precipitating the order update.
+ *
+ *  @retval  0          If the preferred order was successfully
+ *                      changed which includes @a default_service
+ *                      being null or @a default_service and @a
+ *                      new_service having pointer equivalence.
+ *  @retval  -EALREADY  If the preferred order was unchanged.
+ *
+ */
 static int service_update_preferred_order(struct connman_service *default_service,
 		struct connman_service *new_service,
 		enum connman_service_state new_state)
