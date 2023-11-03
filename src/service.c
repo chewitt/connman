@@ -1688,6 +1688,31 @@ struct connman_service *connman_service_get_default(void)
 
 /**
  *  @brief
+ *    Determine whether the specified service is the default service.
+ *
+ *  This determines whether the specified service is the default
+ *  service (that is, the service with the default route).
+ *
+ *  @param[in]  service  A pointer to the immutable service for which
+ *                       to determine whether it is the default
+ *                       network service.
+ *  @returns
+ *    True if the specified service is the default network service;
+ *    otherwise, false.
+ *
+ *  @sa connman_service_get_default
+ *
+ */
+static bool connman_service_is_default(const struct connman_service *service)
+{
+	if (!service)
+		return false;
+
+	return connman_service_get_default() == service;
+}
+
+/**
+ *  @brief
  *    Determine whether the specified network interface index belongs
  *    to the default service.
  *
