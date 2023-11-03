@@ -1426,6 +1426,8 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 
 static bool check_proxy_setup(struct connman_service *service)
 {
+	DBG("service %p (%s)", service, connman_service_get_identifier(service));
+
 	/*
 	 * We start WPAD if we haven't got a PAC URL from DHCP and
 	 * if our proxy manual configuration is either empty or set
@@ -3087,6 +3089,10 @@ char **connman_service_get_timeservers(struct connman_service *service)
 void connman_service_set_proxy_method(struct connman_service *service,
 					enum connman_service_proxy_method method)
 {
+	DBG("service %p (%s) method %d (%s)",
+		service, connman_service_get_identifier(service),
+		method, proxymethod2string(method));
+
 	if (!service || service->hidden)
 		return;
 
