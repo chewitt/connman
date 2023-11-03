@@ -4788,23 +4788,23 @@ static void apply_relevant_default_downgrade(struct connman_service *service)
 	downgrade_state(def_service);
 }
 
-static void switch_default_service(struct connman_service *default_service,
-		struct connman_service *downgrade_service)
+static void switch_service_order(struct connman_service *demoted_service,
+		struct connman_service *promoted_service)
 {
 	struct connman_service *service;
 	GList *src, *dst;
 
-	DBG("default_service %p (%s) default %u downgrade_service %p (%s) default %u",
-		default_service,
-		connman_service_get_identifier(default_service),
-		connman_service_is_default(default_service),
-		downgrade_service,
-		connman_service_get_identifier(downgrade_service),
-		connman_service_is_default(downgrade_service));
+	DBG("demoted_service %p (%s) default %u promoted_sevice %p (%s) default %u",
+		demoted_service,
+		connman_service_get_identifier(demoted_service),
+		connman_service_is_default(demoted_service),
+		promoted_service,
+		connman_service_get_identifier(promoted_service),
+		connman_service_is_default(promoted_service));
 
-	apply_relevant_default_downgrade(default_service);
-	src = g_list_find(service_list, downgrade_service);
-	dst = g_list_find(service_list, default_service);
+	apply_relevant_default_downgrade(demoted_service);
+	src = g_list_find(service_list, promoted_service);
+	dst = g_list_find(service_list, demoted_service);
 
 	/* Nothing to do */
 	if (src == dst || src->next == dst)
@@ -4814,7 +4814,7 @@ static void switch_default_service(struct connman_service *default_service,
 	service_list = g_list_delete_link(service_list, src);
 	service_list = g_list_insert_before(service_list, dst, service);
 
-	downgrade_state(downgrade_service);
+	downgrade_state(promoted_service);
 }
 
 static struct _services_notify {
@@ -4995,9 +4995,9 @@ int __connman_service_move(struct connman_service *service,
 	 * is triggered via downgrading it - if relevant - to state ready.
 	 */
 	if (before)
-		switch_default_service(target, service);
+		switch_service_order(target, service);
 	else
-		switch_default_service(service, target);
+		switch_service_order(service, target);
 
 	__connman_connection_update_gateway();
 
@@ -6083,7 +6083,7 @@ static int service_update_preferred_order(struct connman_service *default_servic
 		return 0;
 
 	if (service_compare_preferred(default_service, new_service) > 0) {
-		switch_default_service(default_service,
+		switch_service_order(default_service,
 				new_service);
 		__connman_connection_update_gateway();
 		return 0;
