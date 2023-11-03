@@ -6552,9 +6552,9 @@ static void service_rp_filter(struct connman_service *service,
 static void redo_wispr(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
-	DBG("Retrying %s WISPr for %p %s",
-		__connman_ipconfig_type2string(type),
-		service, service->name);
+	DBG("Retrying service %p (%s) type %d (%s) WISPr",
+		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type));
 
 	__connman_wispr_start(service, type, complete_online_check);
 	connman_service_unref(service);
