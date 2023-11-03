@@ -4788,6 +4788,33 @@ static void apply_relevant_default_downgrade(struct connman_service *service)
 	downgrade_state(def_service);
 }
 
+/**
+ *  @brief
+ *    Switch the order of the two specified services in the network
+ *    service list.
+ *
+ *  This attempts to switch the order of the two specified services in
+ *  the ntework service list. This has the side-effect of potentially
+ *  downgrading the state of @a demoted_service from "online" to
+ *  "ready" if it is "online" and is the default service and
+ *  downgrading the state of @a promoted_service from "online" to
+ *  "ready".
+ *
+ *  @note
+ *    If the two services have pointer equivalence or are already in
+ *    the specified order, there is no state downgrade of @a
+ *    promoted_service.
+ *
+ *  @param[in,out]  demoted_service   A pointer to the mutable service
+ *                                    to demote in the network service
+ *                                    list to @b after @a
+ *                                    promoted_service.
+ *  @param[in,out]  promoted_service  A pointer to the mutable service
+ *                                    to promote in the network service
+ *                                    list to @b before @a
+ *                                    demoted_service.
+ *
+ */
 static void switch_service_order(struct connman_service *demoted_service,
 		struct connman_service *promoted_service)
 {
