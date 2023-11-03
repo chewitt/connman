@@ -4866,7 +4866,7 @@ static void service_downgrade_online_state(struct connman_service *service)
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 }
 
-static void apply_relevant_default_downgrade(struct connman_service *service)
+static void service_downgrade_online_state_if_default(struct connman_service *service)
 {
 	struct connman_service *def_service;
 
@@ -4919,7 +4919,8 @@ static void switch_service_order(struct connman_service *demoted_service,
 		connman_service_get_identifier(promoted_service),
 		connman_service_is_default(promoted_service));
 
-	apply_relevant_default_downgrade(demoted_service);
+	service_downgrade_online_state_if_default(demoted_service);
+
 	src = g_list_find(service_list, promoted_service);
 	dst = g_list_find(service_list, demoted_service);
 
