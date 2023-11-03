@@ -4844,7 +4844,7 @@ static bool check_suitable_state(enum connman_service_state a,
 	return a == b;
 }
 
-static void downgrade_state(struct connman_service *service)
+static void service_downgrade_online_state(struct connman_service *service)
 {
 	if (!service)
 		return;
@@ -4875,7 +4875,7 @@ static void apply_relevant_default_downgrade(struct connman_service *service)
 		!is_online(def_service->state))
 		return;
 
-	downgrade_state(def_service);
+	service_downgrade_online_state(def_service);
 }
 
 /**
@@ -4931,7 +4931,7 @@ static void switch_service_order(struct connman_service *demoted_service,
 	service_list = g_list_delete_link(service_list, src);
 	service_list = g_list_insert_before(service_list, dst, service);
 
-	downgrade_state(promoted_service);
+	service_downgrade_online_state(promoted_service);
 }
 
 static struct _services_notify {
@@ -6188,7 +6188,7 @@ static void downgrade_connected_services(void)
 		if (is_online(up_service->state))
 			return;
 
-		downgrade_state(up_service);
+		service_downgrade_online_state(up_service);
 	}
 }
 
@@ -6805,7 +6805,7 @@ static void complete_online_check(struct connman_service *service,
 		*interval = online_check_max_interval;
 	} else {
 		current_state = service->state;
-		downgrade_state(service);
+		service_downgrade_online_state(service);
 		if (current_state != service->state)
 			*interval = online_check_initial_interval;
 		if (service != connman_service_get_default()) {
