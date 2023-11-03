@@ -1525,6 +1525,31 @@ static guint online_check_timeout_compute_geometric(unsigned int interval)
 	return timeout_seconds;
 }
 
+/**
+ *  @brief
+ *    Cancel any "online" HTTP-based Internet reachability checks for
+ *    the specified network service.
+ *
+ *  This cancels any current or pending IPv4 and/or IPv6 "online"
+ *  HTTP-based Internet reachability checks for the specified network
+ *  service.
+ *
+ *  @note
+ *    Any lingering WISPr portal reachability context will be lazily
+ *    released at the start of the next online check for the service
+ *    and replaced with new context.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which any current or pending IPv4 or
+ *                           IPv6 "online" reachability checks should
+ *                           be canceled.
+ *
+ *  @sa start_online_check
+ *  @sa complete_online_check
+ *  @sa __connman_wispr_start
+ *  @sa __connman_wispr_stop
+ *
+ */
 static void cancel_online_check(struct connman_service *service)
 {
 	DBG("service %p (%s) online_timeout_ipv4 %d online_timeout_ipv6 %d",
@@ -1544,6 +1569,32 @@ static void cancel_online_check(struct connman_service *service)
 	}
 }
 
+/**
+ *  @brief
+ *    Start an "online" HTTP-based Internet reachability check for the
+ *    specified network service IP configuration type.
+ *
+ *  This attempts to start an "online" HTTP-based Internet
+ *  reachability check for the specified network service IP
+ *  configuration type.
+ *
+ *  @note
+ *    Any check is skipped, with an informational log message, if @a
+ *    EnableOnlineCheck is not asserted.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to start the "online"
+ *                           reachability check.
+ *  @param[in]      type     The IP configuration type for which the
+ *                           "online" reachability check is to be
+ *                           started.
+ *
+ *  @sa cancel_online_check
+ *  @sa complete_online_check
+ *  @sa start_wispr_if_connected
+ *  @sa __connman_service_wispr_start
+ *
+ */
 static void start_online_check(struct connman_service *service,
 				enum connman_ipconfig_type type)
 {
@@ -3686,6 +3737,28 @@ int __connman_service_reset_ipconfig(struct connman_service *service,
 	return err;
 }
 
+/**
+ *  @brief
+ *    Start an "online" HTTP-based Internet reachability check for the
+ *    specified network service IP configuration type.
+ *
+ *  This attempts to start an "online" HTTP-based Internet
+ *  reachability check for the specified network service IP
+ *  configuration type.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to start the "online"
+ *                           reachability check.
+ *  @param[in]      type     The IP configuration type for which the
+ *                           "online" reachability check is to be
+ *                           started.
+ *
+ *  @sa cancel_online_check
+ *  @sa start_online_check
+ *  @sa complete_online_check
+ *  @sa start_wispr_if_connected
+ *
+ */
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -6549,6 +6622,25 @@ static void service_rp_filter(struct connman_service *service,
 		connected_networks_count, original_rp_filter);
 }
 
+/**
+ *  @brief
+ *    Retry an "online" HTTP-based Internet reachability check.
+ *
+ *  This retries an "online" HTTP-based Internet reachability check
+ *  for the specified network service IP configuration type.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which an "online" reachability check
+ *                           should be retried.
+ *  @param[in]      type     The IP configuration type for which an
+ *                           "online" reachability check should be
+ *                           retried.
+ *
+ *  @sa complete_online_check
+ *  @sa redo_wispr_ipv4
+ *  @sa redo_wispr_ipv6
+ *
+ */
 static void redo_wispr(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -6557,9 +6649,36 @@ static void redo_wispr(struct connman_service *service,
 		type, __connman_ipconfig_type2string(type));
 
 	__connman_wispr_start(service, type, complete_online_check);
+
+	// Release the reference to the service taken when
+	// g_timeout_add_seconds was invoked with the callback
+	// that, in turn, invoked this function.
+
 	connman_service_unref(service);
 }
 
+/**
+ *  @brief
+ *    Retry an "online" HTTP-based Internet reachability check
+ *    callback.
+ *
+ *  This callback retries an IPv4 "online" HTTP-based Internet
+ *  reachability check for the specified network service.
+ *
+ *  @param[in,out]  user_data  A pointer to the mutable network
+ *                             service for which an IPv4 "online"
+ *                             reachability check should be retried.
+ *
+ *  @returns
+ *    FALSE (that is, G_SOURCE_REMOVE) unconditionally, indicating
+ *    that the timeout source that triggered this callback should be
+ *    removed on callback completion.
+ *
+ *  @sa complete_online_check
+ *  @sa redo_wispr
+ *  @sa redo_wispr_ipv6
+ *
+ */
 static gboolean redo_wispr_ipv4(gpointer user_data)
 {
 	struct connman_service *service = user_data;
@@ -6571,6 +6690,28 @@ static gboolean redo_wispr_ipv4(gpointer user_data)
 	return FALSE;
 }
 
+/**
+ *  @brief
+ *    Retry an "online" HTTP-based Internet reachability check
+ *    callback.
+ *
+ *  This callback retries an IPv6 "online" HTTP-based Internet
+ *  reachability check for the specified network service.
+ *
+ *  @param[in,out]  user_data  A pointer to the mutable network
+ *                             service for which an IPv6 "online"
+ *                             reachability check should be retried.
+ *
+ *  @returns
+ *    FALSE (that is, G_SOURCE_REMOVE) unconditionally, indicating
+ *    that the timeout source that triggered this callback should be
+ *    removed on callback completion.
+ *
+ *  @sa complete_online_check
+ *  @sa redo_wispr
+ *  @sa redo_wispr_ipv4
+ *
+ */
 static gboolean redo_wispr_ipv6(gpointer user_data)
 {
 	struct connman_service *service = user_data;
@@ -6582,6 +6723,48 @@ static gboolean redo_wispr_ipv6(gpointer user_data)
 	return FALSE;
 }
 
+/**
+ *  @brief
+ *    This completes an "online" HTTP-based Internet reachability
+ *    check for the specified network service and IP configuration
+ *    type.
+ *
+ *  This completes a failed or successful "online" HTTP-based Internet
+ *  reachability check for the specified network service and IP
+ *  configuration type. This effectively "bookends" an earlier
+ *  #__connman_service_wispr_start.
+ *
+ *  If "EnableOnlineToReadyTransition" is deasserted and if @a success
+ *  is asserted, then the state for the specified IP configuration
+ *  type is transitioned to "online" and a future online check is
+ *  scheduled based on the current interval and the
+ *  "OnlineCheckIntervalStyle" setting.
+ *
+ *  Otherwise, if "EnableOnlineToReadyTransition" is asserted, then
+ *  counters are managed for the success or failure and state is
+ *  managed and tracked resulting in the potential demotion of the
+ *  service, placing it into a temporary failure state until such time
+ *  as a series of back-to-back online checks successfully
+ *  complete. If the service is a non-default after demotion and it is
+ *  in failure state or if it is the default service, then a future
+ *  online check is scheduled based on the current interval and the
+ *  "OnlineCheckIntervalStyle" setting.
+ *
+ *  @param[in,out]  service  A pointer to the mutable service for which
+ *                           to complete a previously-requested online
+ *                           check.
+ *  @param[in]      type     The IP configuration type for which to
+ *                           complete a previously-requested online
+ *                           check.
+ *  @param[in]      success  A Boolean indicating whether the previously-
+ *                           requested online check was successful.
+ *
+ *  @sa cancel_online_check
+ *  @sa start_online_check
+ *  @sa start_wispr_if_connected
+ *  @sa __connman_service_wispr_start
+ *
+ */
 static void complete_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					bool success)
