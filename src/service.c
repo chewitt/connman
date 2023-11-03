@@ -4794,6 +4794,14 @@ static void switch_default_service(struct connman_service *default_service,
 	struct connman_service *service;
 	GList *src, *dst;
 
+	DBG("default_service %p (%s) default %u downgrade_service %p (%s) default %u",
+		default_service,
+		connman_service_get_identifier(default_service),
+		connman_service_is_default(default_service),
+		downgrade_service,
+		connman_service_get_identifier(downgrade_service),
+		connman_service_is_default(downgrade_service));
+
 	apply_relevant_default_downgrade(default_service);
 	src = g_list_find(service_list, downgrade_service);
 	dst = g_list_find(service_list, default_service);
