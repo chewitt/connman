@@ -4844,6 +4844,23 @@ static bool check_suitable_state(enum connman_service_state a,
 	return a == b;
 }
 
+/**
+ *  @brief
+ *    Downgrade the service IPv4 and IPv6 states from "online" to
+ *    "ready".
+ *
+ *  This attempts to downgrade the IPv4 and IPv6 states of the
+ *  specified service to "ready" if they are "online".
+ *
+ *  @param[in,out]  service  A pointer to the mutable service whose IPv4
+ *                           and IPv6 states, if
+ *                           #CONNMAN_SERVICE_STATE_ONLINE, are to be
+ *                           downgraded to
+ *                           #CONNMAN_SERVICE_STATE_READY.
+ *
+ *  @sa service_downgrade_online_state_if_default
+ *
+ */
 static void service_downgrade_online_state(struct connman_service *service)
 {
 	if (!service)
@@ -4866,6 +4883,26 @@ static void service_downgrade_online_state(struct connman_service *service)
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 }
 
+/**
+ *  @brief
+ *    Downgrade the service IPv4 and IPv6 states from "online" to
+ *    "ready" if and only if the service is the default service and it
+ *    is "online".
+ *
+ *  This attempts to downgrade the IPv4 and IPv6 states of the
+ *  specified service to "ready" if and only if the service is the
+ *  default service and its combined service state is "online".
+ *
+ *  @param[in,out]  service  A pointer to the mutable service whose IPv4
+ *                           and IPv6 states, if it is the default
+ *                           service and its combined service state is
+ *                           #CONNMAN_SERVICE_STATE_ONLINE, are to be
+ *                           downgraded to
+ *                           #CONNMAN_SERVICE_STATE_READY.
+ *
+ *  @sa service_downgrade_online_state
+ *
+ */
 static void service_downgrade_online_state_if_default(struct connman_service *service)
 {
 	struct connman_service *def_service;
