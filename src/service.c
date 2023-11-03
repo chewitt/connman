@@ -1527,6 +1527,11 @@ static guint online_check_timeout_compute_geometric(unsigned int interval)
 
 static void cancel_online_check(struct connman_service *service)
 {
+	DBG("service %p (%s) online_timeout_ipv4 %d online_timeout_ipv6 %d",
+		service, connman_service_get_identifier(service),
+		service->online_timeout_ipv4,
+		service->online_timeout_ipv6);
+
 	if (service->online_timeout_ipv4) {
 		g_source_remove(service->online_timeout_ipv4);
 		service->online_timeout_ipv4 = 0;
@@ -1542,6 +1547,12 @@ static void cancel_online_check(struct connman_service *service)
 static void start_online_check(struct connman_service *service,
 				enum connman_ipconfig_type type)
 {
+	DBG("service %p (%s) type %d (%s) maybe start WISPr",
+		service,
+		connman_service_get_identifier(service),
+		type,
+		__connman_ipconfig_type2string(type));
+
 	if (!connman_setting_get_bool("EnableOnlineCheck")) {
 		connman_info("Online check disabled. "
 			"Default service remains in READY state.");
