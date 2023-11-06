@@ -163,7 +163,7 @@ static void trigger_autoconnect(struct connman_service *service);
 static void complete_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					bool success);
-static void service_downgrade_online_state(struct connman_service *service);
+static bool service_downgrade_online_state(struct connman_service *service);
 
 struct find_data {
 	const char *path;
@@ -5155,13 +5155,21 @@ static bool service_ipconfig_downgrade_online_state(
  *                           downgraded to
  *                           #CONNMAN_SERVICE_STATE_READY.
  *
+ *  @returns
+ *    True if either IPv4 or IPv6 service state was downgraded;
+ *    otherwise, false.
+ *
+ *  @sa service_ipconfig_downgrade_online_state
  *  @sa service_downgrade_online_state_if_default
  *
  */
-static void service_downgrade_online_state(struct connman_service *service)
+static bool service_downgrade_online_state(struct connman_service *service)
 {
+	bool ipv4_downgraded = false;
+	bool ipv6_downgraded = false;
+
 	if (!service)
-		return;
+		return false;
 
 	DBG("service %p (%s) state4 %d (%s) state6 %d (%s)",
 		service,
@@ -5169,15 +5177,15 @@ static void service_downgrade_online_state(struct connman_service *service)
 		service->state_ipv4, state2string(service->state_ipv4),
 		service->state_ipv6, state2string(service->state_ipv6));
 
-	if (is_online(service->state_ipv4))
-		__connman_service_ipconfig_indicate_state(service,
-						CONNMAN_SERVICE_STATE_READY,
-						CONNMAN_IPCONFIG_TYPE_IPV4);
+	ipv4_downgraded = service_ipconfig_downgrade_online_state(service,
+								 service->state_ipv4,
+								 CONNMAN_IPCONFIG_TYPE_IPV4);
 
-	if (is_online(service->state_ipv6))
-		__connman_service_ipconfig_indicate_state(service,
-						CONNMAN_SERVICE_STATE_READY,
-						CONNMAN_IPCONFIG_TYPE_IPV6);
+	ipv6_downgraded = service_ipconfig_downgrade_online_state(service,
+								 service->state_ipv6,
+								 CONNMAN_IPCONFIG_TYPE_IPV6);
+
+	return ipv4_downgraded || ipv6_downgraded;
 }
 
 /**
@@ -5197,19 +5205,24 @@ static void service_downgrade_online_state(struct connman_service *service)
  *                           downgraded to
  *                           #CONNMAN_SERVICE_STATE_READY.
  *
+ *  @returns
+ *    True if either IPv4 or IPv6 service state was downgraded;
+ *    otherwise, false.
+ *
+ *  @sa service_ipconfig_downgrade_online_state
  *  @sa service_downgrade_online_state
  *
  */
-static void service_downgrade_online_state_if_default(struct connman_service *service)
+static bool service_downgrade_online_state_if_default(struct connman_service *service)
 {
 	struct connman_service *def_service;
 
 	def_service = connman_service_get_default();
 	if (!def_service || def_service != service ||
 		!is_online(def_service->state))
-		return;
+		return false;
 
-	service_downgrade_online_state(def_service);
+	return service_downgrade_online_state(def_service);
 }
 
 /**
