@@ -1798,7 +1798,6 @@ static void complete_online_check(struct connman_service *service,
 	GSourceFunc redo_func;
 	unsigned int *interval;
 	guint *timeout;
-	enum connman_service_state current_state;
 	guint seconds;
 	guint current_timeout;
 
@@ -1831,9 +1830,7 @@ static void complete_online_check(struct connman_service *service,
 	if (success) {
 		*interval = online_check_max_interval;
 	} else {
-		current_state = service->state;
-		service_downgrade_online_state(service);
-		if (current_state != service->state)
+		if (service_downgrade_online_state(service))
 			*interval = online_check_initial_interval;
 		if (service != connman_service_get_default()) {
 			return;
