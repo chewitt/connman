@@ -453,7 +453,7 @@ static void wispr_portal_error(struct connman_wispr_portal_context *wp_context)
 	wp_context->wispr_result = CONNMAN_WISPR_RESULT_FAILED;
 }
 
-static void portal_manage_status(GWebResult *result,
+static void portal_manage_success_status(GWebResult *result,
 			struct connman_wispr_portal_context *wp_context)
 {
 	struct connman_service *service = wp_context->service;
@@ -782,7 +782,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		if (g_web_result_get_header(result, "X-ConnMan-Status",
 						&str)) {
-			portal_manage_status(result, wp_context);
+			portal_manage_success_status(result, wp_context);
 		} else {
 			wispr_portal_context_ref(wp_context);
 			__connman_agent_request_browser(wp_context->service,
