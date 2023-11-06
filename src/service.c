@@ -5092,6 +5092,57 @@ static bool check_suitable_state(enum connman_service_state a,
 
 /**
  *  @brief
+ *    Downgrade the service IP configuration state from "online" to
+ *    "ready".
+ *
+ *  This attempts to downgrade the specified IP configuration state of
+ *  the specified service to "ready" if it is "online".
+ *
+ *  @param[in,out]  service  A pointer to the mutable service whose IP
+ *                           configuration state, if
+ *                           #CONNMAN_SERVICE_STATE_ONLINE, is to be
+ *                           downgraded to
+ *                           #CONNMAN_SERVICE_STATE_READY.
+ *  @param[in]      state    The current IP configuration state of @a
+ *                           service.
+ *  @param[in]      type     The IP configuration type of @a service to
+ *                           try to downgrade.
+ *
+ *  @returns
+ *    True if the service state was downgraded for the specified IP
+ *    configuration type; otherwise, false.
+ *
+ *  @sa service_downgrade_online_state
+ *  @sa service_downgrade_online_state_if_default
+ *
+ */
+static bool service_ipconfig_downgrade_online_state(
+					struct connman_service *service,
+					enum connman_service_state state,
+					enum connman_ipconfig_type type)
+{
+	if (!service)
+		return false;
+
+	DBG("service %p (%s) type %d (%s) state %d (%s)",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		state, state2string(state));
+
+	if (is_online(state)) {
+		__connman_service_ipconfig_indicate_state(service,
+						CONNMAN_SERVICE_STATE_READY,
+						type);
+
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ *  @brief
  *    Downgrade the service IPv4 and IPv6 states from "online" to
  *    "ready".
  *
