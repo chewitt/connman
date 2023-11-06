@@ -1818,7 +1818,14 @@ static void complete_online_check(struct connman_service *service,
 		redo_func = redo_wispr_ipv6;
 	}
 
-	if(!enable_online_to_ready_transition)
+	if (success) {
+		__connman_service_ipconfig_indicate_state(service,
+			CONNMAN_SERVICE_STATE_ONLINE,
+			type);
+
+		if (!enable_online_to_ready_transition)
+			return;
+	} else if (!enable_online_to_ready_transition)
 		goto redo_func;
 
 	if (success) {

@@ -97,7 +97,6 @@ static GHashTable *wispr_portal_hash = NULL;
 
 static char *online_check_ipv4_url = NULL;
 static char *online_check_ipv6_url = NULL;
-static bool enable_online_to_ready_transition = false;
 
 #define wispr_portal_context_ref(wp_context) \
 	wispr_portal_context_ref_debug(wp_context, __FILE__, __LINE__, __func__)
@@ -480,11 +479,7 @@ static void portal_manage_status(GWebResult *result,
 				&str))
 		connman_info("Client-Timezone: %s", str);
 
-	__connman_service_ipconfig_indicate_state(service,
-					CONNMAN_SERVICE_STATE_ONLINE, type);
-
-	if (enable_online_to_ready_transition)
-		wp_context->cb(service, type, true);
+	wp_context->cb(service, type, true);
 }
 
 static bool wispr_route_request(const char *address, int ai_family,
@@ -1112,9 +1107,6 @@ int __connman_wispr_init(void)
 		connman_setting_get_string("OnlineCheckIPv4URL");
 	online_check_ipv6_url =
 		connman_setting_get_string("OnlineCheckIPv6URL");
-
-	enable_online_to_ready_transition =
-		connman_setting_get_bool("EnableOnlineToReadyTransition");
 
 	return 0;
 }
