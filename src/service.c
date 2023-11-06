@@ -1843,6 +1843,10 @@ redo_func:
  */
 static void start_wispr_if_connected(struct connman_service *service)
 {
+	DBG("service %p (%s) maybe start WISPr",
+		service,
+		connman_service_get_identifier(service));
+
 	if (!connman_setting_get_bool("EnableOnlineCheck")) {
 		connman_info("Online check disabled. "
 			"Default service remains in READY state.");
