@@ -453,6 +453,29 @@ static void wispr_portal_error(struct connman_wispr_portal_context *wp_context)
 	wp_context->wispr_result = CONNMAN_WISPR_RESULT_FAILED;
 }
 
+/**
+ *  @brief
+ *    Handle a successful "online" HTTP-based Internet reachability
+ *    check.
+ *
+ *  This handles a successful (that is, completed with a HTTP 200 "OK"
+ *  status code) "online" HTTP-based Internet reachability check
+ *  previously-initiated with #__connman_wispr_start.
+ *
+ *  @param[in]      result      A pointer to the mutable HTTP result
+ *                              for the successful "online" HTTP-based
+ *                              Internet reachability check this is
+ *                              handling.
+ *  @param[in,out]  wp_context  A pointer to the mutable WISPr portal
+ *                              detection context associated the
+ *                              successful "online" HTTP-based
+ *                              Internet reachability check this is
+ *                              handling.
+ *
+ *  @sa __connman_wispr_start
+ *  @sa wispr_portal_web_result
+ *
+ */
 static void portal_manage_success_status(GWebResult *result,
 			struct connman_wispr_portal_context *wp_context)
 {
