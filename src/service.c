@@ -1574,6 +1574,38 @@ static void cancel_online_check(struct connman_service *service)
 
 /**
  *  @brief
+ *    Check whether an online check is enabled for the specified
+ *    service.
+ *
+ *  This determines whether "online" HTTP-based Internet reachability
+ *  checks are enabled for the specified network service. If not, an
+ *  information-level message is logged.
+ *
+ *  @param[in]  service  A pointer to the immutable service for which
+ *                       to determine whether "online" HTTP-based
+ *                       Internet reachability checks are enabled.
+ *
+ *  @returns
+ *    True if "online" HTTP-based Internet reachability * checks are
+ *    enabled for the specified network service; otherwise, false.
+ *
+ *  @sa start_online_check
+ *  @sa start_wispr_if_connected
+ *
+ */
+static bool online_check_enabled_check(const struct connman_service *service)
+{
+	if (!connman_setting_get_bool("EnableOnlineCheck")) {
+		connman_info("Online check disabled. "
+			"Default service remains in READY state.");
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ *  @brief
  *    Start an "online" HTTP-based Internet reachability check for the
  *    specified network service IP configuration type.
  *
@@ -1607,11 +1639,8 @@ static void start_online_check(struct connman_service *service,
 		type,
 		__connman_ipconfig_type2string(type));
 
-	if (!connman_setting_get_bool("EnableOnlineCheck")) {
-		connman_info("Online check disabled. "
-			"Default service remains in READY state.");
+	if (!online_check_enabled_check(service))
 		return;
-	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 || check_proxy_setup(service)) {
 		cancel_online_check(service);
@@ -1847,11 +1876,8 @@ static void start_wispr_if_connected(struct connman_service *service)
 		service,
 		connman_service_get_identifier(service));
 
-	if (!connman_setting_get_bool("EnableOnlineCheck")) {
-		connman_info("Online check disabled. "
-			"Default service remains in READY state.");
+	if (!online_check_enabled_check(service))
 		return;
-	}
 
 	if (__connman_service_is_connected_state(service,
 			CONNMAN_IPCONFIG_TYPE_IPV4))
