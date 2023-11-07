@@ -52,7 +52,7 @@ static GResolv *resolv = NULL;
 static int resolv_id = 0;
 
 static void sync_next(void);
-static void ts_set_nameservers(struct connman_service *service);
+static void ts_set_nameservers(const struct connman_service *service);
 
 static void resolv_debug(const char *str, void *data)
 {
@@ -234,13 +234,13 @@ GSList *__connman_timeserver_add_list(GSList *server_list,
  * list which will be used to determine NTP server for time corrections.
  * The service settings take priority over the global timeservers.
  */
-GSList *__connman_timeserver_get_all(struct connman_service *service)
+GSList *__connman_timeserver_get_all(const struct connman_service *service)
 {
 	GSList *list = NULL;
-	struct connman_network *network;
+	const struct connman_network *network;
 	char **timeservers;
-	char **service_ts;
-	char **service_ts_config;
+	const char * const *service_ts;
+	const char * const *service_ts_config;
 	const char *service_gw;
 	char **fallback_ts;
 	int index, i;
@@ -267,7 +267,7 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 	 * configuration option is set to true.
 	 */
 	if (connman_setting_get_bool("UseGatewaysAsTimeservers")) {
-		network = __connman_service_get_network(service);
+		network = __connman_service_get_network((struct connman_service *)service);
 		if (network) {
 			index = connman_network_get_index(network);
 			service_gw = __connman_ipconfig_get_gateway_from_index(index,
@@ -379,7 +379,7 @@ static int ts_setup_resolv(struct connman_service *service)
 }
 
 
-static void ts_set_nameservers(struct connman_service *service)
+static void ts_set_nameservers(const struct connman_service *service)
 {
 	char **nameservers;
 	int i;

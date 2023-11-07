@@ -3319,7 +3319,7 @@ const char *connman_service_get_dbuspath(const struct connman_service *service)
 	return service->path;
 }
 
-char **connman_service_get_nameservers(struct connman_service *service)
+char **connman_service_get_nameservers(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -3353,20 +3353,20 @@ char **connman_service_get_nameservers(struct connman_service *service)
 	return g_strdupv(connman_setting_get_string_list("FallbackNameservers"));
 }
 
-char **connman_service_get_timeservers_config(struct connman_service *service)
+const char * const *connman_service_get_timeservers_config(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
 
-	return service->timeservers_config;
+	return (const char * const *)service->timeservers_config;
 }
 
-char **connman_service_get_timeservers(struct connman_service *service)
+const char * const *connman_service_get_timeservers(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
 
-	return service->timeservers;
+	return (const char * const *)service->timeservers;
 }
 
 void connman_service_set_proxy_method(struct connman_service *service,
