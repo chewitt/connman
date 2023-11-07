@@ -570,6 +570,7 @@ static void wispr_portal_request_portal(
 					wp_context);
 
 	if (wp_context->request_id == 0) {
+		wp_context->cb(wp_context->service, wp_context->type, false);
 		wispr_portal_error(wp_context);
 		wispr_portal_context_unref(wp_context);
 	}
@@ -894,10 +895,20 @@ static void proxy_callback(const char *proxy, void *user_data)
 	struct connman_wispr_portal_context *wp_context = user_data;
 	char *proxy_server;
 
-	DBG("proxy %s", proxy);
+	DBG("wp_context %p proxy %p", wp_context, proxy);
 
-	if (!wp_context || !proxy)
+	if (!wp_context)
 		return;
+
+	if (!proxy) {
+		DBG("no valid proxy");
+
+		wp_context->cb(wp_context->service, wp_context->type, false);
+
+		return;
+	}
+
+	DBG("proxy %s", proxy);
 
 	wp_context->token = 0;
 
@@ -990,6 +1001,8 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 		g_web_add_nameserver(wp_context->web, nameservers[i]);
 
 	proxy_method = connman_service_get_proxy_method(wp_context->service);
+
+	DBG("proxy_method %d", proxy_method);
 
 	if (proxy_method != CONNMAN_SERVICE_PROXY_METHOD_DIRECT) {
 		wp_context->token = connman_proxy_lookup(interface,
@@ -1088,6 +1101,8 @@ int __connman_wispr_start(struct connman_service *service,
 	return 0;
 
 free_wp:
+	wp_context->cb(wp_context->service, wp_context->type, false);
+
 	g_hash_table_remove(wispr_portal_hash, GINT_TO_POINTER(index));
 	return err;
 }
