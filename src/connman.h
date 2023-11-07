@@ -715,14 +715,14 @@ void __connman_service_notify_ipv4_configuration(
 				struct connman_service *service);
 void __connman_service_wispr_start(struct connman_service *service,
                                 enum connman_ipconfig_type type);
-bool __connman_service_is_connected_state(struct connman_service *service,
+bool __connman_service_is_connected_state(const struct connman_service *service,
 					enum connman_ipconfig_type type);
-const char *__connman_service_get_path(struct connman_service *service);
-const char *__connman_service_get_name(struct connman_service *service);
+const char *__connman_service_get_path(const struct connman_service *service);
+const char *__connman_service_get_name(const struct connman_service *service);
 struct connman_network *__connman_service_get_network(struct connman_service *service);
-enum connman_service_security __connman_service_get_security(struct connman_service *service);
-const char *__connman_service_get_phase2(struct connman_service *service);
-bool __connman_service_wps_enabled(struct connman_service *service);
+enum connman_service_security __connman_service_get_security(const struct connman_service *service);
+const char *__connman_service_get_phase2(const struct connman_service *service);
+bool __connman_service_wps_enabled(const struct connman_service *service);
 int __connman_service_set_favorite(struct connman_service *service,
 						bool favorite);
 int __connman_service_set_favorite_delayed(struct connman_service *service,
@@ -789,17 +789,17 @@ void __connman_service_timeserver_changed(struct connman_service *service,
 		GSList *ts_list);
 void __connman_service_set_pac(struct connman_service *service,
 					const char *pac);
-bool __connman_service_is_hidden(struct connman_service *service);
-bool __connman_service_is_split_routing(struct connman_service *service);
+bool __connman_service_is_hidden(const struct connman_service *service);
+bool __connman_service_is_split_routing(const struct connman_service *service);
 bool __connman_service_index_is_split_routing(int index);
 void __connman_service_set_split_routing(struct connman_service *service,
 						bool split_routing);
 void __connman_service_split_routing_changed(struct connman_service *service);
-int __connman_service_get_index(struct connman_service *service);
+int __connman_service_get_index(const struct connman_service *service);
 void __connman_service_set_hidden(struct connman_service *service);
 void __connman_service_set_hostname(struct connman_service *service,
 						const char *hostname);
-const char *__connman_service_get_hostname(struct connman_service *service);
+const char *__connman_service_get_hostname(const struct connman_service *service);
 void __connman_service_set_domainname(struct connman_service *service,
 						const char *domainname);
 const char *__connman_service_get_nameserver(struct connman_service *service);
@@ -810,7 +810,7 @@ void __connman_service_set_agent_identity(struct connman_service *service,
 						const char *agent_identity);
 int __connman_service_set_passphrase(struct connman_service *service,
 					const char *passphrase);
-const char *__connman_service_get_passphrase(struct connman_service *service);
+const char *__connman_service_get_passphrase(const struct connman_service *service);
 int __connman_service_check_passphrase(enum connman_service_security security,
 					const char *passphrase);
 int __connman_service_reset_ipconfig(struct connman_service *service,

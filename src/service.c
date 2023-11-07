@@ -3218,13 +3218,13 @@ void __connman_service_list_struct(DBusMessageIter *iter)
 	g_list_foreach(service_list, append_struct, iter);
 }
 
-bool __connman_service_is_hidden(struct connman_service *service)
+bool __connman_service_is_hidden(const struct connman_service *service)
 {
 	return service->hidden;
 }
 
 bool
-__connman_service_is_split_routing(struct connman_service *service)
+__connman_service_is_split_routing(const struct connman_service *service)
 {
 	return service->do_split_routing;
 }
@@ -3243,7 +3243,7 @@ bool __connman_service_index_is_split_routing(int index)
 	return __connman_service_is_split_routing(service);
 }
 
-int __connman_service_get_index(struct connman_service *service)
+int __connman_service_get_index(const struct connman_service *service)
 {
 	if (!service)
 		return -1;
@@ -3277,7 +3277,7 @@ void __connman_service_set_hostname(struct connman_service *service,
 		service->hostname = g_strdup(hostname);
 }
 
-const char *__connman_service_get_hostname(struct connman_service *service)
+const char *__connman_service_get_hostname(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -3300,7 +3300,7 @@ void __connman_service_set_domainname(struct connman_service *service,
 	domain_changed(service);
 }
 
-const char *connman_service_get_domainname(struct connman_service *service)
+const char *connman_service_get_domainname(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -3311,7 +3311,7 @@ const char *connman_service_get_domainname(struct connman_service *service)
 		return service->domainname;
 }
 
-const char *connman_service_get_dbuspath(struct connman_service *service)
+const char *connman_service_get_dbuspath(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -3388,7 +3388,7 @@ void connman_service_set_proxy_method(struct connman_service *service,
 }
 
 enum connman_service_proxy_method connman_service_get_proxy_method(
-					struct connman_service *service)
+					const struct connman_service *service)
 {
 	if (!service)
 		return CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
@@ -3414,7 +3414,7 @@ char **connman_service_get_proxy_excludes(struct connman_service *service)
 	return g_strdupv(service->excludes);
 }
 
-const char *connman_service_get_proxy_url(struct connman_service *service)
+const char *connman_service_get_proxy_url(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -3692,7 +3692,7 @@ int __connman_service_set_passphrase(struct connman_service *service,
 	return 0;
 }
 
-const char *__connman_service_get_passphrase(struct connman_service *service)
+const char *__connman_service_get_passphrase(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -6087,7 +6087,7 @@ int __connman_service_compare(const struct connman_service *a,
  *
  * Get the type of service
  */
-enum connman_service_type connman_service_get_type(struct connman_service *service)
+enum connman_service_type connman_service_get_type(const struct connman_service *service)
 {
 	if (!service)
 		return CONNMAN_SERVICE_TYPE_UNKNOWN;
@@ -6158,7 +6158,7 @@ __connman_service_get_ipconfig(struct connman_service *service, int family)
 
 }
 
-bool __connman_service_is_connected_state(struct connman_service *service,
+bool __connman_service_is_connected_state(const struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	if (!service)
@@ -6179,7 +6179,7 @@ bool __connman_service_is_connected_state(struct connman_service *service,
 	return false;
 }
 enum connman_service_security __connman_service_get_security(
-				struct connman_service *service)
+				const struct connman_service *service)
 {
 	if (!service)
 		return CONNMAN_SERVICE_SECURITY_UNKNOWN;
@@ -6187,7 +6187,7 @@ enum connman_service_security __connman_service_get_security(
 	return service->security;
 }
 
-const char *__connman_service_get_phase2(struct connman_service *service)
+const char *__connman_service_get_phase2(const struct connman_service *service)
 {
 	if (!service)
 		return NULL;
@@ -6195,7 +6195,7 @@ const char *__connman_service_get_phase2(struct connman_service *service)
 	return service->phase2;
 }
 
-bool __connman_service_wps_enabled(struct connman_service *service)
+bool __connman_service_wps_enabled(const struct connman_service *service)
 {
 	if (!service)
 		return false;
@@ -6257,12 +6257,12 @@ int __connman_service_set_favorite(struct connman_service *service,
 							false);
 }
 
-bool connman_service_get_favorite(struct connman_service *service)
+bool connman_service_get_favorite(const struct connman_service *service)
 {
 	return service->favorite;
 }
 
-bool connman_service_get_autoconnect(struct connman_service *service)
+bool connman_service_get_autoconnect(const struct connman_service *service)
 {
 	return service->autoconnect;
 }
@@ -7844,22 +7844,22 @@ struct connman_service *__connman_service_lookup_from_index(int index)
 	return NULL;
 }
 
-const char *connman_service_get_identifier(struct connman_service *service)
+const char *connman_service_get_identifier(const struct connman_service *service)
 {
 	return service ? service->identifier : "<null>";
 }
 
-const char *__connman_service_get_path(struct connman_service *service)
+const char *__connman_service_get_path(const struct connman_service *service)
 {
 	return service->path;
 }
 
-const char *__connman_service_get_name(struct connman_service *service)
+const char *__connman_service_get_name(const struct connman_service *service)
 {
 	return service->name;
 }
 
-enum connman_service_state connman_service_get_state(struct connman_service *service)
+enum connman_service_state connman_service_get_state(const struct connman_service *service)
 {
 	return service ? service->state : CONNMAN_SERVICE_STATE_UNKNOWN;
 }
