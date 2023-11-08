@@ -1425,6 +1425,32 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 		nameserver_del_routes(index, service->nameservers, type);
 }
 
+/**
+ *  @brief
+ *    Check the proxy setup of the specified network service.
+ *
+ *  This checks the proxy configuration of the specified network
+ *  service. The network service, @a service, may be set to
+ *  #CONNMAN_SERVICE_PROXY_METHOD_DIRECT if the current internal
+ *  method is empty or if there is no Proxy Auto-configuration (PAC)
+ *  URL received from DHCP or if the user proxy configuration is empty
+ *  or automatic and the Web Proxy Auto-discovery (WPAD) protocol
+ *  fails.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which the proxy setup is to be
+ *                           checked and for which the method may be
+ *                           updated to
+ *                           #CONNMAN_SERVICE_PROXY_METHOD_DIRECT.
+ *
+ *  @returns
+ *    True if the proxy method has been established for the specified
+ *    service; otherwise, false.
+ *
+ *  @sa connman_service_set_proxy_method
+ *  @sa __connman_wpad_start
+ *
+ */
 static bool check_proxy_setup(struct connman_service *service)
 {
 	DBG("service %p (%s)", service, connman_service_get_identifier(service));
@@ -3369,6 +3395,21 @@ const char * const *connman_service_get_timeservers(const struct connman_service
 	return (const char * const *)service->timeservers;
 }
 
+/**
+ *  @brief
+ *    Set the web proxy method of the specified service.
+ *
+ *  This attempts to set the web proxy method of the specified service
+ *  but will fail to do so if @a service is null or is hidden.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to set the web proxy method.
+ *  @param[in]      method   The web proxy method to set.
+ *
+ *  @sa proxy_changed
+ *  @sa __connman_notifier_proxy_changed
+ *
+ */
 void connman_service_set_proxy_method(struct connman_service *service,
 					enum connman_service_proxy_method method)
 {
