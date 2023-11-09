@@ -451,7 +451,7 @@ static inline void call_result_func(struct web_session *session, guint16 status)
 	if (!session->result_func)
 		return;
 
-	if (status != 0)
+	if (status != GWEB_HTTP_STATUS_CODE_UNKNOWN)
 		session->result.status = status;
 
 	session->result_func(&session->result, session->user_data);
@@ -729,7 +729,8 @@ static int decode_chunked(struct web_session *session,
 			if (session->chunk_left <= len) {
 				session->result.buffer = ptr;
 				session->result.length = session->chunk_left;
-				call_result_func(session, 0);
+				call_result_func(session,
+					GWEB_HTTP_STATUS_CODE_UNKNOWN);
 
 				len -= session->chunk_left;
 				ptr += session->chunk_left;
@@ -744,7 +745,8 @@ static int decode_chunked(struct web_session *session,
 			/* more data */
 			session->result.buffer = ptr;
 			session->result.length = len;
-			call_result_func(session, 0);
+			call_result_func(session,
+				GWEB_HTTP_STATUS_CODE_UNKNOWN);
 
 			session->chunk_left -= len;
 			session->total_len += len;
@@ -769,7 +771,8 @@ static int handle_body(struct web_session *session,
 		if (len > 0) {
 			session->result.buffer = buf;
 			session->result.length = len;
-			call_result_func(session, 0);
+			call_result_func(session,
+				GWEB_HTTP_STATUS_CODE_UNKNOWN);
 		}
 		return 0;
 	}
@@ -780,7 +783,7 @@ static int handle_body(struct web_session *session,
 
 		session->result.buffer = NULL;
 		session->result.length = 0;
-		call_result_func(session, 400);
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_BAD_REQUEST);
 	}
 
 	return err;
@@ -876,7 +879,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		session->transport_watch = 0;
 		session->result.buffer = NULL;
 		session->result.length = 0;
-		call_result_func(session, 400);
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_BAD_REQUEST);
 		return FALSE;
 	}
 
@@ -890,7 +893,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 		session->transport_watch = 0;
 		session->result.buffer = NULL;
 		session->result.length = 0;
-		call_result_func(session, 0);
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_UNKNOWN);
 		return FALSE;
 	}
 
@@ -1225,14 +1228,14 @@ static void handle_resolved_address(struct web_session *session)
 	ret = getaddrinfo(session->address, port, &hints, &session->addr);
 	g_free(port);
 	if (ret != 0 || !session->addr) {
-		call_result_func(session, 400);
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_BAD_REQUEST);
 		return;
 	}
 
 	call_route_func(session);
 
 	if (create_transport(session) < 0) {
-		call_result_func(session, 409);
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_CONFLICT);
 		return;
 	}
 }
@@ -1253,7 +1256,7 @@ static void resolv_result(GResolvResultStatus status,
 	struct web_session *session = user_data;
 
 	if (!results || !results[0]) {
-		call_result_func(session, 404);
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_NOT_FOUND);
 		return;
 	}
 
