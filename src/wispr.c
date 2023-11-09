@@ -794,13 +794,13 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	DBG("status: %03u", status);
 
 	switch (status) {
-	case 000:
+	case GWEB_HTTP_STATUS_CODE_UNKNOWN:
 		wispr_portal_context_ref(wp_context);
 		__connman_agent_request_browser(wp_context->service,
 				wispr_portal_browser_reply_cb,
 				wp_context->status_url, wp_context);
 		break;
-	case 200:
+	case GWEB_HTTP_STATUS_CODE_OK:
 		if (wp_context->wispr_msg.message_type >= 0)
 			break;
 
@@ -815,12 +815,12 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		}
 
 		break;
-	case 300:
-	case 301:
-	case 302:
-	case 303:
-	case 307:
-	case 308:
+	case GWEB_HTTP_STATUS_CODE_MULTIPLE_CHOICES:
+	case GWEB_HTTP_STATUS_CODE_MOVED_PERMANENTLY:
+	case GWEB_HTTP_STATUS_CODE_FOUND:
+	case GWEB_HTTP_STATUS_CODE_SEE_OTHER:
+	case GWEB_HTTP_STATUS_CODE_TEMPORARY_REDIRECT:
+	case GWEB_HTTP_STATUS_CODE_PERMANENT_REDIRECT:
 		if (!g_web_supports_tls() ||
 			!g_web_result_get_header(result, "Location",
 							&redirect)) {
@@ -842,12 +842,12 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 				wispr_route_request, wp_context);
 
 		goto done;
-	case 400:
-	case 404:
+	case GWEB_HTTP_STATUS_CODE_BAD_REQUEST:
+	case GWEB_HTTP_STATUS_CODE_NOT_FOUND:
 		wp_context->cb(wp_context->service, wp_context->type, false);
 
 		break;
-	case 505:
+	case GWEB_HTTP_STATUS_CODE_HTTP_VERSION_NOT_SUPPORTED:
 		wispr_portal_context_ref(wp_context);
 		__connman_agent_request_browser(wp_context->service,
 				wispr_portal_browser_reply_cb,
