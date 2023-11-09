@@ -1004,7 +1004,15 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 
 	DBG("proxy_method %d", proxy_method);
 
-	if (proxy_method != CONNMAN_SERVICE_PROXY_METHOD_DIRECT) {
+	/*
+	 * Include both CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN and
+	 * CONNMAN_SERVICE_PROXY_METHOD_DIRECT in avoiding a call to
+	 * connman_proxy_lookup, since the former will always result in
+	 * a WISPr request "falling down a hole" that will only ever
+	 * result in a failure completion.
+	 */
+	if (proxy_method != CONNMAN_SERVICE_PROXY_METHOD_DIRECT &&
+			proxy_method != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN) {
 		wp_context->token = connman_proxy_lookup(interface,
 						wp_context->status_url,
 						wp_context->service,
