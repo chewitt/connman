@@ -93,6 +93,11 @@ struct connman_wispr_portal {
 
 static bool wispr_portal_web_result(GWebResult *result, gpointer user_data);
 
+/**
+ *  A dictionary / hash table of network interface indices to
+ *  active / outstanding WISPr / portal request contexts.
+ *
+ */
 static GHashTable *wispr_portal_hash = NULL;
 
 static char *online_check_ipv4_url = NULL;
