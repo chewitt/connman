@@ -1262,14 +1262,9 @@ static void update_hooks(struct connman_iptables *table, GList *chain_head,
 static bool connman_iptables_entry_is_valid(
 				const struct connman_iptables_entry *new_entry)
 {
-	if (!new_entry ||
-		((new_entry->type != AF_INET) || (new_entry->type != AF_INET6)) ||
-		((new_entry->type == AF_INET) && !new_entry->entry) ||
-		((new_entry->type == AF_INET6) && !new_entry->entry6)) {
-		return false;
-	}
-
-	return true;
+	return (new_entry &&
+			(((new_entry->type == AF_INET)  && new_entry->entry) ||
+			 ((new_entry->type == AF_INET6) && new_entry->entry6)));
 }
 
 static struct connman_iptables_entry *prepare_rule_inclusion(
