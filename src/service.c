@@ -1775,6 +1775,49 @@ static gboolean redo_wispr_ipv6(gpointer user_data)
 	return FALSE;
 }
 
+static void reschedule_online_check(struct connman_service *service,
+					enum connman_ipconfig_type type,
+					unsigned int *interval,
+					guint *timeout)
+{
+	GSourceFunc redo_func;
+	guint seconds;
+
+	if (!service || !interval || !timeout)
+		return;
+
+	DBG("service %p (%s) type %d (%s) interval %u timeout %u",
+		service,
+		connman_service_get_identifier(service),
+		type,
+		__connman_ipconfig_type2string(type),
+		*interval, *timeout);
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		redo_func = redo_wispr_ipv4;
+	else
+		redo_func = redo_wispr_ipv6;
+
+	DBG("updating online checkout timeout period");
+
+	seconds = online_check_timeout_compute_func(*interval);
+
+	DBG("service %p (%s) type %d (%s) interval %u style \"%s\" seconds %u",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		*interval, online_check_timeout_interval_style, seconds);
+
+	*timeout = g_timeout_add_seconds(seconds,
+				redo_func, connman_service_ref(service));
+
+	/* Increment the interval for the next time, limiting to a maximum
+	 * interval of @a online_check_max_interval.
+	 */
+	if (*interval < online_check_max_interval)
+		(*interval)++;
+}
+
 /**
  *  @brief
  *    This completes an "online" HTTP-based Internet reachability
@@ -1821,11 +1864,8 @@ static void complete_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					bool success)
 {
-	GSourceFunc redo_func;
 	unsigned int *interval;
 	guint *timeout;
-	guint seconds;
-	guint current_timeout;
 
 	DBG("service %p (%s) type %d (%s) success %d\n",
 		service,
@@ -1836,11 +1876,9 @@ static void complete_online_check(struct connman_service *service,
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;
 		timeout = &service->online_timeout_ipv4;
-		redo_func = redo_wispr_ipv4;
 	} else {
 		interval = &service->online_check_interval_ipv6;
 		timeout = &service->online_timeout_ipv6;
-		redo_func = redo_wispr_ipv6;
 	}
 
 	if (success) {
@@ -1851,7 +1889,7 @@ static void complete_online_check(struct connman_service *service,
 		if (!enable_online_to_ready_transition)
 			return;
 	} else if (!enable_online_to_ready_transition)
-		goto redo_func;
+		goto reschedule;
 
 	if (success) {
 		*interval = online_check_max_interval;
@@ -1863,27 +1901,8 @@ static void complete_online_check(struct connman_service *service,
 		}
 	}
 
-redo_func:
-	DBG("updating online checkout timeout period");
-
-	seconds = online_check_timeout_compute_func(*interval);
-
-	DBG("service %p (%s) type %d (%s) interval %d style \"%s\" seconds %u",
-		service,
-		connman_service_get_identifier(service),
-		type, __connman_ipconfig_type2string(type),
-		*interval, online_check_timeout_interval_style, seconds);
-
-	current_timeout = g_timeout_add_seconds(seconds,
-				redo_func, connman_service_ref(service));
-
-	*timeout = current_timeout;
-
-	/* Increment the interval for the next time, limiting to a maximum
-	 * interval of @a online_check_max_interval.
-	 */
-	if (*interval < online_check_max_interval)
-		(*interval)++;
+reschedule:
+	reschedule_online_check(service, type, interval, timeout);
 }
 
 /**
