@@ -1775,6 +1775,41 @@ static gboolean redo_wispr_ipv6(gpointer user_data)
 	return FALSE;
 }
 
+/**
+ *  @brief
+ *    Reschedule an "online" HTTP-based Internet reachability check
+ *    for the specified network service IP configuration type.
+ *
+ *  This attempts to eschedule an "online" HTTP-based Internet
+ *  reachability check for the specified network service IP
+ *  configuration type with the provided interval and timeout
+ *  identifier.
+ *
+ *  @param[in,out]  service   A pointer to the mutable network service
+ *                            for which to reschedule the "online"
+ *                            reachability check. On success, the
+ *                            service will have a reference retained
+ *                            that must be elsewhere released.
+ *  @param[in]      type      The IP configuration type for which the
+ *                            "online" reachability check is to be
+ *                            rescheduled.
+ *  @param[in,out]  interval  A pointer to the current mutable "online"
+ *                            reachability check sequence interval. On
+ *                            success, this will be incremented by one
+ *                            (1) if it is less than the value of the
+ *                            @a OnlineCheckMaxInterval configuration
+ *                            setting.
+ *  @param[in,out]  timeout   A pointer to the current GLib main loop
+ *                            timer identifier. On success, this will
+ *                            be updated with the GLib main loop timer
+ *                            identifier associated with the
+ *                            rescheduled "online" HTTP-based Internet
+ *                            reachability check request.
+ *
+ *  @sa redo_wispr_ipv4
+ *  @sa redo_wispr_ipv6
+ *
+ */
 static void reschedule_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					unsigned int *interval,
