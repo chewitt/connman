@@ -574,6 +574,11 @@ static void wispr_portal_request_portal(
 		connman_service_get_identifier(wp_context->service),
 		wp_context->type, __connman_ipconfig_type2string(wp_context->type));
 
+	/*
+	 * Retain a reference to the WISPr/portal context to account for
+	 * 'g_web_request_get' maintaining a weak reference to it. This will
+	 * be released in the 'wispr_portal_web_result' callback.
+	 */
 	wispr_portal_context_ref(wp_context);
 	wp_context->request_id = g_web_request_get(wp_context->web,
 					wp_context->status_url,
@@ -873,6 +878,12 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	wp_context->request_id = 0;
 done:
 	wp_context->wispr_msg.message_type = -1;
+
+	/*
+	 * Release a reference to the WISPr/portal context to balance the
+	 * earlier reference retained to account for 'g_web_request_get'
+	 * maintaining a weak reference to it.
+	 */
 	wispr_portal_context_unref(wp_context);
 	return false;
 }
