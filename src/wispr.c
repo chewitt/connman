@@ -164,6 +164,13 @@ static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 static void free_connman_wispr_portal_context(
 		struct connman_wispr_portal_context *wp_context)
 {
+	DBG("wispr/portal context %p service %p (%s) type %d (%s)",
+		wp_context,
+		wp_context->service,
+		connman_service_get_identifier(wp_context->service),
+		wp_context->type,
+		__connman_ipconfig_type2string(wp_context->type));
+
 	if (wp_context->wispr_portal) {
 		if (wp_context->wispr_portal->ipv4_context == wp_context)
 			wp_context->wispr_portal->ipv4_context = NULL;
