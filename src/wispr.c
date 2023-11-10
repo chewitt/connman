@@ -1033,9 +1033,18 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 	 * connman_proxy_lookup, since the former will always result in
 	 * a WISPr request "falling down a hole" that will only ever
 	 * result in a failure completion.
+	 *
+	 * Whether following the connman_proxy_lookup / proxy_callback
+	 * path or the g_idle_add / no_proxy_callback path, both funnel to
+	 * proxy_callback. Retain a reference to the WISPr/portal context
+	 * here and release it there (that is, in proxy_callback) such
+	 * that the context is retained while the lookup or the idle
+	 * timeout are in flight.
 	 */
 	if (proxy_method != CONNMAN_SERVICE_PROXY_METHOD_DIRECT &&
 			proxy_method != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN) {
+		wispr_portal_context_ref(wp_context);
+
 		wp_context->token = connman_proxy_lookup(interface,
 						wp_context->status_url,
 						wp_context->service,
@@ -1046,6 +1055,8 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 			wispr_portal_context_unref(wp_context);
 		}
 	} else if (wp_context->timeout == 0) {
+		wispr_portal_context_ref(wp_context);
+
 		wp_context->timeout = g_idle_add(no_proxy_callback, wp_context);
 	}
 
