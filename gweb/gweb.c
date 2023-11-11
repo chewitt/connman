@@ -75,6 +75,7 @@ struct web_session {
 	char *content_type;
 
 	GIOChannel *transport_channel;
+	guint connect_timeout;
 	guint transport_watch;
 	guint send_watch;
 
@@ -133,6 +134,8 @@ struct _GWeb {
 #define debug(web, format, arg...)				\
 	_debug(web, __FILE__, __func__, format, ## arg)
 
+static void close_session_transport(struct web_session *session);
+
 static void _debug(GWeb *web, const char *file, const char *caller,
 						const char *format, ...)
 {
@@ -152,6 +155,70 @@ static void _debug(GWeb *web, const char *file, const char *caller,
 	}
 
 	va_end(ap);
+}
+
+static inline void call_result_func(struct web_session *session, guint16 status)
+{
+
+	if (!session->result_func)
+		return;
+
+	if (status != GWEB_HTTP_STATUS_CODE_UNKNOWN)
+		session->result.status = status;
+
+	session->result_func(&session->result, session->user_data);
+
+}
+
+static inline void call_route_func(struct web_session *session)
+{
+	if (session->route_func)
+		session->route_func(session->address, session->addr->ai_family,
+				session->web->index, session->user_data);
+}
+
+static gboolean connect_timeout_cb(gpointer user_data)
+{
+	struct web_session *session = user_data;
+
+	debug(session->web, "session %p connect timeout after %ums",
+			session, g_web_get_connect_timeout(session->web));
+
+	session->connect_timeout = 0;
+
+	close_session_transport(session);
+
+	session->result.buffer = NULL;
+	session->result.length = 0;
+
+	call_result_func(session, GWEB_HTTP_STATUS_CODE_REQUEST_TIMEOUT);
+
+	return G_SOURCE_REMOVE;
+}
+
+static void add_connect_timeout(struct web_session *session,
+						guint timeout_ms)
+{
+	if (!session || !timeout_ms)
+		return;
+
+	debug(session->web, "add connect timeout %u ms", timeout_ms);
+
+	session->connect_timeout = g_timeout_add(timeout_ms,
+				connect_timeout_cb, session);
+}
+
+static void cancel_connect_timeout(struct web_session *session)
+{
+	if (!session)
+		return;
+
+	if (session->connect_timeout > 0) {
+		g_source_remove(session->connect_timeout);
+		session->connect_timeout = 0;
+
+		debug(session->web, "cancelled connect timeout");
+	}
 }
 
 static void close_session_transport(struct web_session *session)
@@ -193,6 +260,8 @@ static void free_session(struct web_session *session)
 
 	if (session->resolv_action > 0)
 		g_resolv_cancel_lookup(web->resolv, session->resolv_action);
+
+	cancel_connect_timeout(session);
 
 	close_session_transport(session);
 
@@ -483,26 +552,6 @@ guint g_web_get_connect_timeout(const GWeb *web)
 
 done:
 	return timeout_ms;
-}
-
-static inline void call_result_func(struct web_session *session, guint16 status)
-{
-
-	if (!session->result_func)
-		return;
-
-	if (status != GWEB_HTTP_STATUS_CODE_UNKNOWN)
-		session->result.status = status;
-
-	session->result_func(&session->result, session->user_data);
-
-}
-
-static inline void call_route_func(struct web_session *session)
-{
-	if (session->route_func)
-		session->route_func(session->address, session->addr->ai_family,
-				session->web->index, session->user_data);
 }
 
 static bool process_send_buffer(struct web_session *session)
@@ -915,6 +964,8 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	gsize bytes_read;
 	GIOStatus status;
 
+	cancel_connect_timeout(session);
+
 	if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
 		session->transport_watch = 0;
 		session->result.buffer = NULL;
@@ -1075,7 +1126,8 @@ static inline int bind_socket(int sk, int index, int family)
 	return err;
 }
 
-static int connect_session_transport(struct web_session *session)
+static int connect_session_transport(struct web_session *session,
+			guint connect_timeout_ms)
 {
 	GIOFlags flags;
 	int sk;
@@ -1133,6 +1185,8 @@ static int connect_session_transport(struct web_session *session)
 				G_IO_OUT | G_IO_HUP | G_IO_NVAL | G_IO_ERR,
 						send_data, session);
 
+	add_connect_timeout(session, connect_timeout_ms);
+
 	return 0;
 }
 
@@ -1140,7 +1194,8 @@ static int create_transport(struct web_session *session)
 {
 	int err;
 
-	err = connect_session_transport(session);
+	err = connect_session_transport(session,
+			g_web_get_connect_timeout(session->web));
 	if (err < 0)
 		return err;
 
