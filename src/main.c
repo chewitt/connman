@@ -47,6 +47,7 @@
 #define DEFAULT_ONLINE_CHECK_IPV4_URL "http://ipv4.connman.net/online/status.html"
 #define DEFAULT_ONLINE_CHECK_IPV6_URL "http://ipv6.connman.net/online/status.html"
 
+#define DEFAULT_ONLINE_CHECK_CONNECT_TIMEOUT (0 * 1000)
 /*
  * We set the integer to 1 sec so that we have a chance to get
  * necessary IPv6 router advertisement messages that might have
@@ -110,6 +111,7 @@ static struct {
 	bool enable_online_to_ready_transition;
 	char *online_check_ipv4_url;
 	char *online_check_ipv6_url;
+	unsigned int online_check_connect_timeout_ms;
 	unsigned int online_check_initial_interval;
 	unsigned int online_check_max_interval;
 	char *online_check_interval_style;
@@ -141,6 +143,7 @@ static struct {
 	.enable_online_to_ready_transition = false,
 	.online_check_ipv4_url = NULL,
 	.online_check_ipv6_url = NULL,
+	.online_check_connect_timeout_ms = DEFAULT_ONLINE_CHECK_CONNECT_TIMEOUT,
 	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
 	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
 	.online_check_interval_style = NULL,
@@ -172,6 +175,7 @@ static struct {
 #define CONF_ENABLE_ONLINE_TO_READY_TRANSITION "EnableOnlineToReadyTransition"
 #define CONF_ONLINE_CHECK_IPV4_URL      "OnlineCheckIPv4URL"
 #define CONF_ONLINE_CHECK_IPV6_URL      "OnlineCheckIPv6URL"
+#define CONF_ONLINE_CHECK_CONNECT_TIMEOUT "OnlineCheckConnectTimeout"
 #define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
 #define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
 #define CONF_ONLINE_CHECK_INTERVAL_STYLE "OnlineCheckIntervalStyle"
@@ -204,6 +208,7 @@ static const char *supported_options[] = {
 	CONF_ENABLE_ONLINE_TO_READY_TRANSITION,
 	CONF_ONLINE_CHECK_IPV4_URL,
 	CONF_ONLINE_CHECK_IPV6_URL,
+	CONF_ONLINE_CHECK_CONNECT_TIMEOUT,
 	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
 	CONF_ONLINE_CHECK_MAX_INTERVAL,
 	CONF_ONLINE_CHECK_INTERVAL_STYLE,
@@ -338,6 +343,7 @@ static void parse_config(GKeyFile *config)
 	char *string;
 	gsize len;
 	int integer;
+	double real;
 
 	if (!config) {
 		connman_settings.auto_connect =
@@ -527,6 +533,27 @@ static void parse_config(GKeyFile *config)
 	if (!error) {
 		connman_settings.enable_online_to_ready_transition = boolean;
 	}
+
+	g_clear_error(&error);
+
+	/* OnlineCheckConnecTimeout */
+
+	real = g_key_file_get_double(config, "General",
+			CONF_ONLINE_CHECK_CONNECT_TIMEOUT, &error);
+	if (!error) {
+		if (real < 0) {
+			connman_warn("Incorrect online check connect timeout %f",
+				real);
+			connman_settings.online_check_connect_timeout_ms =
+				DEFAULT_ONLINE_CHECK_CONNECT_TIMEOUT;
+		} else
+			connman_settings.online_check_connect_timeout_ms =
+				real * 1000;
+	}
+
+	if (connman_settings.online_check_connect_timeout_ms)
+		connman_info("Online check connect timeout %ums",
+			connman_settings.online_check_connect_timeout_ms);
 
 	g_clear_error(&error);
 
@@ -885,6 +912,9 @@ bool connman_setting_get_bool(const char *key)
 
 unsigned int connman_setting_get_uint(const char *key)
 {
+	if (g_str_equal(key, CONF_ONLINE_CHECK_CONNECT_TIMEOUT))
+		return connman_settings.online_check_connect_timeout_ms;
+
 	if (g_str_equal(key, CONF_ONLINE_CHECK_INITIAL_INTERVAL))
 		return connman_settings.online_check_initial_interval;
 
