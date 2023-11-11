@@ -1110,7 +1110,7 @@ static int create_transport(struct web_session *session)
 	return 0;
 }
 
-static int parse_url(struct web_session *session,
+static int parse_request_and_proxy_urls(struct web_session *session,
 				const char *url, const char *proxy)
 {
 	char *scheme, *host, *port, *path;
@@ -1300,7 +1300,7 @@ static guint do_request(GWeb *web, const char *url,
 	if (!session)
 		return 0;
 
-	if (parse_url(session, url, web->proxy) < 0) {
+	if (parse_request_and_proxy_urls(session, url, web->proxy) < 0) {
 		free_session(session);
 		return 0;
 	}
