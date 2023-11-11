@@ -142,6 +142,9 @@ bool g_web_set_ua_profile(GWeb *web, const char *profile);
 
 bool g_web_set_http_version(GWeb *web, const char *version);
 
+void g_web_set_connect_timeout(GWeb *web, guint timeout_ms);
+guint g_web_get_connect_timeout(const GWeb *web);
+
 void g_web_set_close_connection(GWeb *web, bool enabled);
 bool g_web_get_close_connection(GWeb *web);
 

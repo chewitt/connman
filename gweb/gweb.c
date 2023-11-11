@@ -124,6 +124,7 @@ struct _GWeb {
 	char *user_agent_profile;
 	char *http_version;
 	bool close_connection;
+	guint connect_timeout_ms;
 
 	GWebDebugFunc debug_func;
 	gpointer debug_data;
@@ -443,6 +444,29 @@ bool g_web_get_close_connection(GWeb *web)
 		return false;
 
 	return web->close_connection;
+}
+
+void g_web_set_connect_timeout(GWeb *web, guint timeout_ms)
+{
+	if (!web)
+		return;
+
+	debug(web, "timeout %ums", timeout_ms);
+
+	web->connect_timeout_ms = timeout_ms;
+}
+
+guint g_web_get_connect_timeout(const GWeb *web)
+{
+	guint timeout_ms = 0;
+
+	if (!web)
+		goto done;
+
+	timeout_ms = web->connect_timeout_ms;
+
+done:
+	return timeout_ms;
 }
 
 static inline void call_result_func(struct web_session *session, guint16 status)
