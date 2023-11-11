@@ -154,6 +154,29 @@ static void _debug(GWeb *web, const char *file, const char *caller,
 	va_end(ap);
 }
 
+static void close_session_transport(struct web_session *session)
+{
+	if (!session)
+		return;
+
+	debug(session->web, "closing session transport");
+
+	if (session->transport_watch > 0) {
+		g_source_remove(session->transport_watch);
+		session->transport_watch = 0;
+	}
+
+	if (session->send_watch > 0) {
+		g_source_remove(session->send_watch);
+		session->send_watch = 0;
+	}
+
+	if (session->transport_channel) {
+		g_io_channel_unref(session->transport_channel);
+		session->transport_channel = NULL;
+	}
+}
+
 static void free_session(struct web_session *session)
 {
 	GWeb *web;
@@ -171,14 +194,7 @@ static void free_session(struct web_session *session)
 	if (session->resolv_action > 0)
 		g_resolv_cancel_lookup(web->resolv, session->resolv_action);
 
-	if (session->transport_watch > 0)
-		g_source_remove(session->transport_watch);
-
-	if (session->send_watch > 0)
-		g_source_remove(session->send_watch);
-
-	if (session->transport_channel)
-		g_io_channel_unref(session->transport_channel);
+	close_session_transport(session);
 
 	g_free(session->result.last_key);
 
