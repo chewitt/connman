@@ -1071,6 +1071,49 @@ done:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Start a HTTP-based Internet reachability check for the specified
+ *    network service IP configuration type.
+ *
+ *  This attempts to start a HTTP-based Internet reachability check
+ *  for the specified network service IP configuration type with the
+ *  provided connection timeout and completion callback.
+ *
+ *  @param[in,out]  service             A pointer to the mutable network
+ *                                      service for which to start the
+ *                                      reachability check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which the reachability check
+ *                                      is to be started.
+ *  param[in]       connect_timeout_ms  The time, in milliseconds, for
+ *                                      the TCP connection timeout.
+ *                                      Connections that take longer
+ *                                      than this will be aborted. A
+ *                                      value of zero ('0') indicates
+ *                                      that no explicit connection
+ *                                      timeout will be used, leaving
+ *                                      the timeout to the underlying
+ *                                      operating system and its
+ *                                      network stack.
+ *  @param[in]      callback            The callback to be invoked when
+ *                                      the reachability check
+ *                                      terminates, either on failure
+ *                                      or success.
+ *
+ *  @retval  0            If successful.
+ *  @retval  -EINVAL      If the reachability check subsystem is not
+ *                        properly initialized, @a callback is null,
+ *                        or if the network interface index associated
+ *                        with @a service is invalid.
+ *  @retval  -EOPNOTSUPP  If a reachability check is not supported for
+ *                        the network service technology type.
+ *  @retval  -ENOMEM      If resources could not be allocated for the
+ *                        reachability check.
+ *
+ *  @sa __connman_wispr_stop
+ *
+ */
 int __connman_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					guint connect_timeout_ms,
