@@ -1110,101 +1110,426 @@ static int create_transport(struct web_session *session)
 	return 0;
 }
 
-static int parse_request_and_proxy_urls(struct web_session *session,
-				const char *url, const char *proxy)
+static int parse_url_scheme(const char *url, size_t url_length,
+						const char **cursor,
+						char **scheme)
 {
-	char *scheme, *host, *port, *path;
+	static const char * const scheme_delimiter = "://";
+	static const size_t scheme_delimiter_length = 3;
+	const char *result;
+	size_t remaining_length;
+	size_t scheme_length = 0;
 
-	scheme = g_strdup(url);
-	if (!scheme)
+	if (!url || !url_length || !cursor)
 		return -EINVAL;
 
-	host = strstr(scheme, "://");
-	if (host) {
-		*host = '\0';
-		host += 3;
+	remaining_length = url_length - (size_t)(*cursor - url);
+	if (remaining_length) {
+		result = memmem(*cursor,
+					remaining_length,
+					scheme_delimiter,
+					scheme_delimiter_length);
+		if (result) {
+			scheme_length = (size_t)(result - *cursor);
 
-		if (strcasecmp(scheme, "https") == 0) {
-			session->port = 443;
-			session->flags |= SESSION_FLAG_USE_TLS;
-		} else if (strcasecmp(scheme, "http") == 0) {
-			session->port = 80;
-		} else {
-			g_free(scheme);
+			if (scheme)
+				*scheme = g_strndup(*cursor, scheme_length);
+
+			*cursor += scheme_length + scheme_delimiter_length;
+		} else if (scheme)
+			*scheme = NULL;
+	} else if (scheme)
+		*scheme = NULL;
+
+	return 0;
+}
+
+static int parse_url_host(const char *url, size_t url_length,
+						const char **cursor,
+						char **host)
+{
+	static char port_delimiter = ':';
+	static char path_delimiter = '/';
+	size_t remaining_length;
+	size_t host_length	= 0;
+	const char *result;
+	const char *opening_bracket;
+	const char *closing_bracket;
+	int err = 0;
+
+	if (!url || !url_length || !cursor)
+		return -EINVAL;
+
+	/*
+	 * Since it's the easiest to detect, first rule out an IPv6
+	 * address. The only reliably way to do so is to search for the
+	 * delimiting '[' and ']'. Searching for ':' may incorrectly yield
+	 * one of the other forms above (for example, (2), (5), or (7)).
+	 */
+	remaining_length = url_length - (size_t)(*cursor - url);
+
+	opening_bracket = memchr(*cursor, '[', remaining_length);
+	if (opening_bracket) {
+		/*
+		 * We found an opening bracket; this might be an IPv6
+		 * address. Search for its peer closing bracket.
+		 */
+		remaining_length = url_length - (size_t)(opening_bracket - url);
+
+		closing_bracket = memchr(opening_bracket,
+								']',
+								remaining_length);
+		if (!closing_bracket)
 			return -EINVAL;
-		}
+
+		/*
+		 * Assign the first character of the IPv6 address after the
+		 * opening bracket up to, but not including, the closing
+		 * bracket to the host name.
+		 */
+		host_length = closing_bracket - opening_bracket - 1;
+
+		if (host_length && host)
+			*host = g_strndup(opening_bracket + 1, host_length);
 	} else {
-		host = scheme;
-		session->port = 80;
+		/*
+		 * At this point, we either have an IPv4 address or a host
+		 * name, maybe with a port and maybe with a path.
+		 *
+		 * Whether we have a port or not, we definitively know where
+		 * the IPv4 address or host name ends. If we have a port, it
+		 * ends at the port delimiter, ':'. If we don't have a port,
+		 * then it ends at the end of the string or at the path
+		 * delimiter, if any.
+		 */
+		result = memchr(*cursor, port_delimiter, remaining_length);
+
+		/*
+		 * There was no port delimiter; attempt to find a path
+		 * delimiter.
+		 */
+		if (!result)
+			result = memchr(*cursor, path_delimiter, remaining_length);
+
+		/*
+		 * Whether stopping at the port or path delimiter, if we had a
+		 * result, the end of the host is the span from the cursor to
+		 * that result. Otherwise, it is simply the remaining length
+		 * of the string.
+		 */
+		if (result)
+			host_length = result - *cursor;
+		else
+			host_length = remaining_length;
+
+		if (host_length && host)
+			*host = g_strndup(*cursor, host_length);
 	}
 
-	path = strchr(host, '/');
-	if (path)
-		*(path++) = '\0';
-
-	if (!proxy)
-		session->request = g_strdup_printf("/%s", path ? path : "");
+	if (!host_length)
+		err = -EINVAL;
 	else
-		session->request = g_strdup(url);
+		*cursor += host_length;
 
-	port = strrchr(host, ':');
-	if (port) {
-		char *end;
-		int tmp = strtol(port + 1, &end, 10);
+	return err;
+}
 
-		if (*end == '\0') {
-			*port = '\0';
-			session->port = tmp;
+static int parse_url_port(const char *url, size_t url_length,
+						const char **cursor,
+						int16_t *port)
+{
+	static char port_delimiter = ':';
+	static const size_t port_delimiter_length = 1;
+	const char *result;
+	size_t remaining_length;
+	size_t port_length = 0;
+	char *end;
+	unsigned long tmp_port;
+
+	if (!url || !url_length || !cursor)
+		return -EINVAL;
+
+	remaining_length = url_length - (size_t)(*cursor - url);
+
+	result = memchr(*cursor, port_delimiter, remaining_length);
+	if (result) {
+		tmp_port = strtoul(result + port_delimiter_length, &end, 10);
+		if (tmp_port == ULONG_MAX)
+			return -ERANGE;
+		else if (tmp_port > UINT16_MAX)
+			return -ERANGE;
+		else if (result + port_delimiter_length == end)
+			return -EINVAL;
+
+		port_length = end - (result + port_delimiter_length);
+
+		*cursor += port_length;
+	} else
+		tmp_port = -1;
+
+	if (port)
+		*port = (int16_t)tmp_port;
+
+	return 0;
+}
+
+static int parse_url_host_and_port(const char *url, size_t url_length,
+						const char **cursor,
+						char **host,
+						int16_t *port)
+{
+	g_autofree char *temp_host = NULL;
+	int err = 0;
+
+	if (!url || !url_length || !cursor)
+		return -EINVAL;
+
+	/* Attempt to handle the host component. */
+
+	err = parse_url_host(url, url_length, cursor, &temp_host);
+	if (err != 0)
+		goto done;
+
+	/* Attempt to handle the port component. */
+
+	err = parse_url_port(url, url_length, cursor, port);
+	if (err != 0)
+		goto done;
+
+	if (host)
+		*host = g_steal_pointer(&temp_host);
+
+done:
+	return err;
+}
+
+static int parse_url_path(const char *url, size_t url_length,
+						const char **cursor,
+						char **path)
+{
+	static char path_delimiter = '/';
+	static const size_t path_delimiter_length = 1;
+	const char *result;
+	size_t remaining_length;
+	size_t path_length = 0;
+
+	if (!url || !url_length || !cursor)
+		return -EINVAL;
+
+	remaining_length = url_length - (size_t)(*cursor - url);
+
+	result = memchr(*cursor, path_delimiter, remaining_length);
+	if (result) {
+		path_length = url_length -
+			(size_t)(result + path_delimiter_length - url);
+
+		if (path)
+			*path = g_strndup(result + path_delimiter_length, path_length);
+
+		*cursor += path_length + path_delimiter_length;
+	} else if (path)
+		*path = NULL;
+
+	return 0;
+}
+
+static int parse_url_components(const char *url,
+						char **scheme,
+						char **host,
+						int16_t *port,
+						char **path)
+{
+	size_t total_length;
+	const char *p;
+	g_autofree char *temp_scheme = NULL;
+	g_autofree char *temp_host = NULL;
+	int err = 0;
+
+	if (!url)
+		return -EINVAL;
+
+	p = url;
+
+	total_length = strlen(p);
+	if (!total_length)
+		return -EINVAL;
+
+	/* Skip any leading space, if any. */
+
+	while (g_ascii_isspace(*p))
+		p++;
+
+	/* Attempt to handle the scheme component. */
+
+	err = parse_url_scheme(url, total_length, &p, &temp_scheme);
+	if (err != 0)
+		goto done;
+
+	/* Attempt to handle the host component. */
+
+	err = parse_url_host_and_port(url, total_length, &p, &temp_host, port);
+	if (err != 0)
+		goto done;
+
+	/* Attempt to handle the path component. */
+
+	err = parse_url_path(url, total_length, &p, path);
+	if (err != 0)
+		goto done;
+
+	if (scheme)
+		*scheme = g_steal_pointer(&temp_scheme);
+
+	if (host)
+		*host = g_steal_pointer(&temp_host);
+
+done:
+	return err;
+}
+
+static int parse_request_url(struct web_session *session,
+				const char *request_url, bool has_proxy_url)
+{
+	g_autofree char *scheme = NULL;
+	g_autofree char *host = NULL;
+	g_autofree char *path = NULL;
+	int16_t port = -1;
+	int err = 0;
+
+	if (!session || !request_url)
+		return -EINVAL;
+
+	/* Parse the request URL components. */
+
+	err = parse_url_components(request_url,
+			&scheme,
+			&host,
+			&port,
+			&path);
+	if (err != 0)
+		goto done;
+
+	/*
+	 * Handle the URL scheme, if any, for the session, defaulting to
+	 * the "http" scheme and port 80.
+	 */
+	if (scheme) {
+		if (g_ascii_strcasecmp(scheme, "https") == 0)
+			session->port = 443;
+		else if (g_ascii_strcasecmp(scheme, "http") == 0)
+			session->port = 80;
+		else {
+			err = -EINVAL;
+			goto done;
 		}
+	} else
+		session->port = 80;
 
-		if (!proxy)
+	/* Handle the URL host and port, if any, for the session. */
+
+	if (port != -1) {
+		session->port = port;
+
+		if (!has_proxy_url)
 			session->host = g_strdup(host);
 		else
-			session->host = g_strdup_printf("%s:%u", host, tmp);
+			session->host = g_strdup_printf("%s:%u", host, port);
 	} else
 		session->host = g_strdup(host);
 
-	g_free(scheme);
+	/* Handle the URL path, if any, for the session. */
 
-	if (!proxy)
-		return 0;
+	if (!has_proxy_url)
+		session->request = g_strdup_printf("/%s", path ? path : "");
+	else
+		session->request = g_strdup(request_url);
 
-	scheme = g_strdup(proxy);
-	if (!scheme)
+done:
+	return err;
+}
+
+static int parse_proxy_url(struct web_session *session, const char *proxy_url)
+{
+	const char *p;
+	size_t proxy_length;
+	g_autofree char *scheme = NULL;
+	g_autofree char *host = NULL;
+	int16_t port = -1;
+	int err = 0;
+
+	if (!session || !proxy_url)
 		return -EINVAL;
 
-	host = strstr(proxy, "://");
-	if (host) {
-		*host = '\0';
-		host += 3;
+	/*
+	 * Parse the proxy URL scheme, host, and port, the only three
+	 * components we care about.
+	 */
+	p = proxy_url;
+	proxy_length = strlen(p);
 
-		if (strcasecmp(scheme, "http") != 0) {
-			g_free(scheme);
-			return -EINVAL;
-		}
-	} else
-		host = scheme;
+	err = parse_url_scheme(proxy_url,
+			proxy_length,
+			&p,
+			&scheme);
+	if (err != 0)
+		goto done;
 
-	path = strchr(host, '/');
-	if (path)
-		*(path++) = '\0';
+	err = parse_url_host_and_port(proxy_url,
+			proxy_length,
+			&p,
+			&host,
+			&port);
+	if (err != 0)
+		goto done;
 
-	port = strrchr(host, ':');
-	if (port) {
-		char *end;
-		int tmp = strtol(port + 1, &end, 10);
-
-		if (*end == '\0') {
-			*port = '\0';
-			session->port = tmp;
-		}
+	/*
+	 * Handle the proxy URL scheme, if any, for the session. Only
+	 * "http" is allowed.
+	 */
+	if (scheme && g_ascii_strcasecmp(scheme, "http") != 0) {
+		err = -EINVAL;
+		goto done;
 	}
 
-	session->address = g_strdup(host);
+	/*
+	 * Handle the proxy URL host and port for the session.
+	 */
+	if (host)
+		session->address = host;
 
-	g_free(scheme);
+	if (port != -1)
+		session->port = port;
 
-	return 0;
+done:
+	return err;
+}
+
+static int parse_request_and_proxy_urls(struct web_session *session,
+				const char *url, const char *proxy)
+{
+	const bool has_proxy_url = (proxy != NULL);
+	int err = 0;
+
+	if (!session || !url)
+		return -EINVAL;
+
+	/* Parse and handle the request URL */
+
+	err = parse_request_url(session, url, has_proxy_url);
+	if (err != 0)
+		goto done;
+
+	if (!has_proxy_url)
+		goto done;
+
+	/* Parse and handle the proxy URL */
+
+	err = parse_proxy_url(session, proxy);
+	if (err != 0)
+		goto done;
+
+done:
+	return err;
 }
 
 static void handle_resolved_address(struct web_session *session)
