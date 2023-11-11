@@ -58,6 +58,7 @@ static unsigned int vpn_autoconnect_id = 0;
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 static bool enable_online_to_ready_transition = false;
+static unsigned int online_check_connect_timeout_ms = 0;
 static unsigned int online_check_initial_interval = 0;
 static unsigned int online_check_max_interval = 0;
 static const char *online_check_timeout_interval_style = NULL;
@@ -1700,7 +1701,8 @@ static void redo_wispr(struct connman_service *service,
 		service, connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type));
 
-	__connman_wispr_start(service, type, complete_online_check);
+	__connman_wispr_start(service, type,
+			online_check_connect_timeout_ms, complete_online_check);
 
 	// Release the reference to the service taken when
 	// g_timeout_add_seconds was invoked with the callback
@@ -2011,7 +2013,8 @@ void __connman_service_wispr_start(struct connman_service *service,
 		service->online_check_interval_ipv6 =
 					online_check_initial_interval;
 
-	__connman_wispr_start(service, type, complete_online_check);
+	__connman_wispr_start(service, type,
+			online_check_connect_timeout_ms, complete_online_check);
 }
 
 static void address_updated(struct connman_service *service,
@@ -8495,6 +8498,9 @@ int __connman_service_init(void)
 		online_check_timeout_compute_func = online_check_timeout_compute_fibonacci;
 	else
 		online_check_timeout_compute_func = online_check_timeout_compute_geometric;
+
+	online_check_connect_timeout_ms =
+		connman_setting_get_uint("OnlineCheckConnectTimeout");
 
 	online_check_initial_interval =
 		connman_setting_get_uint("OnlineCheckInitialInterval");

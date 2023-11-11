@@ -861,6 +861,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		goto done;
 	case GWEB_HTTP_STATUS_CODE_BAD_REQUEST:
 	case GWEB_HTTP_STATUS_CODE_NOT_FOUND:
+	case GWEB_HTTP_STATUS_CODE_REQUEST_TIMEOUT:
 		wp_context->cb(wp_context->service, wp_context->type, false);
 
 		break;
@@ -967,7 +968,8 @@ static gboolean no_proxy_callback(gpointer user_data)
 	return FALSE;
 }
 
-static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
+static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context,
+						guint connect_timeout_ms)
 {
 	enum connman_service_proxy_method proxy_method;
 	char *interface = NULL;
@@ -1011,6 +1013,8 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context)
 
 	if (getenv("CONNMAN_WEB_DEBUG"))
 		g_web_set_debug(wp_context->web, web_debug, "WEB");
+
+	g_web_set_connect_timeout(wp_context->web, connect_timeout_ms);
 
 	if (wp_context->type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		g_web_set_address_family(wp_context->web, AF_INET);
@@ -1069,15 +1073,17 @@ done:
 
 int __connman_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type,
+					guint connect_timeout_ms,
 					__connman_wispr_cb_t callback)
 {
 	struct connman_wispr_portal_context *wp_context = NULL;
 	struct connman_wispr_portal *wispr_portal = NULL;
 	int index, err;
 
-	DBG("service %p (%s) type %d (%s) callback %p",
+	DBG("service %p (%s) type %d (%s) connect_timeout %ums callback %p",
 		service, connman_service_get_identifier(service),
-		type, __connman_ipconfig_type2string(type), callback);
+		type, __connman_ipconfig_type2string(type),
+		connect_timeout_ms, callback);
 
 	if (!wispr_portal_hash || !callback)
 		return -EINVAL;
@@ -1137,7 +1143,7 @@ int __connman_wispr_start(struct connman_service *service,
 	else
 		wispr_portal->ipv6_context = wp_context;
 
-	err = wispr_portal_detect(wp_context);
+	err = wispr_portal_detect(wp_context, connect_timeout_ms);
 	if (err)
 		goto free_wp;
 	return 0;
