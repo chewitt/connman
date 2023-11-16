@@ -1472,8 +1472,8 @@ static bool check_proxy_setup(struct connman_service *service)
 		return true;
 
 	if (__connman_wpad_start(service) < 0) {
-		service->proxy = CONNMAN_SERVICE_PROXY_METHOD_DIRECT;
-		__connman_notifier_proxy_changed(service);
+		connman_service_set_proxy_method(service,
+			CONNMAN_SERVICE_PROXY_METHOD_DIRECT);
 		return true;
 	}
 
