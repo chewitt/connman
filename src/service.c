@@ -7421,11 +7421,11 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 	if (old_state == new_state)
 		return -EALREADY;
 
-	DBG("service %p (%s) old state %d (%s) new state %d (%s) type %d (%s)",
+	DBG("service %p (%s) type %d (%s) old state %d (%s) new state %d (%s)",
 		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
 		old_state, state2string(old_state),
-		new_state, state2string(new_state),
-		type, __connman_ipconfig_type2string(type));
+		new_state, state2string(new_state));
 
 	switch (new_state) {
 	case CONNMAN_SERVICE_STATE_UNKNOWN:
