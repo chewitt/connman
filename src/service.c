@@ -55,6 +55,15 @@ static GHashTable *passphrase_requested = NULL;
 static GSList *counter_list = NULL;
 static unsigned int autoconnect_id = 0;
 static unsigned int vpn_autoconnect_id = 0;
+/**
+ *  A weak reference to the current default service (that is, has the
+ *  default route) used to compare against another service when the
+ *  default service has potentially changed.
+ *
+ *  @sa connman_service_get_default
+ *  @sa connman_service_is_default
+ *
+ */
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
 static bool enable_online_to_ready_transition = false;
