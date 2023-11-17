@@ -6243,7 +6243,7 @@ enum connman_service_type connman_service_get_type(const struct connman_service 
  *
  * Get network interface of service
  */
-char *connman_service_get_interface(struct connman_service *service)
+char *connman_service_get_interface(const struct connman_service *service)
 {
 	int index;
 

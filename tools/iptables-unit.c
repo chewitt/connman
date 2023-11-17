@@ -624,7 +624,7 @@ struct connman_service {
 	char *dummy;
 };
 
-char *connman_service_get_interface(struct connman_service *service)
+char *connman_service_get_interface(const struct connman_service *service)
 {
 	return "eth0";
 }

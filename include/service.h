@@ -116,7 +116,7 @@ void connman_service_unref_debug(struct connman_service *service,
 
 enum connman_service_type connman_service_get_type(const struct connman_service *service);
 enum connman_service_state connman_service_get_state(const struct connman_service *service);
-char *connman_service_get_interface(struct connman_service *service);
+char *connman_service_get_interface(const struct connman_service *service);
 
 const char *connman_service_get_identifier(const struct connman_service *service);
 const char *connman_service_get_domainname(const struct connman_service *service);
