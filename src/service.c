@@ -1926,6 +1926,40 @@ static void reschedule_online_check(struct connman_service *service,
 		online_check_state->interval++;
 }
 
+/**
+ *  @brief
+ *    Handle the successful completion of an "online" HTTP-based
+ *    Internet reachability check for the specified network service
+ *    and IP configuration type.
+ *
+ *  This handles the completion of a successful "online" HTTP-based
+ *  Internet reachability check for the specified network service and
+ *  IP configuration type. This effectively "bookends" an earlier
+ *  #__connman_service_wispr_start.
+ *
+ *  @param[in,out]  service             A pointer to the mutable service
+ *                                      for which to handle a
+ *                                      successful previously-requested
+ *                                      online check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which to handle a successful
+ *                                      previously-requested online
+ *                                      check.
+ *  @param[in,out]  online_check_state  A pointer to the online check
+ *                                      state for @a service
+ *                                      associated with @a type.
+ *  @param[in]      oneshot             A Boolean indicating whether the
+ *                                      online check mode is
+ *                                      "one-shot" (true) or
+ *                                      "continuous" (false).
+ *
+ *  @returns
+ *    True if another online check should be scheduled; otherwise,
+ *    false.
+ *
+ *  @sa handle_online_check_failure
+ *
+ */
 static bool handle_online_check_success(struct connman_service *service,
 				enum connman_ipconfig_type type,
 				struct online_check_state *online_check_state,
@@ -1950,6 +1984,47 @@ static bool handle_online_check_success(struct connman_service *service,
 	return reschedule;
 }
 
+/**
+ *  @brief
+ *    Handle the failed completion of an "online" HTTP-based
+ *    Internet reachability check for the specified network service
+ *    and IP configuration type.
+ *
+ *  This handles the completion of a failed "online" HTTP-based
+ *  Internet reachability check for the specified network service and
+ *  IP configuration type. This effectively "bookends" an earlier
+ *  #__connman_service_wispr_start.
+ *
+ *  @param[in,out]  service             A pointer to the mutable service
+ *                                      for which to handle a
+ *                                      failed previously-requested
+ *                                      online check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which to handle a failed
+ *                                      previously-requested online
+ *                                      check.
+ *  @param[in]      ipconfig_state      The current @a type IP
+ *                                      configuration state for @a
+ *                                      service.
+ *  @param[in,out]  online_check_state  A pointer to the online check
+ *                                      state for @a service
+ *                                      associated with @a type.
+ *  @param[in]      oneshot             A Boolean indicating whether the
+ *                                      online check mode is
+ *                                      "one-shot" (true) or
+ *                                      "continuous" (false).
+ *  @param[in]      err                 The error status associated with
+ *                                      the failed previously-requested
+ *                                      online check. This is expected
+ *                                      to be less than zero ('< 0').
+ *
+ *  @returns
+ *    True if another online check should be scheduled; otherwise,
+ *    false.
+ *
+ *  @sa handle_online_check_success
+ *
+ */
 static bool handle_online_check_failure(struct connman_service *service,
 				enum connman_ipconfig_type type,
 				enum connman_service_state ipconfig_state,
