@@ -1881,8 +1881,8 @@ static gboolean redo_wispr_ipv6(gpointer user_data)
  *
  */
 static void reschedule_online_check(struct connman_service *service,
-				enum connman_ipconfig_type type,
-				struct online_check_state *online_check_state)
+			enum connman_ipconfig_type type,
+			struct online_check_state *online_check_state)
 {
 	GSourceFunc redo_func;
 	guint seconds;
@@ -1924,6 +1924,72 @@ static void reschedule_online_check(struct connman_service *service,
 	 */
 	if (online_check_state->interval < online_check_max_interval)
 		online_check_state->interval++;
+}
+
+static bool handle_online_check_success(struct connman_service *service,
+				enum connman_ipconfig_type type,
+				struct online_check_state *online_check_state,
+				bool oneshot)
+{
+	const bool reschedule = !oneshot;
+
+	DBG("service %p (%s) type %d (%s) "
+		"one-shot %u\n",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		oneshot);
+
+	__connman_service_ipconfig_indicate_state(service,
+		CONNMAN_SERVICE_STATE_ONLINE,
+		type);
+
+	if (!oneshot)
+		online_check_state->interval = online_check_max_interval;
+
+	return reschedule;
+}
+
+static bool handle_online_check_failure(struct connman_service *service,
+				enum connman_ipconfig_type type,
+				enum connman_service_state ipconfig_state,
+				struct online_check_state *online_check_state,
+				bool oneshot,
+				int err)
+{
+	bool reschedule = false;
+
+	DBG("service %p (%s) type %d (%s) "
+		"one-shot %u err %d (%s)\n",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		oneshot, err, strerror(-err));
+
+	/*
+	 * If this completion closure was a failure with error status
+	 * -ECANCELED, then it was canceled by #__connman_wispr_cancel.
+	 * Simply ignore it and DO NOT reschedule; another check will be
+	 * along to replace the canceled one.
+	 */
+	if (err == -ECANCELED) {
+		DBG("online check was canceled; no action taken");
+
+		goto done;
+	}
+
+	if (oneshot)
+		reschedule = true;
+	else {
+		if (service_downgrade_online_state(service))
+			online_check_state->interval =
+				online_check_initial_interval;
+
+		reschedule = connman_service_is_default(service);
+	}
+
+done:
+	return reschedule;
 }
 
 /**
@@ -1979,46 +2045,42 @@ static void complete_online_check(struct connman_service *service,
 					int err)
 {
 	struct online_check_state *online_check_state;
+	enum connman_service_state *ipconfig_state;
+	bool reschedule = false;
 
-	DBG("service %p (%s) type %d (%s) success %d err %d (%s)\n",
+	DBG("service %p (%s) type %d (%s) "
+		"success %u err %d (%s)\n",
 		service,
 		connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type),
 		success, err, strerror(-err));
 
-	if (!success && err == -ECANCELED) {
-		DBG("online check was canceled; no action taken");
-		return;
-	}
-
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		online_check_state = &service->online_check_state_ipv4;
-	else
+		ipconfig_state = &service->state_ipv4;
+	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
 		online_check_state = &service->online_check_state_ipv6;
+		ipconfig_state = &service->state_ipv6;
+	} else
+		return;
 
-	if (success) {
-		__connman_service_ipconfig_indicate_state(service,
-			CONNMAN_SERVICE_STATE_ONLINE,
-			type);
+	if (success)
+		reschedule = handle_online_check_success(service,
+					 type,
+					 online_check_state,
+					 !enable_online_to_ready_transition);
+	else
+		reschedule = handle_online_check_failure(service,
+					 type,
+					 *ipconfig_state,
+					 online_check_state,
+					 !enable_online_to_ready_transition,
+					 err);
 
-		if (!enable_online_to_ready_transition)
-			return;
-	} else if (!enable_online_to_ready_transition)
-		goto reschedule;
+	DBG("reschedule online check %u", reschedule);
 
-	if (success) {
-		online_check_state->interval = online_check_max_interval;
-	} else {
-		if (service_downgrade_online_state(service))
-			online_check_state->interval =
-				online_check_initial_interval;
-		if (service != connman_service_get_default()) {
-			return;
-		}
-	}
-
-reschedule:
-	reschedule_online_check(service, type, online_check_state);
+	if (reschedule)
+		reschedule_online_check(service, type, online_check_state);
 }
 
 /**
