@@ -1341,6 +1341,41 @@ free_wp:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Cancel a HTTP-based Internet reachability check for the specified
+ *    network service IP configuration type.
+ *
+ *  This attempts to cancel a HTTP-based Internet reachability check
+ *  for the specified network service IP configuration type.
+ *
+ *  If a matching HTTP-based Internet reachability check is found, the
+ *  original callback specified with #__connman_wispr_start will be
+ *  invoked with a success value of zero ('0') or false and an error
+ *  value of -ECANCELED.
+ *
+ *  @param[in,out]  service             A pointer to the mutable network
+ *                                      service for which to cancel the
+ *                                      reachability check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which the reachability check
+ *                                      is to be cancelled.
+ *
+ *  @retval  0            If a matching HTTP-based Internet reachability
+ *                        check was successfully cancelled.
+ *  @retval  -EINVAL      If the IP configuration type is not X or Y or
+ *                        if the network interface index associated
+ *                        with @a service is invalid.
+ *  @retval  -ENOENT      If a matching HTTP-based Internet reachability
+ *                        check could not be found.
+ *  @retval  -EOPNOTSUPP  If HTTP-based Internet reachability checks are
+ *                        not supported for the technology type
+ *                        associated with @a service.
+ *
+ *  @sa __connman_wispr_start
+ *  @sa __connman_wispr_stop
+ *
+ */
 int __connman_wispr_cancel(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
