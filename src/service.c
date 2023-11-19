@@ -1559,11 +1559,11 @@ static guint online_check_timeout_compute_geometric(unsigned int interval)
 /**
  *  @brief
  *    Cancel any "online" HTTP-based Internet reachability checks for
- *    the specified network service.
+ *    the specified network service IP configuration type.
  *
  *  This cancels any current or pending IPv4 and/or IPv6 "online"
  *  HTTP-based Internet reachability checks for the specified network
- *  service.
+ *  service IP configuration type.
  *
  *  @note
  *    Any lingering WISPr portal reachability context will be lazily
@@ -1574,6 +1574,9 @@ static guint online_check_timeout_compute_geometric(unsigned int interval)
  *                           for which any current or pending IPv4 or
  *                           IPv6 "online" reachability checks should
  *                           be canceled.
+ *  @param[in]      type     The IP configuration type for which the
+ *                           "online" reachability check is to be
+ *                           canceled.
  *
  *  @sa start_online_check
  *  @sa complete_online_check
@@ -1581,14 +1584,18 @@ static guint online_check_timeout_compute_geometric(unsigned int interval)
  *  @sa __connman_wispr_stop
  *
  */
-static void cancel_online_check(struct connman_service *service)
+static void cancel_online_check(struct connman_service *service,
+				enum connman_ipconfig_type type)
 {
-	DBG("service %p (%s) online_timeout_ipv4 %d online_timeout_ipv6 %d",
+	DBG("service %p (%s) type %d (%s) "
+		"online_timeout_ipv4 %d online_timeout_ipv6 %d",
 		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
 		service->online_timeout_ipv4,
 		service->online_timeout_ipv6);
 
-	if (service->online_timeout_ipv4) {
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
+		service->online_timeout_ipv4) {
 		g_source_remove(service->online_timeout_ipv4);
 		service->online_timeout_ipv4 = 0;
 
@@ -1598,8 +1605,8 @@ static void cancel_online_check(struct connman_service *service)
 		 * now-cancelled scheduled online check.
 		 */
 		connman_service_unref(service);
-	}
-	if (service->online_timeout_ipv6) {
+	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
+		service->online_timeout_ipv6) {
 		g_source_remove(service->online_timeout_ipv6);
 		service->online_timeout_ipv6 = 0;
 
@@ -1683,7 +1690,7 @@ static void start_online_check(struct connman_service *service,
 		return;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 || check_proxy_setup(service)) {
-		cancel_online_check(service);
+		cancel_online_check(service, type);
 		__connman_service_wispr_start(service, type);
 	}
 }
@@ -7185,7 +7192,7 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 
 	if (is_connected(old_state) && !is_connected(new_state)) {
 		nameserver_remove_all(service, type);
-		cancel_online_check(service);
+		cancel_online_check(service, type);
 	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
