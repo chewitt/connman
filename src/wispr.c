@@ -1072,6 +1072,25 @@ done:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Return whether WISPr requests / HTTP-based Internet reachability
+ *    checks are supported.
+ *
+ *  This determines whether WISPr requests / HTTP-based Internet
+ *  reachability check are supported for the specified network service
+ *  based on its associated technology type.
+ *
+ *  @param[in]  service  A pointer to the immutable network service
+ *                       for which to check WISPr requests / HTTP-based
+ *                       Internet reachability check support.
+ *
+ *  @returns
+ *    True if the network service technology type supports WISPr
+ *    requests / HTTP-based Internet reachability checks; otherwise,
+ *    false.
+ *
+ */
 static bool is_wispr_supported(const struct connman_service *service)
 {
 	if (!service)
