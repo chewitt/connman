@@ -534,6 +534,8 @@ int __connman_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					guint connect_timeout_ms,
 					__connman_wispr_cb_t callback);
+int __connman_wispr_cancel(struct connman_service *service,
+					enum connman_ipconfig_type type);
 void __connman_wispr_stop(struct connman_service *service);
 
 #include <connman/technology.h>

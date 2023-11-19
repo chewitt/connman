@@ -1341,6 +1341,61 @@ free_wp:
 	return err;
 }
 
+int __connman_wispr_cancel(struct connman_service *service,
+					enum connman_ipconfig_type type)
+{
+	struct connman_wispr_portal_context *wp_context = NULL;
+	struct connman_wispr_portal *wispr_portal = NULL;
+	int index;
+
+	DBG("service %p (%s) type %d (%s)",
+		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type));
+
+	if (!is_wispr_supported(service))
+		return -EOPNOTSUPP;
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -EINVAL;
+
+	DBG("index %d", index);
+
+	if (!wispr_portal_hash)
+		return -ENOENT;
+
+	wispr_portal = g_hash_table_lookup(wispr_portal_hash,
+					GINT_TO_POINTER(index));
+
+	DBG("wispr_portal %p", wispr_portal);
+
+	if (!wispr_portal)
+		return -ENOENT;
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		wp_context = wispr_portal->ipv4_context;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		wp_context = wispr_portal->ipv6_context;
+	else
+		return -EINVAL;
+
+	DBG("wp_context %p", wp_context);
+
+	if (!wp_context)
+		return -ENOENT;
+
+	cancel_connman_wispr_portal_context(wp_context);
+
+	wp_context->cb(wp_context->service,
+			wp_context->type,
+			false,
+			-ECANCELED);
+
+	wispr_portal_context_unref(wp_context);
+
+	return 0;
+}
+
 /**
  *  @brief
  *    Stop all HTTP-based Internet reachability checks for the specified
