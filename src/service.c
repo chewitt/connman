@@ -163,7 +163,8 @@ static void vpn_auto_connect(void);
 static void trigger_autoconnect(struct connman_service *service);
 static void complete_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
-					bool success);
+					bool success,
+					int err);
 static bool service_downgrade_online_state(struct connman_service *service);
 
 struct find_data {
@@ -1902,6 +1903,11 @@ static void reschedule_online_check(struct connman_service *service,
  *                           check.
  *  @param[in]      success  A Boolean indicating whether the previously-
  *                           requested online check was successful.
+ *  @param[in]      err      The error status associated with previously-
+ *                           requested online check. This is expected
+ *                           to be zero ('0') if @a success is @a true
+ *                           and less than zero ('< 0') if @a success
+ *                           is @a false.
  *
  *  @sa cancel_online_check
  *  @sa start_online_check
@@ -1911,16 +1917,17 @@ static void reschedule_online_check(struct connman_service *service,
  */
 static void complete_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
-					bool success)
+					bool success,
+					int err)
 {
 	unsigned int *interval;
 	guint *timeout;
 
-	DBG("service %p (%s) type %d (%s) success %d\n",
+	DBG("service %p (%s) type %d (%s) success %d err %d (%s)\n",
 		service,
 		connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type),
-		success);
+		success, err, strerror(-err));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;

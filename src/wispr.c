@@ -564,7 +564,7 @@ static void portal_manage_success_status(GWebResult *result,
 				&str))
 		connman_info("Client-Timezone: %s", str);
 
-	wp_context->cb(service, type, true);
+	wp_context->cb(service, type, true, 0);
 }
 
 static bool wispr_route_request(const char *address, int ai_family,
@@ -618,6 +618,8 @@ static bool wispr_route_request(const char *address, int ai_family,
 static void wispr_portal_request_portal(
 		struct connman_wispr_portal_context *wp_context)
 {
+	int err = 0;
+
 	DBG("wispr/portal context %p service %p (%s) type %d (%s)",
 		wp_context,
 		wp_context->service,
@@ -634,10 +636,13 @@ static void wispr_portal_request_portal(
 					wp_context->status_url,
 					wispr_portal_web_result,
 					wispr_route_request,
-					wp_context, NULL);
+					wp_context, &err);
 
 	if (wp_context->request_id == 0) {
-		wp_context->cb(wp_context->service, wp_context->type, false);
+		wp_context->cb(wp_context->service,
+						wp_context->type,
+						false,
+						err);
 		wispr_portal_error(wp_context);
 		wispr_portal_context_unref(wp_context);
 	}
@@ -910,11 +915,26 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		goto done;
 	case GWEB_HTTP_STATUS_CODE_BAD_REQUEST:
-	case GWEB_HTTP_STATUS_CODE_NOT_FOUND:
-	case GWEB_HTTP_STATUS_CODE_REQUEST_TIMEOUT:
-		wp_context->cb(wp_context->service, wp_context->type, false);
-
+		wp_context->cb(wp_context->service,
+				wp_context->type,
+				false,
+				-EINVAL);
 		break;
+
+	case GWEB_HTTP_STATUS_CODE_NOT_FOUND:
+		wp_context->cb(wp_context->service,
+				wp_context->type,
+				false,
+				-ENOENT);
+		break;
+
+	case GWEB_HTTP_STATUS_CODE_REQUEST_TIMEOUT:
+		wp_context->cb(wp_context->service,
+				wp_context->type,
+				false,
+				-ETIMEDOUT);
+		break;
+
 	case GWEB_HTTP_STATUS_CODE_HTTP_VERSION_NOT_SUPPORTED:
 		wispr_portal_context_ref(wp_context);
 		__connman_agent_request_browser(wp_context->service,
@@ -977,7 +997,10 @@ static void proxy_callback(const char *proxy, void *user_data)
 	if (!proxy) {
 		DBG("no valid proxy");
 
-		wp_context->cb(wp_context->service, wp_context->type, false);
+		wp_context->cb(wp_context->service,
+				wp_context->type,
+				false,
+				-EINVAL);
 
 		return;
 	}
@@ -1312,7 +1335,7 @@ int __connman_wispr_start(struct connman_service *service,
 	return 0;
 
 free_wp:
-	wp_context->cb(wp_context->service, wp_context->type, false);
+	wp_context->cb(wp_context->service, wp_context->type, false, err);
 
 	g_hash_table_remove(wispr_portal_hash, GINT_TO_POINTER(index));
 	return err;
