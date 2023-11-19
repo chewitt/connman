@@ -158,7 +158,10 @@ static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 		}
 
 		g_free(route->address);
+		route->address = NULL;
+
 		g_free(route);
+		wp_context->route_list->data = NULL;
 
 		wp_context->route_list =
 			g_slist_delete_link(wp_context->route_list,
