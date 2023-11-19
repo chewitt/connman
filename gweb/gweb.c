@@ -414,6 +414,9 @@ GWeb *g_web_ref(GWeb *web)
 	if (!web)
 		return NULL;
 
+	debug(web, "ref %d",
+		web->ref_count + 1);
+
 	__sync_fetch_and_add(&web->ref_count, 1);
 
 	return web;
@@ -423,6 +426,9 @@ void g_web_unref(GWeb *web)
 {
 	if (!web)
 		return;
+
+	debug(web, "ref %d",
+		web->ref_count - 1);
 
 	if (__sync_fetch_and_sub(&web->ref_count, 1) != 1)
 		return;
