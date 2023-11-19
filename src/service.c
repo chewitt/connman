@@ -1594,6 +1594,19 @@ static void cancel_online_check(struct connman_service *service,
 		service->online_timeout_ipv4,
 		service->online_timeout_ipv6);
 
+	/*
+	 * First, ensure that the reachability check is cancelled in the
+	 * WISPr module. This may fail, however, we ignore any such
+	 * failures as we still want to cancel any outstanding check from
+	 * this module as well.
+	 */
+	__connman_wispr_cancel(service, type);
+
+	/*
+	 * Now that the reachability check has been cancelled in the WISPr
+	 * module, cancel any outstanding check that may be scheduled in
+	 * this module.
+	 */
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
 		service->online_timeout_ipv4) {
 		g_source_remove(service->online_timeout_ipv4);
@@ -1935,6 +1948,11 @@ static void complete_online_check(struct connman_service *service,
 		connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type),
 		success, err, strerror(-err));
+
+	if (!success && err == -ECANCELED) {
+		DBG("online check was canceled; no action taken");
+		return;
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		interval = &service->online_check_interval_ipv4;
