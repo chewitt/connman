@@ -150,13 +150,15 @@ bool g_web_get_close_connection(GWeb *web);
 
 guint g_web_request_get(GWeb *web, const char *url,
 				GWebResultFunc func, GWebRouteFunc route,
-				gpointer user_data);
+				gpointer user_data, int *err);
 guint g_web_request_post(GWeb *web, const char *url,
 				const char *type, GWebInputFunc input,
-				GWebResultFunc func, gpointer user_data);
+				GWebResultFunc func, gpointer user_data,
+				int *err);
 guint g_web_request_post_file(GWeb *web, const char *url,
 				const char *type, const char *file,
-				GWebResultFunc func, gpointer user_data);
+				GWebResultFunc func, gpointer user_data,
+				int *err);
 
 bool g_web_cancel_request(GWeb *web, guint id);
 

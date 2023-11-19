@@ -531,7 +531,7 @@ static bool wispr_result(GWebResult *result, gpointer user_data)
 		printf("\n");
 
 		wispr->request = g_web_request_get(wispr->web, redirect,
-				wispr_result, wispr_route, wispr);
+				wispr_result, wispr_route, wispr, NULL);
 
 		return false;
 	}
@@ -591,7 +591,7 @@ static bool wispr_result(GWebResult *result, gpointer user_data)
 		printf("\n");
 
 		wispr->request = g_web_request_get(wispr->web, redirect,
-				wispr_result, NULL, wispr);
+				wispr_result, NULL, wispr, NULL);
 
 		return false;
 	}
@@ -608,7 +608,7 @@ static gboolean execute_login(gpointer user_data)
 
 	wispr->request = g_web_request_post(wispr->web, wispr->msg.login_url,
 					"application/x-www-form-urlencoded",
-					wispr_input, wispr_result, wispr);
+					wispr_input, wispr_result, wispr, NULL);
 
 	wispr_msg_init(&wispr->msg);
 
@@ -694,7 +694,7 @@ int main(int argc, char *argv[])
 						parser_callback, &wispr);
 
 	wispr.request = g_web_request_get(wispr.web, option_url,
-			wispr_result, wispr_route, &wispr);
+			wispr_result, wispr_route, &wispr, NULL);
 
 	if (wispr.request == 0) {
 		fprintf(stderr, "Failed to start request\n");

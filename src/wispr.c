@@ -634,7 +634,7 @@ static void wispr_portal_request_portal(
 					wp_context->status_url,
 					wispr_portal_web_result,
 					wispr_route_request,
-					wp_context);
+					wp_context, NULL);
 
 	if (wp_context->request_id == 0) {
 		wp_context->cb(wp_context->service, wp_context->type, false);
@@ -751,7 +751,7 @@ static void wispr_portal_request_wispr_login(struct connman_service *service,
 					wp_context->wispr_msg.login_url,
 					"application/x-www-form-urlencoded",
 					wispr_input, wispr_portal_web_result,
-					wp_context);
+					wp_context, NULL);
 
 	connman_wispr_message_init(&wp_context->wispr_msg);
 }
@@ -906,7 +906,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		wispr_portal_context_ref(wp_context);
 		wp_context->request_id = g_web_request_get(wp_context->web,
 				redirect, wispr_portal_web_result,
-				wispr_route_request, wp_context);
+				wispr_route_request, wp_context, NULL);
 
 		goto done;
 	case GWEB_HTTP_STATUS_CODE_BAD_REQUEST:

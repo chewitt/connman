@@ -2255,23 +2255,31 @@ static bool is_ip_address(const char *host)
 static guint do_request(GWeb *web, const char *url,
 				const char *type, GWebInputFunc input,
 				int fd, gsize length, GWebResultFunc func,
-				GWebRouteFunc route, gpointer user_data)
+				GWebRouteFunc route, gpointer user_data,
+				int *err)
 {
 	struct web_session *session;
 	const gchar *host;
+	int request_id = 0;
+	int status = 0;
 
-	if (!web || !url)
-		return 0;
+	if (!web || !url) {
+		status = -EINVAL;
+		goto done;
+	}
 
 	debug(web, "request %s", url);
 
 	session = g_try_new0(struct web_session, 1);
-	if (!session)
-		return 0;
+	if (!session) {
+		status = -ENOMEM;
+		goto done;
+	}
 
-	if (parse_request_and_proxy_urls(session, url, web->proxy) < 0) {
+	status = parse_request_and_proxy_urls(session, url, web->proxy);
+	if (status < 0) {
 		free_session(session);
-		return 0;
+		goto done;
 	}
 
 	debug(web, "proxy host %s", session->address);
@@ -2299,14 +2307,16 @@ static guint do_request(GWeb *web, const char *url,
 	session->receive_buffer = g_try_malloc(DEFAULT_BUFFER_SIZE);
 	if (!session->receive_buffer) {
 		free_session(session);
-		return 0;
+		status = -ENOMEM;
+		goto done;
 	}
 
 	session->result.headers = g_hash_table_new_full(g_str_hash, g_str_equal,
 							g_free, g_free);
 	if (!session->result.headers) {
 		free_session(session);
-		return 0;
+		status = -ENOMEM;
+		goto done;
 	}
 
 	session->receive_space = DEFAULT_BUFFER_SIZE;
@@ -2325,33 +2335,52 @@ static guint do_request(GWeb *web, const char *url,
 	} else {
 		session->resolv_action = g_resolv_lookup_hostname(web->resolv,
 					host, resolv_result, session);
-		if (session->resolv_action == 0) {
+		if (session->resolv_action <= 0) {
 			free_session(session);
-			return 0;
+			/*
+			 * While the return signature of #g_resolv_lookup_hostname
+			 * is 'guint', it overloads this, treating it as 'int' and
+			 * does potentially return -EIO. Consequently, apply the
+			 * 'int' casts to handle these cases.
+			 */
+			status = (int)session->resolv_action < 0 ?
+						(int)session->resolv_action :
+						-ENOENT;
+			goto done;
 		}
 	}
 
 	web->session_list = g_list_append(web->session_list, session);
 
-	return web->next_query_id++;
+	request_id = web->next_query_id++;
+
+done:
+	if (err)
+		*err = status;
+
+	return request_id;
 }
 
 guint g_web_request_get(GWeb *web, const char *url, GWebResultFunc func,
-		GWebRouteFunc route, gpointer user_data)
+		GWebRouteFunc route, gpointer user_data, int *err)
 {
-	return do_request(web, url, NULL, NULL, -1, 0, func, route, user_data);
+	return do_request(web, url, NULL, NULL, -1, 0,
+		func, route, user_data, err);
 }
 
 guint g_web_request_post(GWeb *web, const char *url,
 				const char *type, GWebInputFunc input,
-				GWebResultFunc func, gpointer user_data)
+				GWebResultFunc func, gpointer user_data,
+				int *err)
 {
-	return do_request(web, url, type, input, -1, 0, func, NULL, user_data);
+	return do_request(web, url, type, input, -1, 0,
+		func, NULL, user_data, err);
 }
 
 guint g_web_request_post_file(GWeb *web, const char *url,
 				const char *type, const char *file,
-				GWebResultFunc func, gpointer user_data)
+				GWebResultFunc func, gpointer user_data,
+				int *err)
 {
 	struct stat st;
 	int fd;
@@ -2365,7 +2394,7 @@ guint g_web_request_post_file(GWeb *web, const char *url,
 		return 0;
 
 	ret = do_request(web, url, type, NULL, fd, st.st_size, func, NULL,
-			user_data);
+			user_data, err);
 	if (ret == 0)
 		close(fd);
 
