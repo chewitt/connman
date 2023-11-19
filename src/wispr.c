@@ -1072,6 +1072,28 @@ done:
 	return err;
 }
 
+static bool is_wispr_supported(const struct connman_service *service)
+{
+	if (!service)
+		return false;
+
+	switch (connman_service_get_type(service)) {
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_WIFI:
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+		return true;
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_VPN:
+	case CONNMAN_SERVICE_TYPE_P2P:
+	default:
+		return false;
+	}
+}
+
 /**
  *  @brief
  *    Start a HTTP-based Internet reachability check for the specified
@@ -1132,20 +1154,8 @@ int __connman_wispr_start(struct connman_service *service,
 	if (!wispr_portal_hash || !callback)
 		return -EINVAL;
 
-	switch (connman_service_get_type(service)) {
-	case CONNMAN_SERVICE_TYPE_ETHERNET:
-	case CONNMAN_SERVICE_TYPE_WIFI:
-	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
-	case CONNMAN_SERVICE_TYPE_CELLULAR:
-	case CONNMAN_SERVICE_TYPE_GADGET:
-		break;
-	case CONNMAN_SERVICE_TYPE_UNKNOWN:
-	case CONNMAN_SERVICE_TYPE_SYSTEM:
-	case CONNMAN_SERVICE_TYPE_GPS:
-	case CONNMAN_SERVICE_TYPE_VPN:
-	case CONNMAN_SERVICE_TYPE_P2P:
+	if (!is_wispr_supported(service))
 		return -EOPNOTSUPP;
-	}
 
 	index = __connman_service_get_index(service);
 	if (index < 0)
