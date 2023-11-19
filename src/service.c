@@ -1590,11 +1590,23 @@ static void cancel_online_check(struct connman_service *service)
 	if (service->online_timeout_ipv4) {
 		g_source_remove(service->online_timeout_ipv4);
 		service->online_timeout_ipv4 = 0;
+
+		/*
+		 * This balances the retained referece made when
+		 * g_timeout_add_seconds was called to schedule this
+		 * now-cancelled scheduled online check.
+		 */
 		connman_service_unref(service);
 	}
 	if (service->online_timeout_ipv6) {
 		g_source_remove(service->online_timeout_ipv6);
 		service->online_timeout_ipv6 = 0;
+
+		/*
+		 * This balances the retained referece made when
+		 * g_timeout_add_seconds was called to schedule this
+		 * now-cancelled scheduled online check.
+		 */
 		connman_service_unref(service);
 	}
 }
