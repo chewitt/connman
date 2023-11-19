@@ -1268,6 +1268,22 @@ free_wp:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Stop all HTTP-based Internet reachability checks for the specified
+ *    network service.
+ *
+ *  This attempts to stop all HTTP-based Internet reachability checks
+ *  for the specified network service.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to stop all reachability
+ *                           checks.
+ *
+ *  @sa __connman_wispr_start
+ *  @sa __connman_wispr_cancel
+ *
+ */
 void __connman_wispr_stop(struct connman_service *service)
 {
 	struct connman_wispr_portal *wispr_portal;
