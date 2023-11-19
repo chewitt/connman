@@ -166,6 +166,24 @@ static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 	}
 }
 
+/**
+ *  @brief
+ *    Cancel a WISPr/portal request.
+ *
+ *  This attempts to cancel any outstanding request associated with
+ *  the specified WISPr/portal context. This deallocates any resources
+ *  associated with the context, except for the context itself which
+ *  requires invoking #free_connman_wispr_portal_context.
+ *
+ *  @param[in,out]  wp_context  A pointer to the mutable WISPr/portal
+ *                              context for which to cancel an outstanding
+ *                              request, whether a reachability check
+ *                              or otherwise.
+ *
+ *  @sa create_connman_wispr_portal_context
+ *  @sa free_connman_wispr_portal_context
+ *
+ */
 static void cancel_connman_wispr_portal_context(
 		struct connman_wispr_portal_context *wp_context)
 {
