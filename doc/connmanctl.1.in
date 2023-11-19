@@ -10,7 +10,7 @@ SYNOPSIS
 .BI enable \ technology\fR|offline\ |
 .BI disable \ technology\fR|offline\ |
 .BI tether \ technology\ \fRon|off\ |
-.BI tether\fR\ wifi\ on|off\  ssid\ passphrase\fR\ |
+.BI tether\fR\ wifi\ on|off\  ssid\ passphrase\ freq\fR\ |
 .BR services \ [\fIservice\fR]\ |
 .BI peers \ peer\fR\ |
 .BI scan \ technology\fR\ |
@@ -86,7 +86,7 @@ by default since tethering it usually breaks local networks. See
 for enabling.
 .PP
 .TP
-.BR tether\ wifi\ on \ |\  off \ \fIssid\ passphrase
+.BR tether\ wifi\ on \ |\  off \ \fIssid\ passphrase\ [freq]
 Enable or disable wireless tethering, as well set the SSID and passphrase.
 .PP
 .TP
