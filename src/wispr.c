@@ -166,6 +166,61 @@ static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 	}
 }
 
+static void cancel_connman_wispr_portal_context(
+		struct connman_wispr_portal_context *wp_context)
+{
+	if (!wp_context)
+		return;
+
+	DBG("wispr/portal context %p service %p (%s) type %d (%s)",
+		wp_context,
+		wp_context->service,
+		connman_service_get_identifier(wp_context->service),
+		wp_context->type,
+		__connman_ipconfig_type2string(wp_context->type));
+
+	if (wp_context->proxy_token > 0) {
+		connman_proxy_lookup_cancel(wp_context->proxy_token);
+		wp_context->proxy_token = 0;
+	}
+
+	if (wp_context->request_id > 0) {
+		g_web_cancel_request(wp_context->web, wp_context->request_id);
+		wp_context->request_id = 0;
+	}
+
+	if (wp_context->proxy_timeout > 0) {
+		g_source_remove(wp_context->proxy_timeout);
+		wp_context->proxy_timeout = 0;
+	}
+
+	if (wp_context->web) {
+		g_web_unref(wp_context->web);
+		wp_context->web = NULL;
+	}
+
+	g_free(wp_context->redirect_url);
+	wp_context->redirect_url = NULL;
+
+	if (wp_context->wispr_parser) {
+		g_web_parser_unref(wp_context->wispr_parser);
+		wp_context->wispr_parser = NULL;
+	}
+
+	connman_wispr_message_init(&wp_context->wispr_msg);
+
+	g_free(wp_context->wispr_username);
+	wp_context->wispr_username = NULL;
+
+	g_free(wp_context->wispr_password);
+	wp_context->wispr_password = NULL;
+
+	g_free(wp_context->wispr_formdata);
+	wp_context->wispr_formdata = NULL;
+
+	free_wispr_routes(wp_context);
+}
+
 static void free_connman_wispr_portal_context(
 		struct connman_wispr_portal_context *wp_context)
 {
@@ -184,30 +239,7 @@ static void free_connman_wispr_portal_context(
 			wp_context->wispr_portal->ipv6_context = NULL;
 	}
 
-	if (wp_context->proxy_token > 0)
-		connman_proxy_lookup_cancel(wp_context->proxy_token);
-
-	if (wp_context->request_id > 0)
-		g_web_cancel_request(wp_context->web, wp_context->request_id);
-
-	if (wp_context->proxy_timeout > 0)
-		g_source_remove(wp_context->proxy_timeout);
-
-	if (wp_context->web)
-		g_web_unref(wp_context->web);
-
-	g_free(wp_context->redirect_url);
-
-	if (wp_context->wispr_parser)
-		g_web_parser_unref(wp_context->wispr_parser);
-
-	connman_wispr_message_init(&wp_context->wispr_msg);
-
-	g_free(wp_context->wispr_username);
-	g_free(wp_context->wispr_password);
-	g_free(wp_context->wispr_formdata);
-
-	free_wispr_routes(wp_context);
+	cancel_connman_wispr_portal_context(wp_context);
 
 	g_free(wp_context);
 }
