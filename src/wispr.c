@@ -968,6 +968,46 @@ static gboolean no_proxy_callback(gpointer user_data)
 	return FALSE;
 }
 
+/**
+ *  @brief
+ *    Start a WISPr / portal detection request / HTTP-based Internet
+ *    reachability check for the specified WISPr / portal context.
+ *
+ *  This attempts to start a WISPr / portal detection request /
+ *  HTTP-based Internet reachability check for the network service IP
+ *  configuration type associated with the provided WISPr / portal
+ *  context with the provided connection timeout.
+ *
+ *  @param[in,out]  wp_context          A pointer to the mutable WISPr
+ *                                      / portal context to supporting
+ *                                      running the WISPr request /
+ *                                      HTTP-based Internet
+ *                                      reachability check.
+ *  param[in]       connect_timeout_ms  The time, in milliseconds, for
+ *                                      the TCP connection timeout.
+ *                                      Connections that take longer
+ *                                      than this will be aborted. A
+ *                                      value of zero ('0') indicates
+ *                                      that no explicit connection
+ *                                      timeout will be used, leaving
+ *                                      the timeout to the underlying
+ *                                      operating system and its
+ *                                      network stack.
+ *
+ *  @retval  0        If the WISPr request / HTTP-based Internet
+ *                    reachability check was successfully queued.
+ *  @retval  -EINVAL  If the network interface or network interface
+ *                    index associated with @a wp_context->service is
+ *                    invalid, if @a wp_context->service has no name
+ *                    servers, or if a proxy could not be successfully
+ *                    associated with @a wp_context->service.
+ *  @retval  -ENOMEM  If a GWeb instance could not be allocated for
+ *                    the WISPr request / HTTP-based Internet
+ *                    reachability check.
+ *
+ *  @sa __connman_wispr_start
+ *
+ */
 static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context,
 						guint connect_timeout_ms)
 {
