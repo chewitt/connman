@@ -64,7 +64,7 @@ struct connman_wispr_portal_context {
 
 	/* Portal/WISPr common */
 	GWeb *web;
-	unsigned int token;
+	unsigned int proxy_token;
 	guint request_id;
 
 	const char *status_url;
@@ -83,7 +83,7 @@ struct connman_wispr_portal_context {
 
 	GSList *route_list;
 
-	guint timeout;
+	guint proxy_timeout;
 };
 
 struct connman_wispr_portal {
@@ -184,14 +184,14 @@ static void free_connman_wispr_portal_context(
 			wp_context->wispr_portal->ipv6_context = NULL;
 	}
 
-	if (wp_context->token > 0)
-		connman_proxy_lookup_cancel(wp_context->token);
+	if (wp_context->proxy_token > 0)
+		connman_proxy_lookup_cancel(wp_context->proxy_token);
 
 	if (wp_context->request_id > 0)
 		g_web_cancel_request(wp_context->web, wp_context->request_id);
 
-	if (wp_context->timeout > 0)
-		g_source_remove(wp_context->timeout);
+	if (wp_context->proxy_timeout > 0)
+		g_source_remove(wp_context->proxy_timeout);
 
 	if (wp_context->web)
 		g_web_unref(wp_context->web);
@@ -934,7 +934,7 @@ static void proxy_callback(const char *proxy, void *user_data)
 
 	DBG("proxy %s", proxy);
 
-	wp_context->token = 0;
+	wp_context->proxy_token = 0;
 
 	proxy_server = parse_proxy(proxy);
 	if (proxy_server) {
@@ -961,7 +961,7 @@ static gboolean no_proxy_callback(gpointer user_data)
 {
 	struct connman_wispr_portal_context *wp_context = user_data;
 
-	wp_context->timeout = 0;
+	wp_context->proxy_timeout = 0;
 
 	proxy_callback("DIRECT", wp_context);
 
@@ -1049,19 +1049,20 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context,
 			proxy_method != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN) {
 		wispr_portal_context_ref(wp_context);
 
-		wp_context->token = connman_proxy_lookup(interface,
+		wp_context->proxy_token = connman_proxy_lookup(interface,
 						wp_context->status_url,
 						wp_context->service,
 						proxy_callback, wp_context);
 
-		if (wp_context->token == 0) {
+		if (wp_context->proxy_token == 0) {
 			err = -EINVAL;
 			wispr_portal_context_unref(wp_context);
 		}
-	} else if (wp_context->timeout == 0) {
+	} else if (wp_context->proxy_timeout == 0) {
 		wispr_portal_context_ref(wp_context);
 
-		wp_context->timeout = g_idle_add(no_proxy_callback, wp_context);
+		wp_context->proxy_timeout = g_idle_add(no_proxy_callback,
+						wp_context);
 	}
 
 done:
