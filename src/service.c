@@ -192,6 +192,8 @@ static void complete_online_check(struct connman_service *service,
 					bool success,
 					int err);
 static bool service_downgrade_online_state(struct connman_service *service);
+static bool connman_service_is_default(const struct connman_service *service);
+static void clear_error(struct connman_service *service);
 
 struct find_data {
 	const char *path;
@@ -4001,7 +4003,7 @@ int __connman_service_set_passphrase(struct connman_service *service,
 
 	if (service->hidden_service &&
 			service->error == CONNMAN_SERVICE_ERROR_INVALID_KEY)
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		clear_error(service);
 
 	return 0;
 }
@@ -4383,7 +4385,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 			 * have the same effect as user connecting the VPN =
 			 * clear previous error and change state to idle.
 			 */
-			set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+			clear_error(service);
 
 			if (service->state == CONNMAN_SERVICE_STATE_FAILURE) {
 				service->state = CONNMAN_SERVICE_STATE_IDLE;
@@ -4683,6 +4685,11 @@ static void set_error(struct connman_service *service,
 				DBUS_TYPE_STRING, &str);
 }
 
+static void clear_error(struct connman_service *service)
+{
+	set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+}
+
 static void remove_timeout(struct connman_service *service)
 {
 	if (service->timeout > 0) {
@@ -4724,7 +4731,7 @@ static DBusMessage *clear_property(DBusConnection *conn,
 							DBUS_TYPE_INVALID);
 
 	if (g_str_equal(name, "Error")) {
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		clear_error(service);
 
 		__connman_service_clear_error(service);
 		service_complete(service);
@@ -6804,7 +6811,7 @@ static void request_input_cb(struct connman_service *service,
 
 	if (err >= 0) {
 		/* We forget any previous error. */
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		clear_error(service);
 
 		__connman_service_connect(service,
 					CONNMAN_SERVICE_CONNECT_REASON_USER);
@@ -7026,7 +7033,7 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_READY:
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		clear_error(service);
 
 		if (service->new_service &&
 				__connman_stats_service_register(service) == 0) {
@@ -7093,7 +7100,7 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 
 	case CONNMAN_SERVICE_STATE_DISCONNECT:
-		set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
+		clear_error(service);
 
 		reply_pending(service, ECONNABORTED);
 
