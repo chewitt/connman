@@ -4659,6 +4659,24 @@ static DBusMessage *set_property(DBusConnection *conn,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
+/**
+ *  @brief
+ *    Set the specified network service "Error" property.
+ *
+ *  This sets the specified network service "Error" property to the
+ *  provided value.
+ *
+ *  @note
+ *    This function results in a D-Bus property changed signal for the
+ *    network service "Error" property.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to set the "Error" property.
+ *  @param[in]      error    The error value to set.
+ *
+ *  @sa clear_error
+ *
+ */
 static void set_error(struct connman_service *service,
 					enum connman_service_error error)
 {
@@ -4685,6 +4703,25 @@ static void set_error(struct connman_service *service,
 				DBUS_TYPE_STRING, &str);
 }
 
+/**
+ *  @brief
+ *    Clear or reset the specified network service "Error" property.
+ *
+ *  This sets the specified network service "Error" property to the
+ *  initialization value of #CONNMAN_SERVICE_ERROR_UNKNOWN,
+ *  effectively clearing or resetting the property.
+ *
+ *  @note
+ *    This function results in a D-Bus property changed signal for the
+ *    network service "Error" property.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to clear or reset the "Error"
+ *                           property.
+ *
+ *  @sa set_error
+ *
+ */
 static void clear_error(struct connman_service *service)
 {
 	set_error(service, CONNMAN_SERVICE_ERROR_UNKNOWN);
