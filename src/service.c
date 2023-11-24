@@ -2238,6 +2238,11 @@ void __connman_service_wispr_start(struct connman_service *service,
 static void address_updated(struct connman_service *service,
 			enum connman_ipconfig_type type)
 {
+	DBG("service %p (%s) type %d (%s)",
+		service,
+		connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type));
+
 	if (is_connected(service->state) &&
 			connman_service_is_default(service)) {
 		nameserver_remove_all(service, type);
