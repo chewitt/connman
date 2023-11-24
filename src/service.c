@@ -2235,6 +2235,33 @@ void __connman_service_wispr_start(struct connman_service *service,
 			online_check_connect_timeout_ms, complete_online_check);
 }
 
+/**
+ *  @brief
+ *    Handle an update to the address(es) for the specified network
+ *    service and IP configuration type.
+ *
+ *  This attempts to handle an address change or update for the
+ *  specified network service and IP configuration type if and only if
+ *  it is connected (that is, #is_connected returns true) and it is
+ *  the default service (that is, has the default route).
+ *
+ *  If the service meets those criteria, then nameservers are
+ *  refreshed, an "online" HTTP-based Internet reachability check is
+ *  initiated, and a time-of-day synchronization is requested.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which there was an address change or
+ *                           update.
+ *  @param[in]      type     The IP configuration type for @a service
+ *                           for which there was an address change or
+ *                           update.
+ *
+ *  @sa nameserver_remove_all
+ *  @sa nameserver_add_all
+ *  @sa start_online_check
+ *  @sa __connman_timeserver_sync
+ *
+ */
 static void address_updated(struct connman_service *service,
 			enum connman_ipconfig_type type)
 {
