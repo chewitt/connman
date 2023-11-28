@@ -1333,7 +1333,7 @@ void connman_network_unref_debug(struct connman_network *network,
 	network_destruct(network);
 }
 
-const char *__connman_network_get_type(struct connman_network *network)
+const char *__connman_network_get_type(const struct connman_network *network)
 {
 	return type2string(network->type);
 }
@@ -1345,7 +1345,7 @@ const char *__connman_network_get_type(struct connman_network *network)
  * Get type of network
  */
 enum connman_network_type connman_network_get_type(
-				struct connman_network *network)
+				const struct connman_network *network)
 {
 	return network->type;
 }
@@ -1356,7 +1356,7 @@ enum connman_network_type connman_network_get_type(
  *
  * Get identifier of network
  */
-const char *connman_network_get_identifier(struct connman_network *network)
+const char *connman_network_get_identifier(const struct connman_network *network)
 {
 	return network->identifier;
 }

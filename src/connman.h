@@ -623,7 +623,7 @@ int __connman_network_clear_ipconfig(struct connman_network *network,
 int __connman_network_enable_ipconfig(struct connman_network *network,
 				struct connman_ipconfig *ipconfig);
 
-const char *__connman_network_get_type(struct connman_network *network);
+const char *__connman_network_get_type(const struct connman_network *network);
 const char *__connman_network_get_group(struct connman_network *network);
 const char *__connman_network_get_ident(struct connman_network *network);
 bool __connman_network_get_weakness(struct connman_network *network);
