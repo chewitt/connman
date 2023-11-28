@@ -1327,6 +1327,31 @@ void __connman_ipconfig_set_gateway(struct connman_ipconfig *ipconfig,
 	ipconfig->address->gateway = g_strdup(gateway);
 }
 
+/**
+ *  @brief
+ *    Add, or set, the gateway, or default router, for a network
+ *    service.
+ *
+ *  This attempts to add, or set, the gateway, or default router, for
+ *  a network service using the specified IP configuration.
+ *
+ *  @param[in]  ipconfig  A pointer to the immutable IP configuration
+ *                        containing the network interface index @a
+ *                        index as the lookup key for the network
+ *                        service for which to add, or set, the
+ *                        gateway.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If the @a address field of @a ipconfig is null,
+ *                    if a cooresponding service cannot be found for
+ *                    the network interface index @a index of @a
+ *                    ipconfig, or if the network interface index
+ *                    associated with @a service is invalid.
+ *
+ *  @sa __connman_ipconfig_gateway_remove
+ *  @sa __connman_connection_gateway_add
+ *
+ */
 int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
@@ -1358,6 +1383,24 @@ int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 	return 0;
 }
 
+/**
+ *  @brief
+ *    Remove, or clear, the gateway, or default router, for a network
+ *    service.
+ *
+ *  This attempts to remove, or clear, the gateway, or default router, for
+ *  a network service using the specified IP configuration.
+ *
+ *  @param[in]  ipconfig  A pointer to the immutable IP configuration
+ *                        containing the network interface index @a
+ *                        index as the lookup key for the network
+ *                        service for which to remove, or clear, the
+ *                        gateway.
+ *
+ *  @sa __connman_ipconfig_gateway_add
+ *  @sa __connman_connection_gateway_remove
+ *
+ */
 void __connman_ipconfig_gateway_remove(const struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
