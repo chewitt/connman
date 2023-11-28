@@ -1303,7 +1303,7 @@ void __connman_ipconfig_set_broadcast(struct connman_ipconfig *ipconfig,
 	ipconfig->address->broadcast = g_strdup(broadcast);
 }
 
-const char *__connman_ipconfig_get_gateway(struct connman_ipconfig *ipconfig)
+const char *__connman_ipconfig_get_gateway(const struct connman_ipconfig *ipconfig)
 {
 	if (!ipconfig->address)
 		return NULL;
@@ -1322,7 +1322,7 @@ void __connman_ipconfig_set_gateway(struct connman_ipconfig *ipconfig,
 	ipconfig->address->gateway = g_strdup(gateway);
 }
 
-int __connman_ipconfig_gateway_add(struct connman_ipconfig *ipconfig)
+int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
 
@@ -1348,7 +1348,7 @@ int __connman_ipconfig_gateway_add(struct connman_ipconfig *ipconfig)
 	return 0;
 }
 
-void __connman_ipconfig_gateway_remove(struct connman_ipconfig *ipconfig)
+void __connman_ipconfig_gateway_remove(const struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
 
