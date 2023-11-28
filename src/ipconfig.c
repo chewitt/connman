@@ -225,12 +225,13 @@ const char *__connman_ipconfig_type2string(enum connman_ipconfig_type type)
 {
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
-	case CONNMAN_IPCONFIG_TYPE_ALL:
 		return "unknown";
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
 		return "IPv4";
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
 		return "IPv6";
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		return "IPv4 + IPv6";
 	}
 
 	return NULL;
