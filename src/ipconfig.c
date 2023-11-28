@@ -103,6 +103,11 @@ static GHashTable *ipdevice_hash = NULL;
 static GList *ipconfig_list = NULL;
 static bool is_ipv6_supported = false;
 
+static const char *maybe_null(const void *pointer)
+{
+	return pointer ? pointer : "<null>";
+}
+
 static void store_set_str(struct ipconfig_store *store,
 			const char *key, const char *val)
 
@@ -1325,8 +1330,13 @@ void __connman_ipconfig_set_gateway(struct connman_ipconfig *ipconfig,
 int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
+	g_autofree char *interface = NULL;
 
-	DBG("");
+	interface = connman_inet_ifname(ipconfig->index);
+
+	DBG("ipconfig %p type %d (%s) index %d (%s)", ipconfig,
+		ipconfig->type, __connman_ipconfig_type2string(ipconfig->type),
+		ipconfig->index, maybe_null(interface));
 
 	if (!ipconfig->address)
 		return -EINVAL;
@@ -1335,7 +1345,7 @@ int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 	if (!service)
 		return -EINVAL;
 
-	DBG("type %d gw %s peer %s", ipconfig->type,
+	DBG("gw %s peer %s",
 		ipconfig->address->gateway, ipconfig->address->peer);
 
 	if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6 ||
@@ -1351,8 +1361,13 @@ int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 void __connman_ipconfig_gateway_remove(const struct connman_ipconfig *ipconfig)
 {
 	struct connman_service *service;
+	g_autofree char *interface = NULL;
 
-	DBG("");
+	interface = connman_inet_ifname(ipconfig->index);
+
+	DBG("ipconfig %p type %d (%s) index %d (%s)", ipconfig,
+		ipconfig->type, __connman_ipconfig_type2string(ipconfig->type),
+		ipconfig->index, maybe_null(interface));
 
 	service = __connman_service_lookup_from_index(ipconfig->index);
 	if (service)
