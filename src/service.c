@@ -1410,7 +1410,7 @@ static void nameserver_del_routes(int index, char **nameservers,
 	}
 }
 
-void __connman_service_nameserver_add_routes(struct connman_service *service,
+void __connman_service_nameserver_add_routes(const struct connman_service *service,
 						const char *gw)
 {
 	int index;
@@ -1438,7 +1438,7 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 	}
 }
 
-void __connman_service_nameserver_del_routes(struct connman_service *service,
+void __connman_service_nameserver_del_routes(const struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	int index;
