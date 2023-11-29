@@ -1320,6 +1320,24 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 	}
 }
 
+/**
+ *  @brief
+ *    Handle a potential change in gateways.
+ *
+ *  This may be invoked by other modules in the event of service and
+ *  technology changes to reexamine and, if necessary, update active
+ *  network interface gateways and their associated routing table
+ *  entries.
+ *
+ *  @returns
+ *    True if an active gateway was updated; otherwise, false.
+ *
+ *  @sa __connman_connection_gateway_add
+ *  @sa __connman_connection_gateway_remove
+ *  @sa set_default_gateway
+ *  @sa unset_default_gateway
+ *
+ */
 bool __connman_connection_update_gateway(void)
 {
 	struct gateway_data *default_gateway;
@@ -1329,6 +1347,10 @@ bool __connman_connection_update_gateway(void)
 
 	DBG("");
 
+	/*
+	 * If there is no service-to-gateway data hash, then there is
+	 * nothing to update and do; simply return.
+	 */
 	if (!gateway_hash)
 		return updated;
 
