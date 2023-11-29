@@ -653,34 +653,36 @@ static int disable_gateway(struct gateway_data *data,
 	return 0;
 }
 
-static struct gateway_data *add_gateway(struct connman_service *service,
+static int add_gateway(struct connman_service *service,
 					int index, const char *gateway,
-					enum connman_ipconfig_type type)
+					enum connman_ipconfig_type type,
+					struct gateway_data **data)
 {
 	g_autofree struct gateway_data *temp_data = NULL;
 	struct gateway_config *config = NULL;
 	struct gateway_data *old;
+	int err = 0;
 
-	if (!service || index < 0 || !gateway || strlen(gateway) == 0)
-		return NULL;
+	if (!service || index < 0 || !gateway || strlen(gateway) == 0 || !data)
+		return -EINVAL;
 
 	switch (type) {
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
 		break;
 	default:
-		return NULL;
+		return -EINVAL;
 	}
 
 	temp_data = g_try_new0(struct gateway_data, 1);
 	if (!temp_data)
-		return NULL;
+		return -ENOMEM;
 
 	temp_data->index = index;
 
 	config = g_try_new0(struct gateway_config, 1);
 	if (!config)
-		return NULL;
+		return -ENOMEM;
 
 	config->gateway = g_strdup(gateway);
 	config->vpn_ip = NULL;
@@ -719,7 +721,9 @@ static struct gateway_data *add_gateway(struct connman_service *service,
 	connman_service_ref(temp_data->service);
 	g_hash_table_replace(gateway_hash, service, temp_data);
 
-	return g_steal_pointer(&temp_data);
+	*data = g_steal_pointer(&temp_data);
+
+	return err;
 }
 
 static void set_default_gateway(struct gateway_data *data,
@@ -1212,6 +1216,7 @@ int __connman_connection_gateway_add(struct connman_service *service,
 					connman_service_get_type(service);
 	int index;
 	g_autofree char *interface = NULL;
+	int err = 0;
 
 	DBG("service %p (%s) gateway %p (%s) type %d (%s) peer %p (%s)",
 		service, maybe_null(connman_service_get_identifier(service)),
@@ -1239,9 +1244,9 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	DBG("service %p index %d gateway %s vpn ip %s type %d",
 		service, index, gateway, peer, type);
 
-	new_gateway = add_gateway(service, index, gateway, type);
-	if (!new_gateway)
-		return -EINVAL;
+	err = add_gateway(service, index, gateway, type, &new_gateway);
+	if (err < 0)
+		return err;
 
 	GATEWAY_DATA_DBG("new_gateway", new_gateway);
 
@@ -1316,7 +1321,8 @@ done:
 		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_READY,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
-	return 0;
+
+	return err;
 }
 
 /**
