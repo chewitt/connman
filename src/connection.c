@@ -1597,7 +1597,7 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 {
 	struct gateway_data *data = NULL;
 	bool set_default4 = false, set_default6 = false;
-        bool do_ipv4 = false, do_ipv6 = false;
+	bool do_ipv4 = false, do_ipv6 = false;
 	int err;
 
 	DBG("service %p (%s) type %d (%s)",
