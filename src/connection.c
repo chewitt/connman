@@ -575,6 +575,46 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 	}
 }
 
+/**
+ *  @brief
+ *    Delete all gateway, or default router, default or host routes
+ *    for the gateway data.
+ *
+ *  This attempts to delete, or remove, all gateway, or default
+ *  router, default or host routes associated with the specified
+ *  gateway data.
+ *
+ *  @note
+ *    Deletions or removals are restricted to the network * interface
+ *    associated with the network interface index specified by * the
+ *    @a data @a index field.
+ *
+ *  @param[in]  data  A pointer to the mutable gateway data for which
+ *                    to delete or remove all gateway, or default
+ *                    router, default or host routes.
+ *  @param[in]  type  The IP configuration type for which the gateway,
+ *                    or default router, default or host routes are to
+ *                    be deleted or removed.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to delete routes.
+ *  @retval  -EINVAL  If the routing information to be deleted was
+ *                    invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    deleted was invalid.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa connman_inet_clear_gateway_address
+ *  @sa connman_inet_clear_gateway_interface
+ *  @sa connman_inet_clear_ipv6_gateway_address
+ *  @sa connman_inet_clear_ipv6_gateway_interface
+ *  @sa connman_inet_del_host_route
+ *  @sa connman_inet_del_ipv6_host_route
+ *  @sa del_gateway_routes_if_active
+ *
+ */
 static int del_gateway_routes(struct gateway_data *data,
 			enum connman_ipconfig_type type)
 {
@@ -629,6 +669,43 @@ static int del_gateway_routes(struct gateway_data *data,
 	return (status4 < 0 ? status4 : status6);
 }
 
+/**
+ *  @brief
+ *    Delete all gateway, or default router, default or host routes
+ *    for the gateway data, if they are active.
+ *
+ *  This attempts to delete, or remove, all gateway, or default
+ *  router, default or host routes associated with the specified
+ *  gateway data, if the corresponding gateway configuration for the
+ *  specified type, @a type, is marked as active.
+ *
+ *  @note
+ *    Deletions or removals are restricted to the network interface
+ *    associated with the network interface index specified by the
+ *    @a data @a index field.
+ *
+ *  @param[in]  data  A pointer to the mutable gateway data for which
+ *                    to delete or remove all gateway, or default
+ *                    router, default or host routes, if they are
+ *                    active.
+ *  @param[in]  type  The IP configuration type for which the gateway,
+ *                    or default router, default or host routes are to
+ *                    be deleted or removed.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If data is null, if type is
+ *                    #CONNMAN_IPCONFIG_TYPE_UNKNOWN, if the routing
+ *                    information to be deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to delete routes.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    deleted was invalid.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa del_gateway_routes
+ *
+ */
 static int del_gateway_routes_if_active(struct gateway_data *data,
 			enum connman_ipconfig_type type)
 {
