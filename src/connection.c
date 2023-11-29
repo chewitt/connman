@@ -657,23 +657,30 @@ static struct gateway_data *add_gateway(struct connman_service *service,
 					int index, const char *gateway,
 					enum connman_ipconfig_type type)
 {
-	struct gateway_data *data, *old;
-	struct gateway_config *config;
+	g_autofree struct gateway_data *temp_data = NULL;
+	struct gateway_config *config = NULL;
+	struct gateway_data *old;
 
-	if (!gateway || strlen(gateway) == 0)
+	if (!service || index < 0 || !gateway || strlen(gateway) == 0)
 		return NULL;
 
-	data = g_try_new0(struct gateway_data, 1);
-	if (!data)
-		return NULL;
-
-	data->index = index;
-
-	config = g_try_new0(struct gateway_config, 1);
-	if (!config) {
-		g_free(data);
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		break;
+	default:
 		return NULL;
 	}
+
+	temp_data = g_try_new0(struct gateway_data, 1);
+	if (!temp_data)
+		return NULL;
+
+	temp_data->index = index;
+
+	config = g_try_new0(struct gateway_config, 1);
+	if (!config)
+		return NULL;
 
 	config->gateway = g_strdup(gateway);
 	config->vpn_ip = NULL;
@@ -683,17 +690,11 @@ static struct gateway_data *add_gateway(struct connman_service *service,
 	config->active = false;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		data->ipv4_config = config;
+		temp_data->ipv4_config = config;
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
-		data->ipv6_config = config;
-	else {
-		g_free(config->gateway);
-		g_free(config);
-		g_free(data);
-		return NULL;
-	}
+		temp_data->ipv6_config = config;
 
-	data->service = service;
+	temp_data->service = service;
 
 	/*
 	 * If the service is already in the hash, then we
@@ -707,18 +708,18 @@ static struct gateway_data *add_gateway(struct connman_service *service,
 			old->ipv4_config, old->ipv6_config);
 		disable_gateway(old, type);
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
-			data->ipv6_config = old->ipv6_config;
+			temp_data->ipv6_config = old->ipv6_config;
 			old->ipv6_config = NULL;
 		} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
-			data->ipv4_config = old->ipv4_config;
+			temp_data->ipv4_config = old->ipv4_config;
 			old->ipv4_config = NULL;
 		}
 	}
 
-	connman_service_ref(data->service);
-	g_hash_table_replace(gateway_hash, service, data);
+	connman_service_ref(temp_data->service);
+	g_hash_table_replace(gateway_hash, service, temp_data);
 
-	return data;
+	return g_steal_pointer(&temp_data);
 }
 
 static void set_default_gateway(struct gateway_data *data,
