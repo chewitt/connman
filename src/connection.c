@@ -59,11 +59,45 @@ struct gateway_data {
 
 static GHashTable *gateway_hash = NULL;
 
+/**
+ *  @brief
+ *    Return the specified pointer if non-null; otherwise, the
+ *    immutable "<null>" string.
+ *
+ *  @param[in]  pointer  The pointer to be returned if non-null.
+ *
+ *  @returns
+ *     @a pointer if non-null; otherwise the "<null>" immutable
+ *     null-terminated C string.
+ *
+ */
 static const char *maybe_null(const void *pointer)
 {
 	return pointer ? pointer : "<null>";
 }
 
+/**
+ *  @brief
+ *    Conditionally log the specified gateway configuration.
+ *
+ *  This conditionally logs at the debug level the specified
+ *  #gateway_config gateway configuration, @a config, with the
+ *  provided description, @a description, attributed to the provided
+ *  function name, @a function.
+ *
+ *  @param[in]  function     A pointer to an immutable null-terminated
+ *                           C string containing the function name to
+ *                           which the call to this function should be
+ *                           attributed.
+ *  @param[in]  description  A pointer to an immutable null-terminated
+ *                           C string briefly describing @a
+ *                           config. For example, "ipv4_config".
+ *  @param[in]  config       A pointer to the immutable gateway
+ *                           configuration to conditionally log.
+ *
+ *  @sa DBG
+ *
+ */
 static void gateway_config_debug(const char *function,
 				const char *description,
 				const struct gateway_config *config)
@@ -95,6 +129,29 @@ static void gateway_config_debug(const char *function,
 	}
 }
 
+/**
+ *  @brief
+ *    Conditionally log the specified gateway data.
+ *
+ *  This conditionally logs at the debug level the specified
+ *  #gateway_data gateway data, @a data, with the provided
+ *  description, @a description, attributed to the provided function
+ *  name, @a function.
+ *
+ *  @param[in]  function     A pointer to an immutable null-terminated
+ *                           C string containing the function name to
+ *                           which the call to this function should be
+ *                           attributed.
+ *  @param[in]  description  A pointer to an immutable null-terminated
+ *                           C string briefly describing @a
+ *                           data. For example, "default_gateway".
+ *  @param[in]  data         A pointer to the immutable gateway
+ *                           data to conditionally log.
+ *
+ *  @sa DBG
+ *  @sa gateway_config_debug
+ *
+ */
 static void gateway_data_debug(const char *function,
 				const char *description,
 				const struct gateway_data *data)
