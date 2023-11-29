@@ -1010,6 +1010,31 @@ static void unset_default_gateway(struct gateway_data *data,
 						data->ipv4_config->gateway);
 }
 
+/**
+ *  @brief
+ *    Decide whether either of the specified gateways should yield the
+ *    default gateway route.
+ *
+ *  This determines whether either of the specified gateway data
+ *  should yield the default gateway route via
+ *  #unset_default_gateway. @a activated is a newly-activated gateway
+ *  from a Routing Netlink (rtnl) notification. @a existing is an
+ *  existing gateway from the services-to-gateway data hash.
+ *
+ *  @param[in,out]  activated  A pointer to a mutable newly-activated
+ *                             gateway.
+ *  @param[in,out]  existing   A pointer to a mutable existing
+ *                             gateway.
+ *
+ *  @returns
+ *    True of @a activated yielded the default gateway; otherwise,
+ *    false.
+ *
+ *  @sa check_default_gateway
+ *  @sa __connman_service_compare
+ *  @sa unset_default_gateway
+ *
+ */
 static bool yield_default_gateway(struct gateway_data *activated,
 					struct gateway_data *existing)
 {
@@ -1022,19 +1047,32 @@ static bool yield_default_gateway(struct gateway_data *activated,
 	GATEWAY_DATA_DBG("existing", existing);
 
 	/*
-	 * If the current default is not active, then we mark
-	 * this one as default. If the other one is already active
-	 * we mark this one as non default.
+	 * There is only an IPv4 default gateway yield decision to be
+	 * considered if there is an IPv4 gateway configuration for BOTH
+	 * the activated and existing gateway data.
 	 */
 	if (activated->ipv4_config && existing->ipv4_config) {
 		type = CONNMAN_IPCONFIG_TYPE_IPV4;
 
+		/*
+		 * If the existing IPv4 gateway data IS NOT active (that is,
+		 * HAS NOT made it to the RTNL notification phase of its
+		 * lifecycle), then it yields the default gateway to the
+		 * activated gateway data.
+		 */
 		if (!existing->ipv4_config->active) {
 			DBG("ipv4 existing %p yielding default", existing);
 
 			unset_default_gateway(existing, type);
 		}
 
+		/*
+		 * If the existing IPv4 gateway data IS active (that is, HAS
+		 * made it to the RTNL notification phase of its lifecycle)
+		 * and if its associated service is more "senior" in the
+		 * service sort order, then the activated gateway data yields
+		 * the default gateway to the existing gateway data.
+		 */
 		if (existing->ipv4_config->active &&
 				__connman_service_compare(existing->service,
 						activated->service) < 0) {
@@ -1046,14 +1084,33 @@ static bool yield_default_gateway(struct gateway_data *activated,
 		}
 	}
 
+	/*
+	 * There is only an IPv6 default gateway yield decision to be
+	 * considered if there is an IPv6 gateway configuration for BOTH
+	 * the activated and existing gateway data.
+	 */
 	if (activated->ipv6_config && existing->ipv6_config) {
 		type = CONNMAN_IPCONFIG_TYPE_IPV6;
+
+		/*
+		 * If the existing IPv6 gateway data IS NOT active (that is,
+		 * HAS NOT made it to the RTNL notification phase of its
+		 * lifecycle), then it yields the default gateway to the
+		 * activated gateway data.
+		 */
 		if (!existing->ipv6_config->active) {
 			DBG("ipv6 existing %p yielding default", existing);
 
 			unset_default_gateway(existing, type);
 		}
 
+		/*
+		 * If the existing IPv6 gateway data IS active (that is, HAS
+		 * made it to the RTNL notification phase of its lifecycle)
+		 * and if its associated service is more "senior" in the
+		 * service sort order, then the activated gateway data yields
+		 * the default gateway to the existing gateway data.
+		 */
 		if (existing->ipv6_config->active &&
 			__connman_service_compare(existing->service,
 					activated->service) < 0) {
