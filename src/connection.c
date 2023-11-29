@@ -627,8 +627,10 @@ static int del_gateway_routes(struct gateway_data *data,
 		do_ipv4 = true;
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		do_ipv6 = true;
-	else
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
 		do_ipv4 = do_ipv6 = true;
+	else
+		return -EINVAL;
 
 	if (do_ipv4 && data->ipv4_config) {
 		if (data->ipv4_config->vpn) {
@@ -711,6 +713,12 @@ static int del_gateway_routes_if_active(struct gateway_data *data,
 {
 	bool active = false;
 
+	DBG("data %p type %d (%s)", data,
+		type, __connman_ipconfig_type2string(type));
+
+	if (!data || type == CONNMAN_IPCONFIG_TYPE_UNKNOWN)
+		return -EINVAL;
+
 	GATEWAY_DATA_DBG("data", data);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
@@ -719,7 +727,7 @@ static int del_gateway_routes_if_active(struct gateway_data *data,
 	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
 		if (data->ipv6_config)
 			active = data->ipv6_config->active;
-	} else
+	} else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
 		active = true;
 
 	DBG("type %d active %d", type, active);
@@ -871,8 +879,10 @@ static void set_default_gateway(struct gateway_data *data,
 		do_ipv4 = true;
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		do_ipv6 = true;
-	else
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
 		do_ipv4 = do_ipv6 = true;
+	else
+		return;
 
 	if (do_ipv4 && data->ipv4_config &&
 					data->ipv4_config->vpn) {
@@ -949,11 +959,10 @@ static void unset_default_gateway(struct gateway_data *data,
 		do_ipv4 = true;
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		do_ipv6 = true;
-	else
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
 		do_ipv4 = do_ipv6 = true;
-
-	DBG("type %d gateway ipv4 %p ipv6 %p", type, data->ipv4_config,
-						data->ipv6_config);
+	else
+		return;
 
 	if (do_ipv4 && data->ipv4_config &&
 					data->ipv4_config->vpn) {
@@ -1599,8 +1608,10 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 		do_ipv4 = true;
 	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		do_ipv6 = true;
-	else
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
 		do_ipv4 = do_ipv6 = true;
+	else
+		return;
 
     /* Delete any routes associated with this service's nameservers. */
 
