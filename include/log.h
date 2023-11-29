@@ -58,11 +58,17 @@ struct connman_debug_desc {
 	unsigned int flags;
 } __attribute__((aligned(8)));
 
-#define CONNMAN_DEBUG_DEFINE(name) \
-	static struct connman_debug_desc __debug_alias_ ## name \
+#define CONNMAN_DEBUG_DESC_INSTANTIATE(symbol, _name, _file, _flags) \
+	static struct connman_debug_desc symbol \
 	__attribute__((used, section("__debug"), aligned(8))) = { \
-		#name, __FILE__, CONNMAN_DEBUG_FLAG_ALIAS \
-	};
+		.name = _name, .file = _file, .flags = _flags \
+	}
+
+#define CONNMAN_DEBUG_ALIAS(suffix) \
+	CONNMAN_DEBUG_DESC_INSTANTIATE(__debug_alias_##suffix, \
+		#suffix, \
+		__FILE__, \
+		CONNMAN_DEBUG_FLAG_ALIAS)
 
 /**
  * DBG:
@@ -73,13 +79,13 @@ struct connman_debug_desc {
  * name it is called in.
  */
 #define DBG(fmt, arg...) do { \
-	static struct connman_debug_desc __connman_debug_desc \
-	__attribute__((used, section("__debug"), aligned(8))) = { \
-		.file = __FILE__, .flags = CONNMAN_DEBUG_FLAG_DEFAULT, \
-	}; \
-	if (__connman_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) \
-		connman_debug("%s:%s() " fmt, \
-					__FILE__, __FUNCTION__ , ## arg); \
+	CONNMAN_DEBUG_DESC_INSTANTIATE(__connman_debug_desc, \
+		0, \
+		__FILE__, \
+		CONNMAN_DEBUG_FLAG_DEFAULT); \
+		if (__connman_debug_desc.flags & CONNMAN_DEBUG_FLAG_PRINT) \
+			connman_debug("%s:%s() " fmt, \
+					__FILE__, __func__, ##arg); \
 } while (0)
 
 #ifdef __cplusplus

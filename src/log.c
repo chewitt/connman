@@ -38,7 +38,7 @@ static const char *program_exec;
 static const char *program_path;
 
 /* This makes sure we always have a __debug section. */
-CONNMAN_DEBUG_DEFINE(dummy);
+CONNMAN_DEBUG_ALIAS(dummy);
 
 /**
  * connman_info:
