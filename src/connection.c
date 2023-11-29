@@ -777,6 +777,29 @@ static bool choose_default_gateway(struct gateway_data *data,
 	return downgraded;
 }
 
+/**
+ *  @brief
+ *    Handler for gateway, or default route, -specific routes newly
+ *    added to the Linux kernel routing tables.
+ *
+ *  This is the Linux Routing Netlink (rtnl) handler for gateway, or
+ *  default route, -specific routes newly-added to the Linux kernel
+ *  routing tables. Its primary role and goal is to serve as a
+ *  round-trip acknowledgement that gateway-, or default route,
+ *  related routes added or set to the kernel are now active and in
+ *  use.
+ *
+ *  @param[in]  index    The network interface index associated with
+ *                       the newly-added gateway, or default router.
+ *  @param[in]  gateway  An pointer to an immutable null-terminated
+ *                       C string containing the text-
+ *                       formatted address of the gateway, or default
+ *                       router, that was added.
+ *
+ *  @sa set_default_gateway
+ *  @sa connection_delgateway
+ *
+ */
 static void connection_newgateway(int index, const char *gateway)
 {
 	g_autofree char *interface = NULL;
@@ -791,12 +814,23 @@ static void connection_newgateway(int index, const char *gateway)
 	DBG("index %d (%s) gateway %s", index, maybe_null(interface),
 		gateway);
 
+	/*
+	 * If there is no gateway configuration, then this is not a
+	 * gateway, or default router, route we added or
+	 * set. Consequently, ignore it and return.
+	 */
 	config = find_gateway(index, gateway);
 	if (!config)
 		return;
 
 	GATEWAY_CONFIG_DBG("config", config);
 
+	/*
+	 * Otherwise, this is a gateway, or default router, route we added
+	 * or set and it is now acknowledged by the kernel. Consequently,
+	 * prospectively mark it as active; however, this may be
+	 * subsequently modified as default route determinations are made.
+	 */
 	config->active = true;
 
 	/*
@@ -869,6 +903,29 @@ static void remove_gateway(gpointer user_data)
 	g_free(data);
 }
 
+/**
+ *  @brief
+ *    Handler for gateway, or default route, -specific routes newly
+ *    removed from the Linux kernel routing tables.
+ *
+ *  This is the Linux Routing Netlink (rtnl) handler for gateway, or
+ *  default route, -specific routes newly-removed from the Linux
+ *  kernel routing tables. Its primary role and goal is to serve as
+ *  a round-trip acknowledgement that gateway-, or default route,
+ *  related routes removed or cleared from the kernel are now inactive
+ *  and are no longer in use.
+ *
+ *  @param[in]  index    The network interface index associated with
+ *                       the newly-removed gateway, or default router.
+ *  @param[in]  gateway  An pointer to an immutable null-terminated
+ *                       C string containing the text-
+ *                       formatted address of the gateway, or default
+ *                       router, that was removed.
+ *
+ *  @sa connection_newgateway
+ *  @sa set_default_gateway
+ *
+ */
 static void connection_delgateway(int index, const char *gateway)
 {
 	g_autofree char *interface = NULL;
@@ -880,6 +937,10 @@ static void connection_delgateway(int index, const char *gateway)
 	DBG("index %d (%s) gateway %s", index, maybe_null(interface),
 		gateway);
 
+	/*
+	 * This ends the lifecycle of the gateway associated with the
+	 * newly-removed route; mark it as no longer active.
+	 */
 	config = find_gateway(index, gateway);
 	if (config) {
 		GATEWAY_CONFIG_DBG("config", config);
@@ -887,6 +948,12 @@ static void connection_delgateway(int index, const char *gateway)
 		config->active = false;
 	}
 
+	/*
+	 * Due to the newly-removed gateway route, there may have been a
+	 * concomitant change in service order that has resulted in a new,
+	 * default service, if any. If so, ensure that service acquires
+	 * the high priority default route.
+	 */
 	data = find_default_gateway();
 	if (data) {
 		GATEWAY_DATA_DBG("data", data);
