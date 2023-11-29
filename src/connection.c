@@ -629,7 +629,7 @@ static int del_routes(struct gateway_data *data,
 	return (status4 < 0 ? status4 : status6);
 }
 
-static int disable_gateway(struct gateway_data *data,
+static int del_gateway_routes_if_active(struct gateway_data *data,
 			enum connman_ipconfig_type type)
 {
 	bool active = false;
@@ -703,7 +703,7 @@ static int disable_gateway(struct gateway_data *data,
  *                    #gateway_config.
  *
  *  @sa __connman_connection_gateway_add
- *  @sa disable_gateway
+ *  @sa del_gateway_routes_if_active
  *
  */
 static int add_gateway(struct connman_service *service,
@@ -761,7 +761,7 @@ static int add_gateway(struct connman_service *service,
 	if (old) {
 		DBG("Replacing gw %p ipv4 %p ipv6 %p", old,
 			old->ipv4_config, old->ipv6_config);
-		disable_gateway(old, type);
+		del_gateway_routes_if_active(old, type);
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 			temp_data->ipv6_config = old->ipv6_config;
 			old->ipv6_config = NULL;
@@ -1471,7 +1471,7 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 
 	/* Remove all active routes associated with this gateway data. */
 
-	err = disable_gateway(data, type);
+	err = del_gateway_routes_if_active(data, type);
 
 	/*
 	 * We remove the service from the service/gateway map only if ALL
@@ -1668,7 +1668,7 @@ void __connman_connection_cleanup(void)
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		struct gateway_data *data = value;
 
-		disable_gateway(data, CONNMAN_IPCONFIG_TYPE_ALL);
+		del_gateway_routes_if_active(data, CONNMAN_IPCONFIG_TYPE_ALL);
 	}
 
 	g_hash_table_destroy(gateway_hash);
