@@ -859,7 +859,6 @@ static int add_gateway(struct connman_service *service,
 static void set_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type)
 {
-	int index;
 	int status4 = 0, status6 = 0;
 	bool do_ipv4 = false, do_ipv6 = false;
 
@@ -905,11 +904,9 @@ static void set_default_gateway(struct gateway_data *data,
 		return;
 	}
 
-	index = __connman_service_get_index(data->service);
-
 	if (do_ipv4 && data->ipv4_config &&
 			is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
-		if (connman_inet_set_gateway_interface(index) < 0)
+		if (connman_inet_set_gateway_interface(data->index) < 0)
 			return;
 		data->ipv4_config->active = true;
 		goto done;
@@ -917,7 +914,7 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv6 && data->ipv6_config &&
 			is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
-		if (connman_inet_set_ipv6_gateway_interface(index) < 0)
+		if (connman_inet_set_ipv6_gateway_interface(data->index) < 0)
 			return;
 		data->ipv6_config->active = true;
 		goto done;
@@ -925,11 +922,11 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv6 && data->ipv6_config)
 		status6 = __connman_inet_add_default_to_table(RT_TABLE_MAIN,
-					index, data->ipv6_config->gateway);
+					data->index, data->ipv6_config->gateway);
 
 	if (do_ipv4 && data->ipv4_config)
 		status4 = __connman_inet_add_default_to_table(RT_TABLE_MAIN,
-					index, data->ipv4_config->gateway);
+					data->index, data->ipv4_config->gateway);
 
 	if (status4 < 0 || status6 < 0)
 		return;
@@ -941,7 +938,6 @@ done:
 static void unset_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type)
 {
-	int index;
 	bool do_ipv4 = false, do_ipv6 = false;
 
 	DBG("data %p type %d (%s)", data,
@@ -985,28 +981,26 @@ static void unset_default_gateway(struct gateway_data *data,
 		return;
 	}
 
-	index = __connman_service_get_index(data->service);
-
 	if (do_ipv4 && data->ipv4_config &&
 			is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
-		connman_inet_clear_gateway_interface(index);
+		connman_inet_clear_gateway_interface(data->index);
 		data->ipv4_config->active = false;
 		return;
 	}
 
 	if (do_ipv6 && data->ipv6_config &&
 			is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
-		connman_inet_clear_ipv6_gateway_interface(index);
+		connman_inet_clear_ipv6_gateway_interface(data->index);
 		data->ipv6_config->active = false;
 		return;
 	}
 
 	if (do_ipv6 && data->ipv6_config)
-		connman_inet_clear_ipv6_gateway_address(index,
+		connman_inet_clear_ipv6_gateway_address(data->index,
 						data->ipv6_config->gateway);
 
 	if (do_ipv4 && data->ipv4_config)
-		connman_inet_clear_gateway_address(index,
+		connman_inet_clear_gateway_address(data->index,
 						data->ipv4_config->gateway);
 }
 
