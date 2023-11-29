@@ -1595,21 +1595,11 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 	struct gateway_data *data = NULL;
 	bool set_default4 = false, set_default6 = false;
         bool do_ipv4 = false, do_ipv6 = false;
-	int index;
-	g_autofree char *interface = NULL;
 	int err;
 
 	DBG("service %p (%s) type %d (%s)",
 		service, maybe_null(connman_service_get_identifier(service)),
 		type, __connman_ipconfig_type2string(type));
-
-	index = __connman_service_get_index(service);
-	if (index < 0)
-		return;
-
-	interface = connman_inet_ifname(index);
-
-	DBG("index %d (%s)", index, maybe_null(interface));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		do_ipv4 = true;
