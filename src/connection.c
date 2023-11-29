@@ -653,6 +653,59 @@ static int disable_gateway(struct gateway_data *data,
 	return 0;
 }
 
+/**
+ *  @brief
+ *    Associate, or add, a new gateway, or default router, with a
+ *    network service.
+ *
+ *  This attempts to associate, or add, a new gateway, or default
+ *  router, with a network service. On success, a strong (that is,
+ *  uses #connman_service_{ref,unref}) reference to @a service is
+ *  retained in the service-to-gateway data hash.
+ *
+ *  @note
+ *    The caller is responsible for deallocating the memory assigned
+ *    to @a *data on success.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           object with which to associate @a
+ *                           gateway. On success, a strong (that is,
+ *                           uses #connman_service_{ref,unref})
+ *                           reference to this service is retained
+ *                           in the service-to-gateway data hash.
+ *  @param[in]      index    The network interface index for the
+ *                           network interface backing @a service.
+ *  @param[in]      gateway  A pointer to an immutable null-
+ *                           terminated C string containing the
+ *                           text-formatted address of the gateway, or
+ *                           default router, with which to associated
+ *                           with @a service.
+ *  @param[in]      type     The IP configuration type for the gateway,
+ *                           or default router.
+ *  @param[in,out]  data     A pointer to mutable storage for a mutable
+ *                           pointer to a #gateway_data structure. On
+ *                           success, this is assigned a newly-
+ *                           allocated and added structure that
+ *                           associates the @a gateway with @a service
+ *                           and @a type. The caller is responsible
+ *                           for deallocating the memory assigned to
+ *                           @a *data on success.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If service is null, if the network interface @a
+ *                    index is invalid, if @a gateway is null or zero
+ *                    in length, if type is not
+ *                    #CONNMAN_IPCONFIG_TYPE_IPV4 or
+ *                    #CONNMAN_IPCONFIG_TYPE_IPV6, or if @a data is
+ *                    null.
+ *  @retval  -ENOMEM  If memory could not be allocated for the
+ *                    #gateway_data structure and its associated
+ *                    #gateway_config.
+ *
+ *  @sa __connman_connection_gateway_add
+ *  @sa disable_gateway
+ *
+ */
 static int add_gateway(struct connman_service *service,
 					int index, const char *gateway,
 					enum connman_ipconfig_type type,
