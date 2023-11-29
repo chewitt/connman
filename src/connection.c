@@ -1059,6 +1059,26 @@ static bool choose_default_gateway(struct gateway_data *data,
 	return downgraded;
 }
 
+/**
+ *  @brief
+ *    Check whether the specified gateway should yield or become the
+ *    default.
+ *
+ *  This compares the specified, ostenisbly new, gateway data against
+ *  all, known existing gateway data in the service-to-gateway hash
+ *  and determines whether or not the default should be ceded from an
+ *  existing gateway and given to the new, incoming gateway or vice
+ *  versa.
+ *
+ *  @param[in,out]  activated  A pointer to the mutable gateway data
+ *                             associated with a newly-activated
+ *                             gateway route which is to be checked
+ *                             against existing gateway data.
+ *
+ *  @sa choose_default_gateway
+ *  @sa connection_newgateway
+ *
+ */
 static void check_default_gateway(struct gateway_data *activated)
 {
 	GHashTableIter iter;
