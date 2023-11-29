@@ -575,7 +575,7 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 	}
 }
 
-static int del_routes(struct gateway_data *data,
+static int del_gateway_routes(struct gateway_data *data,
 			enum connman_ipconfig_type type)
 {
 	int status4 = 0, status6 = 0;
@@ -648,7 +648,7 @@ static int del_gateway_routes_if_active(struct gateway_data *data,
 	DBG("type %d active %d", type, active);
 
 	if (active)
-		return del_routes(data, type);
+		return del_gateway_routes(data, type);
 
 	return 0;
 }
