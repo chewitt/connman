@@ -566,6 +566,9 @@ static void set_default_gateway(struct gateway_data *data,
 	int status4 = 0, status6 = 0;
 	bool do_ipv4 = false, do_ipv6 = false;
 
+	DBG("data %p type %d (%s)", data,
+		type, __connman_ipconfig_type2string(type));
+
 	GATEWAY_DATA_DBG("data", data);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
@@ -574,9 +577,6 @@ static void set_default_gateway(struct gateway_data *data,
 		do_ipv6 = true;
 	else
 		do_ipv4 = do_ipv6 = true;
-
-	DBG("type %d gateway ipv4 %p ipv6 %p", type, data->ipv4_gateway,
-						data->ipv6_gateway);
 
 	if (do_ipv4 && data->ipv4_gateway &&
 					data->ipv4_gateway->vpn) {
@@ -648,6 +648,9 @@ static void unset_default_gateway(struct gateway_data *data,
 {
 	int index;
 	bool do_ipv4 = false, do_ipv6 = false;
+
+	DBG("data %p type %d (%s)", data,
+		type, __connman_ipconfig_type2string(type));
 
 	GATEWAY_DATA_DBG("data", data);
 
@@ -776,13 +779,17 @@ static bool choose_default_gateway(struct gateway_data *data,
 
 static void connection_newgateway(int index, const char *gateway)
 {
+	g_autofree char *interface = NULL;
 	struct gateway_config *config;
 	struct gateway_data *data;
 	GHashTableIter iter;
 	gpointer value, key;
 	bool found = false;
 
-	DBG("index %d gateway %s", index, gateway);
+	interface = connman_inet_ifname(index);
+
+	DBG("index %d (%s) gateway %s", index, maybe_null(interface),
+		gateway);
 
 	config = find_gateway(index, gateway);
 	if (!config)
@@ -839,7 +846,7 @@ static void remove_gateway(gpointer user_data)
 {
 	struct gateway_data *data = user_data;
 
-	DBG("gateway ipv4 %p ipv6 %p", data->ipv4_gateway, data->ipv6_gateway);
+	DBG("data %p", data);
 
 	GATEWAY_DATA_DBG("data", data);
 
@@ -864,10 +871,14 @@ static void remove_gateway(gpointer user_data)
 
 static void connection_delgateway(int index, const char *gateway)
 {
+	g_autofree char *interface = NULL;
 	struct gateway_config *config;
 	struct gateway_data *data;
 
-	DBG("index %d gateway %s", index, gateway);
+	interface = connman_inet_ifname(index);
+
+	DBG("index %d (%s) gateway %s", index, maybe_null(interface),
+		gateway);
 
 	config = find_gateway(index, gateway);
 	if (config) {
@@ -974,8 +985,19 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	enum connman_service_type service_type =
 					connman_service_get_type(service);
 	int index;
+	g_autofree char *interface = NULL;
+
+	DBG("service %p (%s) gateway %p (%s) type %d (%s) peer %p (%s)",
+		service, maybe_null(connman_service_get_identifier(service)),
+		gateway, maybe_null(gateway),
+		type, __connman_ipconfig_type2string(type),
+		peer, maybe_null(peer));
 
 	index = __connman_service_get_index(service);
+
+	interface = connman_inet_ifname(index);
+
+	DBG("index %d (%s)", index, maybe_null(interface));
 
 	/*
 	 * If gateway is NULL, it's a point to point link and the default
@@ -1077,9 +1099,21 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 	struct gateway_data *data = NULL;
 	bool set_default4 = false, set_default6 = false;
         bool do_ipv4 = false, do_ipv6 = false;
+	int index;
+	g_autofree char *interface = NULL;
 	int err;
 
-	DBG("service %p type %d", service, type);
+	DBG("service %p (%s) type %d (%s)",
+		service, maybe_null(connman_service_get_identifier(service)),
+		type, __connman_ipconfig_type2string(type));
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return;
+
+	interface = connman_inet_ifname(index);
+
+	DBG("index %d (%s)", index, maybe_null(interface));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		do_ipv4 = true;
@@ -1157,12 +1191,14 @@ bool __connman_connection_update_gateway(void)
 	GHashTableIter iter;
 	gpointer value, key;
 
+	DBG("");
+
 	if (!gateway_hash)
 		return updated;
 
 	default_gateway = find_default_gateway();
 
-	DBG("default %p", default_gateway);
+	DBG("default_gateway %p", default_gateway);
 
 	GATEWAY_DATA_DBG("default_gateway", default_gateway);
 
