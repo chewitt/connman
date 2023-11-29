@@ -200,11 +200,51 @@ static void gateway_data_debug(const char *function,
 	}
 }
 
+/**
+ *  @brief
+ *    Determine whether the specified text-formatted IPv4 address is
+ *    the "any" or "unspecified" address.
+ *
+ *  This determines whether the specified text-formatted IPv4 address
+ *  is the "any" or "unspecified" address, that is "0.0.0.0".
+ *
+ *  @param[in]  address  A pointer to an immutable null-terminated C
+ *                       string containing the text-formatted address
+ *                       to determine whether it is the IPv4 "any" or
+ *                       "unspecified address.
+ *
+ *  @returns
+ *    True if @a address is the "any" or "unspecified" IPv4 address;
+ *    otherwise, false.
+ *
+ *  @sa is_ipv6_addr_any_str
+ *
+ */
 static bool is_ipv4_addr_any_str(const char *address)
 {
 	return g_strcmp0(ipv4_addr_any_str, address) == 0;
 }
 
+/**
+ *  @brief
+ *    Determine whether the specified text-formatted IPv6 address is
+ *    the "any" or "unspecified" address.
+ *
+ *  This determines whether the specified text-formatted IPv6 address
+ *  is the "any" or "unspecified" address, that is "::".
+ *
+ *  @param[in]  address  A pointer to an immutable null-terminated C
+ *                       string containing the text-formatted address
+ *                       to determine whether it is the IPv6 "any" or
+ *                       "unspecified address.
+ *
+ *  @returns
+ *    True if @a address is the "any" or "unspecified" IPv6 address;
+ *    otherwise, false.
+ *
+ *  @sa is_ipv4_addr_any_str
+ *
+ */
 static bool is_ipv6_addr_any_str(const char *address)
 {
 	return g_strcmp0(ipv6_addr_any_str, address) == 0;
