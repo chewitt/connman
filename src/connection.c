@@ -1059,6 +1059,57 @@ static bool choose_default_gateway(struct gateway_data *data,
 	return downgraded;
 }
 
+static void check_default_gateway(struct gateway_data *activated)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+	bool found = false;
+
+	DBG("activated %p", activated);
+
+	GATEWAY_DATA_DBG("activated", activated);
+
+	/*
+	 * If we have already handled a Routing Netlink (rtnl)
+	 * notification and checked the newly-activated gateway against
+	 * the existing gateway / default routers, simply return.
+	 *
+	 * Otherwise, failure to use this 'default_checked' sentinel could
+	 * lead into an infinite Routing Netlink (rntl) loop as changing
+	 * the default gateway pushes a new route into the kernel and ends
+	 * up back here again (via the .newgateway method).
+	 */
+	if (activated->default_checked)
+		return;
+
+	g_hash_table_iter_init(&iter, gateway_hash);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct gateway_data *existing = value;
+
+		if (existing == activated)
+			continue;
+
+		found = choose_default_gateway(activated, existing);
+		if (found)
+			break;
+	}
+
+	DBG("found %u", found);
+
+	if (!found) {
+		if (activated->ipv4_config)
+			set_default_gateway(activated,
+				CONNMAN_IPCONFIG_TYPE_IPV4);
+
+		if (activated->ipv6_config)
+			set_default_gateway(activated,
+				CONNMAN_IPCONFIG_TYPE_IPV6);
+	}
+
+	activated->default_checked = true;
+}
+
 /**
  *  @brief
  *    Handler for gateway, or default route, -specific routes newly
@@ -1078,6 +1129,7 @@ static bool choose_default_gateway(struct gateway_data *data,
  *                       formatted address of the gateway, or default
  *                       router, that was added.
  *
+ *  @sa check_default_gateway
  *  @sa set_default_gateway
  *  @sa connection_delgateway
  *
@@ -1087,9 +1139,6 @@ static void connection_newgateway(int index, const char *gateway)
 	g_autofree char *interface = NULL;
 	struct gateway_config *config;
 	struct gateway_data *data;
-	GHashTableIter iter;
-	gpointer value, key;
-	bool found = false;
 
 	interface = connman_inet_ifname(index);
 
@@ -1126,36 +1175,11 @@ static void connection_newgateway(int index, const char *gateway)
 
 	GATEWAY_DATA_DBG("data", data);
 
-	if (data->default_checked)
-		return;
-
 	/*
-	 * The next checks are only done once, otherwise setting
-	 * the default gateway could lead into rtnl forever loop.
+	 * Check whether this newly-activated gateway should yield or
+	 * become the default.
 	 */
-
-	g_hash_table_iter_init(&iter, gateway_hash);
-
-	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		struct gateway_data *candidate = value;
-
-		if (candidate == data)
-			continue;
-
-		found = choose_default_gateway(data, candidate);
-		if (found)
-			break;
-	}
-
-	if (!found) {
-		if (data->ipv4_config)
-			set_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV4);
-
-		if (data->ipv6_config)
-			set_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV6);
-	}
-
-	data->default_checked = true;
+	check_default_gateway(data);
 }
 
 static void remove_gateway(gpointer user_data)
