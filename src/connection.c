@@ -57,6 +57,17 @@ struct gateway_data {
 	bool default_checked;
 };
 
+/*
+ * These are declared as 'const char *const' to effect an immutable
+ * pointer to an immutable null-terminated character string such that
+ * they end up in .text, not .data (which would otherwise be the case
+ * for a 'const char *' declaration), and with the 'static'
+ * storage/scope qualifier, the compiler can optimize their use within
+ * this file as it sees fit.
+ */
+static const char *const ipv4_addr_any_str = "0.0.0.0";
+static const char *const ipv6_addr_any_str = "::";
+
 static GHashTable *gateway_hash = NULL;
 
 /**
@@ -486,7 +497,7 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 		DBG("active gw %s", active_gateway->ipv4_config->gateway);
 
 		if (g_strcmp0(active_gateway->ipv4_config->gateway,
-							"0.0.0.0") != 0)
+							ipv4_addr_any_str) != 0)
 			dest = active_gateway->ipv4_config->gateway;
 		else
 			dest = NULL;
@@ -506,7 +517,7 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 		DBG("active gw %s", active_gateway->ipv6_config->gateway);
 
 		if (g_strcmp0(active_gateway->ipv6_config->gateway,
-								"::") != 0)
+					ipv6_addr_any_str) != 0)
 			dest = active_gateway->ipv6_config->gateway;
 		else
 			dest = NULL;
@@ -538,7 +549,7 @@ static int del_routes(struct gateway_data *data,
 						data->ipv4_config->vpn_ip);
 
 		} else if (g_strcmp0(data->ipv4_config->gateway,
-							"0.0.0.0") == 0) {
+						ipv4_addr_any_str) == 0) {
 			status4 = connman_inet_clear_gateway_interface(
 								data->index);
 		} else {
@@ -556,7 +567,8 @@ static int del_routes(struct gateway_data *data,
 						data->index,
 						data->ipv6_config->vpn_ip);
 
-		} else if (g_strcmp0(data->ipv6_config->gateway, "::") == 0) {
+		} else if (g_strcmp0(data->ipv6_config->gateway,
+						ipv6_addr_any_str) == 0) {
 			status6 = connman_inet_clear_ipv6_gateway_interface(
 								data->index);
 		} else {
@@ -716,7 +728,7 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv4 && data->ipv4_config &&
 			g_strcmp0(data->ipv4_config->gateway,
-							"0.0.0.0") == 0) {
+					ipv4_addr_any_str) == 0) {
 		if (connman_inet_set_gateway_interface(index) < 0)
 			return;
 		data->ipv4_config->active = true;
@@ -725,7 +737,7 @@ static void set_default_gateway(struct gateway_data *data,
 
 	if (do_ipv6 && data->ipv6_config &&
 			g_strcmp0(data->ipv6_config->gateway,
-							"::") == 0) {
+					ipv6_addr_any_str) == 0) {
 		if (connman_inet_set_ipv6_gateway_interface(index) < 0)
 			return;
 		data->ipv6_config->active = true;
@@ -798,7 +810,7 @@ static void unset_default_gateway(struct gateway_data *data,
 
 	if (do_ipv4 && data->ipv4_config &&
 			g_strcmp0(data->ipv4_config->gateway,
-							"0.0.0.0") == 0) {
+					ipv4_addr_any_str) == 0) {
 		connman_inet_clear_gateway_interface(index);
 		data->ipv4_config->active = false;
 		return;
@@ -806,7 +818,7 @@ static void unset_default_gateway(struct gateway_data *data,
 
 	if (do_ipv6 && data->ipv6_config &&
 			g_strcmp0(data->ipv6_config->gateway,
-							"::") == 0) {
+					ipv6_addr_any_str) == 0) {
 		connman_inet_clear_ipv6_gateway_interface(index);
 		data->ipv6_config->active = false;
 		return;
@@ -1066,7 +1078,7 @@ static void add_host_route(int family, int index, const char *gateway,
 {
 	switch (family) {
 	case AF_INET:
-		if (g_strcmp0(gateway, "0.0.0.0") != 0) {
+		if (g_strcmp0(gateway, ipv4_addr_any_str) != 0) {
 			/*
 			 * We must not set route to the phy dev gateway in
 			 * VPN link. The packets to VPN link might be routed
@@ -1091,7 +1103,7 @@ static void add_host_route(int family, int index, const char *gateway,
 		break;
 
 	case AF_INET6:
-		if (g_strcmp0(gateway, "::") != 0) {
+		if (g_strcmp0(gateway, ipv6_addr_any_str) != 0) {
 			if (service_type != CONNMAN_SERVICE_TYPE_VPN)
 				connman_inet_add_ipv6_host_route(index,
 								gateway, NULL);
@@ -1176,10 +1188,10 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	 * interface
 	 */
 	if (!gateway && type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		gateway = "0.0.0.0";
+		gateway = ipv4_addr_any_str;
 
 	if (!gateway && type == CONNMAN_IPCONFIG_TYPE_IPV6)
-		gateway = "::";
+		gateway = ipv6_addr_any_str;
 
 	DBG("service %p index %d gateway %s vpn ip %s type %d",
 		service, index, gateway, peer, type);
