@@ -1010,53 +1010,62 @@ static void unset_default_gateway(struct gateway_data *data,
 						data->ipv4_config->gateway);
 }
 
-static bool choose_default_gateway(struct gateway_data *data,
-					struct gateway_data *candidate)
+static bool yield_default_gateway(struct gateway_data *activated,
+					struct gateway_data *existing)
 {
-	bool downgraded = false;
+	enum connman_ipconfig_type type;
+	bool yield_activated = false;
 
-	GATEWAY_DATA_DBG("data", data);
-	GATEWAY_DATA_DBG("candidate", candidate);
+	DBG("activated %p existing %p", activated, existing);
+
+	GATEWAY_DATA_DBG("activated", activated);
+	GATEWAY_DATA_DBG("existing", existing);
 
 	/*
 	 * If the current default is not active, then we mark
 	 * this one as default. If the other one is already active
 	 * we mark this one as non default.
 	 */
-	if (data->ipv4_config && candidate->ipv4_config) {
+	if (activated->ipv4_config && existing->ipv4_config) {
+		type = CONNMAN_IPCONFIG_TYPE_IPV4;
 
-		if (!candidate->ipv4_config->active) {
-			DBG("ipv4 downgrading %p", candidate);
-			unset_default_gateway(candidate,
-						CONNMAN_IPCONFIG_TYPE_IPV4);
+		if (!existing->ipv4_config->active) {
+			DBG("ipv4 existing %p yielding default", existing);
+
+			unset_default_gateway(existing, type);
 		}
 
-		if (candidate->ipv4_config->active &&
-				__connman_service_compare(candidate->service,
-							data->service) < 0) {
-			DBG("ipv4 downgrading this %p", data);
-			unset_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV4);
-			downgraded = true;
-		}
-	}
+		if (existing->ipv4_config->active &&
+				__connman_service_compare(existing->service,
+						activated->service) < 0) {
+			DBG("ipv4 activated %p yielding default", activated);
 
-	if (data->ipv6_config && candidate->ipv6_config) {
-		if (!candidate->ipv6_config->active) {
-			DBG("ipv6 downgrading %p", candidate);
-			unset_default_gateway(candidate,
-						CONNMAN_IPCONFIG_TYPE_IPV6);
-		}
+			unset_default_gateway(activated, type);
 
-		if (candidate->ipv6_config->active &&
-			__connman_service_compare(candidate->service,
-						data->service) < 0) {
-			DBG("ipv6 downgrading this %p", data);
-			unset_default_gateway(data, CONNMAN_IPCONFIG_TYPE_IPV6);
-			downgraded = true;
+			yield_activated = true;
 		}
 	}
 
-	return downgraded;
+	if (activated->ipv6_config && existing->ipv6_config) {
+		type = CONNMAN_IPCONFIG_TYPE_IPV6;
+		if (!existing->ipv6_config->active) {
+			DBG("ipv6 existing %p yielding default", existing);
+
+			unset_default_gateway(existing, type);
+		}
+
+		if (existing->ipv6_config->active &&
+			__connman_service_compare(existing->service,
+					activated->service) < 0) {
+			DBG("ipv6 activated %p yielding default", activated);
+
+			unset_default_gateway(activated, type);
+
+			yield_activated = true;
+		}
+	}
+
+	return yield_activated;
 }
 
 /**
@@ -1075,7 +1084,7 @@ static bool choose_default_gateway(struct gateway_data *data,
  *                             gateway route which is to be checked
  *                             against existing gateway data.
  *
- *  @sa choose_default_gateway
+ *  @sa yield_default_gateway
  *  @sa connection_newgateway
  *
  */
@@ -1083,7 +1092,7 @@ static void check_default_gateway(struct gateway_data *activated)
 {
 	GHashTableIter iter;
 	gpointer value, key;
-	bool found = false;
+	bool yield_activated = false;
 
 	DBG("activated %p", activated);
 
@@ -1110,14 +1119,14 @@ static void check_default_gateway(struct gateway_data *activated)
 		if (existing == activated)
 			continue;
 
-		found = choose_default_gateway(activated, existing);
-		if (found)
+		yield_activated = yield_default_gateway(activated, existing);
+		if (yield_activated)
 			break;
 	}
 
-	DBG("found %u", found);
+	DBG("yield_activated %u", yield_activated);
 
-	if (!found) {
+	if (!yield_activated) {
 		if (activated->ipv4_config)
 			set_default_gateway(activated,
 				CONNMAN_IPCONFIG_TYPE_IPV4);
