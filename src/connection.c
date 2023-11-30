@@ -864,6 +864,35 @@ static int add_gateway(struct connman_service *service,
 	return err;
 }
 
+/**
+ *  @brief
+ *    Set, or assign, the gateway, or default route, for the specified
+ *    IP configuration type from the provided gateway data.
+ *
+ *  This attempts to set, or assign, the gateway, or default, route
+ *  for the specified IP configuration type from the provided gateway
+ *  data. The network interface and, by extension, the network service
+ *  with which the gateway is associated is determined by the @a index
+ *  field of @a data.
+ *
+ *  On success, the gateway configuration specific to @a type will
+ *  have its @a active field set to true and the gateway data network
+ *  service @a service will be signaled as the default via
+ *  #__connman_service_indicate_default.
+ *
+ *  @param[in,out]  data  A pointer to the mutable gateway data to
+ *                        assign as the default route.
+ *  @param[in]      type  The IP configuration type for which the
+ *                        gateway, or default router, configuration
+ *                        will be selected from @a data and used to
+ *                        set the default route.
+ *
+ *  @sa __connman_inet_add_default_to_table
+ *  @sa __connman_service_indicate_default
+ *  @sa connman_inet_set_gateway_interface
+ *  @sa connman_inet_set_ipv6_gateway_interface
+ *
+ */
 static void set_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type)
 {
@@ -952,6 +981,33 @@ static void set_default_gateway(struct gateway_data *data,
 	__connman_service_indicate_default(data->service);
 }
 
+/**
+ *  @brief
+ *    Unset the gateway, or default route, for the specified IP
+ *    configuration type from the provided gateway data.
+ *
+ *  This attempts to unset, or clear, the gateway, or default, route
+ *  for the specified IP configuration type from the provided gateway
+ *  data. The network interface and, by extension, the network service
+ *  with which the gateway is associated is determined by the @a index
+ *  field of @a data.
+ *
+ *  On success, the gateway configuration specific to @a type will
+ *  have its @a active field set to false.
+ *
+ *  @param[in,out]  data  A pointer to the mutable gateway data to
+ *                        clear as the default route.
+ *  @param[in]      type  The IP configuration type for which the
+ *                        gateway, or default router, configuration
+ *                        will be selected from @a data and used to
+ *                        unset the default route.
+ *
+ *  @sa connman_inet_clear_gateway_address
+ *  @sa connman_inet_clear_gateway_interface
+ *  @sa connman_inet_clear_ipv6_gateway_address
+ *  @sa connman_inet_clear_ipv6_gateway_interface
+ *
+ */
 static void unset_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type)
 {
