@@ -957,53 +957,45 @@ static void unset_default_gateway(struct gateway_data *data,
 	else
 		return;
 
-	if (do_ipv4 && data->ipv4_config &&
-					data->ipv4_config->vpn) {
-		connman_inet_clear_gateway_interface(data->index);
-		data->ipv4_config->active = false;
+	if (do_ipv4 && data->ipv4_config) {
+		if (data->ipv4_config->vpn) {
+			connman_inet_clear_gateway_interface(data->index);
 
-		DBG("unset %p index %d vpn %s index %d phy %s",
-			data, data->index, data->ipv4_config->vpn_ip,
-			data->ipv4_config->vpn_phy_index,
-			data->ipv4_config->vpn_phy_ip);
+			data->ipv4_config->active = false;
 
-		return;
-	}
+			DBG("unset %p index %d vpn %s index %d phy %s",
+				data, data->index, data->ipv4_config->vpn_ip,
+				data->ipv4_config->vpn_phy_index,
+				data->ipv4_config->vpn_phy_ip);
+		} else if (is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
+			connman_inet_clear_gateway_interface(data->index);
 
-	if (do_ipv6 && data->ipv6_config &&
-					data->ipv6_config->vpn) {
-		connman_inet_clear_ipv6_gateway_interface(data->index);
-		data->ipv6_config->active = false;
-
-		DBG("unset %p index %d vpn %s index %d phy %s",
-			data, data->index, data->ipv6_config->vpn_ip,
-			data->ipv6_config->vpn_phy_index,
-			data->ipv6_config->vpn_phy_ip);
-
-		return;
-	}
-
-	if (do_ipv4 && data->ipv4_config &&
-			is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
-		connman_inet_clear_gateway_interface(data->index);
-		data->ipv4_config->active = false;
-		return;
-	}
-
-	if (do_ipv6 && data->ipv6_config &&
-			is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
-		connman_inet_clear_ipv6_gateway_interface(data->index);
-		data->ipv6_config->active = false;
-		return;
-	}
-
-	if (do_ipv6 && data->ipv6_config)
-		connman_inet_clear_ipv6_gateway_address(data->index,
-						data->ipv6_config->gateway);
-
-	if (do_ipv4 && data->ipv4_config)
-		connman_inet_clear_gateway_address(data->index,
+			data->ipv4_config->active = false;
+		} else {
+			connman_inet_clear_gateway_address(data->index,
 						data->ipv4_config->gateway);
+		}
+	}
+
+	if (do_ipv6 && data->ipv6_config) {
+		if (data->ipv6_config->vpn) {
+			connman_inet_clear_ipv6_gateway_interface(data->index);
+
+			data->ipv6_config->active = false;
+
+			DBG("unset %p index %d vpn %s index %d phy %s",
+				data, data->index, data->ipv6_config->vpn_ip,
+				data->ipv6_config->vpn_phy_index,
+				data->ipv6_config->vpn_phy_ip);
+		} else if (is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
+			connman_inet_clear_ipv6_gateway_interface(data->index);
+
+			data->ipv6_config->active = false;
+		} else {
+			connman_inet_clear_ipv6_gateway_address(data->index,
+						data->ipv6_config->gateway);
+		}
+	}
 }
 
 /**
