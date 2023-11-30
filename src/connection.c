@@ -1640,13 +1640,11 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 
     /* If necessary, delete any VPN-related host routes. */
 
-	if (do_ipv4 && data->ipv4_config &&
-			data->ipv4_config->vpn && data->index >= 0)
+	if (set_default4 && data->index >= 0)
 		connman_inet_del_host_route(data->ipv4_config->vpn_phy_index,
 						data->ipv4_config->gateway);
 
-	if (do_ipv6 && data->ipv6_config &&
-			data->ipv6_config->vpn && data->index >= 0)
+	if (set_default6 && data->index >= 0)
 		connman_inet_del_ipv6_host_route(
 					data->ipv6_config->vpn_phy_index,
 						data->ipv6_config->gateway);
