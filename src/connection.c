@@ -1596,7 +1596,7 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	struct gateway_data *data = NULL;
-	bool set_default4 = false, set_default6 = false;
+	bool is_vpn4 = false, is_vpn6 = false;
 	bool do_ipv4 = false, do_ipv6 = false;
 	int err;
 
@@ -1628,23 +1628,23 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 	GATEWAY_DATA_DBG("service_data", data);
 
 	if (do_ipv4 && data->ipv4_config)
-		set_default4 = data->ipv4_config->vpn;
+		is_vpn4 = data->ipv4_config->vpn;
 
 	if (do_ipv6 && data->ipv6_config)
-		set_default6 = data->ipv6_config->vpn;
+		is_vpn6 = data->ipv6_config->vpn;
 
 	DBG("ipv4 gateway %s ipv6 gateway %s vpn %d/%d",
 		data->ipv4_config ? data->ipv4_config->gateway : "<null>",
 		data->ipv6_config ? data->ipv6_config->gateway : "<null>",
-		set_default4, set_default6);
+		is_vpn4, is_vpn6);
 
     /* If necessary, delete any VPN-related host routes. */
 
-	if (set_default4 && data->index >= 0)
+	if (is_vpn4 && data->index >= 0)
 		connman_inet_del_host_route(data->ipv4_config->vpn_phy_index,
 						data->ipv4_config->gateway);
 
-	if (set_default6 && data->index >= 0)
+	if (is_vpn6 && data->index >= 0)
 		connman_inet_del_ipv6_host_route(
 					data->ipv6_config->vpn_phy_index,
 						data->ipv6_config->gateway);
@@ -1673,7 +1673,7 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 	 * gateway delete notification.
 	 * We hit the same issue if remove_gateway() fails.
 	 */
-	if (set_default4 || set_default6 || err < 0) {
+	if (is_vpn4 || is_vpn6 || err < 0) {
 		data = find_default_gateway_data();
 
 		GATEWAY_DATA_DBG("default_data", data);
