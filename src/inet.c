@@ -3208,6 +3208,45 @@ static const char *rtnl_route_cmd2string(int cmd)
 	return "";
 }
 
+/**
+ *  @brief
+ *    Add or remove a gateway default route.
+ *
+ *  This attempts to add or remove a gateway default route to or from
+ *  the kernel using a Linux Route Netlink (rtnl) socket and protocol
+ *  with the specified attributes.
+ *
+ *  @param[in]  cmd        The Linux Route Netlink command to send. This
+ *                         is expected to be either RTM_NEWROUTE (add
+ *                         new route) or RTM_DELROUTE (delete existing
+ *                         route).
+ *  @param[in]  table_id   The table to add/delete this route to/from.
+ *  @param[in]  metric     The routing priority metric for the route.
+ *  @param[in]  ifindex    The network interface index associated with
+ *                         the output network device for the route.
+ *  @param[in]  gateway    A pointer to an immutable null-terminated C
+ *                         string containing the IPv4 or IPv6 address,
+ *                         in text form, of the route destination or
+ *                         next hop gateway address.
+ *  @param[in]  prefixlen  The destination prefix length of the route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If the address family of @a gateway was not AF_INET
+ *                    (IPv4) or AF_INET6 (IPv6), if @a gateway does not
+ *                    contain a character string representing a valid
+ *                    network address in either the AF_INET or
+ *                    AF_INET6 family, or if the routing information
+ *                    to be deleted was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to delete routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ */
 static int iproute_default_modify(int cmd, uint32_t table_id, uint32_t metric,
 			int ifindex, const char *gateway,
 			unsigned char prefixlen)
