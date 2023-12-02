@@ -3208,8 +3208,9 @@ static const char *rtnl_route_cmd2string(int cmd)
 	return "";
 }
 
-static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
-			const char *gateway, unsigned char prefixlen)
+static int iproute_default_modify(int cmd, uint32_t table_id, uint32_t metric,
+			int ifindex, const char *gateway,
+			unsigned char prefixlen)
 {
 	struct __connman_inet_rtnl_handle rth;
 	unsigned char buf[sizeof(struct in6_addr)];
@@ -3220,11 +3221,12 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 
 	interface = connman_inet_ifname(ifindex);
 
-	DBG("cmd %d (%s) ifindex %d (%s) gateway %s/%u table %u <%s>",
+	DBG("cmd %d (%s) ifindex %d (%s) gateway %s/%u table %u <%s> metric %u",
 		cmd, rtnl_route_cmd2string(cmd),
 		ifindex, interface,
 		gateway, prefixlen,
-		table_id, __connman_inet_table2string(table_id));
+		table_id, __connman_inet_table2string(table_id),
+		metric);
 
 	switch (family) {
 	case AF_INET:
@@ -3280,6 +3282,9 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 	__connman_inet_rtnl_addattr32(&rth.req.n, sizeof(rth.req),
 							RTA_OIF, ifindex);
 
+	__connman_inet_rtnl_addattr32(&rth.req.n, sizeof(rth.req),
+							RTA_PRIORITY, metric);
+
 	ret = __connman_inet_rtnl_open(&rth);
 	if (ret < 0)
 		goto done;
@@ -3295,31 +3300,49 @@ done:
 int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex,
 						const char *gateway)
 {
-	/* ip route add default via 1.2.3.4 dev wlan0 table 1234 */
+	static const uint32_t metric = 0;
+	static const unsigned char prefixlen = 0;
 
-	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway, 0);
+	/*
+	 * ip route add default/0 via <gateway> dev wlan0 table <table_id>
+	 * metric 0
+	 */
+	return iproute_default_modify(RTM_NEWROUTE, table_id, metric, ifindex,
+		gateway, prefixlen);
 }
 
 int __connman_inet_add_subnet_to_table(uint32_t table_id, int ifindex,
 						const char *gateway, unsigned char prefixlen)
 {
-	/* ip route add 1.2.3.4/24 dev eth0 table 1234 */
-	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway, prefixlen);
+	static const uint32_t metric = 0;
+
+	/* ip route add 1.2.3.4/24 dev eth0 table 1234 metric 0 */
+	return iproute_default_modify(RTM_NEWROUTE, table_id, metric, ifindex,
+		gateway, prefixlen);
 }
 
 int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
 						const char *gateway)
 {
-	/* ip route del default via 1.2.3.4 dev wlan0 table 1234 */
+	static const uint32_t metric = 0;
+	static const unsigned char prefixlen = 0;
 
-	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway, 0);
+	/*
+	 * ip route del default/0 via <gateway> dev wlan0 table <table_id>
+	 * metric 0
+	 */
+	return iproute_default_modify(RTM_DELROUTE, table_id, metric, ifindex,
+		gateway, prefixlen);
 }
 
 int __connman_inet_del_subnet_from_table(uint32_t table_id, int ifindex,
 						const char *gateway, unsigned char prefixlen)
 {
-	/* ip route del 1.2.3.4/24 dev eth0 table 1234 */
-	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway, prefixlen);
+	static const uint32_t metric = 0;
+
+	/* ip route del 1.2.3.4/24 dev eth0 table 1234 metric 0 */
+	return iproute_default_modify(RTM_DELROUTE, table_id, metric, ifindex,
+		gateway, prefixlen);
 }
 
 int __connman_inet_get_interface_ll_address(int index, int family,
