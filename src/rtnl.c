@@ -670,7 +670,8 @@ static void process_deladdr(unsigned char family, unsigned char prefixlen,
 
 static void extract_ipv4_route(struct rtmsg *msg, int bytes, int *index,
 						struct in_addr *dst,
-						struct in_addr *gateway)
+						struct in_addr *gateway,
+						uint32_t *table_id)
 {
 	struct rtattr *attr;
 
@@ -689,13 +690,18 @@ static void extract_ipv4_route(struct rtmsg *msg, int bytes, int *index,
 			if (index)
 				*index = *((int *) RTA_DATA(attr));
 			break;
+		case RTA_TABLE:
+			if (table_id)
+				*table_id = *((uint32_t *) RTA_DATA(attr));
+			break;
 		}
 	}
 }
 
 static void extract_ipv6_route(struct rtmsg *msg, int bytes, int *index,
 						struct in6_addr *dst,
-						struct in6_addr *gateway)
+						struct in6_addr *gateway,
+						uint32_t *table_id)
 {
 	struct rtattr *attr;
 
@@ -715,6 +721,10 @@ static void extract_ipv6_route(struct rtmsg *msg, int bytes, int *index,
 			if (index)
 				*index = *((int *) RTA_DATA(attr));
 			break;
+		case RTA_TABLE:
+			if (table_id)
+				*table_id = *((uint32_t *) RTA_DATA(attr));
+			break;
 		}
 	}
 }
@@ -729,7 +739,8 @@ static void process_newroute(unsigned char family, unsigned char scope,
 	if (family == AF_INET) {
 		struct in_addr dst = { INADDR_ANY }, gateway = { INADDR_ANY };
 
-		extract_ipv4_route(msg, bytes, &index, &dst, &gateway);
+		extract_ipv4_route(msg, bytes, &index, &dst, &gateway,
+			NULL);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
@@ -749,7 +760,8 @@ static void process_newroute(unsigned char family, unsigned char scope,
 		struct in6_addr dst = IN6ADDR_ANY_INIT,
 				gateway = IN6ADDR_ANY_INIT;
 
-		extract_ipv6_route(msg, bytes, &index, &dst, &gateway);
+		extract_ipv6_route(msg, bytes, &index, &dst, &gateway,
+			NULL);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
@@ -786,7 +798,8 @@ static void process_delroute(unsigned char family, unsigned char scope,
 	if (family == AF_INET) {
 		struct in_addr dst = { INADDR_ANY }, gateway = { INADDR_ANY };
 
-		extract_ipv4_route(msg, bytes, &index, &dst, &gateway);
+		extract_ipv4_route(msg, bytes, &index, &dst, &gateway,
+			NULL);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
@@ -806,7 +819,8 @@ static void process_delroute(unsigned char family, unsigned char scope,
 		struct in6_addr dst = IN6ADDR_ANY_INIT,
 				gateway = IN6ADDR_ANY_INIT;
 
-		extract_ipv6_route(msg, bytes, &index, &dst, &gateway);
+		extract_ipv6_route(msg, bytes, &index, &dst, &gateway,
+			NULL);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
