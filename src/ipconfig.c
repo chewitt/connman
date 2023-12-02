@@ -1038,7 +1038,8 @@ out:
 }
 
 void __connman_ipconfig_newroute(int index, int family, unsigned char scope,
-					const char *dst, const char *gateway)
+					const char *dst, const char *gateway,
+					uint32_t table_id)
 {
 	struct connman_ipdevice *ipdevice;
 	char *ifname;
@@ -1099,15 +1100,17 @@ void __connman_ipconfig_newroute(int index, int family, unsigned char scope,
 		}
 	}
 
-	connman_info("%s {add} route %s gw %s scope %u <%s>",
-		ifname, dst, gateway, scope, scope2str(scope));
+	connman_info("%s {add} route %s gw %s scope %u <%s> table %u <%s>",
+		ifname, dst, gateway, scope, scope2str(scope),
+		table_id, __connman_inet_table2string(table_id));
 
 out:
 	g_free(ifname);
 }
 
 void __connman_ipconfig_delroute(int index, int family, unsigned char scope,
-					const char *dst, const char *gateway)
+					const char *dst, const char *gateway,
+					uint32_t table_id)
 {
 	struct connman_ipdevice *ipdevice;
 	char *ifname;
@@ -1166,8 +1169,9 @@ void __connman_ipconfig_delroute(int index, int family, unsigned char scope,
 		}
 	}
 
-	connman_info("%s {del} route %s gw %s scope %u <%s>",
-		ifname, dst, gateway, scope, scope2str(scope));
+	connman_info("%s {del} route %s gw %s scope %u <%s> table %u <%s>",
+		ifname, dst, gateway, scope, scope2str(scope),
+		table_id, __connman_inet_table2string(table_id));
 
 out:
 	g_free(ifname);

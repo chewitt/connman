@@ -735,18 +735,20 @@ static void process_newroute(unsigned char family, unsigned char scope,
 	GSList *list;
 	char dststr[INET6_ADDRSTRLEN], gatewaystr[INET6_ADDRSTRLEN];
 	int index = -1;
+	uint32_t table_id = RT_TABLE_UNSPEC;
 
 	if (family == AF_INET) {
 		struct in_addr dst = { INADDR_ANY }, gateway = { INADDR_ANY };
 
 		extract_ipv4_route(msg, bytes, &index, &dst, &gateway,
-			NULL);
+			&table_id);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_newroute(index, family, scope, dststr,
-								gatewaystr);
+								gatewaystr,
+								table_id);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -761,13 +763,14 @@ static void process_newroute(unsigned char family, unsigned char scope,
 				gateway = IN6ADDR_ANY_INIT;
 
 		extract_ipv6_route(msg, bytes, &index, &dst, &gateway,
-			NULL);
+			&table_id);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_newroute(index, family, scope, dststr,
-								gatewaystr);
+								gatewaystr,
+								table_id);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -794,18 +797,20 @@ static void process_delroute(unsigned char family, unsigned char scope,
 	GSList *list;
 	char dststr[INET6_ADDRSTRLEN], gatewaystr[INET6_ADDRSTRLEN];
 	int index = -1;
+	uint32_t table_id = RT_TABLE_UNSPEC;
 
 	if (family == AF_INET) {
 		struct in_addr dst = { INADDR_ANY }, gateway = { INADDR_ANY };
 
 		extract_ipv4_route(msg, bytes, &index, &dst, &gateway,
-			NULL);
+			&table_id);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_delroute(index, family, scope, dststr,
-								gatewaystr);
+								gatewaystr,
+								table_id);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -820,13 +825,14 @@ static void process_delroute(unsigned char family, unsigned char scope,
 				gateway = IN6ADDR_ANY_INIT;
 
 		extract_ipv6_route(msg, bytes, &index, &dst, &gateway,
-			NULL);
+			&table_id);
 
 		inet_ntop(family, &dst, dststr, sizeof(dststr));
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_delroute(index, family, scope, dststr,
-						gatewaystr);
+								gatewaystr,
+								table_id);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
