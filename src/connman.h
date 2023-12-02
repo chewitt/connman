@@ -19,6 +19,13 @@
  *
  */
 
+/**
+ *  @file
+ *    This file defines internal, non-public (that is, neither visible
+ *    nor consumable by plugins), cross-module interfaces.
+ *
+ */
+
 #include <stdbool.h>
 
 #include <glib.h>
