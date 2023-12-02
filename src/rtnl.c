@@ -758,9 +758,10 @@ static void process_newroute(unsigned char family, unsigned char scope,
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_newroute(index, family, scope, dststr,
-								gatewaystr,
-								table_id,
-								metric);
+							msg->rtm_dst_len,
+							gatewaystr,
+							table_id,
+							metric);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -781,9 +782,10 @@ static void process_newroute(unsigned char family, unsigned char scope,
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_newroute(index, family, scope, dststr,
-								gatewaystr,
-								table_id,
-								metric);
+							msg->rtm_dst_len,
+							gatewaystr,
+							table_id,
+							metric);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -823,9 +825,10 @@ static void process_delroute(unsigned char family, unsigned char scope,
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_delroute(index, family, scope, dststr,
-								gatewaystr,
-								table_id,
-								metric);
+							msg->rtm_dst_len,
+							gatewaystr,
+							table_id,
+							metric);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&
@@ -846,9 +849,10 @@ static void process_delroute(unsigned char family, unsigned char scope,
 		inet_ntop(family, &gateway, gatewaystr, sizeof(gatewaystr));
 
 		__connman_ipconfig_delroute(index, family, scope, dststr,
-								gatewaystr,
-								table_id,
-								metric);
+							msg->rtm_dst_len,
+							gatewaystr,
+							table_id,
+							metric);
 
 		/* skip host specific routes */
 		if (scope != RT_SCOPE_UNIVERSE &&

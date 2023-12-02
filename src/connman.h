@@ -367,10 +367,14 @@ int __connman_ipconfig_newaddr(int index, int family, const char *label,
 void __connman_ipconfig_deladdr(int index, int family, const char *label,
 				unsigned char prefixlen, const char *address);
 void __connman_ipconfig_newroute(int index, int family, unsigned char scope,
-					const char *dst, const char *gateway,
+					const char *dst,
+					unsigned char dst_prefixlen,
+					const char *gateway,
 					uint32_t table_id, uint32_t metric);
 void __connman_ipconfig_delroute(int index, int family, unsigned char scope,
-					const char *dst, const char *gateway,
+					const char *dst,
+					unsigned char dst_prefixlen,
+					const char *gateway,
 					uint32_t table_id, uint32_t metric);
 
 void __connman_ipconfig_foreach(void (*function) (int index, void *user_data),

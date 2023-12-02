@@ -1038,7 +1038,9 @@ out:
 }
 
 void __connman_ipconfig_newroute(int index, int family, unsigned char scope,
-					const char *dst, const char *gateway,
+					const char *dst,
+					unsigned char dst_prefixlen,
+					const char *gateway,
 					uint32_t table_id, uint32_t metric)
 {
 	struct connman_ipdevice *ipdevice;
@@ -1100,9 +1102,9 @@ void __connman_ipconfig_newroute(int index, int family, unsigned char scope,
 		}
 	}
 
-	connman_info("%s {add} route %s gw %s scope %u <%s> table %u <%s> "
+	connman_info("%s {add} route %s/%u gw %s scope %u <%s> table %u <%s> "
 		"metric %u",
-		ifname, dst, gateway, scope, scope2str(scope),
+		ifname, dst, dst_prefixlen, gateway, scope, scope2str(scope),
 		table_id, __connman_inet_table2string(table_id), metric);
 
 out:
@@ -1110,7 +1112,9 @@ out:
 }
 
 void __connman_ipconfig_delroute(int index, int family, unsigned char scope,
-					const char *dst, const char *gateway,
+					const char *dst,
+					unsigned char dst_prefixlen,
+					const char *gateway,
 					uint32_t table_id, uint32_t metric)
 {
 	struct connman_ipdevice *ipdevice;
@@ -1170,9 +1174,9 @@ void __connman_ipconfig_delroute(int index, int family, unsigned char scope,
 		}
 	}
 
-	connman_info("%s {del} route %s gw %s scope %u <%s> table %u <%s> "
+	connman_info("%s {del} route %s/%u gw %s scope %u <%s> table %u <%s> "
 		"metric %u",
-		ifname, dst, gateway, scope, scope2str(scope),
+		ifname, dst, dst_prefixlen, gateway, scope, scope2str(scope),
 		table_id, __connman_inet_table2string(table_id), metric);
 
 out:
