@@ -263,9 +263,9 @@ static const char *type2str(unsigned short type)
 static const char *scope2str(unsigned char scope)
 {
 	switch (scope) {
-	case 0:
+	case RT_SCOPE_UNIVERSE:
 		return "UNIVERSE";
-	case 253:
+	case RT_SCOPE_LINK:
 		return "LINK";
 	}
 
