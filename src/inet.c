@@ -3196,6 +3196,18 @@ int __connman_inet_del_fwmark_rule(uint32_t table_id, int family, uint32_t fwmar
 	return iprule_modify(RTM_DELRULE, family, table_id, fwmark);
 }
 
+static const char *rtnl_route_cmd2string(int cmd)
+{
+	switch (cmd) {
+	case RTM_NEWROUTE:
+		return "add";
+	case RTM_DELROUTE:
+		return "del";
+	}
+
+	return "";
+}
+
 static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 			const char *gateway, unsigned char prefixlen)
 {
@@ -3208,7 +3220,8 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 
 	interface = connman_inet_ifname(ifindex);
 
-	DBG("ifindex %d (%s) gateway %s/%u table %u <%s>",
+	DBG("cmd %d (%s) ifindex %d (%s) gateway %s/%u table %u <%s>",
+		cmd, rtnl_route_cmd2string(cmd),
 		ifindex, interface,
 		gateway, prefixlen,
 		table_id, __connman_inet_table2string(table_id));
