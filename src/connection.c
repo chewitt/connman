@@ -3038,7 +3038,7 @@ static void check_default_gateway(struct gateway_data *activated)
  *
  *  @param[in]  index    The network interface index associated with
  *                       the newly-added gateway, or default router.
- *  @param[in]  gateway  An pointer to an immutable null-terminated
+ *  @param[in]  gateway  A pointer to an immutable null-terminated
  *                       C string containing the text-
  *                       formatted address of the gateway, or default
  *                       router, that was added.
@@ -3165,7 +3165,7 @@ static void remove_gateway(gpointer user_data)
  *
  *  @param[in]  index    The network interface index associated with
  *                       the newly-removed gateway, or default router.
- *  @param[in]  gateway  An pointer to an immutable null-terminated
+ *  @param[in]  gateway  A pointer to an immutable null-terminated
  *                       C string containing the text-
  *                       formatted address of the gateway, or default
  *                       router, that was removed.
