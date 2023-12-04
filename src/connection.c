@@ -1845,6 +1845,8 @@ int __connman_connection_gateway_add(struct connman_service *service,
 		return -EINVAL;
 
 	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -EINVAL;
 
 	interface = connman_inet_ifname(index);
 
