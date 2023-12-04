@@ -833,6 +833,9 @@ static int del_gateway_routes(struct gateway_data *data,
 	int status4 = 0, status6 = 0;
 	bool do_ipv4 = false, do_ipv6 = false;
 
+	DBG("data %p type %d (%s)", data,
+		type, __connman_ipconfig_type2string(type));
+
 	GATEWAY_DATA_DBG("data", data);
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
@@ -879,6 +882,10 @@ static int del_gateway_routes(struct gateway_data *data,
 						data->ipv6_config->gateway);
 		}
 	}
+
+	DBG("status4 %d (%s) status6 %d (%s)",
+		status4, strerror(-status4),
+		status6, strerror(-status6));
 
 	return (status4 < 0 ? status4 : status6);
 }
