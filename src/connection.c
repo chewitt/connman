@@ -2102,27 +2102,27 @@ bool __connman_connection_update_gateway(void)
 	g_hash_table_iter_init(&iter, gateway_hash);
 
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		struct gateway_data *active_gateway = value;
+		struct gateway_data *current_gateway = value;
 
-		GATEWAY_DATA_DBG("active_gateway", active_gateway);
+		GATEWAY_DATA_DBG("current_gateway", current_gateway);
 
-		if (active_gateway == default_gateway)
+		if (current_gateway == default_gateway)
 			continue;
 
-		if (active_gateway->ipv4_config &&
+		if (current_gateway->ipv4_config &&
 				is_gateway_config_state_active(
-					active_gateway->ipv4_config)) {
+					current_gateway->ipv4_config)) {
 
-			UNSET_DEFAULT_GATEWAY(active_gateway,
+			UNSET_DEFAULT_GATEWAY(current_gateway,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
 			updated = true;
 		}
 
-		if (active_gateway->ipv6_config &&
+		if (current_gateway->ipv6_config &&
 				is_gateway_config_state_active(
-					active_gateway->ipv6_config)) {
+					current_gateway->ipv6_config)) {
 
-			UNSET_DEFAULT_GATEWAY(active_gateway,
+			UNSET_DEFAULT_GATEWAY(current_gateway,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
 			updated = true;
 		}
