@@ -38,8 +38,18 @@
 #define GATEWAY_DATA_DBG(description, data) \
 	gateway_data_debug(__func__, description, data)
 
+/**
+ *  Flags governing the state and use of a gateway configuration.
+ */
 enum gateway_config_flags {
+	/**
+	 *	Indicates there are no gateway configuration flags asserted.
+	 */
 	CONNMAN_GATEWAY_CONFIG_FLAG_NONE = 0,
+
+	/**
+	 *	Indicates whether the gateway configuration is part of a VPN.
+	 */
 	CONNMAN_GATEWAY_CONFIG_FLAG_VPN	 = 1U << 0
 };
 
@@ -72,6 +82,10 @@ enum gateway_config_state {
 };
 
 struct gateway_config {
+	/**
+	 *	A 32-bit flag bitfield governing the state and use of the
+	 *	configuration. See #gateway_config_flags.
+	 */
 	uint32_t flags;
 
 	/**
