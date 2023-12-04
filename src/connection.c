@@ -81,8 +81,20 @@ enum gateway_config_state {
 	CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE	  = 1
 };
 
+/**
+ *	Indicates the current type or use of the gateway configuration.
+ */
 enum gateway_config_type {
+	/**
+	 *	Indicates the gateway, or default router, is not used for any
+	 *	route.
+	 */
 	CONNMAN_GATEWAY_CONFIG_TYPE_NONE				  = 0,
+
+	/**
+	 *	Indicates the gateway, or default router, is a high-priority
+	 *	(that is, metric 0) default route.
+	 */
 	CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT = 1
 };
 
@@ -98,6 +110,11 @@ struct gateway_config {
 	 *	#gateway_config_state.
 	 */
 	enum gateway_config_state state;
+
+	/**
+	 *	Indicates the current type or use of the gateway configuration.
+	 *	See #gateway_config_type.
+	 */
 	enum gateway_config_type type;
 	char *gateway;
 
