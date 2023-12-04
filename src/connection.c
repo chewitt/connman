@@ -81,6 +81,11 @@ enum gateway_config_state {
 	CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE	  = 1
 };
 
+enum gateway_config_type {
+	CONNMAN_GATEWAY_CONFIG_TYPE_NONE				  = 0,
+	CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT = 1
+};
+
 struct gateway_config {
 	/**
 	 *	A 32-bit flag bitfield governing the state and use of the
@@ -93,6 +98,7 @@ struct gateway_config {
 	 *	#gateway_config_state.
 	 */
 	enum gateway_config_state state;
+	enum gateway_config_type type;
 	char *gateway;
 
 	/* VPN extra data */
@@ -193,6 +199,18 @@ static const char *gateway_config_state2string(enum gateway_config_state state)
 	return NULL;
 }
 
+static const char *gateway_config_type2string(enum gateway_config_type type)
+{
+	switch (type) {
+	case CONNMAN_GATEWAY_CONFIG_TYPE_NONE:
+		return "none";
+	case CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT:
+		return "high-priority default";
+	}
+
+	return NULL;
+}
+
 static void gateway_config_state_set(struct gateway_config *config,
 				enum gateway_config_state state)
 {
@@ -214,6 +232,17 @@ static bool is_gateway_config_state_active(const struct gateway_config *config)
 {
 	return is_gateway_config_state(config,
 				CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+}
+
+static void gateway_config_type_set(struct gateway_config *config,
+				enum gateway_config_type type)
+{
+	DBG("config %p old type %d (%s) => new type %d (%s)",
+		config,
+		config->type, gateway_config_type2string(config->type),
+		type, gateway_config_type2string(type));
+
+	config->type = type;
 }
 
 /**
@@ -255,7 +284,7 @@ static void gateway_config_debug(const char *function,
 				connman_inet_ifname(config->vpn_phy_index);
 
 		DBG("from %s() "
-			"%s %p: { state: %d (%s), "
+			"%s %p: { state: %d (%s), type %d (%s), "
 			"flags: 0x%x (%s), "
 			"gateway: %p (%s), "
 			"vpn_ip: %p (%s), vpn_phy_index: %d (%s), "
@@ -265,6 +294,8 @@ static void gateway_config_debug(const char *function,
 			config,
 			config->state,
 			maybe_null(gateway_config_state2string(config->state)),
+			config->type,
+			maybe_null(gateway_config_type2string(config->type)),
 			config->flags,
 			is_gateway_config_vpn(config) ? "VPN" : "",
 			config->gateway, maybe_null(config->gateway),
@@ -977,6 +1008,7 @@ static int add_gateway(struct connman_service *service,
 		return -ENOMEM;
 
 	config->state = CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE;
+	config->type = CONNMAN_GATEWAY_CONFIG_TYPE_NONE;
 	config->flags = CONNMAN_GATEWAY_CONFIG_FLAG_NONE;
 	config->gateway = g_strdup(gateway);
 	config->vpn_ip = NULL;
@@ -1097,6 +1129,9 @@ static void set_default_gateway(struct gateway_data *data,
 			DBG("set %p index %d gateway %s",
 				data, data->index, data->ipv4_config->gateway);
 		}
+
+		gateway_config_type_set(data->ipv4_config,
+			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
 	}
 
 	if (do_ipv6 && data->ipv6_config) {
@@ -1129,6 +1164,9 @@ static void set_default_gateway(struct gateway_data *data,
 			DBG("set %p index %d gateway %s",
 				data, data->index, data->ipv4_config->gateway);
 		}
+
+		gateway_config_type_set(data->ipv6_config,
+			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
 	}
 
 	DBG("status4 %d status6 %d", status4, status6);
@@ -1270,6 +1308,8 @@ static void unset_default_gateway(struct gateway_data *data,
 static bool yield_default_gateway(struct gateway_data *activated,
 					struct gateway_data *existing)
 {
+	static const enum gateway_config_type config_type =
+		CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
 	enum connman_ipconfig_type type;
 	bool yield_activated = false;
 
@@ -1293,7 +1333,11 @@ static bool yield_default_gateway(struct gateway_data *activated,
 		 * activated gateway data.
 		 */
 		if (!is_gateway_config_state_active(existing->ipv4_config)) {
-			DBG("ipv4 existing %p yielding default", existing);
+			DBG("%s existing %p yielding %s",
+				__connman_ipconfig_type2string(type),
+				existing,
+				maybe_null(gateway_config_type2string(
+					config_type)));
 
 			unset_default_gateway(existing, type);
 		}
@@ -1308,7 +1352,11 @@ static bool yield_default_gateway(struct gateway_data *activated,
 		if (is_gateway_config_state_active(existing->ipv4_config) &&
 				__connman_service_compare(existing->service,
 						activated->service) < 0) {
-			DBG("ipv4 activated %p yielding default", activated);
+			DBG("%s activated %p yielding %s",
+				__connman_ipconfig_type2string(type),
+				activated,
+				maybe_null(gateway_config_type2string(
+					config_type)));
 
 			unset_default_gateway(activated, type);
 
@@ -1331,7 +1379,11 @@ static bool yield_default_gateway(struct gateway_data *activated,
 		 * activated gateway data.
 		 */
 		if (!is_gateway_config_state_active(existing->ipv6_config)) {
-			DBG("ipv6 existing %p yielding default", existing);
+			DBG("%s existing %p yielding %s",
+				__connman_ipconfig_type2string(type),
+				existing,
+				maybe_null(gateway_config_type2string(
+					config_type)));
 
 			unset_default_gateway(existing, type);
 		}
@@ -1346,7 +1398,11 @@ static bool yield_default_gateway(struct gateway_data *activated,
 		if (is_gateway_config_state_active(existing->ipv6_config) &&
 			__connman_service_compare(existing->service,
 					activated->service) < 0) {
-			DBG("ipv6 activated %p yielding default", activated);
+			DBG("%s activated %p yielding %s",
+				__connman_ipconfig_type2string(type),
+				activated,
+				maybe_null(gateway_config_type2string(
+					config_type)));
 
 			unset_default_gateway(activated, type);
 
@@ -1572,6 +1628,9 @@ static void connection_delgateway(int index, const char *gateway)
 
 		gateway_config_state_set(config,
 			CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+
+		gateway_config_type_set(config,
+			CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
 	}
 
 	/*
