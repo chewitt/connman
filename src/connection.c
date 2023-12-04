@@ -352,6 +352,21 @@ static struct gateway_data *find_gateway_data(
 	return NULL;
 }
 
+/**
+ *  @brief
+ *    Find the first, or any, gateway data marked active.
+ *
+ *  This attempts to find the first, or any, gateway data marked
+ *  active.
+ *
+ *  @returns
+ *    A pointer to the first, or any, gateway data marked active on
+ *    success; otherwise, null.
+ *
+ *  @sa find_default_gateway_data
+ *  @sa find_gateway_data
+ *
+ */
 static struct gateway_data *find_any_active_gateway_data(void)
 {
 	GHashTableIter iter;
