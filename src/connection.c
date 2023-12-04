@@ -1079,6 +1079,94 @@ static int add_gateway(struct connman_service *service,
 	return err;
 }
 
+static int set_ipv4_default_gateway(struct gateway_data *data,
+				struct gateway_config *config)
+{
+	int err = 0;
+
+	if (is_gateway_config_vpn(config)) {
+		connman_inet_set_gateway_interface(data->index);
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+
+		DBG("set %p index %d vpn %s index %d phy %s",
+			data, data->index, config->vpn_ip,
+			config->vpn_phy_index,
+			config->vpn_phy_ip);
+	} else if (is_ipv4_addr_any_str(config->gateway)) {
+		if (connman_inet_set_gateway_interface(
+					data->index) < 0)
+			goto done;
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+
+		DBG("set %p index %d",
+			data, data->index);
+	} else {
+		err = __connman_inet_add_default_to_table(
+					RT_TABLE_MAIN,
+					data->index,
+					config->gateway);
+		if (err < 0)
+			goto done;
+
+		DBG("set %p index %d gateway %s",
+			data, data->index, config->gateway);
+	}
+
+	gateway_config_type_set(config,
+		CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
+
+done:
+	return err;
+}
+
+static int set_ipv6_default_gateway(struct gateway_data *data,
+				struct gateway_config *config)
+{
+	int err = 0;
+
+	if (is_gateway_config_vpn(config)) {
+		connman_inet_set_ipv6_gateway_interface(data->index);
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+
+		DBG("set %p index %d vpn %s index %d phy %s",
+			data, data->index, config->vpn_ip,
+			config->vpn_phy_index,
+			config->vpn_phy_ip);
+	} else if (is_ipv6_addr_any_str(config->gateway)) {
+		if (connman_inet_set_ipv6_gateway_interface(
+					data->index) < 0)
+			goto done;
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+
+		DBG("set %p index %d",
+			data, data->index);
+	} else {
+		err = __connman_inet_add_default_to_table(
+					RT_TABLE_MAIN,
+					data->index,
+					config->gateway);
+		if (err < 0)
+			goto done;
+
+		DBG("set %p index %d gateway %s",
+			data, data->index, config->gateway);
+	}
+
+	gateway_config_type_set(config,
+		CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
+
+done:
+	return err;
+}
+
 /**
  *  @brief
  *    Set, or assign, the gateway, or default route, for the specified
@@ -1134,82 +1222,80 @@ static void set_default_gateway(struct gateway_data *data,
 	else
 		return;
 
-	if (do_ipv4 && data->ipv4_config) {
-		if (is_gateway_config_vpn(data->ipv4_config)) {
-			connman_inet_set_gateway_interface(data->index);
+	if (do_ipv4 && data->ipv4_config)
+		status4 = set_ipv4_default_gateway(data, data->ipv4_config);
 
-			gateway_config_state_set(data->ipv4_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+	if (do_ipv6 && data->ipv6_config)
+		status6 = set_ipv6_default_gateway(data, data->ipv6_config);
 
-			DBG("set %p index %d vpn %s index %d phy %s",
-				data, data->index, data->ipv4_config->vpn_ip,
-				data->ipv4_config->vpn_phy_index,
-				data->ipv4_config->vpn_phy_ip);
-		} else if (is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
-			if (connman_inet_set_gateway_interface(
-						data->index) < 0)
-				return;
-
-			gateway_config_state_set(data->ipv4_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
-
-			DBG("set %p index %d",
-				data, data->index);
-		} else {
-			status4 = __connman_inet_add_default_to_table(
-						RT_TABLE_MAIN,
-						data->index,
-						data->ipv4_config->gateway);
-
-			DBG("set %p index %d gateway %s",
-				data, data->index, data->ipv4_config->gateway);
-		}
-
-		gateway_config_type_set(data->ipv4_config,
-			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
-	}
-
-	if (do_ipv6 && data->ipv6_config) {
-		if (is_gateway_config_vpn(data->ipv6_config)) {
-			connman_inet_set_ipv6_gateway_interface(data->index);
-
-			gateway_config_state_set(data->ipv6_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
-
-			DBG("set %p index %d vpn %s index %d phy %s",
-				data, data->index, data->ipv6_config->vpn_ip,
-				data->ipv6_config->vpn_phy_index,
-				data->ipv6_config->vpn_phy_ip);
-		} else if (is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
-			if (connman_inet_set_ipv6_gateway_interface(
-						data->index) < 0)
-				return;
-
-			gateway_config_state_set(data->ipv6_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
-
-			DBG("set %p index %d",
-				data, data->index);
-		} else {
-			status6 = __connman_inet_add_default_to_table(
-						RT_TABLE_MAIN,
-						data->index,
-						data->ipv6_config->gateway);
-
-			DBG("set %p index %d gateway %s",
-				data, data->index, data->ipv6_config->gateway);
-		}
-
-		gateway_config_type_set(data->ipv6_config,
-			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
-	}
-
-	DBG("status4 %d status6 %d", status4, status6);
+	DBG("status4 %d (%s) status6 %d (%s)",
+		status4, strerror(-status4),
+		status6, strerror(-status6));
 
 	if (status4 < 0 || status6 < 0)
 		return;
 
 	__connman_service_indicate_default(data->service);
+}
+
+static void unset_ipv4_default_gateway(struct gateway_data *data,
+				struct gateway_config *config)
+{
+	if (is_gateway_config_vpn(config)) {
+		connman_inet_clear_gateway_interface(data->index);
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+
+		DBG("unset %p index %d vpn %s index %d phy %s",
+			data, data->index, config->vpn_ip,
+			config->vpn_phy_index,
+			config->vpn_phy_ip);
+	} else if (is_ipv4_addr_any_str(config->gateway)) {
+		connman_inet_clear_gateway_interface(data->index);
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+
+		DBG("unset %p index %d",
+			data, data->index);
+	} else {
+		connman_inet_clear_gateway_address(data->index,
+					config->gateway);
+
+		DBG("unset %p index %d gateway %s",
+			data, data->index, config->gateway);
+	}
+}
+
+static void unset_ipv6_default_gateway(struct gateway_data *data,
+				struct gateway_config *config)
+{
+	if (is_gateway_config_vpn(config)) {
+		connman_inet_clear_ipv6_gateway_interface(data->index);
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+
+		DBG("unset %p index %d vpn %s index %d phy %s",
+			data, data->index, config->vpn_ip,
+			config->vpn_phy_index,
+			config->vpn_phy_ip);
+	} else if (is_ipv6_addr_any_str(config->gateway)) {
+		connman_inet_clear_ipv6_gateway_interface(data->index);
+
+		gateway_config_state_set(config,
+			CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+
+		DBG("unset %p index %d",
+			data, data->index);
+	} else {
+		connman_inet_clear_ipv6_gateway_address(data->index,
+					config->gateway);
+
+		DBG("unset %p index %d gateway %s",
+			data, data->index, config->gateway);
+	}
 }
 
 /**
@@ -1265,61 +1351,11 @@ static void unset_default_gateway(struct gateway_data *data,
 	else
 		return;
 
-	if (do_ipv4 && data->ipv4_config) {
-		if (is_gateway_config_vpn(data->ipv4_config)) {
-			connman_inet_clear_gateway_interface(data->index);
+	if (do_ipv4 && data->ipv4_config)
+		unset_ipv4_default_gateway(data, data->ipv4_config);
 
-			gateway_config_state_set(data->ipv4_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
-
-			DBG("unset %p index %d vpn %s index %d phy %s",
-				data, data->index, data->ipv4_config->vpn_ip,
-				data->ipv4_config->vpn_phy_index,
-				data->ipv4_config->vpn_phy_ip);
-		} else if (is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
-			connman_inet_clear_gateway_interface(data->index);
-
-			gateway_config_state_set(data->ipv4_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
-
-			DBG("unset %p index %d",
-				data, data->index);
-		} else {
-			connman_inet_clear_gateway_address(data->index,
-						data->ipv4_config->gateway);
-
-			DBG("unset %p index %d gateway %s",
-				data, data->index, data->ipv4_config->gateway);
-		}
-	}
-
-	if (do_ipv6 && data->ipv6_config) {
-		if (is_gateway_config_vpn(data->ipv6_config)) {
-			connman_inet_clear_ipv6_gateway_interface(data->index);
-
-			gateway_config_state_set(data->ipv6_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
-
-			DBG("unset %p index %d vpn %s index %d phy %s",
-				data, data->index, data->ipv6_config->vpn_ip,
-				data->ipv6_config->vpn_phy_index,
-				data->ipv6_config->vpn_phy_ip);
-		} else if (is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
-			connman_inet_clear_ipv6_gateway_interface(data->index);
-
-			gateway_config_state_set(data->ipv6_config,
-				CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
-
-			DBG("unset %p index %d",
-				data, data->index);
-		} else {
-			connman_inet_clear_ipv6_gateway_address(data->index,
-						data->ipv6_config->gateway);
-
-			DBG("unset %p index %d gateway %s",
-				data, data->index, data->ipv6_config->gateway);
-		}
-	}
+	if (do_ipv6 && data->ipv6_config)
+		unset_ipv6_default_gateway(data, data->ipv6_config);
 }
 
 /**
