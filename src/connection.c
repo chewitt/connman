@@ -1830,8 +1830,7 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	struct gateway_data *new_gateway = NULL;
 	enum connman_ipconfig_type type4 = CONNMAN_IPCONFIG_TYPE_UNKNOWN,
 		type6 = CONNMAN_IPCONFIG_TYPE_UNKNOWN;
-	enum connman_service_type service_type =
-					connman_service_get_type(service);
+	enum connman_service_type service_type;
 	int index;
 	g_autofree char *interface = NULL;
 	int err = 0;
@@ -1842,11 +1841,16 @@ int __connman_connection_gateway_add(struct connman_service *service,
 		type, __connman_ipconfig_type2string(type),
 		peer, maybe_null(peer));
 
+	if (!service)
+		return -EINVAL;
+
 	index = __connman_service_get_index(service);
 
 	interface = connman_inet_ifname(index);
 
 	DBG("index %d (%s)", index, maybe_null(interface));
+
+	service_type = connman_service_get_type(service);
 
 	/*
 	 * If gateway is NULL, it's a point to point link and the default
