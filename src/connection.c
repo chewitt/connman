@@ -394,6 +394,22 @@ static void gateway_data_debug(const char *function,
 	}
 }
 
+/**
+ *  @brief
+ *    Return the IP-specific gateway configuration for the specified
+ *    gateway data.
+ *
+ *  @param[in]  data  A pointer to the mutable gateway data for which
+ *                    the gateway configuration is to be returned,
+ *                    specific to @a type.
+ *  @param[in]  type  The IP configuration type for which the gateway
+ *                    configuration is to be returned.
+ *
+ *  @returns
+ *    The IP-specific gateway configuration for the specified gateway
+ *    data on success; otherwise, null.
+ *
+ */
 static struct gateway_config *gateway_data_config_get(struct gateway_data *data,
 				enum connman_ipconfig_type type)
 {
