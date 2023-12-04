@@ -2101,8 +2101,6 @@ bool __connman_connection_update_gateway(void)
 
 	default_gateway = find_default_gateway_data();
 
-	DBG("default_gateway %p", default_gateway);
-
 	GATEWAY_DATA_DBG("default_gateway", default_gateway);
 
 	/*
