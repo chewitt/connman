@@ -1698,6 +1698,17 @@ static void connection_newgateway(int index, const char *gateway)
 	check_default_gateway(data);
 }
 
+/**
+ *  @brief
+ *    Deallocate gateway configuration resources.
+ *
+ *  This attempts to deallocate resources associated with the
+ *  specified gateway configuration.
+ *
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                  configuration to deallocate.
+ *
+ */
 static void gateway_config_free(struct gateway_config *config)
 {
 	DBG("config %p", config);
