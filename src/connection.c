@@ -1698,27 +1698,27 @@ static void connection_newgateway(int index, const char *gateway)
 	check_default_gateway(data);
 }
 
+static void gateway_config_free(struct gateway_config *config)
+{
+	DBG("config %p", config);
+
+	if (config) {
+		g_free(config->gateway);
+		g_free(config->vpn_ip);
+		g_free(config->vpn_phy_ip);
+		g_free(config);
+	}
+}
+
 static void remove_gateway(gpointer user_data)
 {
 	struct gateway_data *data = user_data;
 
-	DBG("data %p", data);
-
 	GATEWAY_DATA_DBG("data", data);
 
-	if (data->ipv4_config) {
-		g_free(data->ipv4_config->gateway);
-		g_free(data->ipv4_config->vpn_ip);
-		g_free(data->ipv4_config->vpn_phy_ip);
-		g_free(data->ipv4_config);
-	}
+	gateway_config_free(data->ipv4_config);
 
-	if (data->ipv6_config) {
-		g_free(data->ipv6_config->gateway);
-		g_free(data->ipv6_config->vpn_ip);
-		g_free(data->ipv6_config->vpn_phy_ip);
-		g_free(data->ipv6_config);
-	}
+	gateway_config_free(data->ipv6_config);
 
 	connman_service_unref(data->service);
 
