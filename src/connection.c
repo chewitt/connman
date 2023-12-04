@@ -38,12 +38,40 @@
 #define GATEWAY_DATA_DBG(description, data) \
 	gateway_data_debug(__func__, description, data)
 
+/**
+ *	@brief
+ *    Indicates the current lifecycle state of the gateway
+ *    configuration.
+ *
+ *  Gateway lifecycle is generally top-down, from user space to
+ *  kernel. That is, Connection Manager manages and adds/sets or
+ *  gateway routes and then uses notifications from the kernel Routing
+ *  Netlink (rtnl) to confirm and "activate" those routes. Likewise,
+ *  Connection Manager removes/clears/deletes gateway routes an then
+ *  uses notifications from the kernel Routing Netlink (rtnl) to
+ *  confirm and "inactivate" those routes.
+ *
+ */
 enum gateway_config_state {
+	/**
+	 *	Indicates whether the gateway, or default router, is inactive.
+	 */
 	CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE = 0,
+
+	/**
+	 *	Indicates whether the gateway, or default router, is added and
+	 *	acknowledged by the kernel through a Routing Netlink (rtnl)
+	 *	notification and, consequently, is active (that is, in use).
+	 */
 	CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE	  = 1
 };
 
 struct gateway_config {
+
+	/**
+	 *	Indicates the current state of the gateway configuration. See
+	 *	#gateway_config_state.
+	 */
 	enum gateway_config_state state;
 	char *gateway;
 
