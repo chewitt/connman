@@ -1405,6 +1405,34 @@ static void unset_default_gateway(struct gateway_data *data,
 		unset_ipv6_default_gateway(data, data->ipv6_config);
 }
 
+/**
+ *  @brief
+ *    Decide whether either of the specified gateways should yield the
+ *    default gateway route.
+ *
+ *  This determines whether either of the specified gateway data
+ *  should yield the IP-specific default gateway route via
+ *  #unset_default_gateway. @a activated is a newly-activated gateway
+ *  from a Routing Netlink (rtnl) notification. @a existing is an
+ *  existing gateway from the services-to-gateway data hash.
+ *
+ *  @param[in,out]  activated  A pointer to a mutable newly-activated
+ *                             gateway.
+ *  @param[in,out]  existing   A pointer to a mutable existing
+ *                             gateway.
+ *  @param[in]      type       The IP configuration type for which
+ *                             gateway, or default router, is to be
+ *                             yielded.
+ *
+ *  @returns
+ *    True if @a activated yielded the IP-specific default gateway;
+ *    otherwise, false.
+ *
+ *  @sa __connman_service_compare
+ *  @sa unset_default_gateway
+ *  @sa yield_default_gateway
+ *
+ */
 static bool yield_default_gateway_for_type(struct gateway_data *activated,
 					struct gateway_data *existing,
 					enum connman_ipconfig_type type)
@@ -1492,12 +1520,13 @@ done:
  *                             gateway.
  *
  *  @returns
- *    True of @a activated yielded the default gateway; otherwise,
+ *    True if @a activated yielded the default gateway; otherwise,
  *    false.
  *
  *  @sa check_default_gateway
  *  @sa __connman_service_compare
  *  @sa unset_default_gateway
+ *  @sa yield_default_gateway_for_type
  *
  */
 static bool yield_default_gateway(struct gateway_data *activated,
