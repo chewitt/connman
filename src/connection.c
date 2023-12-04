@@ -1828,11 +1828,11 @@ int __connman_connection_gateway_add(struct connman_service *service,
 {
 	struct gateway_data *any_active_gateway = NULL;
 	struct gateway_data *new_gateway = NULL;
-	enum connman_ipconfig_type type4 = CONNMAN_IPCONFIG_TYPE_UNKNOWN,
-		type6 = CONNMAN_IPCONFIG_TYPE_UNKNOWN;
 	enum connman_service_type service_type;
 	int index;
 	g_autofree char *interface = NULL;
+	bool do_ipv4 = false, do_ipv6 = false;
+	bool is_vpn4 = false, is_vpn6 = false;
 	int err = 0;
 
 	DBG("service %p (%s) gateway %p (%s) type %d (%s) peer %p (%s)",
@@ -1842,6 +1842,13 @@ int __connman_connection_gateway_add(struct connman_service *service,
 		peer, maybe_null(peer));
 
 	if (!service)
+		return -EINVAL;
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		do_ipv4 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		do_ipv6 = true;
+	else
 		return -EINVAL;
 
 	index = __connman_service_get_index(service);
@@ -1859,14 +1866,11 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	 * gateway for ipv4 is 0.0.0.0 and for ipv6 is ::, meaning the
 	 * interface
 	 */
-	if (!gateway && type == CONNMAN_IPCONFIG_TYPE_IPV4)
+	if (!gateway && do_ipv4)
 		gateway = ipv4_addr_any_str;
 
-	if (!gateway && type == CONNMAN_IPCONFIG_TYPE_IPV6)
+	if (!gateway && do_ipv6)
 		gateway = ipv6_addr_any_str;
-
-	DBG("service %p index %d gateway %s vpn ip %s type %d",
-		service, index, gateway, peer, type);
 
 	err = add_gateway(service, index, gateway, type, &new_gateway);
 	if (err < 0)
@@ -1878,20 +1882,16 @@ int __connman_connection_gateway_add(struct connman_service *service,
 
 	GATEWAY_DATA_DBG("any_active_gateway", any_active_gateway);
 
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
-				new_gateway->ipv4_config) {
+	if (do_ipv4 && new_gateway->ipv4_config) {
 		add_host_route(AF_INET, index, gateway, service_type);
 		__connman_service_nameserver_add_routes(service,
 					new_gateway->ipv4_config->gateway);
-		type4 = CONNMAN_IPCONFIG_TYPE_IPV4;
 	}
 
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
-				new_gateway->ipv6_config) {
+	if (do_ipv6 && new_gateway->ipv6_config) {
 		add_host_route(AF_INET6, index, gateway, service_type);
 		__connman_service_nameserver_add_routes(service,
 					new_gateway->ipv6_config->gateway);
-		type6 = CONNMAN_IPCONFIG_TYPE_IPV6;
 	}
 
 	if (service_type == CONNMAN_SERVICE_TYPE_VPN) {
@@ -1899,13 +1899,21 @@ int __connman_connection_gateway_add(struct connman_service *service,
 		set_vpn_routes(new_gateway, service, gateway, type, peer,
 							any_active_gateway);
 
+		is_vpn4 = do_ipv4 &&
+					new_gateway->ipv4_config &&
+					is_gateway_config_vpn(
+						new_gateway->ipv4_config);
+
+		is_vpn6 = do_ipv4 &&
+					new_gateway->ipv4_config &&
+					is_gateway_config_vpn(
+						new_gateway->ipv4_config);
+
 	} else {
-		if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
-					new_gateway->ipv4_config)
+		if (do_ipv4 && new_gateway->ipv4_config)
 			gateway_config_clear_vpn(new_gateway->ipv4_config);
 
-		if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
-					new_gateway->ipv6_config)
+		if (do_ipv6 && new_gateway->ipv6_config)
 			gateway_config_clear_vpn(new_gateway->ipv6_config);
 	}
 
@@ -1914,18 +1922,14 @@ int __connman_connection_gateway_add(struct connman_service *service,
 		goto done;
 	}
 
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
-			new_gateway->ipv4_config &&
-			is_gateway_config_vpn(new_gateway->ipv4_config)) {
+	if (is_vpn4) {
 		if (!__connman_service_is_split_routing(new_gateway->service))
 			connman_inet_clear_gateway_address(
 				any_active_gateway->index,
 				any_active_gateway->ipv4_config->gateway);
 	}
 
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
-			new_gateway->ipv6_config &&
-			is_gateway_config_vpn(new_gateway->ipv6_config)) {
+	if (is_vpn6) {
 		if (!__connman_service_is_split_routing(new_gateway->service))
 			connman_inet_clear_ipv6_gateway_address(
 				any_active_gateway->index,
@@ -1933,12 +1937,12 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	}
 
 done:
-	if (type4 == CONNMAN_IPCONFIG_TYPE_IPV4)
+	if (do_ipv4)
 		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_READY,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
 
-	if (type6 == CONNMAN_IPCONFIG_TYPE_IPV6)
+	if (do_ipv6)
 		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_READY,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
