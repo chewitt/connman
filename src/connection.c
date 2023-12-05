@@ -1371,12 +1371,15 @@ done:
  *                            which the call to this function should
  *                            be attributed.
  *
+ * @returns
+ *   0 if successful; otherwise, < 0 on error.
+ *
  *  @sa mutate_default_gateway
  *  @sa set_ipv4_high_priority_default_gateway
  *  @sa set_ipv6_high_priority_default_gateway
  *
  */
-static void set_default_gateway(struct gateway_data *data,
+static int set_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function)
 {
@@ -1390,9 +1393,12 @@ static void set_default_gateway(struct gateway_data *data,
 
 	status = mutate_default_gateway(data, type, &ops, __func__);
 	if (status < 0)
-		return;
+		goto done;
 
 	__connman_service_indicate_default(data->service);
+
+done:
+	return status;
 }
 
 static int unset_ipv4_high_priority_default_gateway(
