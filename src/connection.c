@@ -203,6 +203,9 @@ struct mutate_default_gateway_ops {
 				struct gateway_config *config);
 };
 
+typedef int (*mutate_default_gateway_route_cb_t)(struct gateway_data *data,
+				struct gateway_config *config);
+
 static int unset_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function);
@@ -1254,7 +1257,45 @@ static int mutate_default_gateway(struct gateway_data *data,
 	return (status4 < 0 ? status4 : status6);
 }
 
-static int set_ipv4_high_priority_default_gateway(
+static int set_default_gateway_route_common(struct gateway_data *data,
+				struct gateway_config *config,
+				enum gateway_config_type type,
+				mutate_default_gateway_route_cb_t cb)
+{
+	int err = 0;
+
+	if (!data || !config || !cb)
+		return -EINVAL;
+
+	err = cb(data, config);
+	if (err < 0)
+		goto done;
+
+	gateway_config_type_set(config, type);
+
+done:
+	return err;
+}
+
+static int unset_default_gateway_route_common(struct gateway_data *data,
+				struct gateway_config *config,
+				enum gateway_config_type type,
+				mutate_default_gateway_route_cb_t cb)
+{
+	int err = 0;
+
+	if (!data || !config || !cb)
+		return -EINVAL;
+
+	err = cb(data, config);
+	if (err < 0)
+		goto done;
+
+done:
+	return err;
+}
+
+static int set_ipv4_high_priority_default_gateway_route_cb(
 				struct gateway_data *data,
 				struct gateway_config *config)
 {
@@ -1292,14 +1333,11 @@ static int set_ipv4_high_priority_default_gateway(
 			data, data->index, config->gateway);
 	}
 
-	gateway_config_type_set(config,
-		CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
-
 done:
 	return err;
 }
 
-static int set_ipv6_high_priority_default_gateway(
+static int set_ipv6_high_priority_default_gateway_route_cb(
 				struct gateway_data *data,
 				struct gateway_config *config)
 {
@@ -1337,11 +1375,30 @@ static int set_ipv6_high_priority_default_gateway(
 			data, data->index, config->gateway);
 	}
 
-	gateway_config_type_set(config,
-		CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT);
-
 done:
 	return err;
+}
+
+static int set_ipv4_high_priority_default_gateway(struct gateway_data *data,
+				struct gateway_config *config)
+{
+	static const enum gateway_config_type type =
+			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
+	static const mutate_default_gateway_route_cb_t cb =
+			set_ipv4_high_priority_default_gateway_route_cb;
+
+	return set_default_gateway_route_common(data, config, type, cb);
+}
+
+static int set_ipv6_high_priority_default_gateway(struct gateway_data *data,
+				struct gateway_config *config)
+{
+	static const enum gateway_config_type type =
+			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
+	static const mutate_default_gateway_route_cb_t cb =
+			set_ipv6_high_priority_default_gateway_route_cb;
+
+	return set_default_gateway_route_common(data, config, type, cb);
 }
 
 /**
@@ -1401,7 +1458,7 @@ done:
 	return status;
 }
 
-static int unset_ipv4_high_priority_default_gateway(
+static int unset_ipv4_high_priority_default_gateway_route_cb(
 				struct gateway_data *data,
 				struct gateway_config *config)
 {
@@ -1436,7 +1493,7 @@ static int unset_ipv4_high_priority_default_gateway(
 	return err;
 }
 
-static int unset_ipv6_high_priority_default_gateway(
+static int unset_ipv6_high_priority_default_gateway_route_cb(
 				struct gateway_data *data,
 				struct gateway_config *config)
 {
@@ -1469,6 +1526,30 @@ static int unset_ipv6_high_priority_default_gateway(
 	}
 
 	return err;
+}
+
+static int unset_ipv4_high_priority_default_gateway(
+				struct gateway_data *data,
+				struct gateway_config *config)
+{
+	static const enum gateway_config_type type =
+			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
+	static const mutate_default_gateway_route_cb_t cb =
+			unset_ipv4_high_priority_default_gateway_route_cb;
+
+	return unset_default_gateway_route_common(data, config, type, cb);
+}
+
+static int unset_ipv6_high_priority_default_gateway(
+				struct gateway_data *data,
+				struct gateway_config *config)
+{
+	static const enum gateway_config_type type =
+			CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
+	static const mutate_default_gateway_route_cb_t cb =
+			unset_ipv6_high_priority_default_gateway_route_cb;
+
+	return unset_default_gateway_route_common(data, config, type, cb);
 }
 
 /**
