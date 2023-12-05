@@ -203,6 +203,10 @@ struct mutate_default_gateway_ops {
 				struct gateway_config *config);
 };
 
+static int unset_default_gateway(struct gateway_data *data,
+				enum connman_ipconfig_type type,
+				const char *function);
+
 /*
  * These are declared as 'const char *const' to effect an immutable
  * pointer to an immutable null-terminated character string such that
@@ -958,15 +962,12 @@ static int del_gateway_routes(struct gateway_data *data,
 						data->index,
 						data->ipv4_config->vpn_ip);
 
-		} else if (is_ipv4_addr_any_str(data->ipv4_config->gateway)) {
-			status4 = connman_inet_clear_gateway_interface(
-								data->index);
 		} else {
 			connman_inet_del_host_route(data->index,
 						data->ipv4_config->gateway);
-			status4 = connman_inet_clear_gateway_address(
-						data->index,
-						data->ipv4_config->gateway);
+
+			status4 = UNSET_DEFAULT_GATEWAY(data, type);
+
 		}
 	}
 
@@ -976,15 +977,12 @@ static int del_gateway_routes(struct gateway_data *data,
 						data->index,
 						data->ipv6_config->vpn_ip);
 
-		} else if (is_ipv6_addr_any_str(data->ipv6_config->gateway)) {
-			status6 = connman_inet_clear_ipv6_gateway_interface(
-								data->index);
 		} else {
 			connman_inet_del_ipv6_host_route(data->index,
 						data->ipv6_config->gateway);
-			status6 = connman_inet_clear_ipv6_gateway_address(
-						data->index,
-						data->ipv6_config->gateway);
+
+			status6 = UNSET_DEFAULT_GATEWAY(data, type);
+
 		}
 	}
 
