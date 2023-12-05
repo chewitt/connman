@@ -119,7 +119,13 @@ enum gateway_config_type {
 	 *	Indicates the gateway, or default router, is a high-priority
 	 *	(that is, metric 0) default route.
 	 */
-	CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT = 1
+	CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT = 1,
+
+	/**
+	 *	Indicates the gateway, or default router, is a low-priority
+	 *	(that is, metric > 0) default route.
+	 */
+	CONNMAN_GATEWAY_CONFIG_TYPE_LOW_PRIORITY_DEFAULT  = 2
 };
 
 struct gateway_config {
@@ -292,6 +298,8 @@ static const char *gateway_config_type2string(enum gateway_config_type type)
 		return "none";
 	case CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT:
 		return "high-priority default";
+	case CONNMAN_GATEWAY_CONFIG_TYPE_LOW_PRIORITY_DEFAULT:
+		return "low-priority default";
 	}
 
 	return NULL;
