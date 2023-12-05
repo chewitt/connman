@@ -1659,7 +1659,9 @@ static int add_gateway(struct connman_service *service,
 	if (old) {
 		DBG("Replacing gw %p ipv4 %p ipv6 %p", old,
 			old->ipv4_config, old->ipv6_config);
+
 		del_gateway_routes_if_active(old, type);
+
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 			temp_data->ipv6_config = old->ipv6_config;
 			old->ipv6_config = NULL;
