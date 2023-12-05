@@ -2421,7 +2421,8 @@ static void connection_delgateway(int index, const char *gateway)
 
 		gateway_config_type_set(config,
 			CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
-	}
+	} else
+		DBG("no matching gateway config");
 
 	/*
 	 * Due to the newly-removed gateway route, there may have been a
@@ -2434,7 +2435,8 @@ static void connection_delgateway(int index, const char *gateway)
 		GATEWAY_DATA_DBG("data", data);
 
 		PROMOTE_DEFAULT_GATEWAY(data, CONNMAN_IPCONFIG_TYPE_ALL);
-	}
+	} else
+		DBG("no default gateway data");
 }
 
 static struct connman_rtnl connection_rtnl = {
