@@ -620,6 +620,15 @@ static bool is_ipv6_addr_any_str(const char *address)
 	return g_strcmp0(ipv6_addr_any_str, address) == 0;
 }
 
+static bool is_addr_any_str(const char *address)
+{
+	if (!address)
+		return false;
+
+	return (!strchr(address, ':') && is_ipv4_addr_any_str(address)) ||
+				is_ipv6_addr_any_str(address);
+}
+
 /**
  *  @brief
  *    Find the gateway, or default router, configuration associated
@@ -934,7 +943,7 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 
 		DBG("active gw %s", active_gateway->ipv4_config->gateway);
 
-		if (!is_ipv4_addr_any_str(active_gateway->ipv4_config->gateway))
+		if (!is_addr_any_str(active_gateway->ipv4_config->gateway))
 			dest = active_gateway->ipv4_config->gateway;
 		else
 			dest = NULL;
@@ -953,7 +962,7 @@ static void set_vpn_routes(struct gateway_data *new_gateway,
 
 		DBG("active gw %s", active_gateway->ipv6_config->gateway);
 
-		if (!is_ipv6_addr_any_str(active_gateway->ipv6_config->gateway))
+		if (!is_addr_any_str(active_gateway->ipv6_config->gateway))
 			dest = active_gateway->ipv6_config->gateway;
 		else
 			dest = NULL;
@@ -1489,7 +1498,7 @@ static int set_ipv4_high_priority_default_gateway_route_cb(
 			data, data->index, config->vpn_ip,
 			config->vpn_phy_index,
 			config->vpn_phy_ip);
-	} else if (is_ipv4_addr_any_str(config->gateway)) {
+	} else if (is_addr_any_str(config->gateway)) {
 		err = connman_inet_set_gateway_interface(
 					data->index);
 		if (err < 0)
@@ -1528,7 +1537,7 @@ static int set_ipv6_high_priority_default_gateway_route_cb(
 			data, data->index, config->vpn_ip,
 			config->vpn_phy_index,
 			config->vpn_phy_ip);
-	} else if (is_ipv6_addr_any_str(config->gateway)) {
+	} else if (is_addr_any_str(config->gateway)) {
 		err = connman_inet_set_ipv6_gateway_interface(
 					data->index);
 		if (err < 0)
@@ -1646,7 +1655,7 @@ static int unset_ipv4_high_priority_default_gateway_route_cb(
 			data, data->index, config->vpn_ip,
 			config->vpn_phy_index,
 			config->vpn_phy_ip);
-	} else if (is_ipv4_addr_any_str(config->gateway)) {
+	} else if (is_addr_any_str(config->gateway)) {
 		err = connman_inet_clear_gateway_interface(data->index);
 		if (err < 0)
 			goto done;
@@ -1682,7 +1691,7 @@ static int unset_ipv6_high_priority_default_gateway_route_cb(
 			data, data->index, config->vpn_ip,
 			config->vpn_phy_index,
 			config->vpn_phy_ip);
-	} else if (is_ipv6_addr_any_str(config->gateway)) {
+	} else if (is_addr_any_str(config->gateway)) {
 		err = connman_inet_clear_ipv6_gateway_interface(data->index);
 		if (err < 0)
 			goto done;
@@ -2336,7 +2345,7 @@ static void add_host_route(int family, int index, const char *gateway,
 {
 	switch (family) {
 	case AF_INET:
-		if (!is_ipv4_addr_any_str(gateway)) {
+		if (!is_addr_any_str(gateway)) {
 			/*
 			 * We must not set route to the phy dev gateway in
 			 * VPN link. The packets to VPN link might be routed
@@ -2361,7 +2370,7 @@ static void add_host_route(int family, int index, const char *gateway,
 		break;
 
 	case AF_INET6:
-		if (!is_ipv6_addr_any_str(gateway)) {
+		if (!is_addr_any_str(gateway)) {
 			if (service_type != CONNMAN_SERVICE_TYPE_VPN)
 				connman_inet_add_ipv6_host_route(index,
 								gateway, NULL);
