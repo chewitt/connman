@@ -88,7 +88,30 @@ enum gateway_config_flags {
  *  Netlink (rtnl) to confirm and "activate" those routes. Likewise,
  *  Connection Manager removes/clears/deletes gateway routes an then
  *  uses notifications from the kernel Routing Netlink (rtnl) to
- *  confirm and "inactivate" those routes.
+ *  confirm and "inactivate" those routes. The following is the state
+ *  machine for that lifecycle:
+ *
+ *                              .----------.    SIOCADDRT /
+ *                              |          |    RTM_NEWROUTE
+ *           .------------------| Inactive |--------------------.
+ *           |                  |          |                    |
+ *           |                  '----------'                    |
+ *           | connman_rtnl                                     |
+ *           | .delgateway                                      |
+ *           |                                                  V
+ *      .---------.         SIOCADDRT / RTM_NEWROUTE        .-------.
+ *      |         |---------------------------------------->|       |
+ *      | Removed |                                         | Added |
+ *      |         |<----------------------------------------|       |
+ *      '---------'         SIOCDELRT / RTM_DELROUTE        '-------'
+ *           ^                                                  |
+ *           | SIOCDELRT /                                      |
+ *           | RTM_DELROUTE                                     |
+ *           |                   .--------.     connman_rtnl    |
+ *           |                   |        |     .newgateway     |
+ *           '-------------------| Active |<--------------------'
+ *                               |        |
+ *                               '--------'
  *
  */
 enum gateway_config_state {
