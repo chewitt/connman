@@ -144,6 +144,13 @@ struct gateway_data {
 	bool default_checked;
 };
 
+struct mutate_default_gateway_ops {
+	int (*mutate_ipv4)(struct gateway_data *data,
+				struct gateway_config *config);
+	int (*mutate_ipv6)(struct gateway_data *data,
+				struct gateway_config *config);
+};
+
 /*
  * These are declared as 'const char *const' to effect an immutable
  * pointer to an immutable null-terminated character string such that
@@ -1126,7 +1133,48 @@ static int add_gateway(struct connman_service *service,
 	return err;
 }
 
-static int set_ipv4_default_gateway(struct gateway_data *data,
+static int mutate_default_gateway(struct gateway_data *data,
+				enum connman_ipconfig_type type,
+				const struct mutate_default_gateway_ops *ops,
+				const char *function)
+{
+	int status4 = 0, status6 = 0;
+	bool do_ipv4 = false, do_ipv6 = false;
+
+	DBG("data %p type %d (%s) ops %p from %s()", data,
+		type, __connman_ipconfig_type2string(type),
+		ops,
+		function);
+
+	if (!data || !ops || !function)
+		return -EINVAL;
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		do_ipv4 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		do_ipv6 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+		do_ipv4 = do_ipv6 = true;
+	else
+		return -EINVAL;
+
+	GATEWAY_DATA_DBG("data", data);
+
+	if (do_ipv4 && ops->mutate_ipv4 && data->ipv4_config)
+		status4 = ops->mutate_ipv4(data, data->ipv4_config);
+
+	if (do_ipv6 && ops->mutate_ipv6 && data->ipv6_config)
+		status6 = ops->mutate_ipv6(data, data->ipv6_config);
+
+	DBG("status4 %d (%s) status6 %d (%s)",
+		status4, strerror(-status4),
+		status6, strerror(-status6));
+
+	return (status4 < 0 ? status4 : status6);
+}
+
+static int set_ipv4_high_priority_default_gateway(
+				struct gateway_data *data,
 				struct gateway_config *config)
 {
 	int err = 0;
@@ -1170,7 +1218,8 @@ done:
 	return err;
 }
 
-static int set_ipv6_default_gateway(struct gateway_data *data,
+static int set_ipv6_high_priority_default_gateway(
+				struct gateway_data *data,
 				struct gateway_config *config)
 {
 	int err = 0;
@@ -1241,53 +1290,36 @@ done:
  *                            which the call to this function should
  *                            be attributed.
  *
- *  @sa __connman_inet_add_default_to_table
- *  @sa __connman_service_indicate_default
- *  @sa connman_inet_set_gateway_interface
- *  @sa connman_inet_set_ipv6_gateway_interface
+ *  @sa mutate_default_gateway
+ *  @sa set_ipv4_high_priority_default_gateway
+ *  @sa set_ipv6_high_priority_default_gateway
  *
  */
 static void set_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function)
 {
-	int status4 = 0, status6 = 0;
-	bool do_ipv4 = false, do_ipv6 = false;
+	static const struct mutate_default_gateway_ops ops = {
+		set_ipv4_high_priority_default_gateway,
+		set_ipv6_high_priority_default_gateway
+	};
+	int status = 0;
 
-	DBG("data %p type %d (%s) from %s()", data,
-		type, __connman_ipconfig_type2string(type),
-		function);
+	DBG("from %s()", function);
 
-	GATEWAY_DATA_DBG("data", data);
-
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		do_ipv4 = true;
-	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
-		do_ipv6 = true;
-	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
-		do_ipv4 = do_ipv6 = true;
-	else
-		return;
-
-	if (do_ipv4 && data->ipv4_config)
-		status4 = set_ipv4_default_gateway(data, data->ipv4_config);
-
-	if (do_ipv6 && data->ipv6_config)
-		status6 = set_ipv6_default_gateway(data, data->ipv6_config);
-
-	DBG("status4 %d (%s) status6 %d (%s)",
-		status4, strerror(-status4),
-		status6, strerror(-status6));
-
-	if (status4 < 0 || status6 < 0)
+	status = mutate_default_gateway(data, type, &ops, __func__);
+	if (status < 0)
 		return;
 
 	__connman_service_indicate_default(data->service);
 }
 
-static void unset_ipv4_default_gateway(struct gateway_data *data,
+static int unset_ipv4_high_priority_default_gateway(
+				struct gateway_data *data,
 				struct gateway_config *config)
 {
+	int err = 0;
+
 	if (is_gateway_config_vpn(config)) {
 		connman_inet_clear_gateway_interface(data->index);
 
@@ -1313,11 +1345,16 @@ static void unset_ipv4_default_gateway(struct gateway_data *data,
 		DBG("unset %p index %d gateway %s",
 			data, data->index, config->gateway);
 	}
+
+	return err;
 }
 
-static void unset_ipv6_default_gateway(struct gateway_data *data,
+static int unset_ipv6_high_priority_default_gateway(
+				struct gateway_data *data,
 				struct gateway_config *config)
 {
+	int err = 0;
+
 	if (is_gateway_config_vpn(config)) {
 		connman_inet_clear_ipv6_gateway_interface(data->index);
 
@@ -1343,6 +1380,8 @@ static void unset_ipv6_default_gateway(struct gateway_data *data,
 		DBG("unset %p index %d gateway %s",
 			data, data->index, config->gateway);
 	}
+
+	return err;
 }
 
 /**
@@ -1371,38 +1410,23 @@ static void unset_ipv6_default_gateway(struct gateway_data *data,
  *                            be attributed.
  *
  *
- *  @sa connman_inet_clear_gateway_address
- *  @sa connman_inet_clear_gateway_interface
- *  @sa connman_inet_clear_ipv6_gateway_address
- *  @sa connman_inet_clear_ipv6_gateway_interface
+ *  @sa mutate_default_gateway
+ *  @sa unset_ipv4_default_gateway
+ *  @sa unset_ipv6_default_gateway
  *
  */
 static void unset_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function)
 {
-	bool do_ipv4 = false, do_ipv6 = false;
+	static const struct mutate_default_gateway_ops ops = {
+		unset_ipv4_high_priority_default_gateway,
+		unset_ipv6_high_priority_default_gateway
+	};
 
-	DBG("data %p type %d (%s) from %s()", data,
-		type, __connman_ipconfig_type2string(type),
-		function);
+	DBG("from %s()", function);
 
-	GATEWAY_DATA_DBG("data", data);
-
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		do_ipv4 = true;
-	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
-		do_ipv6 = true;
-	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
-		do_ipv4 = do_ipv6 = true;
-	else
-		return;
-
-	if (do_ipv4 && data->ipv4_config)
-		unset_ipv4_default_gateway(data, data->ipv4_config);
-
-	if (do_ipv6 && data->ipv6_config)
-		unset_ipv6_default_gateway(data, data->ipv6_config);
+	mutate_default_gateway(data, type, &ops, __func__);
 }
 
 /**
