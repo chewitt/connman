@@ -1493,12 +1493,15 @@ static int unset_ipv6_high_priority_default_gateway(
  *                            be attributed.
  *
  *
+ * @returns
+ *   0 if successful; otherwise, < 0 on error.
+ *
  *  @sa mutate_default_gateway
  *  @sa unset_ipv4_default_gateway
  *  @sa unset_ipv6_default_gateway
  *
  */
-static void unset_default_gateway(struct gateway_data *data,
+static int unset_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function)
 {
@@ -1509,7 +1512,7 @@ static void unset_default_gateway(struct gateway_data *data,
 
 	DBG("from %s()", function);
 
-	mutate_default_gateway(data, type, &ops, __func__);
+	return mutate_default_gateway(data, type, &ops, __func__);
 }
 
 /**
