@@ -86,11 +86,23 @@ enum gateway_config_state {
 	CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE = 0,
 
 	/**
+	 *	Indicates whether the gateway has been added, or set, to the
+	 *	kernel but not acknowledged round-trip.
+	 */
+	CONNMAN_GATEWAY_CONFIG_STATE_ADDED	  = 1,
+
+	/**
 	 *	Indicates whether the gateway, or default router, is added and
 	 *	acknowledged by the kernel through a Routing Netlink (rtnl)
 	 *	notification and, consequently, is active (that is, in use).
 	 */
-	CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE	  = 1
+	CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE	  = 2,
+
+	/**
+	 *	Indicates whether the gateway has been removed, or cleared,
+	 *	from the kernel but not acknowledged round-trip.
+	 */
+	CONNMAN_GATEWAY_CONFIG_STATE_REMOVED  = 3
 };
 
 /**
@@ -262,8 +274,12 @@ static const char *gateway_config_state2string(enum gateway_config_state state)
 	switch (state) {
 	case CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE:
 		return "inactive";
+	case CONNMAN_GATEWAY_CONFIG_STATE_ADDED:
+		return "added";
 	case CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE:
 		return "active";
+	case CONNMAN_GATEWAY_CONFIG_STATE_REMOVED:
+		return "removed";
 	}
 
 	return NULL;
