@@ -2443,51 +2443,39 @@ static struct connman_rtnl connection_rtnl = {
 	.delgateway	= connection_delgateway,
 };
 
-static void add_host_route(int family, int index, const char *gateway,
+static void add_host_route(struct gateway_data *data,
+			enum connman_ipconfig_type ipconfig_type,
 			enum connman_service_type service_type)
 {
-	switch (family) {
-	case AF_INET:
-		if (!is_addr_any_str(gateway)) {
-			/*
-			 * We must not set route to the phy dev gateway in
-			 * VPN link. The packets to VPN link might be routed
-			 * back to itself and not routed into phy link gateway.
-			 */
-			if (service_type != CONNMAN_SERVICE_TYPE_VPN)
-				connman_inet_add_host_route(index, gateway,
-									NULL);
-		} else {
-			/*
-			 * Add host route to P-t-P link so that services can
-			 * be moved around and we can have some link to P-t-P
-			 * network (although those P-t-P links have limited
-			 * usage if default route is not directed to them)
-			 */
-			char *dest;
-			if (connman_inet_get_dest_addr(index, &dest) == 0) {
-				connman_inet_add_host_route(index, dest, NULL);
-				g_free(dest);
-			}
-		}
-		break;
+	const struct gateway_config *const config =
+		gateway_data_config_get(data, ipconfig_type);
 
-	case AF_INET6:
-		if (!is_addr_any_str(gateway)) {
-			if (service_type != CONNMAN_SERVICE_TYPE_VPN)
-				connman_inet_add_ipv6_host_route(index,
-								gateway, NULL);
-		} else {
-			/* P-t-P link, add route to destination */
-			char *dest;
-			if (connman_inet_ipv6_get_dest_addr(index,
-								&dest) == 0) {
-				connman_inet_add_ipv6_host_route(index, dest,
+	if (!config)
+		return;
+
+	if (!is_addr_any_str(config->gateway)) {
+		/*
+		 * We must not set route to the phy dev gateway in
+		 * VPN link. The packets to VPN link might be routed
+		 * back to itself and not routed into phy link gateway.
+		 */
+		if (service_type != CONNMAN_SERVICE_TYPE_VPN)
+			config->ops->add_host_route(data->index,
+								config->gateway,
 								NULL);
-				g_free(dest);
-			}
+	} else {
+		/*
+		 * Add host route to P-t-P link so that services can
+		 * be moved around and we can have some link to P-t-P
+		 * network (although those P-t-P links have limited
+		 * usage if default route is not directed to them)
+		 */
+		char *dest;
+
+		if (config->ops->get_dest_addr(data->index, &dest) == 0) {
+			config->ops->add_host_route(data->index, dest, NULL);
+			g_free(dest);
 		}
-		break;
 	}
 }
 
@@ -2593,13 +2581,15 @@ int __connman_connection_gateway_add(struct connman_service *service,
 	GATEWAY_DATA_DBG("default_gateway", default_gateway);
 
 	if (do_ipv4 && new_gateway->ipv4_config) {
-		add_host_route(AF_INET, index, gateway, service_type);
+		add_host_route(new_gateway, type, service_type);
+
 		__connman_service_nameserver_add_routes(service,
 					new_gateway->ipv4_config->gateway);
 	}
 
 	if (do_ipv6 && new_gateway->ipv6_config) {
-		add_host_route(AF_INET6, index, gateway, service_type);
+		add_host_route(new_gateway, type, service_type);
+
 		__connman_service_nameserver_add_routes(service,
 					new_gateway->ipv6_config->gateway);
 	}
