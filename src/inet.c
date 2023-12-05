@@ -3382,6 +3382,21 @@ int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex,
 		gateway, prefixlen);
 }
 
+int __connman_inet_add_default_to_table_with_metric(uint32_t table_id,
+						int ifindex,
+						const char *gateway,
+						uint32_t metric)
+{
+	static const unsigned char prefixlen = 0;
+
+	/*
+	 * ip route add default/0 via <gateway> dev wlan0 table <table_id>
+	 * metric <metric>
+	 */
+	return iproute_default_modify(RTM_NEWROUTE, table_id, metric, ifindex,
+		gateway, prefixlen);
+}
+
 int __connman_inet_add_subnet_to_table(uint32_t table_id, int ifindex,
 						const char *gateway, unsigned char prefixlen)
 {
@@ -3433,6 +3448,21 @@ int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
 	/*
 	 * ip route del default/0 via <gateway> dev wlan0 table <table_id>
 	 * metric 0
+	 */
+	return iproute_default_modify(RTM_DELROUTE, table_id, metric, ifindex,
+		gateway, prefixlen);
+}
+
+int __connman_inet_del_default_from_table_with_metric(uint32_t table_id,
+						int ifindex,
+						const char *gateway,
+						uint32_t metric)
+{
+	static const unsigned char prefixlen = 0;
+
+	/*
+	 * ip route del default/0 via <gateway> dev wlan0 table <table_id>
+	 * metric <metric>
 	 */
 	return iproute_default_modify(RTM_DELROUTE, table_id, metric, ifindex,
 		gateway, prefixlen);
