@@ -50,6 +50,12 @@
 #define UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(data, type) \
 	unset_low_priority_default_gateway(data, type, __func__)
 
+#define PROMOTE_DEFAULT_GATEWAY(data, type) \
+	promote_default_gateway(data, type, __func__)
+
+#define DEMOTE_DEFAULT_GATEWAY(data, type) \
+	demote_default_gateway(data, type, __func__)
+
 #define GATEWAY_CONFIG_DBG(description, config) \
 	gateway_config_debug(__func__, description, config)
 
@@ -1861,6 +1867,58 @@ static int unset_low_priority_default_gateway(struct gateway_data *data,
 	return mutate_default_gateway(data, type, &ops, __func__);
 }
 
+static int demote_default_gateway(struct gateway_data *data,
+				enum connman_ipconfig_type type,
+				const char *function)
+{
+	int unset_status = 0, set_status = 0;
+
+	DBG("from %s() data %p type %d (%s)",
+		function,
+		data,
+		type, __connman_ipconfig_type2string(type));
+
+	unset_status = UNSET_DEFAULT_GATEWAY(data, type);
+
+	set_status = SET_LOW_PRIORITY_DEFAULT_GATEWAY(data, type);
+
+	DBG("unset_status %d (%s) set_status %d (%s)",
+		unset_status, strerror(-unset_status),
+		set_status, strerror(-set_status));
+
+	/*
+	 * Prefer unset status to set status since unsetting is what effects
+	 * the priority demotion.
+	 */
+	return (unset_status == 0 ? unset_status : set_status);
+}
+
+static int promote_default_gateway(struct gateway_data *data,
+				enum connman_ipconfig_type type,
+				const char *function)
+{
+	int unset_status = 0, set_status = 0;
+
+	DBG("from %s() data %p type %d (%s)",
+		function,
+		data,
+		type, __connman_ipconfig_type2string(type));
+
+	unset_status = UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(data, type);
+
+	set_status = SET_DEFAULT_GATEWAY(data, type);
+
+	DBG("unset_status %d (%s) set_status %d (%s)",
+		unset_status, strerror(-unset_status),
+		set_status, strerror(-set_status));
+
+	/*
+	 * Prefer set status to unset status since setting is what effects
+	 * the priority promotion.
+	 */
+	return (set_status == 0 ? set_status : unset_status);
+}
+
 /**
  *  @brief
  *    Decide whether either of the specified gateways should yield the
@@ -1929,9 +1987,7 @@ static bool yield_default_gateway_for_type(struct gateway_data *activated,
 			maybe_null(gateway_config_type2string(
 				config_type)));
 
-		UNSET_DEFAULT_GATEWAY(existing, type);
-
-		SET_LOW_PRIORITY_DEFAULT_GATEWAY(existing, type);
+		DEMOTE_DEFAULT_GATEWAY(existing, type);
 	}
 
 	/*
@@ -1950,9 +2006,7 @@ static bool yield_default_gateway_for_type(struct gateway_data *activated,
 			maybe_null(gateway_config_type2string(
 				config_type)));
 
-		UNSET_DEFAULT_GATEWAY(activated, type);
-
-		SET_LOW_PRIORITY_DEFAULT_GATEWAY(activated, type);
+		DEMOTE_DEFAULT_GATEWAY(activated, type);
 
 		yield_activated = true;
 	}
@@ -2038,7 +2092,6 @@ static void check_default_gateway(struct gateway_data *activated)
 {
 	GHashTableIter iter;
 	gpointer value, key;
-	enum connman_ipconfig_type type;
 	bool yield_activated = false;
 
 	DBG("activated %p", activated);
@@ -2074,21 +2127,13 @@ static void check_default_gateway(struct gateway_data *activated)
 	DBG("yield_activated %u", yield_activated);
 
 	if (!yield_activated) {
-		if (activated->ipv4_config) {
-			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+		if (activated->ipv4_config)
+			PROMOTE_DEFAULT_GATEWAY(activated,
+				CONNMAN_IPCONFIG_TYPE_IPV4);
 
-			UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(activated, type);
-
-			SET_DEFAULT_GATEWAY(activated, type);
-		}
-
-		if (activated->ipv6_config) {
-			type = CONNMAN_IPCONFIG_TYPE_IPV6;
-
-			UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(activated, type);
-
-			SET_DEFAULT_GATEWAY(activated, type);
-		}
+		if (activated->ipv6_config)
+			PROMOTE_DEFAULT_GATEWAY(activated,
+				CONNMAN_IPCONFIG_TYPE_IPV6);
 	}
 
 	activated->default_checked = true;
@@ -2276,11 +2321,7 @@ static void connection_delgateway(int index, const char *gateway)
 	if (data) {
 		GATEWAY_DATA_DBG("data", data);
 
-		UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(data,
-			CONNMAN_IPCONFIG_TYPE_ALL);
-
-		SET_DEFAULT_GATEWAY(data,
-			CONNMAN_IPCONFIG_TYPE_ALL);
+		PROMOTE_DEFAULT_GATEWAY(data, CONNMAN_IPCONFIG_TYPE_ALL);
 	}
 }
 
@@ -2634,11 +2675,8 @@ void __connman_connection_gateway_remove(struct connman_service *service,
 
 		GATEWAY_DATA_DBG("default_data", data);
 
-		if (data) {
-			UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(data, type);
-
-			SET_DEFAULT_GATEWAY(data, type);
-		}
+		if (data)
+			PROMOTE_DEFAULT_GATEWAY(data, type);
 	}
 }
 
@@ -2666,7 +2704,7 @@ bool __connman_connection_update_gateway(void)
 	GHashTableIter iter;
 	gpointer value, key;
 	enum connman_ipconfig_type type;
-	int set_status = 0, unset_status = 0;
+	int status = 0;
 	bool updated4 = false, updated6 = false;
 
 	DBG("");
@@ -2690,46 +2728,35 @@ bool __connman_connection_update_gateway(void)
 
 	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		struct gateway_data *current_gateway = value;
+		struct gateway_config *current_config;
 
 		GATEWAY_DATA_DBG("current_gateway", current_gateway);
 
 		if (current_gateway == default_gateway)
 			continue;
 
-		if (current_gateway->ipv4_config &&
+		type = CONNMAN_IPCONFIG_TYPE_IPV4;
+		current_config = gateway_data_config_get(current_gateway, type);
+
+		if (current_config &&
 				is_gateway_config_state_active(
-					current_gateway->ipv4_config)) {
-			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+					current_config)) {
+			status = DEMOTE_DEFAULT_GATEWAY(current_gateway,
+						type);
 
-			unset_status =
-				UNSET_DEFAULT_GATEWAY(
-					current_gateway,
-					type);
-
-			set_status =
-				SET_LOW_PRIORITY_DEFAULT_GATEWAY(
-					current_gateway,
-					type);
-
-			updated4 = (unset_status == 0 || set_status == 0);
+			updated4 = status == 0;
 		}
 
-		if (current_gateway->ipv6_config &&
+		type = CONNMAN_IPCONFIG_TYPE_IPV6;
+		current_config = gateway_data_config_get(current_gateway, type);
+
+		if (current_config &&
 				is_gateway_config_state_active(
-					current_gateway->ipv6_config)) {
-			type = CONNMAN_IPCONFIG_TYPE_IPV6;
+					current_config)) {
+			status = DEMOTE_DEFAULT_GATEWAY(current_gateway,
+						type);
 
-			unset_status =
-				UNSET_DEFAULT_GATEWAY(
-					current_gateway,
-					type);
-
-			set_status =
-				SET_LOW_PRIORITY_DEFAULT_GATEWAY(
-					current_gateway,
-					type);
-
-			updated6 = (unset_status == 0 || set_status == 0);
+			updated6 = status == 0;
 		}
 	}
 
@@ -2740,31 +2767,23 @@ bool __connman_connection_update_gateway(void)
 	 * set as active yet.
 	 */
 	if (default_gateway) {
-		if (default_gateway->ipv4_config &&
+		const struct gateway_config *default_config;
+
+		type = CONNMAN_IPCONFIG_TYPE_IPV4;
+		default_config = gateway_data_config_get(default_gateway, type);
+
+		if (default_config &&
 			(updated4 ||
-			!is_gateway_config_state_active(
-				default_gateway->ipv4_config))) {
-			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+			!is_gateway_config_state_active(default_config)))
+			PROMOTE_DEFAULT_GATEWAY(default_gateway, type);
 
-			UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(default_gateway,
-				type);
+		type = CONNMAN_IPCONFIG_TYPE_IPV6;
+		default_config = gateway_data_config_get(default_gateway, type);
 
-			SET_DEFAULT_GATEWAY(default_gateway,
-				type);
-		}
-
-		if (default_gateway->ipv6_config &&
+		if (default_config &&
 			(updated6 ||
-			!is_gateway_config_state_active(
-				default_gateway->ipv6_config))) {
-			type = CONNMAN_IPCONFIG_TYPE_IPV6;
-
-			UNSET_LOW_PRIORITY_DEFAULT_GATEWAY(default_gateway,
-				type);
-
-			SET_DEFAULT_GATEWAY(default_gateway,
-				type);
-		}
+			!is_gateway_config_state_active(default_config)))
+			PROMOTE_DEFAULT_GATEWAY(default_gateway, type);
 	}
 
 done:
