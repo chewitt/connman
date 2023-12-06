@@ -971,13 +971,13 @@ static struct gateway_data *find_any_active_gateway_data(void)
  *    default service.
  *
  *  This attempts to find the gateway, or default router, data
- *  associated with default network service (that is, has the default
- *  route).
+ *  associated with default network service (that is, has the
+ *  high-priority default route).
  *
  *  @returns
  *    A pointer to the gateway, or default router, data associated
- *    with the default network service (that is, has the default
- *    route) on success; otherwise, null.
+ *    with the default network service (that is, has the high-priority
+ *    default route) on success; otherwise, null.
  *
  *  @sa find_any_active_gateway_data
  *  @sa find_gateway_data
