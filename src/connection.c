@@ -820,7 +820,7 @@ static void gateway_config_debug(const char *function,
 		return;
 
 	if (!config)
-		DBG("from %s %s %p", function, description, config);
+		DBG("from %s() %s %p", function, description, config);
 	else {
 		if (config->vpn_phy_index >= 0)
 			vpn_phy_interface =
@@ -883,11 +883,11 @@ static void gateway_data_debug(const char *function,
 		return;
 
 	if (!data)
-		DBG("from %s %s %p", function, description, data);
+		DBG("from %s() %s %p", function, description, data);
 	else {
 		interface = connman_inet_ifname(data->index);
 
-		DBG("from %s %s %p: { index: %d (%s), service: %p (%s), "
+		DBG("from %s() %s %p: { index: %d (%s), service: %p (%s), "
 			"ipv4_config: %p, ipv6_config: %p, default_checked: %u }",
 			function,
 			description,
