@@ -163,6 +163,10 @@ enum gateway_config_type {
 	CONNMAN_GATEWAY_CONFIG_TYPE_LOW_PRIORITY_DEFAULT  = 2
 };
 
+/**
+ *  Gateway configuration function pointers for IP configuration
+ *  type-specific route set/clear/add/delete operations.
+ */
 struct gateway_config_ops {
 	bool (*compare_subnet)(int index,
 		const char *address);
@@ -214,6 +218,11 @@ struct gateway_config {
 	 *	See #gateway_config_type.
 	 */
 	enum gateway_config_type type;
+
+	/**
+	 *  A pointer to immutable function pointers for route
+	 *  set/clear/add/delete operations.
+	 */
 	const struct gateway_config_ops *ops;
 	char *gateway;
 
