@@ -256,6 +256,24 @@ out:
 	return ret;
 }
 
+const char *__connman_inet_table2string(uint32_t table_id)
+{
+	switch (table_id) {
+	case RT_TABLE_UNSPEC:
+		return "unspecified";
+	case RT_TABLE_COMPAT:
+		return "compat";
+	case RT_TABLE_DEFAULT:
+		return "default";
+	case RT_TABLE_MAIN:
+		return "main";
+	case RT_TABLE_LOCAL:
+		return "local";
+	}
+
+	return "";
+}
+
 int connman_inet_ifindex(const char *name)
 {
 	struct ifreq ifr;

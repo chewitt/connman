@@ -174,6 +174,8 @@ int __connman_inet_get_interface_mac_address(int index, uint8_t *mac_address);
 
 bool __connman_inet_is_any_addr(const char *address, int family);
 
+const char *__connman_inet_table2string(uint32_t table_id);
+
 #include <netinet/ip6.h>
 #include <netinet/icmp6.h>
 
