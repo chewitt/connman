@@ -203,6 +203,23 @@ struct mutate_default_gateway_ops {
 				struct gateway_config *config);
 };
 
+/**
+ *  Prototype for a function callback to mutate (that is, add/set or
+ *  clear/delete/remove) a default route for a gateway using a function
+ *  utilizing a SIOCADDRT / SIOCDELRT socket ioctl or a RTM_NEWROUTE /
+ *  RTM_DELROUTE Linux Routing Netlink (rtnl) command to modify the Linux
+ *  routing table.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          use to mutate the default route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to use to mutate the
+ *                          default route.
+ *
+ *  @returns
+ *    0 if successful; otherwise, < 0 on error.
+ *
+ */
 typedef int (*mutate_default_gateway_route_cb_t)(struct gateway_data *data,
 				struct gateway_config *config);
 
