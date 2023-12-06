@@ -3205,7 +3205,9 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 	int family = connman_inet_check_ipaddress(gateway);
 	char *dst = NULL;
 
-	DBG("gateway %s/%u table %u", gateway, prefixlen, table_id);
+	DBG("gateway %s/%u table %u <%s>",
+		gateway, prefixlen,
+		table_id, __connman_inet_table2string(table_id));
 
 	switch (family) {
 	case AF_INET:
