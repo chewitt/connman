@@ -243,11 +243,43 @@ struct gateway_config {
 	char *vpn_phy_ip;
 };
 
+/**
+ *	The key data structure used to associate a network service with a
+ *	gateway, or default router.
+ */
 struct gateway_data {
+	/**
+	 *	The network interface index associated with the underlying
+	 *	network interface for the assigned @a service field.
+	 */
 	int index;
+
+	/**
+	 *	A strong (that is, uses #connman_service_{ref,unref})
+	 *	reference to the network service associated with this gateway.
+	 */
 	struct connman_service *service;
+
+	/**
+	 *	An optional weak reference to dynamically-allocated storage
+	 *	for the gateway-specific configuration, if the gateway is IPv4.
+	 */
 	struct gateway_config *ipv4_config;
+
+	/**
+	 *	An optional weak reference to dynamically-allocated storage
+	 *	for the gateway-specific configuration, if the gateway is IPv6.
+	 */
 	struct gateway_config *ipv6_config;
+
+	/**
+	 *	A Boolean indicating whether this gateway / network interface
+	 *	index tuple has been handled by the #connman_rtnl @a
+	 *	newgateway Linux Routing Netlink (rtnl) new gateway listener
+	 *	method and, specifically, whether that method has checked a
+	 *	new, incoming gateway against the current gateway / default
+	 *	router.
+	 */
 	bool default_checked;
 };
 
