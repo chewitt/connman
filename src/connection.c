@@ -1197,7 +1197,7 @@ static void set_default_gateway(struct gateway_data *data,
 						data->ipv6_config->gateway);
 
 			DBG("set %p index %d gateway %s",
-				data, data->index, data->ipv4_config->gateway);
+				data, data->index, data->ipv6_config->gateway);
 		}
 
 		gateway_config_type_set(data->ipv6_config,
@@ -1317,7 +1317,7 @@ static void unset_default_gateway(struct gateway_data *data,
 						data->ipv6_config->gateway);
 
 			DBG("unset %p index %d gateway %s",
-				data, data->index, data->ipv4_config->gateway);
+				data, data->index, data->ipv6_config->gateway);
 		}
 	}
 }
