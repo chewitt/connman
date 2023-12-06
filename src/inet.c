@@ -256,6 +256,23 @@ out:
 	return ret;
 }
 
+/**
+ *  @brief
+ *    Return a string describing a Linux Routing Netlink (rtnl)
+ *    routing table identifier.
+ *
+ *  This returns a null-terminated C string describing a Linux Routing
+ *  Netlink (rtnl) routing table identifier.
+ *
+ *  @param[in]  table_id   The Linux Routing Netlink (rtnl) routing
+ *                         table identifier for which to return a
+ *                         descriptive string.
+ *
+ *  @returns
+ *    A pointer to a immutable null-terminated C string describing @a
+ *    table_id on success; otherwise, an empty string ("").
+ *
+ */
 const char *__connman_inet_table2string(uint32_t table_id)
 {
 	switch (table_id) {
