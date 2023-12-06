@@ -2591,6 +2591,29 @@ static struct connman_rtnl connection_rtnl = {
 	.delgateway	= connection_delgateway,
 };
 
+/**
+ *  @brief
+ *    Add, or set, a host route for the specified IP configuration
+ *    type for the provided gateway data.
+ *
+ *  This attempts to add, or set, a host route (that is, the RTF_HOST
+ *  flag is asserted on the route) for the specified IP configuration
+ *  type for the provided gateway data.
+ *
+ *  @param[in]  data           A pointer to the mutable gateway data
+ *                             for which to add a host route.
+ *  @param[in]  ipconfig_type  The IP configuration type for which the
+ *                             gateway host route(s) are to be added.
+ *  @param[in]  service_type   The service type for the network service
+ *                             associated with @a index for which the
+ *                             host route is being added.
+ *
+ *  @sa connman_inet_add_host_route
+ *  @sa connman_inet_add_ipv6_host_route
+ *  @sa connman_inet_get_dest_addr
+ *  @sa connman_inet_ipv6_get_dest_addr
+ *
+ */
 static void add_host_route(struct gateway_data *data,
 			enum connman_ipconfig_type ipconfig_type,
 			enum connman_service_type service_type)
