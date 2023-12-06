@@ -1988,12 +1988,57 @@ static int unset_default_gateway(struct gateway_data *data,
 	return mutate_default_gateway(data, type, &ops, __func__);
 }
 
+/**
+ *  @brief
+ *    Compute and return a low-priority gateway default route metric
+ *    unique to the specified gateway data.
+ *
+ *  This computes and returns a low-priority gateway default route
+ *  metric unique to the specified gateway data, @a data.
+ *
+ *  @param[in]  data  A pointer to the immutable gateway data with
+ *                    which to compute the low-priority default route
+ *                    metric.
+ *
+ *  @returns
+ *    The low-priority default route metric/priority.
+ *
+ */
 static uint32_t compute_low_priority_metric(const struct gateway_data *data)
 {
 	static const uint32_t metric_base = UINT32_MAX;
 	static const uint32_t metric_ceiling = (1 << 20);
 	static const uint32_t metric_index_step = (1 << 10);
 
+	/*
+	 * The algorithm uses the network interface index since it is
+	 * assumed to be stable for the uptime of the network interface
+	 * and, consequently, the potential maximum lifetime of the route.
+	 *
+	 * The algorithm establishes UINT32_MAX as the metric base (the
+	 * lowest possible priority) and a somewhat-arbitrary 2^20 as the
+	 * ceiling (to keep metrics out of a range that might be used by
+	 * other applications). The metric is then adjusted in increments
+	 * of 1,024 (2^10) from the base, but less than the ceiling, by
+	 * multiplying the increment by the network interface index. This
+	 * is easy and simple to compute and is invariant on service
+	 * order.
+	 *
+	 * In the fullness of time, the "rule of least astonishment" for
+	 * Connection Manager might be that low priority metrics follow
+	 * the service order with the default service always having metric
+	 * zero (0) and lowest priority metric assigned to the lowest
+	 * priority service, etc. Achieving this would require 1) caching
+	 * the computed metric in the gateway data since services may
+	 * re-sort by the time we are asked to recompute high- and
+	 * low-priority routes and we need a stable and matching metric to
+	 * successfully delete a previously-created route and 2) having
+	 * access to an API (such as
+	 * '__connman_service_get_order(data->service)') that exposes a
+	 * strictly-in/decreasing service order with no duplicates. Today,
+	 * there is no such API nor is there such a durable service order
+	 * meeting that mathematical requirement.
+	 */
 	return MAX(metric_ceiling,
 				metric_base -
 				(data->index * metric_index_step));
