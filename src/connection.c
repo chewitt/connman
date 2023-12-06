@@ -1575,7 +1575,10 @@ static int mutate_default_gateway(struct gateway_data *data,
  *  @retval  -EEXIST        A request was made to add an existing
  *                          routing entry.
  *
+ *  @sa gateway_config_state_set
  *  @sa gateway_config_type_set
+ *  @sa is_gateway_config_state
+ *  @sa is_gateway_config_type
  *  @sa unset_default_gateway_route_common
  *
  */
