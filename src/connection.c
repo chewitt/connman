@@ -1339,6 +1339,49 @@ done:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Unset, or remove, the default route, for the specified gateway
+ *    data and configuration using the provided gateway configuration
+ *    type and callback function.
+ *
+ *  This attempts to unset, or remove, the default route for the
+ *  specified gateway data and configuration using the provided
+ *  gateway configuration type and callback function.
+ *
+ *  On success, the gateway configuration state will be set to
+ *  #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          unset, or remove, as the default route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to unset, or remove, as the
+ *                          default route.
+ *  @param[in]      type    The gateway configuration type that @a
+ *                          config is expected to be.
+ *  @param[in]      cb      The callback function used to unset, or
+ *                          remove, the default route.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data, @a config, or @a cb are
+ *                          null; if the gateway configuration type is
+ *                          not @a type; or if the routing information
+ *                          to be unset, or cleared, was invalid.
+ *  @retval  -EINPROGRESS   If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
+ *  @retval  -EALREADY      If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be unset, or cleared, was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to unset, or
+ *                          clear, routes.
+ *  @retval  -ESRCH         A request was made to unset, or clear a
+ *                          non-existing routing entry.
+ *
+ *  @sa set_default_gateway_route_common
+ *
+ */
 static int unset_default_gateway_route_common(struct gateway_data *data,
 				struct gateway_config *config,
 				enum gateway_config_type type,
