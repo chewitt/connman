@@ -2540,6 +2540,50 @@ static int unset_ipv4_low_priority_default_gateway_route_cb(
 				metric);
 }
 
+/**
+ *  @brief
+ *    Unset the IPv4 low-priority default route for the specified IP
+ *    configuration type from the provided gateway data.
+ *
+ *  This attempts to unset, or clear, the IPv4 low-priority (that is,
+ *  metric > 0) default route for the specified IP configuration type
+ *  from the provided gateway data. The network interface and, by
+ *  extension, the network service with which the gateway is
+ *  associated is determined by the @a index field of @a data.
+ *
+ *  On success, the gateway configuration state will be set to
+ *  #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
+ *
+ *  @param[in,out]  data  A pointer to the mutable gateway data to
+ *                        clear as the IPv4 low-priority default
+ *                        route.
+ *  @param[in]      type  The IP configuration type for which the
+ *                        gateway, or default router, configuration
+ *                        will be selected from @a data and used to
+ *                        unset the IPv4 low-priority default route.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data or @a config are null, if the
+ *                          gateway configuration type is not
+ *                          #CONNMAN_GATEWAY_CONFIG_TYPE_LOW_PRIORITY_DEFAULT,
+ *                          or if the routing information to be unset,
+ *                          or cleared, was invalid.
+ *  @retval  -EINPROGRESS   If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
+ *  @retval  -EALREADY      If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be unset, or cleared, was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to unset, or
+ *                          clear, routes.
+ *  @retval  -ESRCH         A request was made to unset, or clear a
+ *                          non-existing routing entry.
+ *
+ *  @sa unset_default_gateway_route_common
+ *  @sa unset_ipv4_low_priority_default_gateway_route_cb
+ *
+ */
 static int unset_ipv4_low_priority_default_gateway(struct gateway_data *data,
 				struct gateway_config *config)
 {
