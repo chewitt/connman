@@ -1949,33 +1949,52 @@ static int set_ipv6_high_priority_default_gateway(struct gateway_data *data,
 
 /**
  *  @brief
- *    Set, or assign, the gateway, or default route, for the specified
- *    IP configuration type from the provided gateway data.
+ *    Set, or add, the gateway high-priority default route for the
+ *    specified IP configuration type from the provided gateway data.
  *
- *  This attempts to set, or assign, the gateway, or default, route
- *  for the specified IP configuration type from the provided gateway
- *  data. The network interface and, by extension, the network service
- *  with which the gateway is associated is determined by the @a index
- *  field of @a data.
+ *  This attempts to set, or add, the high-priority (that is,
+ *  metric 0) default route for the specified IP configuration type
+ *  from the provided gateway data. The network interface and, by
+ *  extension, the network service with which the gateway is
+ *  associated is determined by the @a index field of @a data.
  *
- *  On success, the gateway configuration specific to @a type will
- *  have its @a active field set to true and the gateway data network
- *  service @a service will be signaled as the default via
- *  #__connman_service_indicate_default.
+ *  On success, the gateway configuration state and type specific to
+ *  @a type will be set to #CONNMAN_GATEWAY_CONFIG_STATE_ADDED and
+ *  #CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT, respectively,
+ *  and the gateway data network service @a service will be signaled
+ *  as the default via #__connman_service_indicate_default.
  *
  *  @param[in,out]  data      A pointer to the mutable gateway data
- *                            to assign as the default route.
+ *                            to assign as the high-priority default
+ *                            route.
  *  @param[in]      type      The IP configuration type for which the
  *                            gateway, or default router,
  *                            configuration will be selected from @a
- *                            data and used to set the default route.
+ *                            data and used to set the high-priority
+ *                            default route.
  *  @param[in]      function  A pointer to an immutable null-terminated
  *                            C string containing the function name to
  *                            which the call to this function should
  *                            be attributed.
  *
- * @returns
- *   0 if successful; otherwise, < 0 on error.
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data or @a config are
+ *                          null; if the gateway configuration type is
+ *                          not #CONNMAN_GATEWAY_CONFIG_TYPE_NONE or
+ *                          #CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
+ *                          or if the routing information to be set,
+ *                          or added, was invalid.
+ *  @retval  -EINPROGRESS   If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ADDED.
+ *  @retval  -EALREADY      If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be added was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to add, or
+ *                          set, routes.
+ *  @retval  -EEXIST        A request was made to add an existing
+ *                          routing entry.
  *
  *  @sa mutate_default_gateway
  *  @sa set_ipv4_high_priority_default_gateway
@@ -2242,32 +2261,49 @@ static int unset_ipv6_high_priority_default_gateway(
 
 /**
  *  @brief
- *    Unset the gateway, or default route, for the specified IP
+ *    Unset the high-priority default route for the specified IP
  *    configuration type from the provided gateway data.
  *
- *  This attempts to unset, or clear, the gateway, or default, route
- *  for the specified IP configuration type from the provided gateway
- *  data. The network interface and, by extension, the network service
- *  with which the gateway is associated is determined by the @a index
- *  field of @a data.
+ *  This attempts to unset, or clear, the high-priority (that is,
+ *  metric 0) default route for the specified IP configuration type
+ *  from the provided gateway data. The network interface and, by
+ *  extension, the network service with which the gateway is
+ *  associated is determined by the @a index field of @a data.
  *
- *  On success, the gateway configuration specific to @a type will
- *  have its @a active field set to false.
+ *  On success, the gateway configuration state specific to @a type
+ *  will be set to #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
  *
  *  @param[in,out]  data      A pointer to the mutable gateway data
- *                            to clear as the default route.
+ *                            to clear as the high-priority default
+ *                            route.
  *  @param[in]      type      The IP configuration type for which
  *                            the gateway, or default router,
  *                            configuration will be selected from @a
- *                            data and used to unset the default route.
+ *                            data and used to unset the high-priority
+ *                            default route.
  *  @param[in]      function  A pointer to an immutable null-terminated
  *                            C string containing the function name to
  *                            which the call to this function should
  *                            be attributed.
  *
- *
- * @returns
- *   0 if successful; otherwise, < 0 on error.
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data is null, if @a type is invalid,
+ *                          if the gateway configuration type is not
+ *                          type
+ *                          #CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT,
+ *                          or if the routing information to be unset,
+ *                          or cleared, was invalid.
+ *  @retval  -EINPROGRESS   If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
+ *  @retval  -EALREADY      If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be unset, or cleared, was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to unset, or
+ *                          clear, routes.
+ *  @retval  -ESRCH         A request was made to unset, or clear a
+ *                          non-existing routing entry.
  *
  *  @sa mutate_default_gateway
  *  @sa unset_ipv4_default_gateway
