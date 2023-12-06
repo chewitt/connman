@@ -2444,6 +2444,38 @@ static int set_ipv4_low_priority_default_gateway(
 	return set_default_gateway_route_common(data, config, type, cb);
 }
 
+/**
+ *  @brief
+ *    Set, or add, the gateway low-priority default route for the
+ *    specified IP configuration type from the provided gateway data.
+ *
+ *  This attempts to set, or add, the low-priority (that is, metric
+ *  > 0) default route for the specified IP configuration type from
+ *  the provided gateway data. The network interface and, by
+ *  extension, the network service with which the gateway is
+ *  associated is determined by the @a index field of @a data.
+ *
+ *  On success, the gateway configuration state and type specific to
+ *  @a type will be set to #CONNMAN_GATEWAY_CONFIG_STATE_ADDED and
+ *  #CONNMAN_GATEWAY_CONFIG_TYPE_LOW_PRIORITY_DEFAULT, respectively.
+ *
+ *  @param[in,out]  data      A pointer to the mutable gateway data
+ *                            to assign as the low-priority default
+ *                            route.
+ *  @param[in]      type      The IP configuration type for which the
+ *                            gateway, or default router,
+ *                            configuration will be selected from @a
+ *                            data and used to set the low-priority
+ *                            default route.
+ *  @param[in]      function  A pointer to an immutable null-terminated
+ *                            C string containing the function name to
+ *                            which the call to this function should
+ *                            be attributed.
+ *
+ *  @sa mutate_default_gateway
+ *  @sa set_ipv4_low_priority_default_gateway
+ *
+ */
 static int set_low_priority_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function)
