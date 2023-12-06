@@ -1655,6 +1655,9 @@ done:
  *  @retval  -ESRCH         A request was made to unset, or clear a
  *                          non-existing routing entry.
  *
+ *  @sa gateway_config_state_set
+ *  @sa is_gateway_config_state
+ *  @sa is_gateway_config_type
  *  @sa set_default_gateway_route_common
  *
  */
