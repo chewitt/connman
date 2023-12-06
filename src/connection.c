@@ -144,9 +144,43 @@ struct gateway_data {
 	bool default_checked;
 };
 
+/**
+ *	Function pointers to mutating (including, but not limited to,
+ *	adding/setting or clearing/deleting/removing routes) IPv4 and/or
+ *	IPv6 default gateways.
+ */
 struct mutate_default_gateway_ops {
+	/**
+	 *  An optional pointer to a function for mutating (including, but
+	 *  not limited to, adding/setting or clearing/deleting/removing
+	 *  routes) an IPv4 default gateway.
+	 *
+	 *  @param[in,out]  data    A pointer to the mutable IPv4 gateway
+	 *                          data to mutate.
+	 *  @param[in,out]  config  A pointer to the mutable IPv4 gateway
+	 *                          configuration to mutate.
+	 *
+	 *  @returns
+	 *    0 if successful; otherwise, < 0 on error.
+	 *
+	 */
 	int (*mutate_ipv4)(struct gateway_data *data,
 				struct gateway_config *config);
+
+	/**
+	 *  An optional pointer to a function for mutating (including, but
+	 *  not limited to, adding/setting or clearing/deleting/removing
+	 *  routes) an IPv6 default gateway.
+	 *
+	 *  @param[in,out]  data    A pointer to the mutable IPv6 gateway
+	 *                          data to mutate.
+	 *  @param[in,out]  config  A pointer to the mutable IPv6 gateway
+	 *                          configuration to mutate.
+	 *
+	 *  @returns
+	 *    0 if successful; otherwise, < 0 on error.
+	 *
+	 */
 	int (*mutate_ipv6)(struct gateway_data *data,
 				struct gateway_config *config);
 };
