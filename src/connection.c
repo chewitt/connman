@@ -200,6 +200,11 @@ struct gateway_config_ops {
 		const char *gateway);
 };
 
+/**
+ *	An IP configuration type-specific data structure used to maintain
+ *	gateway-specific configuration information about a gateway, or
+ *	default router, and, for VPNs, the VPN peer.
+ */
 struct gateway_config {
 	/**
 	 *	A 32-bit flag bitfield governing the state and use of the
@@ -224,6 +229,12 @@ struct gateway_config {
 	 *  set/clear/add/delete operations.
 	 */
 	const struct gateway_config_ops *ops;
+
+	/**
+	 *	A pointer to a mutable, dynamically-allocated null-terminated
+	 *	C string containing the text-formatted address of the gateway,
+	 *	or default router.
+	 */
 	char *gateway;
 
 	/* VPN extra data */
