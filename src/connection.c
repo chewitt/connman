@@ -2125,6 +2125,55 @@ static int unset_low_priority_default_gateway(struct gateway_data *data,
 	return mutate_default_gateway(data, type, &ops, __func__);
 }
 
+/**
+ *  @brief
+ *    Demote, from high- to low-priority, the default route associated
+ *    with the specified gateway data and IP configuration type.
+ *
+ *  This attempts to demote, from high- (that is, metric 0) to low-
+ *  (that is, metric > 0) priority, the default route associated with
+ *  the specified gateway data and IP configuration type.
+ *
+ *  @param[in,out]  data      The gateway data associated with the
+ *                            default route for which the priority is
+ *                            to be demoted.
+ *  @param[in]      type      The IP configuration type for which
+ *                            the gateway, or default router, is to be
+ *                            demoted.
+ *  @param[in]      function  A pointer to an immutable null-terminated
+ *                            C string containing the function name to
+ *                            which the call to this function should be
+ *                            attributed.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data is null, if @a type is
+ *                          #CONNMAN_IPCONFIG_TYPE_UNKNOWN, if the
+ *                          gateway configuration type is invalid; or
+ *                          if the routing information to be added or
+ *                          deleted was invalid.
+ *  @retval  -EINPROGRESS   If the state of the gateway configuration
+ *                          for @a data is already
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ADDED or
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_REMOVED.
+ *  @retval  -EALREADY      If the state of the gateway configuration
+ *                          for @a data is already
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE or
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be added or deleted was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to add or
+ *                          delete routes.
+ *  @retval  -EEXIST        A request was made to add an existing
+ *                          routing entry.
+ *  @retval  -ESRCH         A request was made to delete a non-
+ *                          existing routing entry.
+ *
+ *  @sa unset_default_gateway
+ *  @sa set_low_priority_default_gateway
+ *  @sa promote_default_gateway
+ *
+ */
 static int demote_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const char *function)
