@@ -792,6 +792,27 @@ static bool is_ipv6_addr_any_str(const char *address)
 	return g_strcmp0(ipv6_addr_any_str, address) == 0;
 }
 
+/**
+ *  @brief
+ *    Determine whether the specified text-formatted IP address is
+ *    the "any" or "unspecified" address.
+ *
+ *  This determines whether the specified text-formatted IP address
+ *  is the "any" or "unspecified" address.
+ *
+ *  @param[in]  address  A pointer to an immutable null-terminated C
+ *                       string containing the text-formatted address
+ *                       to determine whether it is the IP "any" or
+ *                       "unspecified address.
+ *
+ *  @returns
+ *    True if @a address is the "any" or "unspecified" IP address;
+ *    otherwise, false.
+ *
+ *  @sa is_ipv4_addr_any_str
+ *  @sa is_ipv6_addr_any_str
+ *
+ */
 static bool is_addr_any_str(const char *address)
 {
 	if (!address)
