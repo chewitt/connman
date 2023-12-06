@@ -3336,6 +3336,38 @@ done:
 	return ret;
 }
 
+/**
+ *  @brief
+ *    Add a gateway default route.
+ *
+ *  This attempts to add a gateway default route to the kernel routing
+ *  table, @a table_id, using a Linux Route Netlink (rtnl) socket and
+ *  protocol with the specified attributes, including an implicit
+ *  metric/prioity of zero (0), the highest priority.
+ *
+ *  @param[in]  table_id   The table to add this route to.
+ *  @param[in]  ifindex    The network interface index associated with
+ *                         the output network device for the route.
+ *  @param[in]  gateway    A pointer to an immutable null-terminated C
+ *                         string containing the IPv4 or IPv6 address,
+ *                         in text form, of the route destination or
+ *                         next hop gateway address.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If the address family of @a gateway was not AF_INET
+ *                    (IPv4) or AF_INET6 (IPv6), if @a gateway does not
+ *                    contain a character string representing a valid
+ *                    network address in either the AF_INET or
+ *                    AF_INET6 family, or if the routing information
+ *                    to be deleted was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to delete routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *
+ */
 int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex,
 						const char *gateway)
 {
