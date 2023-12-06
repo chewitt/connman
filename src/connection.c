@@ -1274,6 +1274,51 @@ static int mutate_default_gateway(struct gateway_data *data,
 	return (status4 < 0 ? status4 : status6);
 }
 
+/**
+ *  @brief
+ *    Set, or add, the default route, for the specified gateway data
+ *    and configuration using the provided gateway configuration type
+ *    and callback function.
+ *
+ *  This attempts to set, or add, the default route for the specified
+ *  gateway data and configuration using the provided gateway
+ *  configuration type and callback function.
+ *
+ *  On success, the gateway configuration type will be set to @a type
+ *  and its state to #CONNMAN_GATEWAY_CONFIG_STATE_ADDED.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          set, or add, as the default route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to set, or add, as the
+ *                          default route.
+ *  @param[in]      type    The gateway configuration type that will
+ *                          be assigned to @a config on success.
+ *  @param[in]      cb      The callback function used to set, or
+ *                          add, the default route.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data, @a config, or @a cb are
+ *                          null; if the gateway configuration type is
+ *                          not #CONNMAN_GATEWAY_CONFIG_TYPE_NONE or
+ *                          @a type; or if the routing information to
+ *                          be set, or added, was invalid.
+ *  @retval  -EINPROGRESS   If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ADDED.
+ *  @retval  -EALREADY      If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be set, or added, was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to set, or
+ *                          add, routes.
+ *  @retval  -EEXIST        A request was made to add an existing
+ *                          routing entry.
+ *
+ *  @sa gateway_config_type_set
+ *  @sa unset_default_gateway_route_common
+ *
+ */
 static int set_default_gateway_route_common(struct gateway_data *data,
 				struct gateway_config *config,
 				enum gateway_config_type type,
