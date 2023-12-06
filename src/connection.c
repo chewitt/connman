@@ -2515,6 +2515,10 @@ static void remove_gateway(gpointer user_data)
 
 	gateway_config_free(data->ipv6_config);
 
+	/*
+	 * Release, and balance, the strong reference to the service
+	 * retained in #add_gateway.
+	 */
 	connman_service_unref(data->service);
 
 	g_free(data);
