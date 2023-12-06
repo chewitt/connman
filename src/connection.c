@@ -1759,6 +1759,42 @@ done:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Set, or add, the IPv6 high-priority default route for the
+ *    specified gateway data and configuration using a function
+ *    utilizing a SIOCADDRT socket ioctl or a RTM_NEWROUTE Linux
+ *    Routing Netlink (rtnl) command.
+ *
+ *  This attempts to set, or add, the IPv6 high-priority (that is,
+ *  metric 0) default route for the specified gateway data and
+ *  configuration using a function utilizing a SIOCADDRT socket ioctl
+ *  or a RTM_NEWROUTE Linux Routing Netlink (rtnl) command to modify
+ *  the Linux routing table.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          use to set, or add, the IPv6 high-priority
+ *                          default route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to use to set, or add,
+ *                          the IPv6 high-priority default route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a data or @a config are null; or if
+ *                    the routing information to be set, or
+ *                    added, was invalid.
+ *  @retval  -EFAULT  If the address to the routing information
+ *                    to be set, or added, was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to set, or
+ *                    add, routes.
+ *  @retval  -EEXIST  A request was made to add an existing
+ *                    routing entry.
+ *
+ *  @sa connman_inet_set_ipv6_gateway_interface
+ *  @sa __connman_inet_add_default_to_table
+ *
+ */
 static int set_ipv6_high_priority_default_gateway_route_cb(
 				struct gateway_data *data,
 				struct gateway_config *config)
