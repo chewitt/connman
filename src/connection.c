@@ -1998,6 +1998,42 @@ done:
 	return status;
 }
 
+/**
+ *  @brief
+ *    Unset, or remove, the IPv4 high-priority default route for the
+ *    specified gateway data and configuration using a function
+ *    utilizing a SIOCDELRT socket ioctl or a RTM_DELROUTE Linux
+ *    Routing Netlink (rtnl) command.
+ *
+ *  This attempts to unset, or remove, the IPv4 high-priority (that
+ *  is, metric 0) default route for the specified gateway data and
+ *  configuration using a function utilizing a SIOCDELRT socket ioctl
+ *  or a RTM_DELROUTE Linux Routing Netlink (rtnl) command to modify
+ *  the Linux routing table.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          use to unset, or remove, the IPv4
+ *                          high-priority default route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to use to unset, or remove,
+ *                          the IPv4 high-priority default route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a data or @a config are null; or if
+ *                    the routing information to be unset, or
+ *                    removed, was invalid.
+ *  @retval  -EFAULT  If the address to the routing information
+ *                    to be set, or added, was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to set, or
+ *                    add, routes.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa connman_inet_clear_gateway_interface
+ *  @sa connman_inet_clear_gateway_address
+ *
+ */
 static int unset_ipv4_high_priority_default_gateway_route_cb(
 				struct gateway_data *data,
 				struct gateway_config *config)
