@@ -1167,6 +1167,31 @@ static int add_gateway(struct connman_service *service,
 	return err;
 }
 
+/**
+ *  @brief
+ *    Mutate the gateway for the specified IP configuration type for
+ *    the provided gateway data.
+ *
+ *  This attempts to mutate (including, but not limited to, adding/
+ *  setting or clearing/deleting/removing routes) the gateway for the
+ *  specified IP configuration type for the provided gateway data.
+ *
+ *  @param[in,out]  data      A pointer to the mutable gateway data
+ *                            to mutate.
+ *  @param[in]      type      The IP configuration type for which the
+ *                            gateway configuration will be selected
+ *                            from @a data and used for mutation.
+ *  @param[in]      ops       A pointer to the default gateway mutation
+ *                            operations to use for the mutation.
+ *  @param[in]      function  A pointer to an immutable null-terminated
+ *                            C string containing the function name to
+ *                            which the call to this function should
+ *                            be attributed.
+ *
+ *  @returns
+ *    0 if successful; otherwise, < 0 on error.
+ *
+ */
 static int mutate_default_gateway(struct gateway_data *data,
 				enum connman_ipconfig_type type,
 				const struct mutate_default_gateway_ops *ops,
