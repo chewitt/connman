@@ -1833,6 +1833,49 @@ done:
 	return err;
 }
 
+/**
+ *  @brief
+ *    Set, or add, the IPv4 high-priority default route for the
+ *    specified gateway data and configuration.
+ *
+ *  This attempts to set, or add, the IPv4 high-priority (that is,
+ *  metric 0) default route for the specified gateway data and
+ *  configuration.
+ *
+ *  On success, the gateway configuration type will be set to
+ *  #CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT and its state
+ *  to #CONNMAN_GATEWAY_CONFIG_STATE_ADDED.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          assign as the IPv4 high-priority default
+ *                          route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to assign as the IPv4
+ *                          high-priority default route.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a data or @a config are
+ *                          null; if the gateway configuration type is
+ *                          not #CONNMAN_GATEWAY_CONFIG_TYPE_NONE or
+ *                          #CONNMAN_GATEWAY_CONFIG_TYPE_HIGH_PRIORITY_DEFAULT;
+ *                          or if the routing information to be set,
+ *                          or added, was invalid.
+ *  @retval  -EINPROGRESS   If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ADDED.
+ *  @retval  -EALREADY      If the state of @a config is
+ *                          #CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE.
+ *  @retval  -EFAULT        If the address to the routing information
+ *                          to be added was invalid.
+ *  @retval  -EPERM         If the current process does not have the
+ *                          credentials or capabilities to add, or
+ *                          set, routes.
+ *  @retval  -EEXIST        A request was made to add an existing
+ *                          routing entry.
+ *
+ *  @sa set_default_gateway_route_common
+ *  @sa set_ipv4_high_priority_default_gateway_func
+ *
+ */
 static int set_ipv4_high_priority_default_gateway(struct gateway_data *data,
 				struct gateway_config *config)
 {
