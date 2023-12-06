@@ -2190,6 +2190,38 @@ static int unset_ipv4_high_priority_default_gateway(
 	return unset_default_gateway_route_common(data, config, type, cb);
 }
 
+/**
+ *  @brief
+ *    Unset, or clear, the IPv6 high-priority default route for the
+ *    specified gateway data and configuration.
+ *
+ *  This attempts to unset, or clear, the IPv6 high-priority (that is,
+ *  metric 0) default route from the provided gateway data and
+ *  configuration.
+ *
+ *  @param[in,out]  data    A pointer to the mutable gateway data to
+ *                          use to unset, or remove, the IPv6
+ *                          high-priority default route.
+ *  @param[in,out]  config  A pointer to the mutable gateway
+ *                          configuration to use to unset, or remove,
+ *                          the IPv6 high-priority default route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a data or @a config are null; or if
+ *                    the routing information to be unset, or
+ *                    removed, was invalid.
+ *  @retval  -EFAULT  If the address to the routing information
+ *                    to be unset, or cleared, was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to unset, or
+ *                    clear, routes.
+ *  @retval  -ESRCH   A request was made to unset, or clear a
+ *                    non-existing routing entry.
+ *
+ *  @sa unset_default_gateway_route_common
+ *  @sa unset_ipv6_high_priority_default_gateway_route_cb
+ *
+ */
 static int unset_ipv6_high_priority_default_gateway(
 				struct gateway_data *data,
 				struct gateway_config *config)
