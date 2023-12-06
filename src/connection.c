@@ -418,6 +418,11 @@ static const struct gateway_config_ops ipv6_gateway_config_ops = {
 static const char *const ipv4_addr_any_str = "0.0.0.0";
 static const char *const ipv6_addr_any_str = "::";
 
+/**
+ *	A dictionary / hash table of network services to gateway, or
+ *	default router, data.
+ *
+ */
 static GHashTable *gateway_hash = NULL;
 
 /**
