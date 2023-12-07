@@ -216,7 +216,8 @@ static struct gateway_config *find_gateway(int index, const char *gateway)
 	return NULL;
 }
 
-static struct gateway_data *lookup_gateway_data(struct gateway_config *config)
+static struct gateway_data *lookup_gateway_data(
+				const struct gateway_config *config)
 {
 	GHashTableIter iter;
 	gpointer value, key;
