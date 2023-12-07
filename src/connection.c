@@ -241,6 +241,41 @@ static struct gateway_data *lookup_gateway_data(struct gateway_config *config)
 	return NULL;
 }
 
+static struct gateway_data *find_active_gateway(void)
+{
+	GHashTableIter iter;
+	gpointer value, key;
+
+	DBG("");
+
+	g_hash_table_iter_init(&iter, gateway_hash);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct gateway_data *data = value;
+
+		if (data->ipv4_config &&
+				data->ipv4_config->active)
+			return data;
+
+		if (data->ipv6_config &&
+				data->ipv6_config->active)
+			return data;
+	}
+
+	return NULL;
+}
+
+static struct gateway_data *find_default_gateway(void)
+{
+	struct connman_service *service;
+
+	service = connman_service_get_default();
+	if (!service)
+		return NULL;
+
+	return g_hash_table_lookup(gateway_hash, service);
+}
+
 static struct gateway_data *find_vpn_gateway(int index, const char *gateway)
 {
 	GHashTableIter iter;
@@ -717,17 +752,6 @@ static void unset_default_gateway(struct gateway_data *data,
 						data->ipv4_config->gateway);
 }
 
-static struct gateway_data *find_default_gateway(void)
-{
-	struct connman_service *service;
-
-	service = connman_service_get_default();
-	if (!service)
-		return NULL;
-
-	return g_hash_table_lookup(gateway_hash, service);
-}
-
 static bool choose_default_gateway(struct gateway_data *data,
 					struct gateway_data *candidate)
 {
@@ -967,30 +991,6 @@ static struct connman_rtnl connection_rtnl = {
 	.newgateway	= connection_newgateway,
 	.delgateway	= connection_delgateway,
 };
-
-static struct gateway_data *find_active_gateway(void)
-{
-	GHashTableIter iter;
-	gpointer value, key;
-
-	DBG("");
-
-	g_hash_table_iter_init(&iter, gateway_hash);
-
-	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		struct gateway_data *data = value;
-
-		if (data->ipv4_config &&
-				data->ipv4_config->active)
-			return data;
-
-		if (data->ipv6_config &&
-				data->ipv6_config->active)
-			return data;
-	}
-
-	return NULL;
-}
 
 static void add_host_route(int family, int index, const char *gateway,
 			enum connman_service_type service_type)
