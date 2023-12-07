@@ -189,6 +189,35 @@ static void gateway_data_debug(const char *function,
 	}
 }
 
+/**
+ *  @brief
+ *    Find the gateway, or default router, configuration associated
+ *    with a network interface index.
+ *
+ *  This attempts to find a gateway, or default router, configuration
+ *  associated with the specified network interface index.
+ *
+ *  It is possible that there is both an IPv4 and IPv6 gateway, or
+ *  default router, configuration exist for an index. The IP address
+ *  family associated with @a gateway will uniqueify and select among
+ *  them.
+ *
+ *  @param[in]  index    The network interface index for which to find
+ *                       gateway, or default router, configuration.
+ *  @param[in]  gateway  A pointer to an immutable null-
+ *                       terminated C string containing the
+ *                       text-formatted address of the gateway, or
+ *                       default router, for which to find its
+ *                       associated configuration.
+ *
+ *  @returns
+ *    A pointer to the gateway, or default router, configuration
+ *    associated with the provided network interface index on success;
+ *    otherwise, null.
+ *
+ *  @sa find_gateway_data
+ *
+ */
 static struct gateway_config *find_gateway_config(int index,
 				const char *gateway)
 {
@@ -217,6 +246,25 @@ static struct gateway_config *find_gateway_config(int index,
 	return NULL;
 }
 
+/**
+ *  @brief
+ *    Find the gateway, or default router, data associated
+ *    with the configuration.
+ *
+ *  This attempts to find a gateway, or default router, data
+ *  associated with the specified configuration.
+ *
+ *  @param[in]  config   A pointer to an immutable gateway, or
+ *                       default router, configuration for which to
+ *                       find the associated gateway data.
+ *
+ *  @returns
+ *    A pointer to the gateway, or default router, data associated
+ *    with the provided configuration on success; otherwise, null.
+ *
+ *  @sa find_gateway_config
+ *
+ */
 static struct gateway_data *find_gateway_data(
 				const struct gateway_config *config)
 {
@@ -267,6 +315,24 @@ static struct gateway_data *find_active_gateway_data(void)
 	return NULL;
 }
 
+/**
+ *  @brief
+ *    Find the gateway, or default router, data associated with the
+ *    default service.
+ *
+ *  This attempts to find the gateway, or default router, data
+ *  associated with default network service (that is, has the default
+ *  route).
+ *
+ *  @returns
+ *    A pointer to the gateway, or default router, data associated
+ *    with the default network service (that is, has the default
+ *    route) on success; otherwise, null.
+ *
+ *  @sa find_active_gateway_data
+ *  @sa find_gateway_data
+ *
+ */
 static struct gateway_data *find_default_gateway_data(void)
 {
 	struct connman_service *service;
