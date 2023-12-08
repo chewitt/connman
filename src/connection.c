@@ -32,7 +32,7 @@
  *    gateway routes and then uses notifications from the kernel
  *    Routing Netlink (rtnl) to confirm and "activate" those
  *    routes. Likewise, Connection Manager removes/clears/deletes
- *    gateway routes an then uses notifications from the kernel
+ *    gateway routes and then uses notifications from the kernel
  *    Routing Netlink (rtnl) to confirm and "inactivate" those
  *    routes. The following is the state machine for that lifecycle:
  *
