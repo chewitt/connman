@@ -111,14 +111,14 @@
  *    Operationally, down calls from outside this module generally
  *    come from the following three functions:
  *
- *      1. __connman_connection_gateway_add
- *      2. __connman_connection_gateway_remove
- *      3. __connman_connection_update_gateway
+ *      1. __connman_gateway_add
+ *      2. __connman_gateway_remove
+ *      3. __connman_gateway_update
  *
  *    and up calls generally come from the following two functions:
  *
- *      1. connection_newgateway
- *      2. connection_delgateway
+ *      1. gateway_rtnl_new
+ *      2. gateway_rtnl_del
  *
  *    From these five functions above, we are then attempting to do
  *    the following for a gateway associated with a network service
@@ -1595,7 +1595,7 @@ static int del_gateway_routes_if_active(struct gateway_data *data,
  *                    #gateway_data structure and its associated
  *                    #gateway_config.
  *
- *  @sa __connman_connection_gateway_add
+ *  @sa __connman_gateway_add
  *  @sa del_gateway_routes_if_active
  *
  */
@@ -3221,7 +3221,7 @@ static bool yield_default_gateway(struct gateway_data *activated,
  *                             against existing gateway data.
  *
  *  @sa yield_default_gateway
- *  @sa connection_newgateway
+ *  @sa gateway_rtnl_new
  *
  */
 static void check_default_gateway(struct gateway_data *activated)
@@ -3296,10 +3296,10 @@ static void check_default_gateway(struct gateway_data *activated)
  *
  *  @sa check_default_gateway
  *  @sa set_default_gateway
- *  @sa connection_delgateway
+ *  @sa gateway_rtnl_del
  *
  */
-static void connection_newgateway(int index, const char *gateway)
+static void gateway_rtnl_new(int index, const char *gateway)
 {
 	g_autofree char *interface = NULL;
 	struct gateway_config *config;
@@ -3421,11 +3421,11 @@ static void remove_gateway(gpointer user_data)
  *                       formatted address of the gateway, or default
  *                       router, that was removed.
  *
- *  @sa connection_newgateway
+ *  @sa gateway_rtnl_new
  *  @sa set_default_gateway
  *
  */
-static void connection_delgateway(int index, const char *gateway)
+static void gateway_rtnl_del(int index, const char *gateway)
 {
 	g_autofree char *interface = NULL;
 	struct gateway_config *config;
@@ -3467,10 +3467,10 @@ static void connection_delgateway(int index, const char *gateway)
 		DBG("no default gateway data");
 }
 
-static struct connman_rtnl connection_rtnl = {
-	.name		= "connection",
-	.newgateway	= connection_newgateway,
-	.delgateway	= connection_delgateway,
+static struct connman_rtnl gateway_rtnl = {
+	.name		= "gateway",
+	.newgateway	= gateway_rtnl_new,
+	.delgateway	= gateway_rtnl_del,
 };
 
 /**
@@ -3563,11 +3563,11 @@ static void add_host_route(struct gateway_data *data,
  *  @retval  -EINVAL  If service is null or if network interface
  *                    index associated with @a service is invalid.
  *
- *  @sa __connman_connection_gateway_remove
- *  @sa __connman_connection_update_gateway
+ *  @sa __connman_gateway_remove
+ *  @sa __connman_gateway_update
  *
  */
-int __connman_connection_gateway_add(struct connman_service *service,
+int __connman_gateway_add(struct connman_service *service,
 					const char *gateway,
 					enum connman_ipconfig_type type,
 					const char *peer)
@@ -3740,11 +3740,11 @@ done:
  *  @retval  -EINVAL  If service is null or if network interface
  *                    index associated with @a service is invalid.
  *
- *  @sa __connman_connection_gateway_add
- *  @sa __connman_connection_update_gateway
+ *  @sa __connman_gateway_add
+ *  @sa __connman_gateway_update
  *
  */
-void __connman_connection_gateway_remove(struct connman_service *service,
+void __connman_gateway_remove(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	struct gateway_data *data = NULL;
@@ -3848,13 +3848,13 @@ void __connman_connection_gateway_remove(struct connman_service *service,
  *  @returns
  *    True if an active gateway was updated; otherwise, false.
  *
- *  @sa __connman_connection_gateway_add
- *  @sa __connman_connection_gateway_remove
+ *  @sa __connman_gateway_add
+ *  @sa __connman_gateway_remove
  *  @sa set_default_gateway
  *  @sa unset_default_gateway
  *
  */
-bool __connman_connection_update_gateway(void)
+bool __connman_gateway_update(void)
 {
 	struct gateway_data *default_gateway;
 	GHashTableIter iter;
@@ -3946,7 +3946,7 @@ done:
 	return updated4 || updated6;
 }
 
-int __connman_connection_get_vpn_index(int phy_index)
+int __connman_gateway_get_vpn_index(int phy_index)
 {
 	GHashTableIter iter;
 	gpointer value, key;
@@ -3968,7 +3968,7 @@ int __connman_connection_get_vpn_index(int phy_index)
 	return -1;
 }
 
-int __connman_connection_get_vpn_phy_index(int vpn_index)
+int __connman_gateway_get_vpn_phy_index(int vpn_index)
 {
 	GHashTableIter iter;
 	gpointer value, key;
@@ -3991,7 +3991,7 @@ int __connman_connection_get_vpn_phy_index(int vpn_index)
 	return -1;
 }
 
-int __connman_connection_init(void)
+int __connman_gateway_init(void)
 {
 	int err;
 
@@ -4000,21 +4000,21 @@ int __connman_connection_init(void)
 	gateway_hash = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 							NULL, remove_gateway);
 
-	err = connman_rtnl_register(&connection_rtnl);
+	err = connman_rtnl_register(&gateway_rtnl);
 	if (err < 0)
 		connman_error("Failed to setup RTNL gateway driver");
 
 	return err;
 }
 
-void __connman_connection_cleanup(void)
+void __connman_gateway_cleanup(void)
 {
 	GHashTableIter iter;
 	gpointer value, key;
 
 	DBG("");
 
-	connman_rtnl_unregister(&connection_rtnl);
+	connman_rtnl_unregister(&gateway_rtnl);
 
 	g_hash_table_iter_init(&iter, gateway_hash);
 

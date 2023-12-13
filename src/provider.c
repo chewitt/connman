@@ -666,7 +666,7 @@ int connman_provider_set_split_routing(struct connman_provider *provider,
 	}
 
 	vpn_index = __connman_service_get_index(provider->vpn_service);
-	service_index = __connman_connection_get_vpn_phy_index(vpn_index);
+	service_index = __connman_gateway_get_vpn_phy_index(vpn_index);
 	service = __connman_service_lookup_from_index(service_index);
 	if (!service)
 		goto save;
@@ -857,7 +857,7 @@ static void provider_service_changed(struct connman_service *service,
 
 	service_index = __connman_service_get_index(service);
 
-	vpn_index = __connman_connection_get_vpn_index(service_index);
+	vpn_index = __connman_gateway_get_vpn_index(service_index);
 
 	DBG("service %p %s state %d index %d/%d", service,
 		connman_service_get_identifier(service),

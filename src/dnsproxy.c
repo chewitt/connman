@@ -3020,7 +3020,7 @@ static void dnsproxy_default_changed(struct connman_service *service)
 	 * the VPN must be enabled as well, when the transport becomes the
 	 * default service.
 	 */
-	vpn_index = __connman_connection_get_vpn_index(index);
+	vpn_index = __connman_gateway_get_vpn_index(index);
 
 	for (GSList *list = server_list; list; list = list->next) {
 		struct server_data *data = list->data;

@@ -522,19 +522,19 @@ int __connman_dhcpv6_start_pd_release(struct connman_network *network,
 int __connman_ipv4_init(void);
 void __connman_ipv4_cleanup(void);
 
-int __connman_connection_init(void);
-void __connman_connection_cleanup(void);
+int __connman_gateway_init(void);
+void __connman_gateway_cleanup(void);
 
-int __connman_connection_gateway_add(struct connman_service *service,
+int __connman_gateway_add(struct connman_service *service,
 					const char *gateway,
 					enum connman_ipconfig_type type,
 					const char *peer);
-void __connman_connection_gateway_remove(struct connman_service *service,
+void __connman_gateway_remove(struct connman_service *service,
 					enum connman_ipconfig_type type);
-int __connman_connection_get_vpn_index(int phy_index);
-int __connman_connection_get_vpn_phy_index(int vpn_index);
+int __connman_gateway_get_vpn_index(int phy_index);
+int __connman_gateway_get_vpn_phy_index(int vpn_index);
 
-bool __connman_connection_update_gateway(void);
+bool __connman_gateway_update(void);
 
 typedef void (*__connman_ntp_cb_t) (bool success, void *user_data);
 int __connman_ntp_start(char *server, __connman_ntp_cb_t callback,

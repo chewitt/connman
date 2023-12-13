@@ -5851,7 +5851,7 @@ int __connman_service_move(struct connman_service *service,
 	else
 		switch_service_order(service, target);
 
-	__connman_connection_update_gateway();
+	__connman_gateway_update();
 
 	service_schedule_changed();
 
@@ -6002,7 +6002,7 @@ static void service_free(gpointer user_data)
 	service->path = NULL;
 
 	if (path) {
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 
 		g_dbus_unregister_interface(connection, path,
 						CONNMAN_SERVICE_INTERFACE);
@@ -6627,7 +6627,7 @@ int __connman_service_set_favorite_delayed(struct connman_service *service,
 
 		service_list_sort();
 
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 	}
 
 	return 0;
@@ -6765,7 +6765,7 @@ static void report_error_cb(void *user_context, bool retry,
 
 		service_complete(service);
 		service_list_sort();
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 	}
 }
 
@@ -6905,7 +6905,7 @@ static void request_input_cb(struct connman_service *service,
 		}
 
 		service_complete(service);
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 	}
 }
 
@@ -6972,7 +6972,7 @@ static int service_update_preferred_order(struct connman_service *default_servic
 	if (service_compare_preferred(default_service, new_service) > 0) {
 		switch_service_order(default_service,
 				new_service);
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 		return 0;
 	}
 
@@ -7208,7 +7208,7 @@ static int service_indicate_state(struct connman_service *service)
 
 	service_list_sort();
 
-	__connman_connection_update_gateway();
+	__connman_gateway_update();
 
 notifier:
 	if ((old_state == CONNMAN_SERVICE_STATE_ONLINE &&
@@ -7893,7 +7893,7 @@ int __connman_service_provision_changed(const char *ident)
 
 		service_list_sort();
 
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 	}
 
 	return data.ret;
@@ -7966,7 +7966,7 @@ static int service_register(struct connman_service *service)
 
 	service_list_sort();
 
-	__connman_connection_update_gateway();
+	__connman_gateway_update();
 
 	return 0;
 }
@@ -8463,7 +8463,7 @@ struct connman_service * __connman_service_create_from_network(struct connman_ne
 			__connman_ipconfig_set_index(service->ipconfig_ipv6,
 									index);
 
-		__connman_connection_update_gateway();
+		__connman_gateway_update();
 		return service;
 	}
 
@@ -8589,7 +8589,7 @@ void __connman_service_remove_from_network(struct connman_network *network)
 
 	service->ignore = true;
 
-	__connman_connection_gateway_remove(service,
+	__connman_gateway_remove(service,
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
 	connman_service_unref(service);

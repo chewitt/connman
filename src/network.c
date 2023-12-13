@@ -1022,7 +1022,7 @@ static void set_disconnected(struct connman_network *network)
 					CONNMAN_IPCONFIG_TYPE_IPV6);
 
 	if (network->connected) {
-		__connman_connection_gateway_remove(service,
+		__connman_gateway_remove(service,
 						CONNMAN_IPCONFIG_TYPE_ALL);
 
 		__connman_ipconfig_address_unset(ipconfig_ipv4);

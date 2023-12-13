@@ -1359,7 +1359,7 @@ void __connman_ipconfig_set_gateway(struct connman_ipconfig *ipconfig,
  *                    associated with @a service is invalid.
  *
  *  @sa __connman_ipconfig_gateway_remove
- *  @sa __connman_connection_gateway_add
+ *  @sa __connman_gateway_add
  *
  */
 int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
@@ -1385,7 +1385,7 @@ int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
 
 	if (ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV6 ||
 				ipconfig->type == CONNMAN_IPCONFIG_TYPE_IPV4)
-		return __connman_connection_gateway_add(service,
+		return __connman_gateway_add(service,
 						ipconfig->address->gateway,
 						ipconfig->type,
 						ipconfig->address->peer);
@@ -1408,7 +1408,7 @@ int __connman_ipconfig_gateway_add(const struct connman_ipconfig *ipconfig)
  *                        gateway.
  *
  *  @sa __connman_ipconfig_gateway_add
- *  @sa __connman_connection_gateway_remove
+ *  @sa __connman_gateway_remove
  *
  */
 void __connman_ipconfig_gateway_remove(const struct connman_ipconfig *ipconfig)
@@ -1424,7 +1424,7 @@ void __connman_ipconfig_gateway_remove(const struct connman_ipconfig *ipconfig)
 
 	service = __connman_service_lookup_from_index(ipconfig->index);
 	if (service)
-		__connman_connection_gateway_remove(service, ipconfig->type);
+		__connman_gateway_remove(service, ipconfig->type);
 }
 
 unsigned char __connman_ipconfig_get_prefixlen(struct connman_ipconfig *ipconfig)
