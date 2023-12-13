@@ -222,9 +222,8 @@
  *        'compute_low_priority_metric'.
  *
  *    Historically, this file started life as "connection.c". However,
- *    today it might be better named "route.c" or, perhaps more
- *    precisely, "gateway.c" since its primary focus is gateway routes
- *    and gateway route management.
+ *    it was renamed to "gateway.c" since its primary focus is gateway
+ *    routes and gateway route management.
  *
  */
 
