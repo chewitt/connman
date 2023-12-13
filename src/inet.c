@@ -3079,7 +3079,7 @@ bool connman_inet_is_ipv6_supported()
  * connmand and vpnd use inet.c, getting the route is via ipconfig and ipconfig
  * is different for both. Gateway is left here for possible future use.
  *
- * Gateway can be NULL and connection.c then assigns 0.0.0.0 address or ::,
+ * Gateway can be NULL and gateway.c then assigns 0.0.0.0 address or ::,
  * depending on IP family.
  */
 bool connman_inet_is_default_route(int family, const char *host,
