@@ -1317,6 +1317,7 @@ static int vpn_provider_save(struct vpn_provider *provider)
 {
 	GKeyFile *keyfile;
 	const char *value;
+	int err;
 
 	DBG("provider %p immutable %s", provider,
 					provider->immutable ? "yes" : "no");
@@ -1380,10 +1381,14 @@ static int vpn_provider_save(struct vpn_provider *provider)
 	if (provider->driver && provider->driver->save)
 		provider->driver->save(provider, keyfile);
 
-	__connman_storage_save_provider(keyfile, provider->identifier);
+	err = __connman_storage_save_provider(keyfile, provider->identifier);
+	if (err)
+		connman_error("Provider %s was not saved: %s",
+					provider->identifier, strerror(-err));
+
 	g_key_file_unref(keyfile);
 
-	return 0;
+	return err;
 }
 
 struct vpn_provider *__vpn_provider_lookup(const char *identifier)
