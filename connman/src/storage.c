@@ -1193,7 +1193,7 @@ GKeyFile *connman_storage_load_service(const char *service_id)
 
 int __connman_storage_save_service(GKeyFile *keyfile, const char *service_id)
 {
-	int ret = 0;
+	int err;
 	gchar *pathname;
 	gchar *dirname;
 	const char *storagedir;
@@ -1202,32 +1202,38 @@ int __connman_storage_save_service(GKeyFile *keyfile, const char *service_id)
 		return -EINVAL;
 
 	storagedir = storagedir_for(service_id);
-	if (!storagedir)
+	if (!storagedir) {
+		connman_error("No storagedir, service %s is not saved",
+						service_id);
 		return -EINVAL;
+	}
 
 	dirname = g_build_filename(storagedir, service_id, NULL);
-	if (!dirname)
+	if (!dirname) {
+		connman_error("No dirname, service %s, is not saved",
+						service_id);
 		return -ENOMEM;
-
-	/* If the dir doesn't exist, create it */
-	if (!g_file_test(dirname, G_FILE_TEST_IS_DIR)) {
-		if (mkdir(dirname, STORAGE_DIR_MODE) < 0) {
-			if (errno != EEXIST) {
-				g_free(dirname);
-				return -errno;
-			}
-		}
 	}
+
+	/* Returns 0 on both dir exists or is created */
+	if (g_mkdir_with_parents(dirname, STORAGE_DIR_MODE)) {
+		connman_error("Cannot create dir for service %s, error %s",
+						dirname, strerror(errno));
+		g_free(dirname);
+		return -errno;
+	}
+
+	DBG("Created dir %s", dirname);
 
 	pathname = g_build_filename(dirname, SETTINGS, NULL);
 
 	g_free(dirname);
 
-	ret = storage_save(keyfile, pathname);
+	err = storage_save(keyfile, pathname);
 
 	g_free(pathname);
 
-	return ret;
+	return err;
 }
 
 static int remove_file(const char *service_id, const char *file)
@@ -1397,39 +1403,53 @@ GKeyFile *__connman_storage_load_provider(const char *identifier)
 	return keyfile;
 }
 
-void __connman_storage_save_provider(GKeyFile *keyfile, const char *identifier)
+int __connman_storage_save_provider(GKeyFile *keyfile, const char *identifier)
 {
 	gchar *pathname;
 	gchar *dirname;
 	gchar *id;
 	const char *storagedir;
+	int err;
 
 	if (!keyfile || !identifier || !*identifier)
-		return;
+		return -EINVAL;
 
 	id = g_strconcat("provider_", identifier, NULL);
 
+	DBG("provider id %s", id);
+
 	storagedir = storagedir_for(id);
-	if (!storagedir)
-		return;
+	if (!storagedir) {
+		connman_error("provider is not saved, no storagedir");
+		g_free(id);
+		return -EINVAL;
+	}
 
 	dirname = g_build_filename(storagedir, id, NULL);
 	g_free(id);
 
-	if (!dirname)
-		return;
-
-	if (!g_file_test(dirname, G_FILE_TEST_IS_DIR) &&
-			mkdir(dirname, MODE) < 0) {
-		g_free(dirname);
-		return;
+	if (!dirname) {
+		connman_error("provider is not saved, no dirname");
+		return -ENOMEM;
 	}
+
+	/* Returns 0 on both dir created or the dir already existed */
+	if (g_mkdir_with_parents(dirname, MODE)) {
+		connman_error("Cannot create %s: %s", dirname, strerror(errno));
+		g_free(dirname);
+		return -errno;
+	}
+
+	DBG("Created dir %s", dirname);
 
 	pathname = g_build_filename(dirname, SETTINGS, NULL);
 	g_free(dirname);
 
-	storage_save(keyfile, pathname);
+	err = storage_save(keyfile, pathname);
+
 	g_free(pathname);
+
+	return err;
 }
 
 static bool remove_all(const char *id)
