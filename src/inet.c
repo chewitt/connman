@@ -2574,6 +2574,40 @@ static gboolean inet_rtnl_timeout_cb(gpointer user_data)
 	return FALSE;
 }
 
+/**
+ *  @brief
+ *    Receive and process a Linux Routing Netlink (rtnl) response
+ *    message.
+ *
+ *  This attempts to receive and process a Linux Routing Netlink
+ *  (rtnl) response message to a previous request send by
+ *  #__connman_inet_rtnl_send or #__connman_inet_rtnl_talk.
+ *
+ *  @param[in]      rtnl  A pointer to an immutable Connection
+ *                        Manager Routing Netlink (rtnl) session
+ *                        handle with which the response message will
+ *                        be received.
+ *  @param[in,out]  n     An optional pointer to storage for the
+ *                        Routing Netlink (rtnl) response message
+ *                        header which will be populated if a message
+ *                        is received and processed.
+ *
+ *  @retval  0            If successful.
+ *  @retval  -EINVAL      If @a rtnl is null.
+ *  @retval  -ECONNRESET  If zero bytes were read and/or the remote
+ *                        end of the Routing Netlink (rtnl) socket
+ *                        closed the connection.
+ *  @retval  -EBADMSG     If NLMSG_OK evaluates to false for the
+ *                        received Routing Netlink (rtnl) message or
+ *                        if the received message was of type
+ *                        NLMSG_NOOP or NLMSG_OVERRUN.
+ *
+ *  @sa __connman_inet_rtnl_open
+ *  @sa __connman_inet_rtnl_send
+ *  @sa __connman_inet_rtnl_talk
+ *  @sa __connman_inet_rtnl_close
+ *
+ */
 int __connman_inet_rtnl_recv(const struct __connman_inet_rtnl_handle *rtnl,
 	struct nlmsghdr **n)
 {
