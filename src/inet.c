@@ -2574,33 +2574,34 @@ static gboolean inet_rtnl_timeout_cb(gpointer user_data)
 	return FALSE;
 }
 
-static int inet_rtnl_recv(GIOChannel *chan, struct inet_rtnl_cb_data *rtnl_data)
+int __connman_inet_rtnl_recv(const struct __connman_inet_rtnl_handle *rtnl,
+	struct nlmsghdr **n)
 {
-	struct __connman_inet_rtnl_handle *rth = rtnl_data->rtnl;
 	struct nlmsghdr *h = NULL;
 	struct sockaddr_nl nladdr;
 	socklen_t addr_len = sizeof(nladdr);
 	unsigned char buf[4096];
 	void *ptr = buf;
 	gsize len;
-	int status, fd;
+	int status;
+
+	if (!rtnl)
+		return -EINVAL;
 
 	memset(buf, 0, sizeof(buf));
 	memset(&nladdr, 0, sizeof(nladdr));
 
-	fd = g_io_channel_unix_get_fd(chan);
-
-	status = recvfrom(fd, buf, sizeof(buf), 0,
+	status = recvfrom(rtnl->fd, buf, sizeof(buf), 0,
                        (struct sockaddr *) &nladdr, &addr_len);
 	if (status < 0) {
 		if (errno == EINTR || errno == EAGAIN)
 			return 0;
 
-		return -1;
+		return -errno;
 	}
 
 	if (status == 0)
-		return -1;
+		return -ECONNRESET;
 
 	if (nladdr.nl_pid != 0) { /* not sent by kernel, ignore */
 		DBG("Received msg from %u, ignoring it", nladdr.nl_pid);
@@ -2615,11 +2616,11 @@ static int inet_rtnl_recv(GIOChannel *chan, struct inet_rtnl_cb_data *rtnl_data)
 		h = ptr;
 
 		if (!NLMSG_OK(h, len))
-			return -1;
+			return -EBADMSG;
 
-		if (h->nlmsg_seq != rth->seq) {
+		if (h->nlmsg_seq != rtnl->seq) {
 			/* Skip this msg */
-			DBG("skip %d/%d len %d", rth->seq,
+			DBG("skip %d/%d len %d", rtnl->seq,
 				h->nlmsg_seq, h->nlmsg_len);
 
 			len -= h->nlmsg_len;
@@ -2630,17 +2631,41 @@ static int inet_rtnl_recv(GIOChannel *chan, struct inet_rtnl_cb_data *rtnl_data)
 		switch (h->nlmsg_type) {
 		case NLMSG_NOOP:
 		case NLMSG_OVERRUN:
-			return -1;
+			return -EBADMSG;
 
 		case NLMSG_ERROR:
 			err = (struct nlmsgerr *)NLMSG_DATA(h);
-			connman_error("RTNETLINK answers %s (%d)",
-				strerror(-err->error), -err->error);
+			if (err->error != 0)
+				DBG("RTNETLINK answers %s (%d)",
+					strerror(-err->error), -err->error);
 			return err->error;
 		}
 
 		break;
 	}
+
+	if (h && n)
+		*n = h;
+
+	return 0;
+}
+
+static int inet_rtnl_recv(GIOChannel *chan, struct inet_rtnl_cb_data *rtnl_data)
+{
+	struct __connman_inet_rtnl_handle *rth = rtnl_data->rtnl;
+	struct nlmsghdr *h = NULL;
+	int status;
+
+	/*
+	 * Both the chan and rth contain the socket descriptor and should
+	 * be identical. __connman_inet_rtnl_recv uses rth; consequently,
+	 * chan goes unused here.
+	 */
+	(void)chan;
+
+	status = __connman_inet_rtnl_recv(rth, &h);
+	if (status < 0)
+		return status;
 
 	if (h->nlmsg_seq == rth->seq) {
 		DBG("received %d seq %d", h->nlmsg_len, h->nlmsg_seq);

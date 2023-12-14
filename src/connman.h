@@ -244,7 +244,8 @@ int __connman_inet_rtnl_send(struct __connman_inet_rtnl_handle *rtnl,
 {
 	return __connman_inet_rtnl_talk(rtnl, n, 0, NULL, NULL);
 }
-
+int __connman_inet_rtnl_recv(const struct __connman_inet_rtnl_handle *rtnl,
+			struct nlmsghdr **n);
 void __connman_inet_rtnl_close(struct __connman_inet_rtnl_handle *rth);
 int __connman_inet_rtnl_addattr_l(struct nlmsghdr *n, size_t max_length,
 			int type, const void *data, size_t data_length);
