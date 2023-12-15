@@ -1615,6 +1615,8 @@ static guint online_check_timeout_compute_geometric(unsigned int interval)
 static void cancel_online_check(struct connman_service *service,
 				enum connman_ipconfig_type type)
 {
+	bool do_ipv4 = false, do_ipv6 = false;
+
 	DBG("service %p (%s) type %d (%s) "
 		"online_timeout_ipv4 %d online_timeout_ipv6 %d",
 		service, connman_service_get_identifier(service),
@@ -1622,20 +1624,34 @@ static void cancel_online_check(struct connman_service *service,
 		service->online_check_state_ipv4.timeout,
 		service->online_check_state_ipv6.timeout);
 
-	/*
-	 * First, ensure that the reachability check is cancelled in the
-	 * WISPr module. This may fail, however, we ignore any such
-	 * failures as we still want to cancel any outstanding check from
-	 * this module as well.
-	 */
-	__connman_wispr_cancel(service, type);
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		do_ipv4 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		do_ipv6 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+		do_ipv4 = do_ipv6 = true;
+	else
+		return;
 
 	/*
-	 * Now that the reachability check has been cancelled in the WISPr
-	 * module, cancel any outstanding check that may be scheduled in
-	 * this module.
+	 * First, ensure that the reachability check(s) is/are cancelled
+	 * in the WISPr module. This may fail, however, we ignore any such
+	 * failures as we still want to cancel any outstanding check(s)
+	 * from this module as well.
 	 */
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4 &&
+
+	if (do_ipv4)
+		__connman_wispr_cancel(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	if (do_ipv6)
+		__connman_wispr_cancel(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+
+	/*
+	 * Now that the reachability check(s) has/have been cancelled in
+	 * the WISPr module, cancel any outstanding check(s) that may be
+	 * scheduled in this module.
+	 */
+	if (do_ipv4 &&
 		service->online_check_state_ipv4.timeout) {
 		g_source_remove(service->online_check_state_ipv4.timeout);
 		service->online_check_state_ipv4.timeout = 0;
@@ -1646,7 +1662,9 @@ static void cancel_online_check(struct connman_service *service,
 		 * now-cancelled scheduled online check.
 		 */
 		connman_service_unref(service);
-	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
+	}
+
+	if (do_ipv6 &&
 		service->online_check_state_ipv6.timeout) {
 		g_source_remove(service->online_check_state_ipv6.timeout);
 		service->online_check_state_ipv6.timeout = 0;
