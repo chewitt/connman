@@ -651,6 +651,31 @@ static int inet_get_addr_data(int family,
 	return 0;
 }
 
+/**
+ *  @brief
+ *    Apply the specified prefix length to the specified binary
+ *    address data.
+ *
+ *  This attempts to apply the specified prefix length as a network /
+ *  prefix mask to the specified address data, in network (that is,
+ *  big endian) byte order, to generate a network address / prefix.
+ *
+ *  @param[in]      addr_len   The length, in bytes of the address
+ *                             pointed to by @a addr_data.
+ *  @param[in,out]  addr_data  A pointer to the mutable address data
+ *                             in binary form in network (that is,
+ *                             big endian) byte order to mask with @a
+ *                             prefixlen.
+ *  @param[in]      prefixlen  The prefix length to apply to @a
+ *                             addr_data as a mask to generate a
+ *                             network address / prefix.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a addr_len or @a addr_data are null
+ *                          or if the specified prefix length exceeds
+ *                          the address length.
+ *
+ */
 static int inet_mask_addr_data(size_t addr_len,
 			void *addr_data,
 			uint8_t prefixlen)
