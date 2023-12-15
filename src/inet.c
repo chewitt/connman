@@ -597,6 +597,37 @@ static const char *rtnl_route_cmd2string(int cmd)
 	return "";
 }
 
+/**
+ *  @brief
+ *    Convert the specified address from text to binary form.
+ *
+ *  This attempts to converts the specified address in text form into
+ *  binary form in network (that is, big endian) byte order, according
+ *  to the specified address family.
+ *
+ *  @param[in]      family       The address family describing the
+ *                               address pointed to by @a addr_string.
+ *  @param[in]      addr_string  A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               address, in text form, to convert to
+ *                               binary form.
+ *  @param[in,out]  addr_data    A pointer to storage sufficiently
+ *                               large to hold @a addr_string
+ *                               converted into binary form. This will
+ *                               point to the converted binary address
+ *                               data on success.
+ *
+ *  @retval  0              If successful.
+ *  @retval  -EINVAL        If @a addr_string or @a addr_data are
+ *                          null or @a addr_string does not contain a
+ *                          character string representing a valid
+ *                          network address in @a family.
+ *  @retval  -EAFNOSUPPORT  If @ family does not contain a valid
+ *                          address family.
+ *
+ *  @sa inet_pton
+ *
+ */
 static int inet_get_addr_data(int family,
 			const char *addr_string,
 			void *addr_data)
