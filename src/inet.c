@@ -584,6 +584,18 @@ int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
 	return 0;
 }
 
+static const char *rtnl_route_cmd2string(int cmd)
+{
+	switch (cmd) {
+	case RTM_NEWROUTE:
+		return "add";
+	case RTM_DELROUTE:
+		return "del";
+	}
+
+	return "";
+}
+
 int connman_inet_add_host_route(int index, const char *host,
 				const char *gateway)
 {
@@ -3253,18 +3265,6 @@ int __connman_inet_add_fwmark_rule(uint32_t table_id, int family, uint32_t fwmar
 int __connman_inet_del_fwmark_rule(uint32_t table_id, int family, uint32_t fwmark)
 {
 	return iprule_modify(RTM_DELRULE, family, table_id, fwmark);
-}
-
-static const char *rtnl_route_cmd2string(int cmd)
-{
-	switch (cmd) {
-	case RTM_NEWROUTE:
-		return "add";
-	case RTM_DELROUTE:
-		return "del";
-	}
-
-	return "";
 }
 
 /**
