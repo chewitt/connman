@@ -876,6 +876,68 @@ done:
 	return ret;
 }
 
+/**
+ *  @brief
+ *    Add or remove a host route.
+ *
+ *  This attempts to add or remove a host route to or from the kernel
+ *  using a Linux Route Netlink (rtnl) socket and protocol with the
+ *  specified attributes.
+ *
+ *  @note
+ *    The caller may provide the IPv4 or IPv6 @a host address in
+ *    masked (that is, 169.254.0.0/16) or unmasked (169.254.75.191/16)
+ *    form. The function will mask the address, based on the prefix
+ *    length, before modifying the route with it.
+ *
+ *  @param[in]  cmd              The Linux Route Netlink command to
+ *                               send. This is expected to be either
+ *                               RTM_NEWROUTE (add new route) or
+ *                               RTM_DELROUTE (delete existing route).
+ *  @param[in]  family           The address family associated with @a
+ *                               host and @a gateway, if present.
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv4 or IPv6 address, in text form,
+ *                               of the route host destination
+ *                               address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv4 or IPv6 address, in text
+ *                               form, of the route next hop gateway
+ *                               address.
+ *  @param[in]  prefixlen        The destination prefix length of the
+ *                               route.
+ *  @param[in]  table_id         The table to add/delete this route
+ *                               to/from.
+ *  @param[in]  metric           The routing priority metric for the
+ *                               route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    the address family of @a family was not AF_INET
+ *                    (IPv4) or AF_INET6 (IPv6); if @a host or @a
+ *                    gateway, if present, do not contain a character
+ *                    string representing a valid network address in
+ *                    either the AF_INET or AF_INET6 family; or if the
+ *                    routing information to be added or deleted was
+ *                    invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add or delete
+ *                    routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa inet_modify_host_or_network_route
+ *
+ */
 static int inet_modify_host_route(int cmd,
 					int family,
 					int index,
@@ -896,6 +958,68 @@ static int inet_modify_host_route(int cmd,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add or remove a network route.
+ *
+ *  This attempts to add or remove a network route to or from the
+ *  kernel using a Linux Route Netlink (rtnl) socket and protocol with
+ *  the specified attributes.
+ *
+ *  @note
+ *    The caller may provide the IPv4 or IPv6 @a network address in
+ *    masked (that is, 169.254.0.0/16) or unmasked (169.254.75.191/16)
+ *    form. The function will mask the address, based on the prefix
+ *    length, before modifying the route with it.
+ *
+ *  @param[in]  cmd              The Linux Route Netlink command to
+ *                               send. This is expected to be either
+ *                               RTM_NEWROUTE (add new route) or
+ *                               RTM_DELROUTE (delete existing route).
+ *  @param[in]  family           The address family associated with @a
+ *                               network and @a gateway, if present.
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  network          A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv4 or IPv6 address, in text form,
+ *                               of the route network destination
+ *                               address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv4 or IPv6 address, in text
+ *                               form, of the route next hop gateway
+ *                               address.
+ *  @param[in]  prefixlen        The destination prefix length of the
+ *                               route.
+ *  @param[in]  table_id         The table to add/delete this route
+ *                               to/from.
+ *  @param[in]  metric           The routing priority metric for the
+ *                               route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a network is null; if @a index is invalid;
+ *                    if the address family of @a family was not
+ *                    AF_INET (IPv4) or AF_INET6 (IPv6); if @a network
+ *                    or @a gateway, if present, do not contain a
+ *                    character string representing a valid network
+ *                    address in either the AF_INET or AF_INET6
+ *                    family; or if the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add or delete
+ *                    routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa inet_modify_host_or_network_route
+ *
+ */
 static int inet_modify_network_route(int cmd,
 					int family,
 					int index,
@@ -916,6 +1040,58 @@ static int inet_modify_network_route(int cmd,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add or remove an IPv4 network route.
+ *
+ *  This attempts to add or remove an IPv4 network route to or from
+ *  the kernel using a Linux Route Netlink (rtnl) socket and protocol
+ *  with the specified attributes.
+ *
+ *  @note
+ *    The caller may provide the IPv4 @a network address in masked
+ *    (that is, 169.254.0.0/16) or unmasked (169.254.75.191/16)
+ *    form. The function will mask the address, based on the prefix
+ *    length, before modifying the route with it.
+ *
+ *  @param[in]  cmd              The Linux Route Netlink command to
+ *                               send. This is expected to be either
+ *                               RTM_NEWROUTE (add new route) or
+ *                               RTM_DELROUTE (delete existing route).
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  network          A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv4 address, in text form, of the
+ *                               route network destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv4 address, in text form, of
+ *                               the route next hop gateway address.
+ *  @param[in]  metric           The routing priority metric for the
+ *                               route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a network is null; if @a index is invalid;
+ *                    if @a network or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be added or deleted was
+ *                    invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add or delete
+ *                    routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa inet_modify_network_route
+ *
+ */
 static int inet_modify_ipv4_network_route(int cmd,
 					int index,
 					const char *network,
@@ -934,6 +1110,59 @@ static int inet_modify_ipv4_network_route(int cmd,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add or remove an IPv6 network route.
+ *
+ *  This attempts to add or remove an IPv6 network route to or from
+ *  the kernel using a Linux Route Netlink (rtnl) socket and protocol
+ *  with the specified attributes.
+ *
+ *  @note
+ *    The caller may provide the IPv6 @a network address in masked
+ *    (that is, 2601:647:5a00:1500::/56) or unmasked
+ *    (2601:647:5a00:15c1:230d:b2c9:c388:f96b/56) form. The function
+ *    will mask the address, based on the prefix length, before
+ *    modifying the route with it.
+ *
+ *  @param[in]  cmd              The Linux Route Netlink command to
+ *                               send. This is expected to be either
+ *                               RTM_NEWROUTE (add new route) or
+ *                               RTM_DELROUTE (delete existing route).
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  network          A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv6 address, in text form, of the
+ *                               route network destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv6 address, in text form, of
+ *                               the route next hop gateway address.
+ *  @param[in]  metric           The routing priority metric for the
+ *                               route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a network is null; if @a index is invalid;
+ *                    if @a network or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be added or deleted was
+ *                    invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add or delete
+ *                    routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa inet_modify_network_route
+ *
+ */
 static int inet_modify_ipv6_network_route(int cmd,
 					int index,
 					const char *network,
@@ -952,6 +1181,52 @@ static int inet_modify_ipv6_network_route(int cmd,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add or remove an IPv4 host route.
+ *
+ *  This attempts to add or remove an IPv4 host route to or from the
+ *  kernel using a Linux Route Netlink (rtnl) socket and protocol with
+ *  the specified attributes.
+ *
+ *  @param[in]  cmd              The Linux Route Netlink command to
+ *                               send. This is expected to be either
+ *                               RTM_NEWROUTE (add new route) or
+ *                               RTM_DELROUTE (delete existing route).
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv4 address, in text form, of the
+ *                               route host destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv4 address, in text form, of
+ *                               the route next hop gateway address.
+ *  @param[in]  metric           The routing priority metric for the
+ *                               route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    @a host or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be added or deleted was
+ *                    invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add or delete
+ *                    routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa inet_modify_host_route
+ *
+ */
 static int inet_modify_ipv4_host_route(int cmd,
 					int index,
 					const char *host,
@@ -970,6 +1245,52 @@ static int inet_modify_ipv4_host_route(int cmd,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add or remove an IPv6 host route.
+ *
+ *  This attempts to add or remove an IPv6 host route to or from the
+ *  kernel using a Linux Route Netlink (rtnl) socket and protocol with
+ *  the specified attributes.
+ *
+ *  @param[in]  cmd              The Linux Route Netlink command to
+ *                               send. This is expected to be either
+ *                               RTM_NEWROUTE (add new route) or
+ *                               RTM_DELROUTE (delete existing route).
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv6 address, in text form, of the
+ *                               route host destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv6 address, in text form, of
+ *                               the route next hop gateway address.
+ *  @param[in]  metric           The routing priority metric for the
+ *                               route.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    @a host or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET6 family; or if
+ *                    the routing information to be added or deleted
+ *                    was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added or deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add or delete
+ *                    routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa inet_modify_host_route
+ *
+ */
 static int inet_modify_ipv6_host_route(int cmd,
 					int index,
 					const char *host,
