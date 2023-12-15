@@ -4547,7 +4547,6 @@ static int iproute_default_modify(int cmd, uint32_t table_id, uint32_t metric,
 	rth.req.n.nlmsg_type = cmd;
 	rth.req.u.r.rt.rtm_family = family;
 	rth.req.u.r.rt.rtm_table = RT_TABLE_MAIN;
-	rth.req.u.r.rt.rtm_scope = RT_SCOPE_NOWHERE;
 	rth.req.u.r.rt.rtm_protocol = RTPROT_BOOT;
 	rth.req.u.r.rt.rtm_scope = RT_SCOPE_UNIVERSE;
 	rth.req.u.r.rt.rtm_type = RTN_UNICAST;
