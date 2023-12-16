@@ -1367,6 +1367,27 @@ static void add_nameserver_route(int family, int index, char *nameserver,
 	}
 }
 
+static void del_nameserver_route(int family, int index, const char *nameserver,
+				const char *gw,
+				enum connman_ipconfig_type type)
+{
+	DBG("family %d index %d nameserver %s gw %s",
+		family, index, nameserver, gw);
+
+	switch (family) {
+	case AF_INET:
+		if (type != CONNMAN_IPCONFIG_TYPE_IPV6)
+			connman_inet_del_host_route(index,
+						nameserver);
+		break;
+	case AF_INET6:
+		if (type != CONNMAN_IPCONFIG_TYPE_IPV4)
+			connman_inet_del_ipv6_host_route(index,
+						nameserver);
+		break;
+	}
+}
+
 static void nameserver_add_routes(int index, char **nameservers,
 					const char *gw)
 {
@@ -1388,25 +1409,15 @@ static void nameserver_add_routes(int index, char **nameservers,
 static void nameserver_del_routes(int index, char **nameservers,
 				enum connman_ipconfig_type type)
 {
-	int i, family;
+	int i, ns_family;
 
 	for (i = 0; nameservers[i]; i++) {
-		family = connman_inet_check_ipaddress(nameservers[i]);
-		if (family < 0)
+		ns_family = connman_inet_check_ipaddress(nameservers[i]);
+		if (ns_family < 0)
 			continue;
 
-		switch (family) {
-		case AF_INET:
-			if (type != CONNMAN_IPCONFIG_TYPE_IPV6)
-				connman_inet_del_host_route(index,
-							nameservers[i]);
-			break;
-		case AF_INET6:
-			if (type != CONNMAN_IPCONFIG_TYPE_IPV4)
-				connman_inet_del_ipv6_host_route(index,
-							nameservers[i]);
-			break;
-		}
+		del_nameserver_route(ns_family, index, nameservers[i],
+			NULL, type);
 	}
 }
 
