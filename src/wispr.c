@@ -708,6 +708,17 @@ static bool wispr_route_request(const char *address, int ai_family,
 		return false;
 	}
 
+	result = __connman_service_get_route_metric(wp_context->service,
+				&metric);
+	if (result < 0) {
+		DBG("failed to get metric for service %p (%s): %s (%d)",
+			wp_context->service,
+			connman_service_get_identifier(wp_context->service),
+			strerror(-result), result);
+
+		return false;
+	}
+
 	DBG("service %p (%s) metric %u",
 		wp_context->service,
 		connman_service_get_identifier(wp_context->service),
