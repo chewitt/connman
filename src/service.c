@@ -1348,6 +1348,9 @@ void __connman_service_nameserver_clear(struct connman_service *service)
 static void add_nameserver_route(int family, int index, const char *nameserver,
 				const char *gw)
 {
+	DBG("family %d index %d nameserver %s gw %s",
+		family, index, nameserver, gw);
+
 	switch (family) {
 	case AF_INET:
 		if (connman_inet_compare_subnet(index, nameserver))
