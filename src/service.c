@@ -1457,6 +1457,31 @@ static void del_nameserver_route(int family, int index, const char *nameserver,
 	}
 }
 
+/**
+ *  @brief
+ *    Add IPv4 or IPv6 host routes for the specified domain name
+ *    service (DNS) servers.
+ *
+ *  This attempts to add IPv4 or IPv6 host routes for the specified
+ *  domain name service (DNS) servers with the specified attributes.
+ *
+ *  @param[in]  index        The network interface index associated
+ *                           with the output network device for
+ *                           the route.
+ *  @param[in]  nameservers  A pointer to a null-terminated array of
+ *                           mutable null-terminated C strings
+ *                           containing the IPv4 or IPv6 addresses, in
+ *                           text form, of the route DNS server
+ *                           destination addresses.
+ *  @param[in]  gw           A pointer to an immutable null-terminated
+ *                           C string containing the IPv4 or IPv6
+ *                           address, in text form, of the route next
+ *                           hop gateway address.
+ *
+ *  @sa add_nameserver_route
+ *  @sa nameserver_del_routes
+ *
+ */
 static void nameserver_add_routes(int index, char **nameservers,
 					const char *gw)
 {
@@ -1475,6 +1500,31 @@ static void nameserver_add_routes(int index, char **nameservers,
 	}
 }
 
+/**
+ *  @brief
+ *    Delete IPv4 or IPv6 host routes for the specified domain name
+ *    service (DNS) servers.
+ *
+ *  This attempts to delete IPv4 or IPv6 host routes for the specified
+ *  domain name service (DNS) servers with the specified attributes.
+ *
+ *  @param[in]  index        The network interface index associated
+ *                           with the output network device for
+ *                           the route.
+ *  @param[in]  nameservers  A pointer to a null-terminated array of
+ *                           mutable null-terminated C strings
+ *                           containing the IPv4 or IPv6 addresses, in
+ *                           text form, of the route DNS server
+ *                           destination addresses.
+ *  @param[in]  gw           A pointer to an immutable null-terminated
+ *                           C string containing the IPv4 or IPv6
+ *                           address, in text form, of the route next
+ *                           hop gateway address.
+ *
+ *  @sa del_nameserver_route
+ *  @sa nameserver_add_routes
+ *
+ */
 static void nameserver_del_routes(int index, char **nameservers,
 				const char *gw,
 				enum connman_ipconfig_type type)
