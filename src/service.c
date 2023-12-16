@@ -1407,22 +1407,28 @@ static void nameserver_add_routes(int index, char **nameservers,
 }
 
 static void nameserver_del_routes(int index, char **nameservers,
+				const char *gw,
 				enum connman_ipconfig_type type)
 {
-	int i, ns_family;
+	int i, ns_family, gw_family;
+
+	gw_family = connman_inet_check_ipaddress(gw);
+	if (gw_family < 0)
+		return;
 
 	for (i = 0; nameservers[i]; i++) {
 		ns_family = connman_inet_check_ipaddress(nameservers[i]);
-		if (ns_family < 0)
+		if (ns_family < 0 || ns_family != gw_family)
 			continue;
 
 		del_nameserver_route(ns_family, index, nameservers[i],
-			NULL, type);
+			gw, type);
 	}
 }
 
-void __connman_service_nameserver_add_routes(const struct connman_service *service,
-						const char *gw)
+void __connman_service_nameserver_add_routes(
+					const struct connman_service *service,
+					const char *gw)
 {
 	int index;
 
@@ -1449,7 +1455,9 @@ void __connman_service_nameserver_add_routes(const struct connman_service *servi
 	}
 }
 
-void __connman_service_nameserver_del_routes(const struct connman_service *service,
+void __connman_service_nameserver_del_routes(
+					const struct connman_service *service,
+					const char *gw,
 					enum connman_ipconfig_type type)
 {
 	int index;
@@ -1461,9 +1469,9 @@ void __connman_service_nameserver_del_routes(const struct connman_service *servi
 
 	if (service->nameservers_config)
 		nameserver_del_routes(index, service->nameservers_config,
-					type);
+					gw, type);
 	else if (service->nameservers)
-		nameserver_del_routes(index, service->nameservers, type);
+		nameserver_del_routes(index, service->nameservers, gw, type);
 }
 
 /**
@@ -4483,6 +4491,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		if (gw && strlen(gw))
 			__connman_service_nameserver_del_routes(service,
+						gw,
 						CONNMAN_IPCONFIG_TYPE_ALL);
 
 		dbus_message_iter_recurse(&value, &entry);

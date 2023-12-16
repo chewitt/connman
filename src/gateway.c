@@ -3765,10 +3765,6 @@ void __connman_gateway_remove(struct connman_service *service,
 	else
 		return;
 
-    /* Delete any routes associated with this service's nameservers. */
-
-	__connman_service_nameserver_del_routes(service, type);
-
 	/*
 	 * If there is no hash table / map entry for this service, then
 	 * there are no gateways associated with it; simply return.
@@ -3778,6 +3774,18 @@ void __connman_gateway_remove(struct connman_service *service,
 		return;
 
 	GATEWAY_DATA_DBG("service_data", data);
+
+	/* Delete any routes associated with this service's nameservers. */
+
+	if (do_ipv4 && data->ipv4_config)
+		__connman_service_nameserver_del_routes(service,
+			data->ipv4_config->gateway,
+			type);
+
+	if (do_ipv6 && data->ipv6_config)
+		__connman_service_nameserver_del_routes(service,
+			data->ipv6_config->gateway,
+			type);
 
 	if (do_ipv4 && data->ipv4_config)
 		is_vpn4 = is_gateway_config_vpn(data->ipv4_config);
