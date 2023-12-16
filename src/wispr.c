@@ -50,9 +50,28 @@ enum connman_wispr_result {
 	CONNMAN_WISPR_RESULT_FAILED  = 3,
 };
 
+/**
+ *  State for host routes used for a WISPr request.
+ */
 struct wispr_route {
+	/**
+	 *	A pointer to a mutable, dynamically-allocated null-terminated
+	 *	C string containing the text-formatted address of the WISPr
+	 *	host.
+	 */
 	char *address;
+
+	/**
+	 *	The network interface index associated with the underlying
+	 *	network interface over which the WISPr request will sent and
+	 *	the reply received.
+	 */
 	int if_index;
+
+	/**
+	 *	The route metric/priority used for the host route created for
+	 *	the WISPr host.
+	 */
 	uint32_t metric;
 };
 
