@@ -1545,14 +1545,29 @@ int connman_inet_del_network_route_with_metric(int index,
 				metric);
 }
 
-int connman_inet_add_host_route(int index, const char *host,
+int connman_inet_add_host_route(int index,
+				const char *host,
 				const char *gateway)
 {
 	return connman_inet_add_network_route(index, host, gateway, NULL);
 }
 
-int connman_inet_del_host_route(int index, const char *host)
+int connman_inet_del_host_route(int index,
+				const char *host,
+				const char *gateway)
 {
+	/*
+	 * NOTE: The 'connman_inet_del_network_route' is deficient in that
+	 * it is missing the requisite 'gateway' parameter making it
+	 * symmetric with 'connman_inet_add_host_route' and
+	 * 'connman_inet_add_network_route'. Consequently, host route
+	 * deletion may fail.
+	 *
+	 * This, 'connman_inet_add_host_route', and
+	 * 'connman_inet_del_network_route' should probably be migrated to
+	 * the same RTNL-based call stack as
+	 * 'connman_inet_del_host_route_with_metric'.
+	 */
 	return connman_inet_del_network_route(index, host);
 }
 
@@ -1936,14 +1951,29 @@ int connman_inet_del_ipv6_network_route_with_metric(int index,
 				metric);
 }
 
-int connman_inet_add_ipv6_host_route(int index, const char *host,
-					const char *gateway)
+int connman_inet_add_ipv6_host_route(int index,
+				const char *host,
+				const char *gateway)
 {
 	return connman_inet_add_ipv6_network_route(index, host, gateway, 128);
 }
 
-int connman_inet_del_ipv6_host_route(int index, const char *host)
+int connman_inet_del_ipv6_host_route(int index,
+				const char *host,
+				const char *gateway)
 {
+	/*
+	 * NOTE: The 'connman_inet_del_ipv6_network_route' is deficient in
+	 * that it is missing the requisite 'gateway' parameter making it
+	 * symmetric with 'connman_inet_add_ipv6_host_route' and
+	 * 'connman_inet_add_ipv6_network_route'. Consequently, host route
+	 * deletion may fail.
+	 *
+	 * This, 'connman_inet_add_ipv6_host_route', and
+	 * 'connman_inet_del_ipv6_network_route' should probably be
+	 * migrated to the same RTNL-based call stack as
+	 * 'connman_inet_del_ipv6_host_route_with_metric'.
+	 */
 	return connman_inet_del_ipv6_network_route(index, host, 128);
 }
 

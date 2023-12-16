@@ -1376,14 +1376,27 @@ static void del_nameserver_route(int family, int index, const char *nameserver,
 
 	switch (family) {
 	case AF_INET:
-		if (type != CONNMAN_IPCONFIG_TYPE_IPV6)
-			connman_inet_del_host_route(index,
-						nameserver);
+		if (type != CONNMAN_IPCONFIG_TYPE_IPV4 &&
+			type != CONNMAN_IPCONFIG_TYPE_ALL)
+			break;
+
+		if (connman_inet_compare_subnet(index, nameserver))
+			break;
+
+		if (connman_inet_del_host_route(index, nameserver, gw) < 0)
+			/* For P-t-P link the above route del will fail */
+			connman_inet_del_host_route(index, nameserver, NULL);
 		break;
+
 	case AF_INET6:
-		if (type != CONNMAN_IPCONFIG_TYPE_IPV4)
-			connman_inet_del_ipv6_host_route(index,
-						nameserver);
+		if (type != CONNMAN_IPCONFIG_TYPE_IPV6 &&
+			type != CONNMAN_IPCONFIG_TYPE_ALL)
+			break;
+
+		if (connman_inet_del_ipv6_host_route(index, nameserver,
+								gw) < 0)
+			connman_inet_del_ipv6_host_route(index, nameserver,
+							NULL);
 		break;
 	}
 }

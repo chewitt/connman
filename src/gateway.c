@@ -401,9 +401,10 @@ struct gateway_config_ops {
 		uint32_t metric);
 
 	int (*add_host_route)(int index,
-		const char *gateway,
-		const char *host);
+		const char *host,
+		const char *gateway);
 	int (*del_host_route)(int index,
+		const char *host,
 		const char *gateway);
 };
 
@@ -1445,7 +1446,8 @@ static int del_gateway_routes(struct gateway_data *data,
 		} else {
 			data->ipv4_config->ops->del_host_route(
 						data->index,
-						data->ipv4_config->gateway);
+						data->ipv4_config->gateway,
+						NULL);
 
 			status4 = UNSET_DEFAULT_GATEWAY(data, type);
 
@@ -1462,7 +1464,8 @@ static int del_gateway_routes(struct gateway_data *data,
 		} else {
 			data->ipv6_config->ops->del_host_route(
 						data->index,
-						data->ipv6_config->gateway);
+						data->ipv6_config->gateway,
+						NULL);
 
 			status6 = UNSET_DEFAULT_GATEWAY(data, type);
 
@@ -3803,12 +3806,14 @@ void __connman_gateway_remove(struct connman_service *service,
 	if (is_vpn4 && data->index >= 0)
 		data->ipv4_config->ops->del_host_route(
 					data->ipv4_config->vpn_phy_index,
-					data->ipv4_config->gateway);
+					data->ipv4_config->gateway,
+					NULL);
 
 	if (is_vpn6 && data->index >= 0)
 		data->ipv6_config->ops->del_host_route(
 					data->ipv6_config->vpn_phy_index,
-					data->ipv6_config->gateway);
+					data->ipv6_config->gateway,
+					NULL);
 
 	/* Remove all active routes associated with this gateway data. */
 

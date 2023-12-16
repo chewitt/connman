@@ -50,8 +50,12 @@ int connman_inet_del_host_route_with_metric(int index,
 					const char *host,
 					const char *gateway,
 					uint32_t metric);
-int connman_inet_add_host_route(int index, const char *host, const char *gateway);
-int connman_inet_del_host_route(int index, const char *host);
+int connman_inet_add_host_route(int index,
+					const char *host,
+					const char *gateway);
+int connman_inet_del_host_route(int index,
+					const char *host,
+					const char *gateway);
 int connman_inet_add_network_route_with_metric(int index,
 					const char *host,
 					const char *gateway,
@@ -82,9 +86,12 @@ int connman_inet_del_ipv6_host_route_with_metric(int index,
 					const char *host,
 					const char *gateway,
 					uint32_t metric);
-int connman_inet_add_ipv6_host_route(int index, const char *host,
-						const char *gateway);
-int connman_inet_del_ipv6_host_route(int index, const char *host);
+int connman_inet_add_ipv6_host_route(int index,
+					const char *host,
+					const char *gateway);
+int connman_inet_del_ipv6_host_route(int index,
+					const char *host,
+					const char *gateway);
 int connman_inet_del_ipv6_network_route_with_metric(int index,
 					const char *host,
 					const char *gateway,
