@@ -75,6 +75,10 @@ struct wispr_route {
 	uint32_t metric;
 };
 
+/**
+ *  Gateway configuration function pointers for IP configuration
+ *  type-specific route set/clear/add/delete operations.
+ */
 struct wispr_portal_context_route_ops {
 	int (*add_host_route_with_metric)(int index,
 		const char *host,
@@ -90,7 +94,13 @@ struct connman_wispr_portal_context {
 	int refcount;
 	struct connman_service *service;
 	enum connman_ipconfig_type type;
+
+	/**
+	 *	A pointer to immutable function pointers for route
+	 *	set/clear/add/delete operations.
+	 */
 	const struct wispr_portal_context_route_ops *ops;
+
 	__connman_wispr_cb_t cb;
 	struct connman_wispr_portal *wispr_portal;
 
