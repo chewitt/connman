@@ -1104,14 +1104,14 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context,
 	if (!interface)
 		return -EINVAL;
 
-	DBG("interface %s", interface);
-
 	if_index = connman_inet_ifindex(interface);
 	if (if_index < 0) {
 		DBG("Could not get ifindex");
 		err = -EINVAL;
 		goto done;
 	}
+
+	DBG("index %d (%s)", if_index, interface);
 
 	nameservers = connman_service_get_nameservers(wp_context->service);
 	if (!nameservers) {
