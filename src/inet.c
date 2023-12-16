@@ -1545,6 +1545,42 @@ int connman_inet_del_network_route_with_metric(int index,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add an IPv4 host route.
+ *
+ *  This attempts to add an IPv4 host route to the kernel with the
+ *  specified attributes.
+ *
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv4 address, in text form, of the
+ *                               route host destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv4 address, in text form, of
+ *                               the route next hop gateway address.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    @a host or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be added was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *
+ *  @sa connman_inet_del_host_route
+ *  @sa connman_inet_add_ipv6_host_route
+ *
+ */
 int connman_inet_add_host_route(int index,
 				const char *host,
 				const char *gateway)
@@ -1552,6 +1588,42 @@ int connman_inet_add_host_route(int index,
 	return connman_inet_add_network_route(index, host, gateway, NULL);
 }
 
+/**
+ *  @brief
+ *    Delete an IPv4 host route.
+ *
+ *  This attempts to delete an IPv4 host route to the kernel with the
+ *  specified attributes.
+ *
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv4 address, in text form, of the
+ *                               route host destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv4 address, in text form, of
+ *                               the route next hop gateway address.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    @a host or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be deleted was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to delete routes.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa connman_inet_add_host_route
+ *  @sa connman_inet_del_ipv6_host_route
+ *
+ */
 int connman_inet_del_host_route(int index,
 				const char *host,
 				const char *gateway)
@@ -1951,6 +2023,42 @@ int connman_inet_del_ipv6_network_route_with_metric(int index,
 				metric);
 }
 
+/**
+ *  @brief
+ *    Add an IPv6 host route.
+ *
+ *  This attempts to add an IPv6 host route to the kernel with the
+ *  specified attributes.
+ *
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv6 address, in text form, of the
+ *                               route host destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv6 address, in text form, of
+ *                               the route next hop gateway address.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    @a host or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be added was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    added was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to add routes.
+ *  @retval  -EEXIST  A request was made to add an existing routing
+ *                    entry.
+ *
+ *  @sa connman_inet_add_host_route
+ *  @sa connman_inet_del_ipv6_host_route
+ *
+ */
 int connman_inet_add_ipv6_host_route(int index,
 				const char *host,
 				const char *gateway)
@@ -1958,6 +2066,42 @@ int connman_inet_add_ipv6_host_route(int index,
 	return connman_inet_add_ipv6_network_route(index, host, gateway, 128);
 }
 
+/**
+ *  @brief
+ *    Delete an IPv6 host route.
+ *
+ *  This attempts to delete an IPv6 host route to the kernel with the
+ *  specified attributes.
+ *
+ *  @param[in]  index            The network interface index associated
+ *                               with the output network device for
+ *                               the route.
+ *  @param[in]  host             A pointer to an immutable null-
+ *                               terminated C string containing the
+ *                               IPv6 address, in text form, of the
+ *                               route host destination address.
+ *  @param[in]  gateway          An optional pointer to an immutable
+ *                               null-terminated C string containing
+ *                               the IPv6 address, in text form, of
+ *                               the route next hop gateway address.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a host is null; if @a index is invalid; if
+ *                    @a host or @a gateway, if present, do not
+ *                    contain a character string representing a valid
+ *                    network address in the AF_INET family; or if the
+ *                    routing information to be deleted was invalid.
+ *  @retval  -EFAULT  If the address to the routing information to be
+ *                    deleted was invalid.
+ *  @retval  -EPERM   If the current process does not have the
+ *                    credentials or capabilities to delete routes.
+ *  @retval  -ESRCH   A request was made to delete a non-existing
+ *                    routing entry.
+ *
+ *  @sa connman_inet_add_ipv6_host_route
+ *  @sa connman_inet_del_host_route
+ *
+ */
 int connman_inet_del_ipv6_host_route(int index,
 				const char *host,
 				const char *gateway)
