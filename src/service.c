@@ -1345,7 +1345,7 @@ void __connman_service_nameserver_clear(struct connman_service *service)
 	nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 }
 
-static void add_nameserver_route(int family, int index, char *nameserver,
+static void add_nameserver_route(int family, int index, const char *nameserver,
 				const char *gw)
 {
 	switch (family) {
