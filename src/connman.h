@@ -733,6 +733,8 @@ void __connman_service_remove_from_network(struct connman_network *network);
 void __connman_service_read_ip4config(struct connman_service *service);
 void __connman_service_read_ip6config(struct connman_service *service);
 
+int __connman_service_get_route_metric(const struct connman_service *service,
+				uint32_t *metric);
 struct connman_ipconfig *__connman_service_get_ip4config(
 				struct connman_service *service);
 struct connman_ipconfig *__connman_service_get_ip6config(

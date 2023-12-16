@@ -6539,6 +6539,70 @@ __connman_service_get_network(struct connman_service *service)
 	return service->network;
 }
 
+static size_t service_get_count(void)
+{
+	return service_list ? g_list_length(service_list) : 0;
+}
+
+int __connman_service_get_route_metric(const struct connman_service *service,
+				uint32_t *metric)
+{
+	static const uint32_t metric_base = UINT32_MAX;
+	static const uint32_t metric_ceiling = (1 << 20);
+	static const uint32_t metric_index_step = (1 << 10);
+	int index;
+
+	DBG("");
+
+	if (!service || !metric)
+		return -EINVAL;
+
+	DBG("service %p (%s) metric %p",
+		service, connman_service_get_identifier(service),
+		metric);
+
+	index = __connman_service_get_index(service);
+	if (index < 0)
+		return -ENXIO;
+
+	/*
+	 * The algorithm uses the network interface index since it is
+	 * assumed to be stable for the uptime of the network interface
+	 * and, consequently, the potential maximum lifetime of the route.
+	 *
+	 * The algorithm establishes UINT32_MAX as the metric base (the
+	 * lowest possible priority) and a somewhat-arbitrary 2^20 as the
+	 * ceiling (to keep metrics out of a range that might be used by
+	 * other applications). The metric is then adjusted in increments
+	 * of 1,024 (2^10) from the base, but less than the ceiling, by
+	 * multiplying the increment by the network interface index. This
+	 * is easy and simple to compute and is invariant on service
+	 * order.
+	 *
+	 * In the fullness of time, the "rule of least astonishment" for
+	 * Connection Manager might be that low priority metrics follow
+	 * the service order with the default service always having metric
+	 * zero (0) and lowest priority metric assigned to the lowest
+	 * priority service, etc. Achieving this would require having
+	 * access to APIs (such as '__connman_service_get_count()' and
+	 * '__connman_service_get_order(service)') that expose a
+	 * strictly-in/decreasing service order with no duplicates. Today,
+	 * there is no such API nor is there such a durable service order
+	 * meeting that mathematical requirement.
+	 */
+
+	if (service_get_count() <= 1 || connman_service_is_default(service))
+		*metric = 0;
+	else
+		*metric = MAX(metric_ceiling,
+					metric_base -
+					(index * metric_index_step));
+
+	DBG("metric %u", *metric);
+
+	return 0;
+}
+
 struct connman_ipconfig *
 __connman_service_get_ip4config(struct connman_service *service)
 {
