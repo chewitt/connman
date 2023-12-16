@@ -6539,11 +6539,45 @@ __connman_service_get_network(struct connman_service *service)
 	return service->network;
 }
 
+/**
+ *  @brief
+ *    Return the current service count.
+ *
+ *  @returns
+ *    The current service count.
+ *
+ */
 static size_t service_get_count(void)
 {
 	return service_list ? g_list_length(service_list) : 0;
 }
 
+/**
+ *  @brief
+ *    Get the route metric/priority for the specified service.
+ *
+ *  This attempts to get the route metric/priority for the specified
+ *  service based on the current service and services state.
+ *
+ *  If the service is the default or if it is the only service, then
+ *  the metric is zero (0). Otherwise, a low-priority metric (metric >
+ *  0) unique to @a service and its underlying network interface is
+ *  computed and returned.
+ *
+ *  @param[in]      service  A pointer to the immutable service for
+ *                           which to get the route metric/priority.
+ *  @param[in,out]  metric   A pointer to storage for the route
+ *                           metric/priority, populated with the route
+ *                           metric/priority on success.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -EINVAL  If @a service or @a metric are null.
+ *  @retval  -ENXIO   If the network interface index associated with
+ *                    @a service is invalid.
+ *
+ *  @sa connman_service_is_default
+ *
+ */
 int __connman_service_get_route_metric(const struct connman_service *service,
 				uint32_t *metric)
 {
