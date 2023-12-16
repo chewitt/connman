@@ -1545,6 +1545,27 @@ static void nameserver_del_routes(int index, char **nameservers,
 	}
 }
 
+/**
+ *  @brief
+ *    Add IPv4 or IPv6 host routes for the domain name service (DNS)
+ *    servers associated with the specified service.
+ *
+ *  This attempts to add IPv4 or IPv6 host routes for both the
+ *  automatic and configured domain name service (DNS) servers
+ *  associated with the specified network service.
+ *
+ *  @param[in]  service      A pointer to the immutable network
+ *                           service for which to add DNS server host
+ *                           routes.
+ *  @param[in]  gw           A pointer to an immutable null-terminated
+ *                           C string containing the IPv4 or IPv6
+ *                           address, in text form, of the route next
+ *                           hop gateway address.
+ *
+ *  @sa __connman_service_nameserver_del_routes
+ *  @sa nameserver_add_routes
+ *
+ */
 void __connman_service_nameserver_add_routes(
 					const struct connman_service *service,
 					const char *gw)
@@ -1574,6 +1595,29 @@ void __connman_service_nameserver_add_routes(
 	}
 }
 
+/**
+ *  @brief
+ *    Delete IPv4 or IPv6 host routes for the domain name service (DNS)
+ *    servers associated with the specified service.
+ *
+ *  This attempts to delete IPv4 or IPv6 host routes for both the
+ *  automatic and configured domain name service (DNS) servers
+ *  associated with the specified network service.
+ *
+ *  @param[in]  service      A pointer to the immutable network
+ *                           service for which to delete DNS server
+ *                           host routes.
+ *  @param[in]  gw           A pointer to an immutable null-terminated
+ *                           C string containing the IPv4 or IPv6
+ *                           address, in text form, of the route next
+ *                           hop gateway address.
+ *  @param[in]  type         The IP configuration type for which to
+ *                           delete DNS server host routes.
+ *
+ *  @sa __connman_service_nameserver_del_routes
+ *  @sa nameserver_add_routes
+ *
+ */
 void __connman_service_nameserver_del_routes(
 					const struct connman_service *service,
 					const char *gw,
