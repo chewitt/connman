@@ -1281,7 +1281,7 @@ int __connman_wispr_start(struct connman_service *service,
 	struct connman_wispr_portal *wispr_portal = NULL;
 	int index, err;
 
-	DBG("service %p (%s) type %d (%s) connect_timeout %ums callback %p",
+	DBG("service %p (%s) type %d (%s) connect_timeout %u ms callback %p",
 		service, connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type),
 		connect_timeout_ms, callback);
