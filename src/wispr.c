@@ -135,30 +135,37 @@ static void connman_wispr_message_init(struct connman_wispr_message *msg)
 	msg->location_name = NULL;
 }
 
+static void free_wispr_route(
+		const struct connman_wispr_portal_context *wp_context,
+		struct wispr_route *route)
+{
+	DBG("free route to %s if %d type %d", route->address,
+			route->if_index, wp_context->type);
+
+	switch (wp_context->type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+		connman_inet_del_host_route(route->if_index,
+				route->address);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		connman_inet_del_ipv6_host_route(route->if_index,
+				route->address);
+		break;
+	case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
+	case CONNMAN_IPCONFIG_TYPE_ALL:
+		break;
+	}
+
+	g_free(route->address);
+	route->address = NULL;
+}
+
 static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 {
 	while (wp_context->route_list) {
 		struct wispr_route *route = wp_context->route_list->data;
 
-		DBG("free route to %s if %d type %d", route->address,
-				route->if_index, wp_context->type);
-
-		switch (wp_context->type) {
-		case CONNMAN_IPCONFIG_TYPE_IPV4:
-			connman_inet_del_host_route(route->if_index,
-					route->address);
-			break;
-		case CONNMAN_IPCONFIG_TYPE_IPV6:
-			connman_inet_del_ipv6_host_route(route->if_index,
-					route->address);
-			break;
-		case CONNMAN_IPCONFIG_TYPE_UNKNOWN:
-		case CONNMAN_IPCONFIG_TYPE_ALL:
-			break;
-		}
-
-		g_free(route->address);
-		route->address = NULL;
+		free_wispr_route(wp_context, route);
 
 		g_free(route);
 		wp_context->route_list->data = NULL;
