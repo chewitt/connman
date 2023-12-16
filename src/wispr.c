@@ -1338,6 +1338,8 @@ int __connman_wispr_start(struct connman_service *service,
 	return 0;
 
 free_wp:
+	DBG("err %d wp_context %p", err, wp_context);
+
 	wp_context->cb(wp_context->service, wp_context->type, false, err);
 
 	g_hash_table_remove(wispr_portal_hash, GINT_TO_POINTER(index));
