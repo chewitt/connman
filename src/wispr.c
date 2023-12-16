@@ -164,6 +164,27 @@ static void connman_wispr_message_init(struct connman_wispr_message *msg)
 	msg->location_name = NULL;
 }
 
+/**
+ *  @brief
+ *    Deallocate resources associated with the specified WISPr host
+ *    route.
+ *
+ *  This attempts to deallocate resources, including host routes,
+ *  associated with the specified WISPr host route belonging to the
+ *  specified WISPr portal context.
+ *
+ *  @param[in]      wp_context  A pointer to the immutable WISPr
+ *                              portal context associated with @a
+ *                              route.
+ *  @param[in,out]  route       A pointer to the mutable WISPr host
+ *                              route structure for which to delete an
+ *                              associated host route and to
+ *                              deallocate any dynamically-allocated
+ *                              resources associated with it.
+ *
+ *  @sa wispr_route_request
+ *
+ */
 static void free_wispr_route(
 		const struct connman_wispr_portal_context *wp_context,
 		struct wispr_route *route)
@@ -205,6 +226,19 @@ free:
 	route->address = NULL;
 }
 
+/**
+ *  @brief
+ *    Deallocate host route resources associated with the specified
+ *    WISPr portal context.
+ *
+ *  This attempts to deallocate host route resources associated with
+ *  the specified WISPr specified WISPr portal context.
+ *
+ *  @param[in]      wp_context  A pointer to the mutable WISPr
+ *                              portal context for which to deallocate
+ *                              resources associated with host routes.
+ *
+ */
 static void free_wispr_routes(struct connman_wispr_portal_context *wp_context)
 {
 	while (wp_context->route_list) {
