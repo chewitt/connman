@@ -480,9 +480,12 @@ static void set_default_gateway(struct gateway_data *data,
 	if (do_ipv4 && data->ipv4_gateway &&
 			g_strcmp0(data->ipv4_gateway->gateway,
 							"0.0.0.0") == 0) {
-		if (connman_inet_set_gateway_interface(data->index4) < 0)
+		if (connman_inet_set_gateway_interface(data->index4) < 0) {
 			DBG("cannot set v4 gateway interface index %d",
 								data->index4);
+			return;
+		}
+
 		data->ipv4_gateway->active = true;
 		goto done;
 	}
@@ -490,9 +493,11 @@ static void set_default_gateway(struct gateway_data *data,
 	if (do_ipv6 && data->ipv6_gateway &&
 			g_strcmp0(data->ipv6_gateway->gateway,
 							"::") == 0) {
-		if (connman_inet_set_ipv6_gateway_interface(data->index6) < 0)
+		if (connman_inet_set_ipv6_gateway_interface(data->index6) < 0) {
 			DBG("cannot set v6 gateway interface index %d",
 								data->index6);
+			return;
+		}
 
 		data->ipv6_gateway->active = true;
 		goto done;
