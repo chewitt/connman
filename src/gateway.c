@@ -787,6 +787,20 @@ static bool is_gateway_config_type(const struct gateway_config *config,
 	return config->type == type;
 }
 
+static void gateway_config_set_active(struct gateway_config *config)
+{
+	gateway_config_state_set(config, CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+}
+
+static void gateway_config_set_inactive(struct gateway_config *config)
+{
+	gateway_config_state_set(config,
+		CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+
+	gateway_config_type_set(config,
+		CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
+}
+
 /**
  *  @brief
  *    Conditionally log the specified gateway configuration.
@@ -3366,8 +3380,7 @@ static void gateway_rtnl_new(int index, const char *gateway)
 	 * and it is now acknowledged by the kernel. Consequently, mark it
 	 * as active.
 	 */
-	gateway_config_state_set(config,
-		CONNMAN_GATEWAY_CONFIG_STATE_ACTIVE);
+	gateway_config_set_active(config);
 
 	/*
 	 * It is possible that we have two default routes atm
@@ -3471,13 +3484,9 @@ static void gateway_rtnl_del(int index, const char *gateway)
 	if (config) {
 		GATEWAY_CONFIG_DBG("config", config);
 
-		if (is_gateway_config_state_removed(config)) {
-			gateway_config_state_set(config,
-				CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
-
-			gateway_config_type_set(config,
-				CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
-		} else {
+		if (is_gateway_config_state_removed(config))
+			gateway_config_set_inactive(config);
+		else {
 			DBG("ignoring gateway stale removed activation; "
 			"probably added before removed activation completed");
 
