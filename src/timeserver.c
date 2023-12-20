@@ -417,7 +417,8 @@ static void ts_set_nameservers(const struct connman_service *service)
  */
 static void ts_reset(struct connman_service *service)
 {
-	DBG("service %p", service);
+	DBG("service %p (%s)",
+		service, connman_service_get_identifier(service));
 
 	if (!resolv)
 		return;
