@@ -690,23 +690,18 @@ static bool wispr_route_request(const char *address, int ai_family,
 {
 	int result = -1;
 	struct connman_wispr_portal_context *wp_context = user_data;
+	g_autofree char *interface = NULL;
 	const char *gateway;
 	struct wispr_route *route;
 	uint32_t metric = 0;
 
+	interface = connman_inet_ifname(if_index);
+
 	gateway = __connman_ipconfig_get_gateway_from_index(if_index,
 		wp_context->type);
 
-	DBG("address %s if %d gw %s", address, if_index, gateway);
-
 	if (!gateway)
 		return false;
-
-	route = g_try_new0(struct wispr_route, 1);
-	if (route == 0) {
-		DBG("could not create struct");
-		return false;
-	}
 
 	result = __connman_service_get_route_metric(wp_context->service,
 				&metric);
@@ -719,10 +714,21 @@ static bool wispr_route_request(const char *address, int ai_family,
 		return false;
 	}
 
-	DBG("service %p (%s) metric %u",
-		wp_context->service,
-		connman_service_get_identifier(wp_context->service),
-		metric);
+	DBG("add route to %s via %s dev %d (%s) metric %u type %d (%s) "
+		"ops %p",
+		address,
+		gateway,
+		if_index, interface,
+		metric,
+		wp_context->type,
+		__connman_ipconfig_type2string(wp_context->type),
+		wp_context->ops);
+
+	route = g_try_new0(struct wispr_route, 1);
+	if (route == 0) {
+		DBG("could not create struct");
+		return false;
+	}
 
 	result = wp_context->ops->add_host_route_with_metric(
 					if_index,
