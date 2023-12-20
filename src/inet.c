@@ -4748,6 +4748,12 @@ static int iproute_default_modify(int cmd, uint32_t table_id, uint32_t metric,
 		goto done;
 
 	ret = __connman_inet_rtnl_send(&rth, &rth.req.n);
+	if (ret < 0)
+		goto done;
+
+	ret = __connman_inet_rtnl_recv(&rth, NULL);
+	if (ret < 0)
+		goto done;
 
 done:
 	__connman_inet_rtnl_close(&rth);
