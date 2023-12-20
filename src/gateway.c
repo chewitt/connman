@@ -3102,9 +3102,11 @@ static int promote_default_gateway(struct gateway_data *data,
  *  existing gateway from the services-to-gateway data hash.
  *
  *  @param[in,out]  activated  A pointer to a mutable newly-activated
- *                             gateway.
+ *                             gateway from a Routing Netlink (rtnl)
+ *                             notification.
  *  @param[in,out]  existing   A pointer to a mutable existing
- *                             gateway.
+ *                             gateway from the services-to-gateway
+ *                             hash.
  *  @param[in]      type       The IP configuration type for which
  *                             gateway, or default router, is to be
  *                             yielded.
@@ -3200,9 +3202,11 @@ done:
  *  existing gateway from the services-to-gateway data hash.
  *
  *  @param[in,out]  activated  A pointer to a mutable newly-activated
- *                             gateway.
+ *                             gateway from a Routing Netlink (rtnl)
+ *                             notification.
  *  @param[in,out]  existing   A pointer to a mutable existing
- *                             gateway.
+ *                             gateway from the services-to-gateway
+ *                             hash.
  *
  *  @returns
  *    True if @a activated yielded the default gateway; otherwise,
