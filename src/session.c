@@ -1937,7 +1937,9 @@ static void service_state_changed(struct connman_service *service,
 {
 	struct connman_service_info *info;
 
-	DBG("service %p state %d", service, state);
+	DBG("service %p (%s) state %d",
+		service, connman_service_get_identifier(service),
+		state);
 
 	info = g_hash_table_lookup(service_hash, service);
 
