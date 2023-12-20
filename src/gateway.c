@@ -221,6 +221,11 @@
  *        interface basis and is computed by
  *        'compute_low_priority_metric'.
  *
+ *    There is one exception to the above. When the Linux kernel
+ *    recognizes that the next hop for a route becomes unreachable, it
+ *    is automatically purged from the routing table with no
+ *    RTM_DELROUTE RTNL notification.
+ *
  *    Historically, this file started life as "connection.c". However,
  *    it was renamed to "gateway.c" since its primary focus is gateway
  *    routes and gateway route management.
@@ -1864,8 +1869,6 @@ done:
  *  @retval  -EPERM         If the current process does not have the
  *                          credentials or capabilities to unset, or
  *                          clear, routes.
- *  @retval  -ESRCH         A request was made to unset, or clear a
- *                          non-existing routing entry.
  *
  *  @sa gateway_config_state_set
  *  @sa is_gateway_config_state
@@ -1892,8 +1895,27 @@ static int unset_default_gateway_route_common(struct gateway_data *data,
 	if (is_gateway_config_state_inactive(config))
 		return -EALREADY;
 
+	/*
+	 * Generally, we mandate that gateway routes follow the documented
+	 * lifecycle and state machine, using events and down- and upcalls
+	 * to drive the lifecycle.
+	 *
+	 * There is one exception, however. When the Linux kernel
+	 * recognizes that the next hop (that is, the "via" or RTA_GATEWAY
+	 * part of the route) for a route becomes unreachable, it is
+	 * automatically purged from the routing table with no
+	 * RTM_DELROUTE RTNL notification. Consequently, routes so purged
+	 * will return -ESRCH when we attempt to delete them here in the
+	 * mistaken belief they are still there.
+	 *
+	 * Map -ESRCH to success such that gateway configuration for such
+	 * routes is not indefinitely stuck in the "active" or "added"
+	 * states.
+	 */
 	err = cb(data, config);
-	if (err < 0)
+	if (err == -ESRCH)
+		err = 0;
+	else if (err < 0)
 		goto done;
 
 	gateway_config_state_set(config,
