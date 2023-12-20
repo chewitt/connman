@@ -7773,8 +7773,25 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 	if (!is_connected(old_state) && is_connected(new_state)) {
 		nameserver_add_all(service, type);
 
-		__connman_timeserver_sync(service,
-					CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE);
+		/*
+		 * Care must be taken here in a multi-technology and -service
+		 * environment. In such an environment, there may be a senior,
+		 * default service that is providing the network service for
+		 * time-of-day synchronization.
+		 *
+		 * Without an appropriate qualifier here, a junior,
+		 * non-default service may come in and usurp the senior,
+		 * default service and start trying to provide time-of-day
+		 * synchronization which is NOT what is desired.
+		 *
+		 * However, this qualifier should NOT be moved to the next
+		 * most outer block. Otherwise, name servers will not be added
+		 * to junior, non-default services and they will be unusable
+		 * from a DNS perspective.
+		 */
+		if (connman_service_is_default(service))
+			__connman_timeserver_sync(service,
+				CONNMAN_TIMESERVER_SYNC_REASON_STATE_UPDATE);
 	}
 
 	return service_indicate_state(service);
