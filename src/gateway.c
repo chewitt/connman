@@ -787,12 +787,6 @@ static bool is_gateway_config_type(const struct gateway_config *config,
 	return config->type == type;
 }
 
-static bool is_gateway_config_type_none(const struct gateway_config *config)
-{
-	return is_gateway_config_type(config,
-				CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
-}
-
 /**
  *  @brief
  *    Conditionally log the specified gateway configuration.
@@ -1809,7 +1803,8 @@ static int set_default_gateway_route_common(struct gateway_data *data,
 	if (!data || !config || !cb)
 		return -EINVAL;
 
-	if (!is_gateway_config_type_none(config) &&
+	if ((is_gateway_config_state_added(config) ||
+		is_gateway_config_state_active(config)) &&
 		!is_gateway_config_type(config, type))
 		return -EINVAL;
 
@@ -1886,7 +1881,8 @@ static int unset_default_gateway_route_common(struct gateway_data *data,
 	if (!data || !config || !cb)
 		return -EINVAL;
 
-	if (!is_gateway_config_type(config, type))
+	if (!is_gateway_config_state_inactive(config) &&
+		!is_gateway_config_type(config, type))
 		return -EINVAL;
 
 	if (is_gateway_config_state_removed(config))
@@ -3359,6 +3355,12 @@ static void gateway_rtnl_new(int index, const char *gateway)
 		return;
 	}
 
+	if (is_gateway_config_state_inactive(config)) {
+		DBG("ignoring inactive gateway activation");
+
+		return;
+	}
+
 	/*
 	 * Otherwise, this is a gateway default route we added, or set,
 	 * and it is now acknowledged by the kernel. Consequently, mark it
@@ -3469,11 +3471,18 @@ static void gateway_rtnl_del(int index, const char *gateway)
 	if (config) {
 		GATEWAY_CONFIG_DBG("config", config);
 
-		gateway_config_state_set(config,
-			CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
+		if (is_gateway_config_state_removed(config)) {
+			gateway_config_state_set(config,
+				CONNMAN_GATEWAY_CONFIG_STATE_INACTIVE);
 
-		gateway_config_type_set(config,
-			CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
+			gateway_config_type_set(config,
+				CONNMAN_GATEWAY_CONFIG_TYPE_NONE);
+		} else {
+			DBG("ignoring gateway stale removed activation; "
+			"probably added before removed activation completed");
+
+			return;
+		}
 	} else
 		DBG("no matching gateway config");
 
