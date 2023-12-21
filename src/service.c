@@ -2373,6 +2373,38 @@ static void online_check_counters_log(
 		ipv6_counter);
 }
 
+/**
+ *  @brief
+ *    Determine whether an online check counter has met its threshold.
+ *
+ *  This determines whether an online check counter associated with
+ *  the specified network service has met its threshold, where the
+ *  threshold is accessed from the configuration store with the
+ *  specified key.
+ *
+ *  @param[in]  service                A pointer to the immutable
+ *                                     network service associated with
+ *                                     the counter to check.
+ *  @param[in]  counter_threshold_key  A pointer to a null-terminated
+ *                                     C string containing the key to
+ *                                     use with the configuration
+ *                                     store to access the threshold
+ *                                     value to check the counter
+ *                                     against.
+ *  @param[in]  counter_description    A pointer to a null-terminated
+ *                                     C string describing the counter
+ *                                     to check. For example, "failure".
+ *  @param[in]  predicate              A pointer to the predicate
+ *                                     function to invoke to make the
+ *                                     actual determination of whether
+ *                                     the counter has met the
+ *                                     threshold accessed by @a
+ *                                     counter_threshold_key.
+ *
+ *  @returns
+ *    True if the counter has met the threshold; otherwise, false.
+ *
+ */
 static bool online_check_counter_threshold_is_met(
 			const struct connman_service *service,
 			const char *counter_threshold_key,
