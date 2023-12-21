@@ -384,6 +384,8 @@ static const char *error2string(enum connman_service_error error)
 		return "invalid-key";
 	case CONNMAN_SERVICE_ERROR_BLOCKED:
 		return "blocked";
+	case CONNMAN_SERVICE_ERROR_ONLINE_CHECK_FAILED:
+		return "online-check-failed";
 	}
 
 	return NULL;
