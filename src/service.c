@@ -2553,6 +2553,28 @@ static void complete_online_check(struct connman_service *service,
 		online_check_active_clear(service, type);
 }
 
+static int start_online_check_if_connected_with_type(
+					struct connman_service *service,
+					enum connman_ipconfig_type type)
+{
+	int status = 0;
+
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (!__connman_service_is_connected_state(service, type))
+		status = -ENOTCONN;
+	else
+		status = __connman_service_wispr_start(service, type);
+
+	return status;
+}
+
 /**
  *  @brief
  *    Start HTTP-based Internet reachability probes if the specified
@@ -2562,21 +2584,34 @@ static void complete_online_check(struct connman_service *service,
  *  reachability probes if the IPv4 state or IPv6 state is connected
  *  (that is, "ready" or "online").
  *
- *  @param[in]  service  A pointer to a mutable service on which to start
- *                       reachability probes if the IPv4 or IPv6 state
- *                       is "connected" (that is, "ready" or "online").
+ *  @param[in,out]  service  A pointer to a mutable service on which
+ *                           to start "online" HTTP-based Internet
+ *                           reachability checks if the IPv4 or IPv6
+ *                           state is "connected" (that is, "ready" or
+ *                           "online").
  *
  *  @retval  0          If successful.
  *  @retval  -EINVAL    If @a service is null or @a type is invalid.
  *  @retval  -EPERM     If online checks are disabled via
  *                      configuration.
+ *  @retval  -ENOTCONN  If @a service is not "connected" (that is,
+ *                      "ready" or "online").
+ *  @retval  -EALEADY   If online checks are already active for @a
+ *                      service.
+ *
+ *  @sa start_online_check
+ *  @sa start_online_check_if_connected_with_type
  *
  */
 static int start_online_check_if_connected(struct connman_service *service)
 {
-	DBG("service %p (%s) maybe start WISPr",
+	int status4 = 0, status6 = 0;
+
+	DBG("service %p (%s) state4 %d (%s) state6 %d (%s) maybe start WISPr",
 		service,
-		connman_service_get_identifier(service));
+		connman_service_get_identifier(service),
+		service->state_ipv4, state2string(service->state_ipv4),
+		service->state_ipv6, state2string(service->state_ipv6));
 
 	if (!service)
 		return -EINVAL;
@@ -2584,17 +2619,17 @@ static int start_online_check_if_connected(struct connman_service *service)
 	if (!online_check_is_enabled_check(service))
 		return -EPERM;
 
-	if (__connman_service_is_connected_state(service,
-			CONNMAN_IPCONFIG_TYPE_IPV4))
-		__connman_service_wispr_start(service,
-					CONNMAN_IPCONFIG_TYPE_IPV4);
+	status4 = start_online_check_if_connected_with_type(service,
+			CONNMAN_IPCONFIG_TYPE_IPV4);
 
-	if (__connman_service_is_connected_state(service,
-			CONNMAN_IPCONFIG_TYPE_IPV6))
-		__connman_service_wispr_start(service,
-					CONNMAN_IPCONFIG_TYPE_IPV6);
+	status6 = start_online_check_if_connected_with_type(service,
+			CONNMAN_IPCONFIG_TYPE_IPV6);
 
-	return 0;
+	DBG("status4 %d (%s) status6 %d (%s)",
+		status4, strerror(-status4),
+		status6, strerror(-status6));
+
+	return (status4 < 0 ? status4 : status6);
 }
 
 /**
