@@ -2266,6 +2266,18 @@ static inline void online_check_counter_reset(
 	*counter = 0;
 }
 
+/**
+ *  @brief
+ *    Reset to zero (0) the IPv4 and IPv6 online check failure
+ *    counters for the specified service.
+ *
+ *  @param[in]   service   A pointer to the mutable service for which
+ *                         to reset the IPv4 and IPv6 online check
+ *                         failure counters.
+ *
+ *  @sa online_check_successes_reset
+ *
+ */
 static void online_check_failures_reset(struct connman_service *service)
 {
 	DBG("service %p (%s)",
@@ -2275,6 +2287,18 @@ static void online_check_failures_reset(struct connman_service *service)
 	online_check_counter_reset(&service->online_check_state_ipv6.failures);
 }
 
+/**
+ *  @brief
+ *    Reset to zero (0) the IPv4 and IPv6 online check success
+ *    counters for the specified service.
+ *
+ *  @param[in]   service   A pointer to the mutable service for which
+ *                         to reset the IPv4 and IPv6 online check
+ *                         success counters.
+ *
+ *  @sa online_check_failures_reset
+ *
+ */
 static void online_check_successes_reset(struct connman_service *service)
 {
 	DBG("service %p (%s)",
