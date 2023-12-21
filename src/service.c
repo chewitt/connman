@@ -9911,6 +9911,25 @@ static void service_ip_release(struct connman_ipconfig *ipconfig,
 	settings_changed(service, ipconfig);
 }
 
+/**
+ *  @brief
+ *    Handler for IP configuration routes changes.
+ *
+ *  This is the IP configuration handler for route set (add) and unset
+ *  (delete) operations for the specified IP configuration and its
+ *  associated network interface name.
+ *
+ *  @param[in]  ipconfig  A pointer to the IP configuration associated
+ *                        with the network service route change.
+ *  @param[in]  ifname    A pointer to an immutable null-terminated
+ *                        C string containing the network interface
+ *                        name associated with the route change.
+ *
+ *  @sa __connman_ipconfig_set_data
+ *  @sa __connman_ipconfig_set_ops
+ *  @sa settings_changed
+ *
+ */
 static void service_route_changed(struct connman_ipconfig *ipconfig,
 				const char *ifname)
 {
