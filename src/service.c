@@ -8758,6 +8758,8 @@ static void downgrade_connected_services(void)
 	struct connman_service *up_service;
 	GList *list;
 
+	DBG("");
+
 	for (list = service_list; list; list = list->next) {
 		up_service = list->data;
 
