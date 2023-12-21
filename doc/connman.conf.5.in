@@ -166,7 +166,49 @@ ConnMan will issue an HTTP GET request to verify that end-to-end
 connectivity is successful. Only then the service will be
 transitioned to ONLINE state.
 If this setting is false, the default service will remain in READY state.
-Default value is true.
+Default value is \fBtrue\fR.
+
+\fBNOTE:\fR \fBEnableOnlineCheck\fR is deprecated; please use
+\fBOnlineCheckMode\fR with a mode of either \fBone-shot\fR or
+\fBnone\fR.
+
+.TP
+.BI OnlineCheckMode= mode
+This indicates the "online" HTTP-based Internet reachability check
+mode and supercedes and deprecates \fBEnableOnlineCheck\fR. Possible
+values for \fImode\fR are \fBnone\fR, \fBone-shot\fR, and
+\fBcontinuous\fR. The default value of \fImode\fR is \fBone-shot\fR.
+
+In \fBnone\fR mode, there are no "online" HTTP-based Internet reachability
+checks. Any connected service and the manager state will terminate at
+the "ready" state and will not progress to "online".
+
+In \fBone-shot\fR mode, there is a single, one-shot "online" HTTP-based
+Internet reachability check for the default service. When the check
+succeeds, the associated service and the manager state will terminate
+at the "online" state. When the check fails, subsequent checks will be
+rescheduled according to \fBOnlineCheckIntervalStyle\fR,
+\fBOnlineCheckInitialInterval\fR, and \fBOnlineCheckMaxInterval\fR and will
+continue indefinitely until one succeeds or unti the service is
+disconnected.
+
+In \fBcontinuous\fR mode, there are ongoing "online" HTTP-based Internet
+reachability check for the default service. As with "one-shot" mode,
+when the first check succeeds, the associated service and the manager
+state will terminate at the "online" state. Thereafter, subsequent
+checks will be scheduled according to \fBOnlineCheckIntervalStyle\fR and
+\fBOnlineCheckMaxInterval\fR. When the check fails, subsequent checks will
+be rescheduled according to \fBOnlineCheckIntervalStyle\fR,
+\fBOnlineCheckInitialInterval\fR, and \fBOnlineCheckMaxInterval\fR. When and
+if \fBOnlineCheckFailuresThreshold\fR is met, the service and manager
+state will be demoted to "ready" and the service will have its "Error"
+property set to "online-check-failed" while subsequent checks will
+continue. In the interim, if available, another service may be
+promoted to the default service and online checks will be initiated
+for it. When and if, for the demoted service,
+\fBOnlineCheckSuccessesThreshold\fR is met, the service "Error" property
+will be cleared and the service state promoted to "online",
+potentially causing it to become the default service again.
 .TP
 .BI OnlineCheckIPv4URL= url, OnlineCheckIPv6URL= url
 Urls (IPv4 and IPv6 respectively) used during the online status check.
@@ -220,12 +262,15 @@ If this setting is true, the HTTP GET request keeps beeing called to guarantee
 that end-to-end connectivity is still successful. If not, the default service
 will transition to READY state, enabling another service to become the
 default one, in replacement.
-Default value is false.
+Default value is \fBfalse\fR.
+
+\fBNOTE:\fR \fBEnableOnlineToReadyTransition\fR is deprecated; please use
+\fBOnlineCheckMode\fR with a mode of either \fBcontinuous\fR or
+\fBnone\fR.
 .TP
 .BI OnlineCheckFailuresThreshold= failures
-When both \fBEnableOnlineCheck\fR and
-\fBEnableOnlineToReadyTransition\fR are asserted, this is the number
-of failed back-to-back "ready" to "online" HTTP-based Internet
+When \fBOnlineCheckMode\fR is "continuous", this is the number of
+failed back-to-back "ready" to "online" HTTP-based Internet
 reachability checks that will be allowed before marking a service as
 "failed" from a reachability perspective, sorting it at a lower
 priority than other services not so marked.
@@ -234,16 +279,14 @@ Lower values may result in higher-frequency network service cycling
 while higher values may result in a longer period of time before
 failing from a non-Internet reachable service to one that might be.
 
-See \fBOnlineCheckIntervalStyle\fR, \fBOnlineCheckInitialInterval\fR,
-and \fBOnlineCheckMaxInterval\fR for other values that influence
-network service failure/recovery transition time.
-
+See \fBOnlineCheckIntervalStyle\fR, \fBOnlineCheckInitialInterval\fR, and
+\fBOnlineCheckMaxInterval\fR for other values that influence network
+service failure/recovery transition time.
 The default value is 6.
 .TP
 .BI OnlineCheckSuccessesThreshold= successes
-When both \fBEnableOnlineCheck\fR and
-\fBEnableOnlineToReadyTransition\fR are asserted, this is the number
-of successful back-to-back "ready" to "online" HTTP-based Internet
+When \fBOnlineCheckMode\fR is "continuous", this is the number of
+successful back-to-back "ready" to "online" HTTP-based Internet
 reachability checks that must be met before clearing a service as
 "failed" from a reachability perspective and allowing it to transition
 to the "online" state again, allowing it to sort back to a higher
@@ -254,9 +297,9 @@ while higher values may result in a longer period of time before
 transitioning back to more a preferred, Internet reachable network
 service.
 
-See \fBOnlineCheckIntervalStyle\fR, \fBOnlineCheckInitialInterval\fR,
-and \fBOnlineCheckMaxInterval\fR for other values that influence
-network service failure/recovery transition time.
+See \fBOnlineCheckIntervalStyle\fR, \fBOnlineCheckInitialInterval\fR, and
+\fBOnlineCheckMaxInterval\fR for other values that influence network
+service failure/recovery transition time.
 
 The default value is 6.
 .TP
