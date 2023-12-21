@@ -3248,6 +3248,22 @@ static bool handle_online_check_success(struct connman_service *service,
 	return reschedule;
 }
 
+/**
+ *  @brief
+ *    Log an online check failure.
+ *
+ *  This logs an online check failure for the specified network
+ *  service IP configuration type.
+ *
+ *  @param[in]  service  A pointer to the immutable network
+ *                       service for which to log an online
+ *                       check failure.
+ *  @param[in]  type     The IP configuration type for which
+ *                       the online check failed.
+ *  @param[in]  err      The error status, in the POSIX domain,
+ *                       associated with the online check failure.
+ *
+ */
 static void online_check_log_failure(const struct connman_service *service,
 			enum connman_ipconfig_type type,
 			int err)
