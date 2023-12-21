@@ -2871,6 +2871,20 @@ static void online_check_counter_increment_and_log(
 		counter_description, *counter);
 }
 
+/**
+ *  @brief
+ *    Log an online check success.
+ *
+ *  This logs an online check success for the specified network
+ *  service IP configuration type.
+ *
+ *  @param[in]  service  A pointer to the immutable network
+ *                       service for which to log an online
+ *                       check success.
+ *  @param[in]  type     The IP configuration type for which
+ *                       the online check was successful.
+ *
+ */
 static void online_check_log_success(const struct connman_service *service,
 			enum connman_ipconfig_type type)
 {
