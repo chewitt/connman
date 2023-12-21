@@ -83,7 +83,6 @@ static unsigned int vpn_autoconnect_id = 0;
  */
 static struct connman_service *current_default = NULL;
 static bool services_dirty = false;
-static bool enable_online_to_ready_transition = false;
 static unsigned int online_check_connect_timeout_ms = 0;
 static unsigned int online_check_initial_interval = 0;
 static unsigned int online_check_max_interval = 0;
@@ -1749,6 +1748,25 @@ static bool check_proxy_setup(struct connman_service *service)
 	return false;
 }
 
+const char *__connman_service_online_check_mode2string(
+				enum service_online_check_mode mode)
+{
+	switch (mode) {
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN:
+		break;
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE:
+		return "none";
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_ONE_SHOT:
+		return "one-shot";
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS:
+		return "continuous";
+	default:
+		break;
+	}
+
+	return NULL;
+}
+
 enum service_online_check_mode __connman_service_online_check_string2mode(
 				const char *mode)
 {
@@ -1763,6 +1781,61 @@ enum service_online_check_mode __connman_service_online_check_string2mode(
 		return CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS;
 
 	return CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN;
+}
+
+/**
+ *  @brief
+ *    Return the "online" HTTP-based Internet reachability check mode.
+ *
+ *  @returns
+ *    The "online" HTTP-based Internet reachability check mode.
+ *
+ */
+enum service_online_check_mode __connman_service_get_online_check_mode(void)
+{
+	return connman_setting_get_uint("OnlineCheckMode");
+}
+
+/**
+ *  @brief
+ *    Return whether the "online" HTTP-based Internet reachability
+ *    checks are enabled.
+ *
+ *  @returns
+ *    True if "online" HTTP-based Internet reachability checks are
+ *    enabled; otherwise, false.
+ *
+ *  @sa __connman_service_get_online_check_mode
+ *
+ */
+bool __connman_service_is_online_check_enabled(void)
+{
+	const enum service_online_check_mode mode =
+		__connman_service_get_online_check_mode();
+
+	return mode != CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN &&
+		mode != CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE;
+}
+
+/**
+ *  @brief
+ *    Determines whether the "online" HTTP-based Internet reachability
+ *    check mode is the specified mode.
+ *
+ *  @param[in]  mode  The "online" HTTP-based Internet reachability
+ *                    check mode to confirm.
+ *
+ *  @returns
+ *    True if the current "online" HTTP-based Internet reachability
+ *    check mode is @a mode; otherwise, false.
+ *
+ *  @sa __connman_service_get_online_check_mode
+ *
+ */
+bool __connman_service_is_online_check_mode(
+		enum service_online_check_mode mode)
+{
+	return __connman_service_get_online_check_mode() == mode;
 }
 
 /**
@@ -2122,7 +2195,7 @@ static void cancel_online_check(struct connman_service *service,
 static bool online_check_is_enabled_check(
 		const struct connman_service *service)
 {
-	if (!connman_setting_get_bool("EnableOnlineCheck")) {
+	if (!__connman_service_is_online_check_enabled()) {
 		connman_info("Online check disabled. "
 			"Default service remains in READY state.");
 		return false;
@@ -2142,7 +2215,7 @@ static bool online_check_is_enabled_check(
  *
  *  @note
  *    Any check is skipped, with an informational log message, if @a
- *    EnableOnlineCheck is not asserted.
+ *    OnlineCheckMode is "none".
  *
  *  @param[in,out]  service  A pointer to the mutable network service
  *                           for which to start the "online"
@@ -3614,20 +3687,20 @@ done:
  *  configuration type. This effectively "bookends" an earlier
  *  #__connman_service_wispr_start.
  *
- *  If "EnableOnlineToReadyTransition" is deasserted and if @a success
- *  is asserted, then the state for the specified IP configuration
- *  type is transitioned to "online" and a future online check is
- *  scheduled based on the current interval and the
- *  "OnlineCheckIntervalStyle" setting.
+ *  If "OnlineCheckMode" is "one-shot" and if @a success is asserted,
+ *  then the state for the specified IP configuration type is
+ *  transitioned to "online" and a future online check is scheduled
+ *  based on the current interval and the "OnlineCheckIntervalStyle"
+ *  setting.
  *
- *  Otherwise, if "EnableOnlineToReadyTransition" is asserted, then
- *  counters are managed for the success or failure and state is
- *  managed and tracked resulting in the potential demotion of the
- *  service, placing it into a temporary failure state until such time
- *  as a series of back-to-back online checks successfully
- *  complete. If the service is a non-default after demotion and it is
- *  in failure state or if it is the default service, then a future
- *  online check is scheduled based on the current interval and the
+ *  Otherwise, if "OnlineCheckMode" is "continuous", then counters are
+ *  managed for the success or failure and state is managed and
+ *  tracked resulting in the potential demotion of the service,
+ *  placing it into a temporary failure state until such time as a
+ *  series of back-to-back online checks successfully complete. If the
+ *  service is a non-default after demotion and it is in failure state
+ *  or if it is the default service, then a future online check is
+ *  scheduled based on the current interval and the
  *  "OnlineCheckIntervalStyle" setting.
  *
  *  @param[in,out]  service  A pointer to the mutable service for which
@@ -3658,6 +3731,8 @@ static void complete_online_check(struct connman_service *service,
 					bool success,
 					int err)
 {
+	const bool oneshot = __connman_service_is_online_check_mode(
+		CONNMAN_SERVICE_ONLINE_CHECK_MODE_ONE_SHOT);
 	struct online_check_state *online_check_state;
 	enum connman_service_state ipconfig_state;
 	bool reschedule = false;
@@ -3682,13 +3757,13 @@ static void complete_online_check(struct connman_service *service,
 		reschedule = handle_online_check_success(service,
 					 type,
 					 online_check_state,
-					 !enable_online_to_ready_transition);
+					 oneshot);
 	else
 		reschedule = handle_online_check_failure(service,
 					 type,
 					 ipconfig_state,
 					 online_check_state,
-					 !enable_online_to_ready_transition,
+					 oneshot,
 					 err);
 
 	DBG("reschedule online check %u", reschedule);
@@ -10689,8 +10764,6 @@ int __connman_service_init(void)
 
 	remove_unprovisioned_services();
 
-	enable_online_to_ready_transition =
-		connman_setting_get_bool("EnableOnlineToReadyTransition");
 	online_check_timeout_interval_style =
 		connman_setting_get_string("OnlineCheckIntervalStyle");
 	if (g_strcmp0(online_check_timeout_interval_style, "fibonacci") == 0)

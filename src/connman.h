@@ -807,8 +807,15 @@ enum service_online_check_mode {
 	CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS = 3
 };
 
+const char *__connman_service_online_check_mode2string(
+		enum service_online_check_mode mode);
 enum service_online_check_mode __connman_service_online_check_string2mode(
 		const char *mode);
+enum service_online_check_mode __connman_service_get_online_check_mode(void);
+bool __connman_service_is_online_check_enabled(void);
+bool __connman_service_is_online_check_mode(
+		enum service_online_check_mode mode);
+
 int __connman_service_nameserver_append(struct connman_service *service,
 				const char *nameserver, bool is_auto);
 int __connman_service_nameserver_remove(struct connman_service *service,
