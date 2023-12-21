@@ -1913,28 +1913,48 @@ static bool online_check_is_enabled_check(
  *                           "online" reachability check is to be
  *                           started.
  *
+ *  @retval  0          If successful.
+ *  @retval  -EINVAL    If @a service is null or @a type is invalid.
+ *  @retval  -EPERM     If online checks are disabled via
+ *                      configuration.
+ *
  *  @sa cancel_online_check
  *  @sa complete_online_check
  *  @sa start_wispr_if_connected
  *  @sa __connman_service_wispr_start
  *
  */
-static void start_online_check(struct connman_service *service,
+static int start_online_check(struct connman_service *service,
 				enum connman_ipconfig_type type)
 {
+	int status = 0;
+
 	DBG("service %p (%s) type %d (%s) maybe start WISPr",
 		service,
 		connman_service_get_identifier(service),
 		type,
 		__connman_ipconfig_type2string(type));
 
-	if (!online_check_is_enabled_check(service))
-		return;
+	if (!service) {
+		status = -EINVAL;
+		goto done;
+	}
+
+	if (!online_check_is_enabled_check(service)) {
+		status = -EPERM;
+		goto done;
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 || check_proxy_setup(service)) {
 		cancel_online_check(service, type);
-		__connman_service_wispr_start(service, type);
+
+		status = __connman_service_wispr_start(service, type);
 	}
+
+done:
+	DBG("status %d (%s)", status, strerror(-status));
+
+	return status;
 }
 
 /**
