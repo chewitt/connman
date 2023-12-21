@@ -2308,6 +2308,22 @@ static void online_check_successes_reset(struct connman_service *service)
 	online_check_counter_reset(&service->online_check_state_ipv6.successes);
 }
 
+/**
+ *  @brief
+ *    Reset the online check state for the specified service.
+ *
+ *  This resets the online check state for the specified service,
+ *  including its failure threshold state, failure counters, and
+ *  success counters.
+ *
+ *  @param[in]   service   A pointer to the mutable service for which
+ *                         to reset the online check state.
+ *
+ *  @sa online_check_failures_reset
+ *  @sa online_check_successes_reset
+ *  @sa online_check_failures_threshold_was_met_clear
+ *
+ */
 static void online_check_state_reset(struct connman_service *service)
 {
 	online_check_failures_reset(service);
