@@ -93,6 +93,9 @@ struct connman_stats_counter {
  *
  */
 struct online_check_state {
+	/**
+	 *  Indicates whether an online check is active and in-flight.
+	 */
 	bool active;
 
 	/**
