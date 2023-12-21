@@ -93,6 +93,8 @@ struct connman_stats_counter {
  *
  */
 struct online_check_state {
+	bool active;
+
 	/**
 	 *  The current GLib main loop timer identifier.
 	 *
@@ -1690,6 +1692,79 @@ static bool check_proxy_setup(struct connman_service *service)
 	return false;
 }
 
+static bool online_check_is_active(const struct connman_service *service,
+		enum connman_ipconfig_type type)
+{
+	bool do_ipv4 = false, do_ipv6 = false;
+	bool active = false;
+
+	DBG("service %p (%s) type %d (%s)",
+		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type));
+
+	if (!service)
+		goto done;
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		do_ipv4 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		do_ipv6 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+		do_ipv4 = do_ipv6 = true;
+	else
+		goto done;
+
+	active = (do_ipv4 && service->online_check_state_ipv4.active) ||
+			 (do_ipv6 && service->online_check_state_ipv6.active);
+
+	DBG("active? %u", active);
+
+ done:
+	return active;
+}
+
+static void online_check_active_set_value(struct connman_service *service,
+		enum connman_ipconfig_type type,
+		bool active)
+{
+	bool do_ipv4 = false, do_ipv6 = false;
+
+	DBG("service %p (%s) type %d (%s) active? %u",
+		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		active);
+
+	if (!service)
+		return;
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		do_ipv4 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+		do_ipv6 = true;
+	else if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+		do_ipv4 = do_ipv6 = true;
+	else
+		return;
+
+	if (do_ipv4)
+		service->online_check_state_ipv4.active = active;
+
+	if (do_ipv6)
+		service->online_check_state_ipv6.active = active;
+}
+
+static void online_check_active_set(struct connman_service *service,
+		enum connman_ipconfig_type type)
+{
+	online_check_active_set_value(service, type, true);
+}
+
+static void online_check_active_clear(struct connman_service *service,
+		enum connman_ipconfig_type type)
+{
+	online_check_active_set_value(service, type, false);
+}
+
 /**
  *  @brief
  *    Compute a Fibonacci online check timeout based on the specified
@@ -1858,6 +1933,10 @@ static void cancel_online_check(struct connman_service *service,
 		 */
 		connman_service_unref(service);
 	}
+
+    /* Mark the online check state as inactive. */
+
+	online_check_active_clear(service, type);
 }
 
 /**
@@ -1917,6 +1996,8 @@ static bool online_check_is_enabled_check(
  *  @retval  -EINVAL    If @a service is null or @a type is invalid.
  *  @retval  -EPERM     If online checks are disabled via
  *                      configuration.
+ *  @retval  -EALREADY  If online checks are already active for @a
+ *                      service.
  *
  *  @sa cancel_online_check
  *  @sa complete_online_check
@@ -2379,6 +2460,8 @@ static void complete_online_check(struct connman_service *service,
 
 	if (reschedule)
 		reschedule_online_check(service, type, online_check_state);
+	else
+		online_check_active_clear(service, type);
 }
 
 /**
@@ -2443,6 +2526,8 @@ static int start_wispr_if_connected(struct connman_service *service)
  *
  *  @retval  0          If successful.
  *  @retval  -EINVAL    If @a service is null or @a type is invalid.
+ *  @retval  -EALREADY  If online checks are already active for @a
+ *                      service.
  *
  *  @sa cancel_online_check
  *  @sa start_online_check
@@ -2469,6 +2554,9 @@ int __connman_service_wispr_start(struct connman_service *service,
 		return -EINVAL;
 	}
 
+	if (online_check_is_active(service, type))
+		return -EALREADY;
+
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_state_ipv4.interval =
 					online_check_initial_interval;
@@ -2478,6 +2566,10 @@ int __connman_service_wispr_start(struct connman_service *service,
 
 	__connman_wispr_start(service, type,
 			online_check_connect_timeout_ms, complete_online_check);
+
+	/* Mark the online check state as active. */
+
+	online_check_active_set(service, type);
 
 	return 0;
 }
