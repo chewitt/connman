@@ -2901,6 +2901,29 @@ static void online_check_log_success(const struct connman_service *service,
 			connman_setting_get_string("OnlineCheckIPv6URL"));
 }
 
+/**
+ *  @brief
+ *    Log that an online check counter has met its threshold.
+ *
+ *  This logs that an online check counter associated with the
+ *  specified network service has met its threshold.
+ *
+ *  @param[in]  service                A pointer to the immutable
+ *                                     network service for which to
+ *                                     log that one of its online
+ *                                     check counters has met its
+ *                                     threshold.
+ *  @param[in]  counter_threshold_key  A pointer to a null-terminated
+ *                                     C string containing the key to
+ *                                     use with the configuration
+ *                                     store to access the threshold
+ *                                     value for the counter.
+ *  @param[in]  counter_description    A pointer to a null-terminated
+ *                                     C string describing the counter
+ *                                     to check. For example,
+ *                                     "failure(s)".
+ *
+ */
 static void continuous_online_check_log_counter_threshold_met(
 			const struct connman_service *service,
 			const char *counter_threshold_key,
@@ -2919,6 +2942,20 @@ static void continuous_online_check_log_counter_threshold_met(
 				 counter_description);
 }
 
+/**
+ *  @brief
+ *    Log that an online check success counter has met its threshold.
+ *
+ *  This logs that an online check success counter associated with the
+ *  specified network service has met its threshold.
+ *
+ *  @param[in]  service                A pointer to the immutable
+ *                                     network service for which to
+ *                                     log that its online check
+ *                                     success counter has met its
+ *                                     threshold.
+ *
+ */
 static void continuous_online_check_log_successes_threshold_met(
 			const struct connman_service *service
 )
@@ -2933,6 +2970,20 @@ static void continuous_online_check_log_successes_threshold_met(
 		counter_description);
 }
 
+/**
+ *  @brief
+ *    Log that an online check failure counter has met its threshold.
+ *
+ *  This logs that an online check failure counter associated with the
+ *  specified network service has met its threshold.
+ *
+ *  @param[in]  service                A pointer to the immutable
+ *                                     network service for which to
+ *                                     log that its online check
+ *                                     failure counter has met its
+ *                                     threshold.
+ *
+ */
 static void continuous_online_check_log_failures_threshold_met(
 			const struct connman_service *service
 )
