@@ -2437,6 +2437,32 @@ done:
 	return threshold_met;
 }
 
+/**
+ *  @brief
+ *    Determine whether the service has met the online check failure
+ *    threshold.
+ *
+ *  This predicate determines whether the online check failure
+ *  threshold has been met by the specified network service.
+ *
+ *  @param[in]  service                A pointer to the immutable
+ *                                     network service for which to
+ *                                     check whether its has met the
+ *                                     online check failure threshold.
+ *  @param[in]  counter_description    A pointer to a null-terminated
+ *                                     C string describing the failure
+ *                                     counter. For example,
+ *                                     "failure".
+ *  @param[in]  counter_threshold      The threshold value to check the
+ *                                     failure counter against.
+ *
+ *  @returns
+ *    True if the online check failure counter has met the failure
+ *    threshold; otherwise, false.
+ *
+ *  @sa online_check_failures_threshold_is_met
+ *
+ */
 static bool is_online_check_failure_threshold_met_predicate(
 			const struct connman_service *service,
 			const char *counter_description,
