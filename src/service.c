@@ -3832,6 +3832,11 @@ int __connman_service_wispr_start(struct connman_service *service,
 	if (online_check_is_active(service, type))
 		return -EALREADY;
 
+	/*
+	 * At this particular entry point, we assume to be starting an
+	 * "online" HTTP-based Internet reachability check
+	 * afresh. Consequently, set the check interval to initial.
+	 */
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_state_ipv4.interval =
 					online_check_initial_interval;
