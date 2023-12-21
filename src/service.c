@@ -188,6 +188,7 @@ struct connman_service {
 	bool wps_advertizing;
 	struct online_check_state online_check_state_ipv4;
 	struct online_check_state online_check_state_ipv6;
+	bool online_check_failures_met_threshold;
 	bool do_split_routing;
 	bool new_service;
 	bool hidden_service;
