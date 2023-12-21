@@ -2250,6 +2250,13 @@ static void online_check_failures_threshold_was_met_clear(
 	online_check_failures_threshold_was_met_set_value(service, false);
 }
 
+/**
+ *  Reset the specified counter to zero (0).
+ *
+ *  @param[in,out]  counter  A pointer to the counter to reset by
+ *                           setting it to zero (0).
+ *
+ */
 static inline void online_check_counter_reset(
 			unsigned int *counter)
 {
