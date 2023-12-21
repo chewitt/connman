@@ -80,6 +80,13 @@ enum connman_service_error {
 	CONNMAN_SERVICE_ERROR_AUTH_FAILED         = 6,
 	CONNMAN_SERVICE_ERROR_INVALID_KEY         = 7,
 	CONNMAN_SERVICE_ERROR_BLOCKED             = 8,
+
+	/**
+	 *	In "continuous" online check mode,
+	 *	the back-to-back online check
+	 *	failures threshold was met or
+	 *	exceeded.
+	 */
 	CONNMAN_SERVICE_ERROR_ONLINE_CHECK_FAILED = 9,
 };
 

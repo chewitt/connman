@@ -157,7 +157,8 @@ Properties	string State [readonly]
 
 			Currently defined error codes are: "out-of-range",
 			"pin-missing", "dhcp-failed", "connect-failed",
-			"login-failed", "auth-failed" and "invalid-key".
+			"login-failed", "auth-failed", "invalid-key",
+			"blocked", and "online-check-failed".
 
 		string Name [readonly]
 
