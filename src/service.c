@@ -2464,11 +2464,12 @@ static bool handle_online_check_failure(struct connman_service *service,
 {
 	bool reschedule = false;
 
-	DBG("service %p (%s) type %d (%s) "
+	DBG("service %p (%s) type %d (%s) state %d (%s) "
 		"one-shot %u err %d (%s)\n",
 		service,
 		connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type),
+		ipconfig_state, state2string(ipconfig_state),
 		oneshot, err, strerror(-err));
 
 	/*
@@ -2550,7 +2551,7 @@ static void complete_online_check(struct connman_service *service,
 					int err)
 {
 	struct online_check_state *online_check_state;
-	enum connman_service_state *ipconfig_state;
+	enum connman_service_state ipconfig_state;
 	bool reschedule = false;
 
 	DBG("service %p (%s) type %d (%s) "
@@ -2562,10 +2563,10 @@ static void complete_online_check(struct connman_service *service,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		online_check_state = &service->online_check_state_ipv4;
-		ipconfig_state = &service->state_ipv4;
+		ipconfig_state = service->state_ipv4;
 	} else if (type == CONNMAN_IPCONFIG_TYPE_IPV6) {
 		online_check_state = &service->online_check_state_ipv6;
-		ipconfig_state = &service->state_ipv6;
+		ipconfig_state = service->state_ipv6;
 	} else
 		return;
 
@@ -2577,7 +2578,7 @@ static void complete_online_check(struct connman_service *service,
 	else
 		reschedule = handle_online_check_failure(service,
 					 type,
-					 *ipconfig_state,
+					 ipconfig_state,
 					 online_check_state,
 					 !enable_online_to_ready_transition,
 					 err);
