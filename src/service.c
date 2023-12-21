@@ -3220,6 +3220,8 @@ static bool handle_continuous_online_check_success(
  *    false.
  *
  *  @sa handle_online_check_failure
+ *  @sa handle_oneshot_online_check_success
+ *  @sa handle_continuous_online_check_success
  *
  */
 static bool handle_online_check_success(struct connman_service *service,
@@ -3514,6 +3516,8 @@ static bool handle_continuous_online_check_failure(
  *    false.
  *
  *  @sa handle_online_check_success
+ *  @sa handle_oneshot_online_check_failure
+ *  @sa handle_continuous_online_check_failure
  *
  */
 static bool handle_online_check_failure(struct connman_service *service,
@@ -3615,6 +3619,9 @@ done:
  *  @sa start_online_check
  *  @sa start_online_check_if_connected
  *  @sa __connman_service_wispr_start
+ *  @sa handle_online_check_success
+ *  @sa handle_online_check_failure
+ *  @sa reschedule_online_check
  *
  */
 static void complete_online_check(struct connman_service *service,
