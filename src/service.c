@@ -8709,6 +8709,19 @@ static void request_input_cb(struct connman_service *service,
 	}
 }
 
+/**
+ *  @brief
+ *    Downgrade the service IPv4 and IPv6 states from "online" to
+ *    "ready" of all connected services.
+ *
+ *  This attempts to downgrade the IPv4 and IPv6 states of all
+ *  @a is_connected services to "ready" if they are "online".
+ *
+ *  @sa service_ipconfig_downgrade_online_state
+ *  @sa service_downgrade_online_state
+ *  @sa service_downgrade_online_state_if_default
+ *
+ */
 static void downgrade_connected_services(void)
 {
 	struct connman_service *up_service;
