@@ -2553,6 +2553,40 @@ static void complete_online_check(struct connman_service *service,
 		online_check_active_clear(service, type);
 }
 
+/**
+ *  @brief
+ *    Start HTTP-based Internet reachability probes if the specified
+ *    service is connected.
+ *
+ *  This attempts to start IPv4 or IPv6 HTTP-based Internet
+ *  reachability probes if the IPv4 state or IPv6 state is connected
+ *  (that is, "ready" or "online") and if the online check state is
+ *  not already active for the specified network service IP
+ *  configuration type.
+ *
+ *  @param[in,out]  service  A pointer to a mutable service on which
+ *                           to start "online" HTTP-based Internet
+ *                           reachability checks if the IP
+ *                           configuration state associated with @a
+ *                           type is "connected" (that is, "ready" or
+ *                           "online").
+ *  @param[in]      type     The IP configuration type for which to
+ *                           start the "online" HTTP-based Internet
+ *                           reachability checks.
+ *
+ *  @retval  0          If successful.
+ *  @retval  -EINVAL    If @a service is null or @a type is invalid.
+ *  @retval  -EPERM     If online checks are disabled via
+ *                      configuration.
+ *  @retval  -ENOTCONN  If @a service is not "connected" (that is,
+ *                      "ready" or "online").
+ *  @retval  -EALREADY  If online checks are already active for @a
+ *                      service.
+ *
+ *  @sa start_online_check
+ *  @sa start_online_check_if_connected_with_type
+ *
+ */
 static int start_online_check_if_connected_with_type(
 					struct connman_service *service,
 					enum connman_ipconfig_type type)
