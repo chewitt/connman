@@ -222,6 +222,44 @@ will transition to READY state, enabling another service to become the
 default one, in replacement.
 Default value is false.
 .TP
+.BI OnlineCheckFailuresThreshold= failures
+When both \fBEnableOnlineCheck\fR and
+\fBEnableOnlineToReadyTransition\fR are asserted, this is the number
+of failed back-to-back "ready" to "online" HTTP-based Internet
+reachability checks that will be allowed before marking a service as
+"failed" from a reachability perspective, sorting it at a lower
+priority than other services not so marked.
+
+Lower values may result in higher-frequency network service cycling
+while higher values may result in a longer period of time before
+failing from a non-Internet reachable service to one that might be.
+
+See \fBOnlineCheckIntervalStyle\fR, \fBOnlineCheckInitialInterval\fR,
+and \fBOnlineCheckMaxInterval\fR for other values that influence
+network service failure/recovery transition time.
+
+The default value is 6.
+.TP
+.BI OnlineCheckSuccessesThreshold= successes
+When both \fBEnableOnlineCheck\fR and
+\fBEnableOnlineToReadyTransition\fR are asserted, this is the number
+of successful back-to-back "ready" to "online" HTTP-based Internet
+reachability checks that must be met before clearing a service as
+"failed" from a reachability perspective and allowing it to transition
+to the "online" state again, allowing it to sort back to a higher
+priority relative to other network services.
+
+Lower values may result in higher-frequency network service cycling
+while higher values may result in a longer period of time before
+transitioning back to more a preferred, Internet reachable network
+service.
+
+See \fBOnlineCheckIntervalStyle\fR, \fBOnlineCheckInitialInterval\fR,
+and \fBOnlineCheckMaxInterval\fR for other values that influence
+network service failure/recovery transition time.
+
+The default value is 6.
+.TP
 .BI AutoConnectRoamingServices=true\ \fR|\fB\ false
 Automatically connect roaming services. This is not recommended unless you know
 you won't have any billing problem.
