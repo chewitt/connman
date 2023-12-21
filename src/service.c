@@ -78,6 +78,7 @@ static unsigned int vpn_autoconnect_id = 0;
  *
  *  @sa connman_service_get_default
  *  @sa connman_service_is_default
+ *  @sa default_changed
  *
  */
 static struct connman_service *current_default = NULL;
