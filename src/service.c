@@ -225,6 +225,8 @@ static void complete_online_check(struct connman_service *service,
 					int err);
 static bool service_downgrade_online_state(struct connman_service *service);
 static bool connman_service_is_default(const struct connman_service *service);
+static void set_error(struct connman_service *service,
+					enum connman_service_error error);
 static void clear_error(struct connman_service *service);
 
 struct find_data {
@@ -4537,9 +4539,6 @@ int __connman_service_check_passphrase(enum connman_service_security security,
 
 	return 0;
 }
-
-static void set_error(struct connman_service *service,
-					enum connman_service_error error);
 
 int __connman_service_set_passphrase(struct connman_service *service,
 					const char *passphrase)
