@@ -1800,12 +1800,54 @@ static void online_check_active_set_value(struct connman_service *service,
 		service->online_check_state_ipv6.active = active;
 }
 
+/**
+ *  @brief
+ *    Set, or assert, the "online" HTTP-based Internet reachability
+ *    check active state.
+ *
+ *  This sets, or asserts, the "online" HTTP-based Internet
+ *  reachability check active state for the specified network service
+ *  IP configuration type.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to set the "online" HTTP-
+ *                           based Internet reachability active
+ *                           state.
+ *  @param[in]      type     The IP configuration type for which to
+ *                           set the "online" HTTP-based Internet
+ *                           reachability active state.
+ *
+ *  @sa online_check_active_set_value
+ *  @sa online_check_is_active
+ *
+ */
 static void online_check_active_set(struct connman_service *service,
 		enum connman_ipconfig_type type)
 {
 	online_check_active_set_value(service, type, true);
 }
 
+/**
+ *  @brief
+ *    Clear, or deassert, the "online" HTTP-based Internet
+ *    reachability check active state.
+ *
+ *  This clears, or deasserts, the "online" HTTP-based Internet
+ *  reachability check active state for the specified network service
+ *  IP configuration type.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to clear the "online" HTTP-
+ *                           based Internet reachability active
+ *                           state.
+ *  @param[in]      type     The IP configuration type for which to
+ *                           clear the "online" HTTP-based Internet
+ *                           reachability active state.
+ *
+ *  @sa online_check_active_set_value
+ *  @sa online_check_is_active
+ *
+ */
 static void online_check_active_clear(struct connman_service *service,
 		enum connman_ipconfig_type type)
 {
