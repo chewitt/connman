@@ -7972,8 +7972,21 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 	a_connected = is_connected(state_a);
 	b_connected = is_connected(state_b);
 
+	/*
+	 * If both services are connected (that is, "ready" or "online"),
+	 * then further sort by whether the services are VPN type, then
+	 * service order if there is VPN equivalence, and then by their
+	 * preferred technology status.
+	 */
 	if (a_connected && b_connected) {
 		int rval;
+
+		/*
+		 * If at this point the services are still comparing as
+		 * equivalent, then use online check failure status, giving
+		 * priority to the service that has not met the failure
+		 * threshold.
+		 */
 		if (!online_check_failures_threshold_was_met(service_a) &&
 			online_check_failures_threshold_was_met(service_b)) {
 			return -1;
@@ -8004,6 +8017,15 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 			return rval;
 	}
 
+	/*
+	 * If at this point the services are still comparing as
+	 * equilvalent, then check whether their combined states are
+	 * different. If they are, then prefer the service that is
+	 * "online" to that which is only "ready", then prefer @a a being
+	 * connected versus @a b being connected, and, finally, then
+	 * prefer @a a being in the process of connecting to @a b being in
+	 * the process of connecting.
+	 */
 	if (state_a != state_b) {
 		if (a_connected && b_connected) {
 			/* We prefer online over ready state */
@@ -8025,12 +8047,26 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 			return 1;
 	}
 
+	/*
+	 * If at this point the services are still comparing as
+	 * equivalent, then use favorite status, giving priority to @a a
+	 * as a favorite versus @a b as a favorite.
+	 */
 	if (service_a->favorite && !service_b->favorite)
 		return -1;
 
 	if (!service_a->favorite && service_b->favorite)
 		return 1;
 
+	/*
+	 * If at this point the services are still comparing as
+	 * equivalent, then check whether their types are different. If
+	 * they are, then compare their types. First, against the
+	 * PreferredTechnologies priority list and then by an internal
+	 * prioritization favoring Ethernet over Wi-Fi, Wi-Fi over
+	 * Cellular, Cellular over Bluetooth, Bluetooth over VPN, and VPN
+	 * over Gadget (that is, USB Ethernet).
+	 */
 	if (service_a->type != service_b->type) {
 		int rval;
 
@@ -8069,10 +8105,18 @@ static gint service_compare(gconstpointer a, gconstpointer b)
 			return 1;
 	}
 
+	/*
+	 * If at this point the services are still comparing as
+	 * equivalent, then check their strengths.
+	 */
 	strength = (gint) service_b->strength - (gint) service_a->strength;
 	if (strength)
 		return strength;
 
+	/*
+	 * Finally, if at this point the services are still comparing as
+	 * equivalent, then check their names.
+	 */
 	return g_strcmp0(service_a->name, service_b->name);
 }
 
