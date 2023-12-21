@@ -705,7 +705,9 @@ static int service_save(struct connman_service *service)
 	const char *cst_str = NULL;
 	int err = 0;
 
-	DBG("service %p new %d", service, service->new_service);
+	DBG("service %p (%s) new %d",
+		service, connman_service_get_identifier(service),
+		service->new_service);
 
 	if (service->new_service)
 		return -ESRCH;
@@ -1231,7 +1233,9 @@ int __connman_service_nameserver_append(struct connman_service *service,
 	char **nameservers;
 	int len, i;
 
-	DBG("service %p nameserver %s auto %d",	service, nameserver, is_auto);
+	DBG("service %p (%s) nameserver %s auto %d",
+		service, connman_service_get_identifier(service),
+		nameserver, is_auto);
 
 	if (!nameserver)
 		return -EINVAL;
@@ -6415,7 +6419,8 @@ static DBusMessage *reset_counters(DBusConnection *conn,
 
 static void service_schedule_added(struct connman_service *service)
 {
-	DBG("service %p", service);
+	DBG("service %p (%s)",
+		service, connman_service_get_identifier(service));
 
 	g_hash_table_remove(services_notify->remove, service->path);
 	g_hash_table_replace(services_notify->add, service->path, service);
@@ -8643,8 +8648,10 @@ static void service_ip_bound(struct connman_ipconfig *ipconfig,
 	type = __connman_ipconfig_get_config_type(ipconfig);
 	method = __connman_ipconfig_get_method(ipconfig);
 
-	DBG("service %p ipconfig %p type %d method %d", service, ipconfig,
-							type, method);
+	DBG("service %p (%s) type %d (%s) ipconfig %p method %d (%s)",
+		service, connman_service_get_identifier(service),
+		type, __connman_ipconfig_type2string(type),
+		ipconfig, method, __connman_ipconfig_method2string(method));
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 &&
 			method == CONNMAN_IPCONFIG_METHOD_AUTO)
@@ -8691,7 +8698,10 @@ static void service_route_changed(struct connman_ipconfig *ipconfig,
 {
 	struct connman_service *service = __connman_ipconfig_get_data(ipconfig);
 
-	DBG("%s route changed", ifname);
+	DBG("service %p (%s) ipconfig %p ifname %s route changed",
+		service, connman_service_get_identifier(service),
+		ipconfig,
+		ifname);
 
 	settings_changed(service, ipconfig);
 }
