@@ -109,6 +109,8 @@ struct online_check_state {
 	 *
 	 */
 	unsigned int interval;
+	unsigned int successes;
+	unsigned int failures;
 };
 
 struct connman_service {
