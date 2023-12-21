@@ -1748,6 +1748,28 @@ static bool online_check_is_active(const struct connman_service *service,
 	return active;
 }
 
+/**
+ *  @brief
+ *    Assign the "online" HTTP-based Internet reachability check
+ *    active state.
+ *
+ *  This assigns the "online" HTTP-based Internet reachability check
+ *  active state for the specified network service IP configuration
+ *  type.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network service
+ *                           for which to assign the "online" HTTP-
+ *                           based Internet reachability active
+ *                           state.
+ *  @param[in]      type     The IP configuration type for which to
+ *                           assign the "online" HTTP-based Internet
+ *                           reachability active state.
+ *  @param[in]      active   The "online" HTTP-based Internet
+ *                           reachability active state to assign.
+ *
+ *  @sa online_check_is_active
+ *
+ */
 static void online_check_active_set_value(struct connman_service *service,
 		enum connman_ipconfig_type type,
 		bool active)
