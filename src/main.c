@@ -608,6 +608,10 @@ static void parse_config(GKeyFile *config)
 	boolean = __connman_config_get_bool(config, "General",
 					CONF_ENABLE_ONLINE_CHECK, &error);
 	if (!error) {
+		connman_warn("\"%s\" is deprecated; use \"%s\" instead.",
+			CONF_ENABLE_ONLINE_CHECK,
+			CONF_ONLINE_CHECK_MODE);
+
 		connman_settings.enable_online_check = boolean;
 	}
 
@@ -618,6 +622,10 @@ static void parse_config(GKeyFile *config)
 	boolean = __connman_config_get_bool(config, "General",
 			CONF_ENABLE_ONLINE_TO_READY_TRANSITION, &error);
 	if (!error) {
+		connman_warn("\"%s\" is deprecated; use \"%s\" instead.",
+			CONF_ENABLE_ONLINE_TO_READY_TRANSITION,
+			CONF_ONLINE_CHECK_MODE);
+
 		connman_settings.enable_online_to_ready_transition = boolean;
 	}
 
