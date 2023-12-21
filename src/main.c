@@ -56,6 +56,9 @@
 #define DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL 1
 #define DEFAULT_ONLINE_CHECK_MAX_INTERVAL 12
 
+#define DEFAULT_ONLINE_CHECK_FAILURES_THRESHOLD 6
+#define DEFAULT_ONLINE_CHECK_SUCCESSES_THRESHOLD 6
+
 #define ONLINE_CHECK_INTERVAL_STYLE_FIBONACCI "fibonacci"
 #define ONLINE_CHECK_INTERVAL_STYLE_GEOMETRIC "geometric"
 
@@ -114,6 +117,8 @@ static struct {
 	unsigned int online_check_connect_timeout_ms;
 	unsigned int online_check_initial_interval;
 	unsigned int online_check_max_interval;
+	unsigned int online_check_failures_threshold;
+	unsigned int online_check_successes_threshold;
 	char *online_check_interval_style;
 	bool auto_connect_roaming_services;
 	bool acd;
@@ -146,6 +151,10 @@ static struct {
 	.online_check_connect_timeout_ms = DEFAULT_ONLINE_CHECK_CONNECT_TIMEOUT,
 	.online_check_initial_interval = DEFAULT_ONLINE_CHECK_INITIAL_INTERVAL,
 	.online_check_max_interval = DEFAULT_ONLINE_CHECK_MAX_INTERVAL,
+	.online_check_failures_threshold =
+		DEFAULT_ONLINE_CHECK_FAILURES_THRESHOLD,
+	.online_check_successes_threshold =
+		DEFAULT_ONLINE_CHECK_SUCCESSES_THRESHOLD,
 	.online_check_interval_style = NULL,
 	.auto_connect_roaming_services = false,
 	.acd = false,
@@ -178,6 +187,8 @@ static struct {
 #define CONF_ONLINE_CHECK_CONNECT_TIMEOUT "OnlineCheckConnectTimeout"
 #define CONF_ONLINE_CHECK_INITIAL_INTERVAL "OnlineCheckInitialInterval"
 #define CONF_ONLINE_CHECK_MAX_INTERVAL     "OnlineCheckMaxInterval"
+#define CONF_ONLINE_CHECK_FAILURES_THRESHOLD "OnlineCheckFailuresThreshold"
+#define CONF_ONLINE_CHECK_SUCCESSES_THRESHOLD "OnlineCheckSuccessesThreshold"
 #define CONF_ONLINE_CHECK_INTERVAL_STYLE "OnlineCheckIntervalStyle"
 #define CONF_AUTO_CONNECT_ROAMING_SERVICES "AutoConnectRoamingServices"
 #define CONF_ACD                        "AddressConflictDetection"
@@ -211,6 +222,8 @@ static const char *supported_options[] = {
 	CONF_ONLINE_CHECK_CONNECT_TIMEOUT,
 	CONF_ONLINE_CHECK_INITIAL_INTERVAL,
 	CONF_ONLINE_CHECK_MAX_INTERVAL,
+	CONF_ONLINE_CHECK_FAILURES_THRESHOLD,
+	CONF_ONLINE_CHECK_SUCCESSES_THRESHOLD,
 	CONF_ONLINE_CHECK_INTERVAL_STYLE,
 	CONF_AUTO_CONNECT_ROAMING_SERVICES,
 	CONF_ACD,
@@ -604,6 +617,38 @@ static void parse_config(GKeyFile *config)
 			DEFAULT_ONLINE_CHECK_MAX_INTERVAL;
 	}
 
+	/* OnlineCheckFailuresThreshold */
+
+	integer = g_key_file_get_integer(config, "General",
+			CONF_ONLINE_CHECK_FAILURES_THRESHOLD, &error);
+	if (!error && integer >= 0)
+		connman_settings.online_check_failures_threshold = integer;
+
+	if (connman_settings.online_check_failures_threshold < 1) {
+		connman_warn("Incorrect online check failures threshold [%d]",
+			connman_settings.online_check_failures_threshold);
+		connman_settings.online_check_failures_threshold =
+			DEFAULT_ONLINE_CHECK_FAILURES_THRESHOLD;
+	}
+
+	g_clear_error(&error);
+
+	/* OnlineCheckSuccessesThreshold */
+
+	integer = g_key_file_get_integer(config, "General",
+			CONF_ONLINE_CHECK_SUCCESSES_THRESHOLD, &error);
+	if (!error && integer >= 0)
+		connman_settings.online_check_successes_threshold = integer;
+
+	if (connman_settings.online_check_successes_threshold < 1) {
+		connman_warn("Incorrect online check successes threshold [%d]",
+			connman_settings.online_check_successes_threshold);
+		connman_settings.online_check_successes_threshold =
+			DEFAULT_ONLINE_CHECK_SUCCESSES_THRESHOLD;
+	}
+
+	g_clear_error(&error);
+
 	string = __connman_config_get_string(config, "General",
 					CONF_ONLINE_CHECK_INTERVAL_STYLE, &error);
 	if (!error) {
@@ -920,6 +965,12 @@ unsigned int connman_setting_get_uint(const char *key)
 
 	if (g_str_equal(key, CONF_ONLINE_CHECK_MAX_INTERVAL))
 		return connman_settings.online_check_max_interval;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_FAILURES_THRESHOLD))
+		return connman_settings.online_check_failures_threshold;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_SUCCESSES_THRESHOLD))
+		return connman_settings.online_check_successes_threshold;
 
 	return 0;
 }
