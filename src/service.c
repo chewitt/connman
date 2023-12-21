@@ -2394,15 +2394,23 @@ static void complete_online_check(struct connman_service *service,
  *                       reachability probes if the IPv4 or IPv6 state
  *                       is "connected" (that is, "ready" or "online").
  *
+ *  @retval  0          If successful.
+ *  @retval  -EINVAL    If @a service is null or @a type is invalid.
+ *  @retval  -EPERM     If online checks are disabled via
+ *                      configuration.
+ *
  */
-static void start_wispr_if_connected(struct connman_service *service)
+static int start_wispr_if_connected(struct connman_service *service)
 {
 	DBG("service %p (%s) maybe start WISPr",
 		service,
 		connman_service_get_identifier(service));
 
+	if (!service)
+		return -EINVAL;
+
 	if (!online_check_is_enabled_check(service))
-		return;
+		return -EPERM;
 
 	if (__connman_service_is_connected_state(service,
 			CONNMAN_IPCONFIG_TYPE_IPV4))
@@ -2413,6 +2421,8 @@ static void start_wispr_if_connected(struct connman_service *service)
 			CONNMAN_IPCONFIG_TYPE_IPV6))
 		__connman_service_wispr_start(service,
 					CONNMAN_IPCONFIG_TYPE_IPV6);
+
+	return 0;
 }
 
 /**
