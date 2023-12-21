@@ -3283,6 +3283,47 @@ static void online_check_log_failure(const struct connman_service *service,
 		strerror(-err));
 }
 
+/**
+ *  @brief
+ *    Handle the failed completion of an one-shot mode "online"
+ *    HTTP-based Internet reachability check for the specified network
+ *    service and IP configuration type for the "one-shot" online
+ *    check mode.
+ *
+ *  This handles the completion of a failed one-shot mode "online"
+ *  HTTP-based Internet reachability check for the specified network
+ *  service and IP configuration type for the "one-shot" online check
+ *  mode. This effectively "bookends" an earlier
+ *  #__connman_service_wispr_start.
+ *
+ *  This simply indicates that rescheduling another check is desired.
+ *
+ *  @param[in,out]  service             A pointer to the mutable service
+ *                                      for which to handle a
+ *                                      failed previously-requested
+ *                                      online check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which to handle a failed
+ *                                      previously-requested online
+ *                                      check.
+ *  @param[in]      ipconfig_state      The current @a type IP
+ *                                      configuration state for @a
+ *                                      service.
+ *  @param[in,out]  online_check_state  A pointer to the online check
+ *                                      state for @a service
+ *                                      associated with @a type.
+ *  @param[in]      err                 The error status associated with
+ *                                      the failed previously-requested
+ *                                      online check. This is expected
+ *                                      to be less than zero ('< 0').
+ *
+ *  @returns
+ *    True, unconditionally.
+ *
+ *  @sa handle_online_check_failure
+ *  @sa handle_oneshot_online_check_failure
+ *
+ */
 static bool handle_oneshot_online_check_failure(
 			struct connman_service *service,
 			enum connman_ipconfig_type type,
@@ -3299,6 +3340,46 @@ static bool handle_oneshot_online_check_failure(
 	return reschedule;
 }
 
+/**
+ *  @brief
+ *    Handle the failed completion of an one-shot mode "online"
+ *    HTTP-based Internet reachability check for the specified network
+ *    service and IP configuration type for the "continuous" online
+ *    check mode.
+ *
+ *  This handles the completion of a failed continuous mode "online"
+ *  HTTP-based Internet reachability check for the specified network
+ *  service and IP configuration type for the "continuous" online check
+ *  mode. This effectively "bookends" an earlier
+ *  #__connman_service_wispr_start.
+ *
+ *  @param[in,out]  service             A pointer to the mutable service
+ *                                      for which to handle a
+ *                                      failed previously-requested
+ *                                      online check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which to handle a failed
+ *                                      previously-requested online
+ *                                      check.
+ *  @param[in]      ipconfig_state      The current @a type IP
+ *                                      configuration state for @a
+ *                                      service.
+ *  @param[in,out]  online_check_state  A pointer to the online check
+ *                                      state for @a service
+ *                                      associated with @a type.
+ *  @param[in]      err                 The error status associated with
+ *                                      the failed previously-requested
+ *                                      online check. This is expected
+ *                                      to be less than zero ('< 0').
+ *
+ *  @returns
+ *    True if another online check should be scheduled; otherwise,
+ *    false.
+ *
+ *  @sa handle_online_check_failure
+ *  @sa handle_continuous_online_check_failure
+ *
+ */
 static bool handle_continuous_online_check_failure(
 			struct connman_service *service,
 			enum connman_ipconfig_type type,
