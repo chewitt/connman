@@ -188,6 +188,12 @@ struct connman_service {
 	bool wps_advertizing;
 	struct online_check_state online_check_state_ipv4;
 	struct online_check_state online_check_state_ipv6;
+
+    /**
+     *  Tracks whether the service has met the number of sustained,
+     *  back-to-back "online" reachability check failures for
+     *  "continuous" online check mode.
+     */
 	bool online_check_failures_met_threshold;
 	bool do_split_routing;
 	bool new_service;
