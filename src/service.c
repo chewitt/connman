@@ -2191,6 +2191,20 @@ static bool online_check_failures_threshold_was_met(
 	return service->online_check_failures_met_threshold;
 }
 
+/**
+ *  @brief
+ *    Set the online check failures threshold state to the specified
+ *    value.
+ *
+ *  @param[in,out]  service  A pointer to the mutable service for which
+ *                           to set the failures threshold state.
+ *  @param[in]      value    The value to set the @a service failures
+ *                           threshold state to.
+ *
+ *  @sa online_check_failures_threshold_was_met_set
+ *  @sa online_check_failures_threshold_was_met_clear
+ *
+ */
 static void online_check_failures_threshold_was_met_set_value(
 			struct connman_service *service, bool value)
 {
