@@ -2410,19 +2410,25 @@ static void start_wispr_if_connected(struct connman_service *service)
  *                           "online" reachability check is to be
  *                           started.
  *
+ *  @retval  0          If successful.
+ *  @retval  -EINVAL    If @a service is null or @a type is invalid.
+ *
  *  @sa cancel_online_check
  *  @sa start_online_check
  *  @sa complete_online_check
  *  @sa start_wispr_if_connected
  *
  */
-void __connman_service_wispr_start(struct connman_service *service,
+int __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	DBG("service %p (%s) type %d (%s)",
 		service,
 		connman_service_get_identifier(service),
 		type, __connman_ipconfig_type2string(type));
+
+	if (!service)
+		return -EINVAL;
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_state_ipv4.interval =
@@ -2433,6 +2439,8 @@ void __connman_service_wispr_start(struct connman_service *service,
 
 	__connman_wispr_start(service, type,
 			online_check_connect_timeout_ms, complete_online_check);
+
+	return 0;
 }
 
 /**
