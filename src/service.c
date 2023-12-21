@@ -2168,6 +2168,23 @@ done:
 	return status;
 }
 
+/**
+ *  @brief
+ *    Return the online check failures threshold state.
+ *
+ *  @param[in]  service  A pointer to the immutable service for which
+ *                       to return the online check failures threshold
+ *                       state.
+ *
+ *  @returns
+ *    True if the online check failures threshold was met; otherwise,
+ *    false.
+ *
+ *  @sa online_check_failures_threshold_was_met_set_value
+ *  @sa online_check_failures_threshold_was_met_set
+ *  @sa online_check_failures_threshold_was_met_clear
+ *
+ */
 static bool online_check_failures_threshold_was_met(
 			const struct connman_service *service)
 {
