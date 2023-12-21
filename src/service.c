@@ -2046,7 +2046,7 @@ static void cancel_online_check(struct connman_service *service,
  *    enabled for the specified network service; otherwise, false.
  *
  *  @sa start_online_check
- *  @sa start_wispr_if_connected
+ *  @sa start_online_check_if_connected
  *
  */
 static bool online_check_is_enabled_check(
@@ -2090,7 +2090,7 @@ static bool online_check_is_enabled_check(
  *
  *  @sa cancel_online_check
  *  @sa complete_online_check
- *  @sa start_wispr_if_connected
+ *  @sa start_online_check_if_connected
  *  @sa __connman_service_wispr_start
  *
  */
@@ -2503,7 +2503,7 @@ done:
  *
  *  @sa cancel_online_check
  *  @sa start_online_check
- *  @sa start_wispr_if_connected
+ *  @sa start_online_check_if_connected
  *  @sa __connman_service_wispr_start
  *
  */
@@ -2572,7 +2572,7 @@ static void complete_online_check(struct connman_service *service,
  *                      configuration.
  *
  */
-static int start_wispr_if_connected(struct connman_service *service)
+static int start_online_check_if_connected(struct connman_service *service)
 {
 	DBG("service %p (%s) maybe start WISPr",
 		service,
@@ -2621,7 +2621,7 @@ static int start_wispr_if_connected(struct connman_service *service)
  *  @sa cancel_online_check
  *  @sa start_online_check
  *  @sa complete_online_check
- *  @sa start_wispr_if_connected
+ *  @sa start_online_check_if_connected
  *
  */
 int __connman_service_wispr_start(struct connman_service *service,
@@ -2908,7 +2908,7 @@ static void default_changed(void)
 				connman_setting_get_bool("AllowDomainnameUpdates"))
 			__connman_utsname_set_domainname(service->domainname);
 
-		start_wispr_if_connected(service);
+		start_online_check_if_connected(service);
 
 		/*
 		 * Connect VPN automatically when new default service
@@ -4927,7 +4927,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 		dns_configuration_changed(service);
 
-		start_wispr_if_connected(service);
+		start_online_check_if_connected(service);
 
 		service_save(service);
 	} else if (g_str_equal(name, "Timeservers.Configuration")) {
