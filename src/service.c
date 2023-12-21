@@ -2998,6 +2998,36 @@ static void continuous_online_check_log_failures_threshold_met(
 		counter_description);
 }
 
+/**
+ *  @brief
+ *    Handle the successful completion of an "online" HTTP-based
+ *    Internet reachability check for the specified network service
+ *    and IP configuration type for the "one-shot" online check mode.
+ *
+ *  This handles the completion of a successful "online" HTTP-based
+ *  Internet reachability check for the specified network service and
+ *  IP configuration type for the "one-shot" online check mode. This
+ *  effectively "bookends" an earlier #__connman_service_wispr_start.
+ *
+ *  @param[in,out]  service             A pointer to the mutable service
+ *                                      for which to handle a
+ *                                      successful previously-requested
+ *                                      online check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which to handle a successful
+ *                                      previously-requested online
+ *                                      check.
+ *  @param[in,out]  online_check_state  A pointer to the online check
+ *                                      state for @a service
+ *                                      associated with @a type.
+ *
+ *  @returns
+ *    False, unconditionally.
+ *
+ *  @sa handle_oneshot_online_check_failure
+ *  @sa handle_online_check_success
+ *
+ */
 static bool handle_oneshot_online_check_success(
 			struct connman_service *service,
 			enum connman_ipconfig_type type,
@@ -3018,6 +3048,37 @@ static bool handle_oneshot_online_check_success(
 	return !reschedule;
 }
 
+/**
+ *  @brief
+ *    Handle the successful completion of an "online" HTTP-based
+ *    Internet reachability check for the specified network service
+ *    and IP configuration type for the "continuous" online check mode.
+ *
+ *  This handles the completion of a successful "online" HTTP-based
+ *  Internet reachability check for the specified network service and
+ *  IP configuration type for the "continuous" online check mode. This
+ *  effectively "bookends" an earlier #__connman_service_wispr_start.
+ *
+ *  @param[in,out]  service             A pointer to the mutable service
+ *                                      for which to handle a
+ *                                      successful previously-requested
+ *                                      online check.
+ *  @param[in]      type                The IP configuration type for
+ *                                      which to handle a successful
+ *                                      previously-requested online
+ *                                      check.
+ *  @param[in,out]  online_check_state  A pointer to the online check
+ *                                      state for @a service
+ *                                      associated with @a type.
+ *
+ *  @returns
+ *    True if another online check should be scheduled; otherwise,
+ *    false.
+ *
+ *  @sa handle_continuous_online_check_failure
+ *  @sa handle_online_check_success
+ *
+ */
 static bool handle_continuous_online_check_success(
 			struct connman_service *service,
 			enum connman_ipconfig_type type,
