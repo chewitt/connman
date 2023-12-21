@@ -1749,6 +1749,22 @@ static bool check_proxy_setup(struct connman_service *service)
 	return false;
 }
 
+enum service_online_check_mode __connman_service_online_check_string2mode(
+				const char *mode)
+{
+	if (!mode)
+		return CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN;
+
+	if (g_strcmp0(mode, "none") == 0)
+		return CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE;
+	else if (g_strcmp0(mode, "one-shot") == 0)
+		return CONNMAN_SERVICE_ONLINE_CHECK_MODE_ONE_SHOT;
+	else if (g_strcmp0(mode, "continuous") == 0)
+		return CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS;
+
+	return CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN;
+}
+
 /**
  *  @brief
  *    Determine whether an "online" HTTP-based Internet reachability

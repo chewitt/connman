@@ -112,6 +112,7 @@ static struct {
 	char *vendor_class_id;
 	bool enable_online_check;
 	bool enable_online_to_ready_transition;
+	enum service_online_check_mode online_check_mode;
 	char *online_check_ipv4_url;
 	char *online_check_ipv6_url;
 	unsigned int online_check_connect_timeout_ms;
@@ -146,6 +147,7 @@ static struct {
 	.vendor_class_id = NULL,
 	.enable_online_check = true,
 	.enable_online_to_ready_transition = false,
+	.online_check_mode = CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN,
 	.online_check_ipv4_url = NULL,
 	.online_check_ipv6_url = NULL,
 	.online_check_connect_timeout_ms = DEFAULT_ONLINE_CHECK_CONNECT_TIMEOUT,
@@ -182,6 +184,7 @@ static struct {
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
 #define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_ENABLE_ONLINE_TO_READY_TRANSITION "EnableOnlineToReadyTransition"
+#define CONF_ONLINE_CHECK_MODE          "OnlineCheckMode"
 #define CONF_ONLINE_CHECK_IPV4_URL      "OnlineCheckIPv4URL"
 #define CONF_ONLINE_CHECK_IPV6_URL      "OnlineCheckIPv6URL"
 #define CONF_ONLINE_CHECK_CONNECT_TIMEOUT "OnlineCheckConnectTimeout"
@@ -217,6 +220,7 @@ static const char *supported_options[] = {
 	CONF_VENDOR_CLASS_ID,
 	CONF_ENABLE_ONLINE_CHECK,
 	CONF_ENABLE_ONLINE_TO_READY_TRANSITION,
+	CONF_ONLINE_CHECK_MODE,
 	CONF_ONLINE_CHECK_IPV4_URL,
 	CONF_ONLINE_CHECK_IPV6_URL,
 	CONF_ONLINE_CHECK_CONNECT_TIMEOUT,
@@ -343,6 +347,36 @@ static void check_config(GKeyFile *config)
 	}
 
 	g_strfreev(keys);
+}
+
+static void online_check_mode_set_from_deprecated(void)
+{
+	connman_settings.online_check_mode =
+		connman_settings.enable_online_check ?
+		connman_settings.enable_online_to_ready_transition ?
+			CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS :
+			CONNMAN_SERVICE_ONLINE_CHECK_MODE_ONE_SHOT :
+		CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE;
+}
+
+static void online_check_mode_set_to_deprecated(void)
+{
+	switch (connman_settings.online_check_mode) {
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE:
+		connman_settings.enable_online_check = false;
+		connman_settings.enable_online_to_ready_transition = false;
+		break;
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_ONE_SHOT:
+		connman_settings.enable_online_check = true;
+		connman_settings.enable_online_to_ready_transition = false;
+		break;
+	case CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS:
+		connman_settings.enable_online_check = true;
+		connman_settings.enable_online_to_ready_transition = true;
+		break;
+	default:
+		break;
+	}
 }
 
 static void parse_config(GKeyFile *config)
@@ -546,6 +580,26 @@ static void parse_config(GKeyFile *config)
 	if (!error) {
 		connman_settings.enable_online_to_ready_transition = boolean;
 	}
+
+	g_clear_error(&error);
+
+	/* OnlineCheckMode */
+
+	string = __connman_config_get_string(config, "General",
+				CONF_ONLINE_CHECK_MODE, &error);
+	if (!error) {
+		connman_settings.online_check_mode =
+			__connman_service_online_check_string2mode(string);
+		if (connman_settings.online_check_mode ==
+			CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN) {
+			connman_error("Invalid online check mode \"%s\"",
+				string);
+
+			online_check_mode_set_from_deprecated();
+		} else
+			online_check_mode_set_to_deprecated();
+	} else
+		online_check_mode_set_from_deprecated();
 
 	g_clear_error(&error);
 
@@ -965,6 +1019,9 @@ unsigned int connman_setting_get_uint(const char *key)
 
 	if (g_str_equal(key, CONF_ONLINE_CHECK_MAX_INTERVAL))
 		return connman_settings.online_check_max_interval;
+
+	if (g_str_equal(key, CONF_ONLINE_CHECK_MODE))
+		return connman_settings.online_check_mode;
 
 	if (g_str_equal(key, CONF_ONLINE_CHECK_FAILURES_THRESHOLD))
 		return connman_settings.online_check_failures_threshold;

@@ -800,6 +800,15 @@ const char *__connman_service_type2string(enum connman_service_type type);
 enum connman_service_type __connman_service_string2type(const char *str);
 enum connman_service_security __connman_service_string2security(const char *str);
 
+enum service_online_check_mode {
+	CONNMAN_SERVICE_ONLINE_CHECK_MODE_UNKNOWN    = 0,
+	CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE       = 1,
+	CONNMAN_SERVICE_ONLINE_CHECK_MODE_ONE_SHOT   = 2,
+	CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS = 3
+};
+
+enum service_online_check_mode __connman_service_online_check_string2mode(
+		const char *mode);
 int __connman_service_nameserver_append(struct connman_service *service,
 				const char *nameserver, bool is_auto);
 int __connman_service_nameserver_remove(struct connman_service *service,
