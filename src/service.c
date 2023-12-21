@@ -1695,6 +1695,28 @@ static bool check_proxy_setup(struct connman_service *service)
 	return false;
 }
 
+/**
+ *  @brief
+ *    Determine whether an "online" HTTP-based Internet reachability
+ *    check is active.
+ *
+ *  This determines whether an "online" HTTP-based Internet
+ *  reachability check is active for the specified network service IP
+ *  configuration type.
+ *
+ *  @param[in]  service  A pointer to the immutable network service
+ *                       for which to determine whether an "online"
+ *                       HTTP-based Internet reachability is active.
+ *  @param[in]  type     The IP configuration type for which to
+ *                       determine whether an "online" HTTP-based
+ *                       Internet reachability is active.
+ *
+ *  @returns
+ *    True if an "online" HTTP-based Internet reachability check is
+ *    active for the specified network service IP configuration type;
+ *    otherwise, false.
+ *
+ */
 static bool online_check_is_active(const struct connman_service *service,
 		enum connman_ipconfig_type type)
 {
