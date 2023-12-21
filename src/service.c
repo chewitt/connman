@@ -45,6 +45,18 @@
 #define VPN_AUTOCONNECT_TIMEOUT_STEP 30
 #define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD 270
 
+/*
+ * There are many call sites throughout this module for these
+ * functions. These are macros to help, during debugging, to acertain
+ * where they were called from.
+ */
+
+#define DEFAULT_CHANGED() \
+	default_changed(__func__)
+
+#define SERVICE_LIST_SORT() \
+	service_list_sort(__func__)
+
 typedef guint (*online_check_timeout_compute_t)(unsigned int interval);
 typedef bool (*is_counter_threshold_met_predicate_t)(
 	const struct connman_service *service,
@@ -223,7 +235,7 @@ static struct connman_ipconfig *create_ip6config(struct connman_service *service
 static void dns_changed(struct connman_service *service);
 static void vpn_auto_connect(void);
 static void trigger_autoconnect(struct connman_service *service);
-static void service_list_sort(void);
+static void service_list_sort(const char *function);
 static void complete_online_check(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					bool success,
@@ -3173,7 +3185,7 @@ static bool handle_continuous_online_check_success(
 		 * this service being the default (that is, has the default
 		 * route) service.
 		 */
-		service_list_sort();
+		SERVICE_LIST_SORT();
 
 		if (connman_service_is_default(service)) {
 			__connman_service_ipconfig_indicate_state(
@@ -3457,7 +3469,7 @@ static bool handle_continuous_online_check_failure(
 
 		set_error(service, CONNMAN_SERVICE_ERROR_ONLINE_CHECK_FAILED);
 
-		service_list_sort();
+		SERVICE_LIST_SORT();
 
 		__connman_gateway_update();
 	}
@@ -4075,9 +4087,11 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
-static void default_changed(void)
+static void default_changed(const char *function)
 {
 	struct connman_service *service = connman_service_get_default();
+
+	DBG("from %s()", function);
 
 	if (service == current_default)
 		return;
@@ -8143,13 +8157,20 @@ static gint service_compare(gconstpointer a, gconstpointer b)
  *  the network services list. On completion of the sort, a D-Bus
  *  "ServicesChanged" signal is scheduled.
  *
+ *  @param[in]  function  A pointer to an immutable null-terminated
+ *                        C string containing the function name to
+ *                        which the call to this function should be
+ *                        attributed.
+ *
  *  @sa service_compare
  *  @sa service_compare_preferred
  *  @sa service_schedule_changed
  *
  */
-static void service_list_sort(void)
+static void service_list_sort(const char *function)
 {
+	DBG("from %s()", function);
+
 	if (service_list && service_list->next) {
 		service_list = g_list_sort(service_list, service_compare);
 		service_schedule_changed();
@@ -8434,7 +8455,7 @@ int __connman_service_set_favorite_delayed(struct connman_service *service,
 
 	if (!delay_ordering) {
 
-		service_list_sort();
+		SERVICE_LIST_SORT();
 
 		__connman_gateway_update();
 	}
@@ -8573,7 +8594,7 @@ static void report_error_cb(void *user_context, bool retry,
 		__connman_service_clear_error(service);
 
 		service_complete(service);
-		service_list_sort();
+		SERVICE_LIST_SORT();
 		__connman_gateway_update();
 	}
 }
@@ -8945,7 +8966,7 @@ static int service_indicate_state(struct connman_service *service)
 
 		service_update_preferred_order(def_service, service, new_state);
 
-		default_changed();
+		DEFAULT_CHANGED();
 
 		__connman_service_set_favorite(service, true);
 
@@ -8995,7 +9016,7 @@ static int service_indicate_state(struct connman_service *service)
 
 		reply_pending(service, ECONNABORTED);
 
-		default_changed();
+		DEFAULT_CHANGED();
 
 		cancel_online_check(service, CONNMAN_IPCONFIG_TYPE_ALL);
 
@@ -9032,7 +9053,7 @@ static int service_indicate_state(struct connman_service *service)
 		break;
 	}
 
-	service_list_sort();
+	SERVICE_LIST_SORT();
 
 	__connman_gateway_update();
 
@@ -9046,7 +9067,7 @@ notifier:
 
 	if (is_online(new_state)) {
 		__connman_notifier_enter_online(service->type);
-		default_changed();
+		DEFAULT_CHANGED();
 	}
 
 	return 0;
@@ -9117,7 +9138,7 @@ int __connman_service_indicate_default(struct connman_service *service)
 		return -EINPROGRESS;
 	}
 
-	default_changed();
+	DEFAULT_CHANGED();
 
 	return 0;
 }
@@ -9734,7 +9755,7 @@ int __connman_service_provision_changed(const char *ident)
 	if (services_dirty) {
 		services_dirty = false;
 
-		service_list_sort();
+		SERVICE_LIST_SORT();
 
 		__connman_gateway_update();
 	}
@@ -9807,7 +9828,7 @@ static int service_register(struct connman_service *service)
 	if (__connman_config_provision_service(service) < 0)
 		service_load(service);
 
-	service_list_sort();
+	SERVICE_LIST_SORT();
 
 	__connman_gateway_update();
 
@@ -10232,7 +10253,7 @@ static void update_from_network(struct connman_service *service,
 	if (!service->network)
 		service->network = connman_network_ref(network);
 
-	service_list_sort();
+	SERVICE_LIST_SORT();
 }
 
 static void trigger_autoconnect(struct connman_service *service)
@@ -10439,7 +10460,7 @@ roaming:
 
 sorting:
 	if (need_sort) {
-		service_list_sort();
+		SERVICE_LIST_SORT();
 	}
 }
 
