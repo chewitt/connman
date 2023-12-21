@@ -109,7 +109,17 @@ struct online_check_state {
 	 *
 	 */
 	unsigned int interval;
+
+	/**
+	 *	The number of sustained, back-to-back "online" reachability
+	 *	check successes for "continuous" online check mode.
+	 */
 	unsigned int successes;
+
+	/**
+	 *	The number of sustained, back-to-back "online" reachability
+	 *	check failures for "continuous" online check mode.
+	 */
 	unsigned int failures;
 };
 
