@@ -565,6 +565,8 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	/* EnableOnlineCheck */
+
 	boolean = __connman_config_get_bool(config, "General",
 					CONF_ENABLE_ONLINE_CHECK, &error);
 	if (!error) {
@@ -574,6 +576,8 @@ static void parse_config(GKeyFile *config)
 	}
 
 	g_clear_error(&error);
+
+	/* EnableOnlineToReadyTransition */
 
 	boolean = __connman_config_get_bool(config, "General",
 			CONF_ENABLE_ONLINE_TO_READY_TRANSITION, &error);
@@ -603,7 +607,7 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
-	/* OnlineCheckConnecTimeout */
+	/* OnlineCheckConnectTimeout */
 
 	real = g_key_file_get_double(config, "General",
 			CONF_ONLINE_CHECK_CONNECT_TIMEOUT, &error);
@@ -624,6 +628,8 @@ static void parse_config(GKeyFile *config)
 
 	g_clear_error(&error);
 
+	/* OnlineCheckIPv4URL */
+
 	string = __connman_config_get_string(config, "General",
 					CONF_ONLINE_CHECK_IPV4_URL, &error);
 	if (!error)
@@ -633,6 +639,8 @@ static void parse_config(GKeyFile *config)
 			g_strdup(DEFAULT_ONLINE_CHECK_IPV4_URL);
 
 	g_clear_error(&error);
+
+	/* OnlineCheckIPv6URL */
 
 	string = __connman_config_get_string(config, "General",
 					CONF_ONLINE_CHECK_IPV6_URL, &error);
@@ -644,6 +652,8 @@ static void parse_config(GKeyFile *config)
 
 
 	g_clear_error(&error);
+
+	/* OnlineCheck{Initial,Max}Interval */
 
 	integer = g_key_file_get_integer(config, "General",
 			CONF_ONLINE_CHECK_INITIAL_INTERVAL, &error);
@@ -702,6 +712,8 @@ static void parse_config(GKeyFile *config)
 	}
 
 	g_clear_error(&error);
+
+	/* OnlineCheckIntervalStyle */
 
 	string = __connman_config_get_string(config, "General",
 					CONF_ONLINE_CHECK_INTERVAL_STYLE, &error);
