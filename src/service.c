@@ -2335,6 +2335,26 @@ static void online_check_state_reset(struct connman_service *service)
 	clear_error(service);
 }
 
+/**
+ *  @brief
+ *    Log the specified IPv4 and IPv6 online check counters for the
+ *    specified service.
+ *
+ *  This logs the specified IPv4 and IPv6 online check counters
+ *  described by the provided description for the specified network
+ *  service.
+ *
+ *  @param[in]  service              A pointer to the immutable network
+ *                                   service associated with @a
+ *                                   ipv4_counter and @a ipv6_counter.
+ *  @param[in]  counter_description  A pointer to a null-terminated C
+ *                                   string describing @a ipv4_counter
+ *                                   and @a ipv6_counter. For example,
+ *                                   "failure".
+ *  @param[in]  ipv4_counter         The IPv4-specific counter to log.
+ *  @param[in]  ipv6_counter         The IPv6-specific counter to log.
+ *
+ */
 static void online_check_counters_log(
 			const struct connman_service *service,
 			const char *counter_description,
