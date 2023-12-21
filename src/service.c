@@ -2430,10 +2430,18 @@ int __connman_service_wispr_start(struct connman_service *service,
 	if (!service)
 		return -EINVAL;
 
+	switch (type) {
+	case CONNMAN_IPCONFIG_TYPE_IPV4:
+	case CONNMAN_IPCONFIG_TYPE_IPV6:
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->online_check_state_ipv4.interval =
 					online_check_initial_interval;
-	else
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		service->online_check_state_ipv6.interval =
 					online_check_initial_interval;
 
