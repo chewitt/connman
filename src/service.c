@@ -2836,6 +2836,24 @@ static void reschedule_online_check(struct connman_service *service,
 		online_check_state->interval++;
 }
 
+/**
+ *  @brief
+ *    Increment and log the specified online check counter.
+ *
+ *  This increments by one (1) and logs the post-increment value of
+ *  the specified online check counter associated with the specified
+ *  network service.
+ *
+ *  @param[in]  service              A pointer to the immutable network
+ *                                   service associated with @a
+ *                                   counter.
+ *  @param[in]  type                 The IP configuration type associated
+ *                                   with @a counter.
+ *  @param[in]  counter_description  A pointer to a null-terminated C
+ *                                   string describing @a counter. For
+ *                                   example, "failure".
+ *
+ */
 static void online_check_counter_increment_and_log(
 			const struct connman_service *service,
 			enum connman_ipconfig_type type,
