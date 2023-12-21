@@ -7389,6 +7389,15 @@ static gboolean service_send_changed(gpointer data)
 	return FALSE;
 }
 
+/**
+ *  @brief
+ *    Schedule a D-Bus "ServicesChanged" signal at 100 milliseconds
+ *    from now.
+ *
+ *  @sa service_send_changed
+ *  @sa service_list_sort
+ *
+ */
 static void service_schedule_changed(void)
 {
 	if (services_notify->id != 0)
