@@ -2608,6 +2608,26 @@ static bool is_online_check_success_threshold_met_predicate(
 	return threshold_met;
 }
 
+/**
+ *  @brief
+ *    Determine whether the online check successes threshold is met.
+ *
+ *  This attempts to determine whether the online check successes
+ *  threshold is met, comparing the current IPv4 and IPv6 online check
+ *  success counts against the "OnlineCheckSuccessesThreshold" settings
+ *  value and returning @a true if @b either the IPv4 @b or IPv6 counts
+ *  meet or exceed the threshold.
+ *
+ *  @param[in]  service  A pointer to the immutable service for which
+ *                       to determine whether the online check success
+ *                       threshold is met.
+ *
+ *  @returns
+ *    True if the success threshold is met; otherwise, false.
+ *
+ *  @sa online_check_failures_threshold_is_met
+ *
+ */
 static bool online_check_successes_threshold_is_met(
 			const struct connman_service *service)
 {
