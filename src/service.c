@@ -2293,8 +2293,10 @@ static void reschedule_online_check(struct connman_service *service,
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		redo_func = redo_wispr_ipv4;
-	else
+	else if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
 		redo_func = redo_wispr_ipv6;
+	else
+		return;
 
 	DBG("updating online checkout timeout period");
 
