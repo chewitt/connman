@@ -186,7 +186,15 @@ struct connman_service {
 	char *pac;
 	bool wps;
 	bool wps_advertizing;
+
+    /**
+     *  IPv4-specific "online" reachability check state.
+     */
 	struct online_check_state online_check_state_ipv4;
+
+    /**
+     *  IPv6-specific "online" reachability check state.
+     */
 	struct online_check_state online_check_state_ipv6;
 
     /**
