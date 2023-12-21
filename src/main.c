@@ -379,6 +379,44 @@ static void online_check_mode_set_to_deprecated(void)
 	}
 }
 
+static void online_check_settings_log(void)
+{
+	connman_info("Online check mode \"%s\"",
+				 __connman_service_online_check_mode2string(
+					connman_settings.online_check_mode));
+
+	if (connman_settings.online_check_mode ==
+			CONNMAN_SERVICE_ONLINE_CHECK_MODE_NONE)
+		return;
+
+	connman_info("Online check IPv4 URL \"%s\"",
+		connman_settings.online_check_ipv4_url);
+
+	connman_info("Online check IPv6 URL \"%s\"",
+		connman_settings.online_check_ipv6_url);
+
+	connman_info("Online check interval style \"%s\"",
+		connman_settings.online_check_interval_style);
+
+	connman_info("Online check interval range [%u, %u]",
+		connman_settings.online_check_initial_interval,
+		connman_settings.online_check_max_interval);
+
+	if (connman_settings.online_check_connect_timeout_ms)
+		connman_info("Online check connect timeout %u ms",
+			connman_settings.online_check_connect_timeout_ms);
+
+	if (connman_settings.online_check_mode !=
+			CONNMAN_SERVICE_ONLINE_CHECK_MODE_CONTINUOUS)
+		return;
+
+	connman_info("Online check continuous mode failures threshold %d",
+		connman_settings.online_check_failures_threshold);
+
+	connman_info("Online check continuous mode successes threshold %d",
+		connman_settings.online_check_successes_threshold);
+}
+
 static void parse_config(GKeyFile *config)
 {
 	GError *error = NULL;
@@ -571,8 +609,6 @@ static void parse_config(GKeyFile *config)
 					CONF_ENABLE_ONLINE_CHECK, &error);
 	if (!error) {
 		connman_settings.enable_online_check = boolean;
-		if (!boolean)
-			connman_info("Online check disabled by main config.");
 	}
 
 	g_clear_error(&error);
@@ -622,10 +658,6 @@ static void parse_config(GKeyFile *config)
 				real * 1000;
 	}
 
-	if (connman_settings.online_check_connect_timeout_ms)
-		connman_info("Online check connect timeout %ums",
-			connman_settings.online_check_connect_timeout_ms);
-
 	g_clear_error(&error);
 
 	/* OnlineCheckIPv4URL */
@@ -649,7 +681,6 @@ static void parse_config(GKeyFile *config)
 	else
 		connman_settings.online_check_ipv6_url =
 			g_strdup(DEFAULT_ONLINE_CHECK_IPV6_URL);
-
 
 	g_clear_error(&error);
 
@@ -777,6 +808,8 @@ static void parse_config(GKeyFile *config)
 		g_free(string);
 
 	g_clear_error(&error);
+
+	online_check_settings_log();
 }
 
 static int config_init(const char *file)
