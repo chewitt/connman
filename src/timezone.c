@@ -38,9 +38,10 @@
 
 #include "connman.h"
 
-#define ETC_SYSCONFIG_CLOCK	"/etc/sysconfig/clock"
-#define USR_SHARE_ZONEINFO	"/usr/share/zoneinfo"
-#define USR_SHARE_ZONEINFO_MAP	USR_SHARE_ZONEINFO "/zone1970.tab"
+#define ETC_SYSCONFIG_CLOCK		"/etc/sysconfig/clock"
+#define USR_SHARE_ZONEINFO		"/usr/share/zoneinfo"
+#define USR_SHARE_ZONEINFO_MAP		USR_SHARE_ZONEINFO "/zone1970.tab"
+#define USR_SHARE_ZONEINFO_MAP_OLD	USR_SHARE_ZONEINFO "/zone.tab"
 
 static char *read_key_file(const char *pathname, const char *key)
 {
@@ -115,11 +116,16 @@ static char *read_key_file(const char *pathname, const char *key)
 }
 
 static int compare_file(void *src_map, struct stat *src_st,
-						const char *pathname)
+				const char *real_path, const char *pathname)
 {
 	struct stat dst_st;
 	void *dst_map;
 	int fd, result;
+
+	DBG("real path %s path name %s", real_path, pathname);
+
+	if (real_path && g_strcmp0(real_path, pathname))
+		return -1;
 
 	fd = open(pathname, O_RDONLY | O_CLOEXEC);
 	if (fd < 0)
@@ -151,7 +157,8 @@ static int compare_file(void *src_map, struct stat *src_st,
 }
 
 static char *find_origin(void *src_map, struct stat *src_st,
-				const char *basepath, const char *subpath)
+				const char* real_path, const char *basepath,
+				const char *subpath)
 {
 	DIR *dir;
 	struct dirent *d;
@@ -186,7 +193,8 @@ static char *find_origin(void *src_map, struct stat *src_st,
 						"%s/%s/%s", basepath,
 							subpath, d->d_name);
 
-			if (compare_file(src_map, src_st, pathname) == 0) {
+			if (compare_file(src_map, src_st, real_path, pathname)
+									== 0) {
 				if (!subpath)
 					str = g_strdup(d->d_name);
 				else
@@ -214,7 +222,8 @@ static char *find_origin(void *src_map, struct stat *src_st,
 				snprintf(pathname, sizeof(pathname),
 						"%s/%s", subpath, d->d_name);
 
-			str = find_origin(src_map, src_st, basepath, pathname);
+			str = find_origin(src_map, src_st, real_path, basepath,
+						pathname);
 			if (str) {
 				closedir(dir);
 				return str;
@@ -228,7 +237,52 @@ static char *find_origin(void *src_map, struct stat *src_st,
 	return NULL;
 }
 
-static char *get_timezone_alpha2(const char *zone)
+/* TZ map file format: Countrycodes Coordinates TZ Comments */
+enum tz_map_item {
+	TZ_MAP_ITEM_ISO3166 = 0,
+	TZ_MAP_ITEM_COORDINATE = 1,
+	TZ_MAP_ITEM_TIMEZONE = 2,
+	TZ_MAP_ITEM_COMMENT = 3,
+};
+
+static bool iso3166_matches(const char *codes, const char *iso3166)
+{
+	gchar **tokens;
+	guint len;
+	guint i;
+	bool ret = false;
+
+	if (!codes || !iso3166)
+		return false;
+
+	tokens = g_strsplit(codes, ",", -1);
+	if (!tokens)
+		return false;
+
+	len = g_strv_length(tokens);
+	if (len < 2) {
+		g_strfreev(tokens);
+		return false;
+	}
+
+	DBG("search %s from %s", iso3166, codes);
+
+	for (i = 0; i < len; i++) {
+		DBG("#%d %s", i, tokens[i]);
+
+		if (!g_strcmp0(tokens[i], iso3166)) {
+			ret = true;
+			break;
+		}
+	}
+
+	g_strfreev(tokens);
+
+	return ret;
+}
+
+static char *get_timezone_alpha2(const char *zone, const char *mapfile,
+						enum tz_map_item map_item)
 {
 	GIOChannel *channel;
 	struct stat st;
@@ -236,15 +290,15 @@ static char *get_timezone_alpha2(const char *zone)
 	char *line;
 	char *alpha2 = NULL;
 	gsize len;
+	bool found = false;
 	int fd;
 
 	if (!zone)
 		return NULL;
 
-	fd = open(USR_SHARE_ZONEINFO_MAP, O_RDONLY | O_CLOEXEC);
+	fd = open(mapfile, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
-		connman_warn("failed to open zoneinfo map %s",
-							USR_SHARE_ZONEINFO_MAP);
+		connman_warn("failed to open zoneinfo map %s", mapfile);
 		return NULL;
 	}
 
@@ -256,23 +310,23 @@ static char *get_timezone_alpha2(const char *zone)
 
 	channel = g_io_channel_unix_new(fd);
 	if (!channel) {
-		connman_warn("failed to create io channel for %s",
-							USR_SHARE_ZONEINFO_MAP);
+		connman_warn("failed to create io channel for %s", mapfile);
 		close(fd);
 		return NULL;
 	}
 
-	DBG("read %s for %s", USR_SHARE_ZONEINFO_MAP, zone);
+	DBG("read %s for %s", mapfile, zone);
 	g_io_channel_set_encoding(channel, "UTF-8", NULL);
 
 	while (g_io_channel_read_line(channel, &line, &len, NULL, NULL) ==
 							G_IO_STATUS_NORMAL) {
+		found = false;
+
 		if (!line || !*line || *line == '#' || *line == '\n') {
 			g_free(line);
 			continue;
 		}
 
-		/* File format: Countrycodes Coordinates TZ Comments */
 		tokens = g_strsplit_set(line, " \t", 4);
 		if (!tokens) {
 			connman_warn("line %s failed to parse", line);
@@ -280,13 +334,35 @@ static char *get_timezone_alpha2(const char *zone)
 			continue;
 		}
 
-		if (g_strv_length(tokens) >= 3 && !g_strcmp0(
-						g_strstrip(tokens[2]), zone)) {
+		if (g_strv_length(tokens) >= 3) {
+			switch (map_item) {
+			case TZ_MAP_ITEM_ISO3166:
+
+				if (!g_strcmp0(tokens[0], zone)) {
+					found = true;
+					break;
+				}
+
+				if (iso3166_matches(tokens[0], zone))
+					found = true;
+				break;
+			case TZ_MAP_ITEM_COORDINATE:
+				break;
+			case TZ_MAP_ITEM_TIMEZONE:
+				if (!g_strcmp0(g_strstrip(tokens[2]), zone))
+					found = true;
+				break;
+			case TZ_MAP_ITEM_COMMENT:
+				break;
+			}
+
 			/*
 			 * Multiple country codes can be listed, use the first
-			 * 2 chars.
+			 * 2 chars as backends such as gsupplicant support only
+			 * the main country code.
 			 */
-			alpha2 = g_strndup(g_strstrip(tokens[0]), 2);
+			if (found)
+				alpha2 = g_strndup(g_strstrip(tokens[0]), 2);
 		}
 
 		g_strfreev(tokens);
@@ -300,14 +376,51 @@ static char *get_timezone_alpha2(const char *zone)
 			} else {
 				DBG("Zone %s ISO3166 country code %s", zone,
 									alpha2);
+				break;
 			}
-
-			break;
 		}
 	}
 
 	g_io_channel_unref(channel);
 	close(fd);
+
+	return alpha2;
+}
+
+static char *try_get_timezone_alpha2(const char *zone)
+{
+	char *alpha2;
+	char *alpha2_old;
+
+	/* First try the official map */
+	alpha2 = get_timezone_alpha2(zone, USR_SHARE_ZONEINFO_MAP,
+							TZ_MAP_ITEM_TIMEZONE);
+	if (alpha2)
+		return alpha2;
+
+	DBG("%s not found in %s", zone, USR_SHARE_ZONEINFO_MAP);
+
+	/* The zone was not found in official map, try with deprecated */
+	alpha2_old = get_timezone_alpha2(zone, USR_SHARE_ZONEINFO_MAP_OLD,
+							TZ_MAP_ITEM_TIMEZONE);
+	if (!alpha2_old) {
+		DBG("%s not found in %s", zone, USR_SHARE_ZONEINFO_MAP_OLD);
+		return NULL;
+	}
+
+	/*
+	 * Found from deprecated, try to get main region code from official new
+	 * map using the iso3166 search. This is because some of the codes
+	 * defined in the deprecated are not supported by the backends, e.g.,
+	 * gsupplicant and the main code should be used.
+	 */
+	alpha2 = get_timezone_alpha2(alpha2_old, USR_SHARE_ZONEINFO_MAP,
+							TZ_MAP_ITEM_ISO3166);
+
+	DBG("%s -> ISO3166 %s found in %s as %s", zone, alpha2_old,
+						USR_SHARE_ZONEINFO_MAP, alpha2);
+
+	g_free(alpha2_old);
 
 	return alpha2;
 }
@@ -319,13 +432,16 @@ char *__connman_timezone_lookup(void)
 	int fd;
 	char *zone;
 	char *alpha2;
+	const char *local_time;
+	char real_path[PATH_MAX];
 
 	zone = read_key_file(ETC_SYSCONFIG_CLOCK, "ZONE");
 
 	DBG("sysconfig zone %s", zone);
 
-	fd = open(connman_setting_get_string("Localtime"),
-							O_RDONLY | O_CLOEXEC);
+	local_time = connman_setting_get_string("Localtime");
+
+	fd = open(local_time, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
 		g_free(zone);
 		return NULL;
@@ -333,6 +449,15 @@ char *__connman_timezone_lookup(void)
 
 	if (fstat(fd, &st) < 0)
 		goto done;
+
+	if (!realpath(local_time, real_path)) {
+		connman_error("Failed to get real path of %s: %d/%s",
+					local_time, errno, strerror(errno));
+		g_free(zone);
+		close(fd);
+
+		return NULL;
+	}
 
 	if (S_ISREG(st.st_mode)) {
 		map = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
@@ -349,14 +474,15 @@ char *__connman_timezone_lookup(void)
 			snprintf(pathname, PATH_MAX, "%s/%s",
 						USR_SHARE_ZONEINFO, zone);
 
-			if (compare_file(map, &st, pathname) != 0) {
+			if (compare_file(map, &st, NULL, pathname) != 0) {
 				g_free(zone);
 				zone = NULL;
 			}
 		}
 
 		if (!zone)
-			zone = find_origin(map, &st, USR_SHARE_ZONEINFO, NULL);
+			zone = find_origin(map, &st, real_path,
+						USR_SHARE_ZONEINFO, NULL);
 
 		munmap(map, st.st_size);
 	} else {
@@ -370,7 +496,7 @@ done:
 	DBG("localtime zone %s", zone);
 
 	if (connman_setting_get_bool("RegdomFollowsTimezone")) {
-		alpha2 = get_timezone_alpha2(zone);
+		alpha2 = try_get_timezone_alpha2(zone);
 		if (alpha2) {
 			DBG("change regdom to %s", alpha2);
 			connman_technology_set_regdom(alpha2);
