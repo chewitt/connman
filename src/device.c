@@ -589,6 +589,7 @@ int connman_device_set_powered(struct connman_device *device,
 {
 	struct connman_device_scan_params params;
 	enum connman_service_type type;
+	const char *alpha2;
 	int i;
 
 	DBG("device %p powered %d", device, powered);
@@ -607,6 +608,16 @@ int connman_device_set_powered(struct connman_device *device,
 	if (!device->powered) {
 		__connman_technology_disabled(type);
 		return 0;
+	} else {
+		/*
+		 * Check if the technology has regdom set and apply it for the
+		 * device. Regdom may have been changed when the device was
+		 * powered off and, thus, the new regdom has not been applied
+		 * here.
+		 */
+		alpha2 = __connman_technology_get_regdom(type);
+		if (alpha2)
+			connman_device_set_regdom(device, alpha2);
 	}
 
 	__connman_technology_enabled(type);
