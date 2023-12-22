@@ -225,7 +225,7 @@ default value is zero ('0') which indicates that no explicit
 connection timeout will be used, leaving the timeout to the underlying
 operating system and network stack.
 .TP
-.BI OnlineCheckInitialInterval= secs, OnlineCheckMaxInterval= secs
+.BI OnlineCheckInitialInterval= interval, OnlineCheckMaxInterval= interval
 Range of intervals between two online check requests.
 Please refer to the README for more detailed information.
 Default values are 1 and 12 respectively.
