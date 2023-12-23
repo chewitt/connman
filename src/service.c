@@ -4187,6 +4187,17 @@ bool __connman_service_index_is_default(int index)
 	return __connman_service_get_index(service) == index;
 }
 
+static void service_log_default(const struct connman_service *service)
+{
+	g_autofree char *interface = NULL;
+
+	interface = connman_service_get_interface(service);
+
+	connman_info("Interface %s [ %s ] is the default",
+		interface,
+		__connman_service_type2string(service->type));
+}
+
 static void default_changed(const char *function)
 {
 	struct connman_service *service = connman_service_get_default();
@@ -4233,6 +4244,8 @@ static void default_changed(const char *function)
 	current_default = service;
 
 	if (service) {
+		service_log_default(service);
+
 		if (service->hostname &&
 				connman_setting_get_bool("AllowHostnameUpdates"))
 			__connman_utsname_set_hostname(service->hostname);
@@ -4257,9 +4270,23 @@ static void default_changed(const char *function)
 	__connman_notifier_default_changed(service);
 }
 
+static void service_log_state(const struct connman_service *service)
+{
+	g_autofree char *interface = NULL;
+
+	interface = connman_service_get_interface(service);
+
+	connman_info("Interface %s [ %s ] state is %s",
+		interface,
+		__connman_service_type2string(service->type),
+		state2string(service->state));
+}
+
 static void state_changed(struct connman_service *service)
 {
 	const char *str;
+
+	service_log_state(service);
 
 	__connman_notifier_service_state_changed(service, service->state);
 
@@ -6450,6 +6477,19 @@ static DBusMessage *set_property(DBusConnection *conn,
 	return g_dbus_create_reply(msg, DBUS_TYPE_INVALID);
 }
 
+static void service_log_error(const struct connman_service *service,
+					enum connman_service_error error)
+{
+	g_autofree char *interface = NULL;
+
+	interface = connman_service_get_interface(service);
+
+	connman_warn("Interface %s [ %s ] error \"%s\"",
+		interface,
+		__connman_service_type2string(service->type),
+		error2string(error));
+}
+
 /**
  *  @brief
  *    Set the specified network service "Error" property.
@@ -6471,7 +6511,14 @@ static DBusMessage *set_property(DBusConnection *conn,
 static void set_error(struct connman_service *service,
 					enum connman_service_error error)
 {
-	const char *str;
+	const char *str = error2string(error);
+
+	if (!str)
+		str = "";
+
+	DBG("service %p (%s) error %d (%s)",
+		service, connman_service_get_identifier(service),
+		error, str);
 
 	if (service->error == error)
 		return;
@@ -6481,13 +6528,11 @@ static void set_error(struct connman_service *service,
 	if (!service->path)
 		return;
 
+	if (error != CONNMAN_SERVICE_ERROR_UNKNOWN)
+		service_log_error(service, error);
+
 	if (!allow_property_changed(service))
 		return;
-
-	str = error2string(service->error);
-
-	if (!str)
-		str = "";
 
 	connman_dbus_property_changed_basic(service->path,
 				CONNMAN_SERVICE_INTERFACE, "Error",
