@@ -2195,9 +2195,17 @@ static void cancel_online_check(struct connman_service *service,
 static bool online_check_is_enabled_check(
 		const struct connman_service *service)
 {
+	g_autofree char *interface = NULL;
+
 	if (!__connman_service_is_online_check_enabled()) {
-		connman_info("Online check disabled. "
-			"Default service remains in READY state.");
+		interface = connman_service_get_interface(service);
+
+		connman_info("Online check disabled; "
+			"interface %s [ %s ] remains in %s state.",
+			interface,
+			__connman_service_type2string(service->type),
+			state2string(CONNMAN_SERVICE_STATE_READY));
+
 		return false;
 	}
 
