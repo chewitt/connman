@@ -252,7 +252,6 @@ an hour at interval 19 which "geometric" does not reach until interval
 60.
 .TP
 .BI EnableOnlineToReadyTransition=true\ \fR|\fB\ false
-WARNING: Experimental feature!!!
 In addition to EnableOnlineCheck setting, enable or disable use of HTTP GET
 to detect the loss of end-to-end connectivity.
 If this setting is false, when the default service transitions to ONLINE
