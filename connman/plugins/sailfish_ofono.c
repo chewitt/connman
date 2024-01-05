@@ -576,6 +576,8 @@ static int modem_configure(struct modem_data *md)
 					md->connctx->settings, ns);
 		} else {
 			DBG("set network %p IPv4 DHCP", md->network);
+			// Updates ipconfig index
+			connman_service_create_ip4config(service, index);
 			connman_network_set_ipv4_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_DHCP);
 		}
@@ -588,6 +590,8 @@ static int modem_configure(struct modem_data *md)
 					md->connctx->ipv6_settings, ns);
 		} else {
 			DBG("set network %p IPv6 AUTO", md->network);
+			// Updates ipconfig index
+			connman_service_create_ip6config(service, index);
 			connman_network_set_ipv6_method(md->network,
 					CONNMAN_IPCONFIG_METHOD_AUTO);
 		}

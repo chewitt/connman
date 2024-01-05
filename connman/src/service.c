@@ -9176,8 +9176,10 @@ void connman_service_create_ip4config(struct connman_service *service,
 {
 	DBG("ipv4 %p", service->ipconfig_ipv4);
 
-	if (service->ipconfig_ipv4)
+	if (service->ipconfig_ipv4) {
+		__connman_ipconfig_set_index(service->ipconfig_ipv4, index);
 		return;
+	}
 
 	service->ipconfig_ipv4 = create_ip4config(service, index,
 			CONNMAN_IPCONFIG_METHOD_DHCP);
@@ -9206,8 +9208,10 @@ void connman_service_create_ip6config(struct connman_service *service,
 {
 	DBG("ipv6 %p", service->ipconfig_ipv6);
 
-	if (service->ipconfig_ipv6)
+	if (service->ipconfig_ipv6) {
+		__connman_ipconfig_set_index(service->ipconfig_ipv6, index);
 		return;
+	}
 
 	service->ipconfig_ipv6 = create_ip6config(service, index);
 

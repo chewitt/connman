@@ -177,15 +177,15 @@ static void dhcp_success(struct connman_network *network,
 		goto err;
 
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4)
+		return;
+
 	if (ipconfig_ipv4 != ipconfig) {
 		DBG("ignore result, ipconfig has changed");
 		return;
 	}
 
 	DBG("lease acquired for ipconfig %p", ipconfig_ipv4);
-
-	if (!ipconfig_ipv4)
-		return;
 
 	err = __connman_ipconfig_address_add(ipconfig_ipv4);
 	if (err < 0)
@@ -215,15 +215,15 @@ static void dhcp_failure(struct connman_network *network,
 		return;
 
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4)
+		return;
+
 	if (ipconfig_ipv4 != ipconfig) {
 		DBG("ignore failure, ipconfig has changed");
 		return;
 	}
 
 	DBG("lease lost for ipconfig %p", ipconfig_ipv4);
-
-	if (!ipconfig_ipv4)
-		return;
 
 	__connman_ipconfig_address_remove(ipconfig_ipv4);
 	__connman_ipconfig_gateway_remove(ipconfig_ipv4);
