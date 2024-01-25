@@ -444,54 +444,6 @@ bool __connman_service_is_really_hidden(struct connman_service *service)
 	return service && (service->hidden || service->hidden_service);
 }
 
-static void do_single_online_check(struct connman_service *service, enum connman_ipconfig_type type)
-{
-	if (!service)
-		return;
-
-	if (!__connman_service_is_connected_state(service, type))
-		return;
-
-	switch (type) {
-	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		service->online_check_interval_ipv4 = ONLINE_CHECK_RETRY_COUNT;
-		break;
-	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		service->online_check_interval_ipv6 = ONLINE_CHECK_RETRY_COUNT;
-		break;
-	default:
-		;
-	}
-
-	__connman_wispr_start(service, type);
-}
-
-static void stop_recurring_online_check(struct connman_service *service)
-{
-	gboolean remove_ipv4 = false;
-	gboolean remove_ipv6 = false;
-
-	if (!service)
-		return;
-
-	if (service->online_timeout_ipv4 > 0)
-		remove_ipv4 = true;
-	if (service->online_timeout_ipv6 > 0)
-		remove_ipv6 = true;
-
-	if (remove_ipv4) {
-		g_source_remove(service->online_timeout_ipv4);
-		service->online_timeout_ipv4 = 0;
-		connman_service_unref(service);
-	}
-
-	if (remove_ipv6) {
-		g_source_remove(service->online_timeout_ipv6);
-		service->online_timeout_ipv6 = 0;
-		connman_service_unref(service);
-	}
-}
-
 static void get_config_string(GKeyFile *keyfile, const char *group,
 					const char *key, char **value)
 {
@@ -1948,6 +1900,9 @@ static bool check_proxy_setup(struct connman_service *service)
 
 static void cancel_online_check(struct connman_service *service)
 {
+	if (!service)
+		return;
+
 	if (service->online_timeout_ipv4) {
 		g_source_remove(service->online_timeout_ipv4);
 		service->online_timeout_ipv4 = 0;
@@ -4987,7 +4942,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 		dns_configuration_changed(service);
 
-		stop_recurring_online_check(service);
+		cancel_online_check(service);
 
 		start_wispr_when_connected(service);
 
@@ -5108,7 +5063,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		__connman_notifier_proxy_changed(service);
 
-		stop_recurring_online_check(service);
+		cancel_online_check(service);
 
 		start_wispr_when_connected(service);
 
@@ -6799,7 +6754,7 @@ static void service_free(gpointer user_data)
 	g_free(service->access);
 	g_free(service->path);
 
-	stop_recurring_online_check(service);
+	cancel_online_check(service);
 	if (service->connect_retry_timer)
 		g_source_remove(service->connect_retry_timer);
 
@@ -8727,7 +8682,7 @@ int __connman_service_disconnect(struct connman_service *service)
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 
 	__connman_wispr_stop(service);
-	stop_recurring_online_check(service);
+	cancel_online_check(service);
 
 	reply_pending(service, ECONNABORTED);
 
@@ -9918,7 +9873,7 @@ void __connman_service_remove_from_network(struct connman_network *network)
 	__connman_connection_gateway_remove(service,
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
-	stop_recurring_online_check(service);
+	cancel_online_check(service);
 	if (service->connect_retry_timer) {
 		g_source_remove(service->connect_retry_timer);
 		service->connect_retry_timer = 0;
