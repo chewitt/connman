@@ -1969,12 +1969,11 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 		dbus_bool_t powered;
 
 		dbus_message_iter_get_basic(&value, &powered);
+
 		modem->powered = powered;
+		modem->set_powered = powered;
 
 		DBG("%s Powered %d", modem->path, modem->powered);
-
-		/* Set the powered according to the value */
-		modem_set_powered(modem, powered);
 	} else if (g_str_equal(key, "Online")) {
 		dbus_bool_t online;
 
