@@ -44,6 +44,7 @@ unsigned int *connman_setting_get_uint_list(const char *key)
 }
 
 bool connman_setting_get_bool(const char *key) { return true; }
+unsigned int connman_setting_get_uint(const char *key) { return 0; }
 char **connman_setting_get_string_list(const char *key) { return NULL; }
 unsigned int connman_timeout_input_request(void) { return 0; }
 unsigned int connman_timeout_browser_launch(void) { return 0; }
