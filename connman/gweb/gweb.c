@@ -99,6 +99,7 @@ struct web_session {
 	GWebResult result;
 
 	GWebResultFunc result_func;
+	GWebDnsRouteFunc dns_route_func;
 	GWebRouteFunc route_func;
 	GWebInputFunc input_func;
 	int fd;
@@ -107,6 +108,7 @@ struct web_session {
 	gpointer user_data;
 
 	bool cancelled;
+	bool dns_routes_set;
 };
 
 struct _GWeb {
@@ -473,6 +475,26 @@ static inline void call_result_func(struct web_session *session, guint16 status)
 
 	session->result_func(&session->result, session->user_data);
 
+}
+
+static inline int call_dns_route_func(struct web_session *session, bool add)
+{
+	if (add == session->dns_routes_set)
+		return -EALREADY;
+
+	if (session->dns_route_func) {
+		if (!session->dns_route_func(session->web->index, add,
+							session->user_data)) {
+			debug(session->web, "Failed to %s DNS routes",
+					add ? "add" : "remove");
+			// No service or gateway, route errors do not propagate
+			return -EINVAL;
+		}
+	}
+
+	session->dns_routes_set = add;
+
+	return 0;
 }
 
 static inline void call_route_func(struct web_session *session)
@@ -1276,6 +1298,11 @@ static void resolv_result(GResolvResultStatus status,
 					char **results, gpointer user_data)
 {
 	struct web_session *session = user_data;
+	int err;
+
+	err = call_dns_route_func(session, false);
+	if (err && err != -EALREADY)
+		debug(session->web, "failed to cleanup DNS routes");
 
 	if (session->cancelled)
 		return;
@@ -1310,7 +1337,8 @@ static bool is_ip_address(const char *host)
 static guint do_request(GWeb *web, const char *url,
 				const char *type, GWebInputFunc input,
 				int fd, gsize length, GWebResultFunc func,
-				GWebRouteFunc route, gpointer user_data)
+				GWebDnsRouteFunc dns_route, GWebRouteFunc route,
+				gpointer user_data)
 {
 	struct web_session *session;
 	const gchar *host;
@@ -1344,6 +1372,7 @@ static guint do_request(GWeb *web, const char *url,
 	session->web = web;
 
 	session->result_func = func;
+	session->dns_route_func = dns_route;
 	session->route_func = route;
 	session->input_func = input;
 	session->fd = fd;
@@ -1380,9 +1409,17 @@ static guint do_request(GWeb *web, const char *url,
 		session->address_action = g_timeout_add(0, already_resolved,
 							session);
 	} else {
+		int err = call_dns_route_func(session, true);
+		if (err && err != -EALREADY)
+			debug(session->web, "failed to add DNS routes");
+
 		session->resolv_action = g_resolv_lookup_hostname(web->resolv,
 					host, resolv_result, session);
 		if (session->resolv_action == 0) {
+			err = call_dns_route_func(session, false);
+			if (err && err != -EALREADY)
+				debug(session->web, "failed to del DNS routes");
+
 			free_session(session);
 			return 0;
 		}
@@ -1394,16 +1431,19 @@ static guint do_request(GWeb *web, const char *url,
 }
 
 guint g_web_request_get(GWeb *web, const char *url, GWebResultFunc func,
-		GWebRouteFunc route, gpointer user_data)
+		GWebDnsRouteFunc dnsroute, GWebRouteFunc route,
+		gpointer user_data)
 {
-	return do_request(web, url, NULL, NULL, -1, 0, func, route, user_data);
+	return do_request(web, url, NULL, NULL, -1, 0, func, dnsroute, route,
+			user_data);
 }
 
 guint g_web_request_post(GWeb *web, const char *url,
 				const char *type, GWebInputFunc input,
 				GWebResultFunc func, gpointer user_data)
 {
-	return do_request(web, url, type, input, -1, 0, func, NULL, user_data);
+	return do_request(web, url, type, input, -1, 0, func, NULL, NULL,
+			user_data);
 }
 
 guint g_web_request_post_file(GWeb *web, const char *url,
@@ -1421,7 +1461,7 @@ guint g_web_request_post_file(GWeb *web, const char *url,
 	if (fd < 0)
 		return 0;
 
-	ret = do_request(web, url, type, NULL, fd, st.st_size, func, NULL,
+	ret = do_request(web, url, type, NULL, fd, st.st_size, func, NULL, NULL,
 			user_data);
 	if (ret == 0)
 		close(fd);
@@ -1431,6 +1471,8 @@ guint g_web_request_post_file(GWeb *web, const char *url,
 
 bool g_web_cancel_request(GWeb *web, guint id)
 {
+	int err;
+
 	if (!web)
 		return false;
 
@@ -1440,6 +1482,11 @@ bool g_web_cancel_request(GWeb *web, guint id)
 
 	g_resolv_cancel_lookup(web->resolv, session->resolv_action);
 	session->cancelled = true;
+
+	/* Remove nameserver routes if added and not removed before cancel */
+	err = call_dns_route_func(session, false);
+	if (err && err != -EALREADY)
+		debug(session->web, "Could not remove nameserver routes");
 
 	return true;
 }
