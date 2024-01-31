@@ -500,6 +500,34 @@ static void portal_manage_status(GWebResult *result,
 	connman_service_unref(service);
 }
 
+static bool wispr_dns_route_request(int if_index, bool add, gpointer user_data)
+{
+	struct connman_wispr_portal_context *wp_context = user_data;
+	struct connman_service *service;
+	const char *gateway;
+
+	DBG("index %d type %s", if_index, add ? "add" : "remove");
+
+	service = __connman_service_lookup_from_index(if_index);
+	if (!service)
+		return false;
+
+	gateway = __connman_ipconfig_get_gateway_from_index(if_index,
+			wp_context->type);
+	if (!gateway)
+		return false;
+
+	DBG("service %p gw %s", service, gateway);
+
+	if (add)
+		__connman_service_nameserver_add_routes(service, gateway);
+	else
+		__connman_service_nameserver_del_routes(service,
+				wp_context->type);
+
+	return true;
+}
+
 static bool wispr_route_request(const char *address, int ai_family,
 		int if_index, gpointer user_data)
 {
@@ -538,6 +566,8 @@ static bool wispr_route_request(const char *address, int ai_family,
 
 	if (result < 0) {
 		g_free(route);
+		DBG("could not add host route %d address %s gateway %s",
+				if_index, address, gateway);
 		return false;
 	}
 
@@ -558,6 +588,7 @@ static void wispr_portal_request_portal(
 	wp_context->request_id = g_web_request_get(wp_context->web,
 					wp_context->status_url,
 					wispr_portal_web_result,
+					wispr_dns_route_request,
 					wispr_route_request,
 					wp_context);
 
@@ -868,7 +899,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		wispr_portal_context_ref(wp_context);
 		wp_context->request_id = g_web_request_get(wp_context->web,
 				redirect, wispr_portal_web_result,
-				wispr_route_request, wp_context);
+				wispr_dns_route_request, wispr_route_request,
+				wp_context);
 		skip_failed = true;
 
 		break;
