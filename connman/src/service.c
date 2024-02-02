@@ -7931,9 +7931,31 @@ static int service_indicate_state(struct connman_service *service)
 		default_changed();
 	}
 
-	if (new_state == CONNMAN_SERVICE_STATE_READY &&
-				service->type == CONNMAN_SERVICE_TYPE_VPN)
-		default_changed();
+	if (new_state == CONNMAN_SERVICE_STATE_READY) {
+		/*
+		 * Start online check always when upgrading to ready state.
+		 * This is because sorting is based also on the state and in
+		 * case there is an online service as default, e.g., mobile
+		 * data then other, a WLAN service, for instance, would not
+		 * start online check when becoming ready.
+		*/
+		if (old_state != CONNMAN_SERVICE_STATE_ONLINE) {
+			if (__connman_ipconfig_get_method(
+					service->ipconfig_ipv4) !=
+						CONNMAN_IPCONFIG_METHOD_OFF)
+				__connman_service_wispr_start(service,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+
+			if (__connman_ipconfig_get_method(
+					service->ipconfig_ipv6) !=
+						CONNMAN_IPCONFIG_METHOD_OFF)
+				__connman_service_wispr_start(service,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+		}
+
+		if (service->type == CONNMAN_SERVICE_TYPE_VPN)
+			default_changed();
+	}
 
 	return 0;
 }
