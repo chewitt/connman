@@ -8198,10 +8198,17 @@ int __connman_service_online_check_failed(struct connman_service *service,
 
 	timeout = connman_wakeup_timer_add_seconds(*interval * *interval,
 				redo_func, connman_service_ref(service));
-	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+		if (service->online_timeout_ipv4)
+			g_source_remove(service->online_timeout_ipv4);
+
 		service->online_timeout_ipv4 = timeout;
-	else
+	} else {
+		if (service->online_timeout_ipv6)
+			g_source_remove(service->online_timeout_ipv6);
+
 		service->online_timeout_ipv6 = timeout;
+	}
 
 
 	/* Increment the interval for the next time, set a maximum timeout of
