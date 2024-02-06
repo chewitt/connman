@@ -326,6 +326,8 @@ struct connman_service {
 	char **nameservers_config;
 	char **nameservers_auto;
 	int nameservers_timeout;
+	int nameservers_ipv4_refcount;
+	int nameservers_ipv6_refcount;
 	char **domains;
 	char *hostname;
 	char *domainname;
@@ -1786,13 +1788,9 @@ static void add_nameserver_route(int family, int index, char *nameserver,
 }
 
 static void nameserver_add_routes(int index, char **nameservers,
-					const char *gw)
+					const char *gw, int gw_family)
 {
-	int i, ns_family, gw_family;
-
-	gw_family = connman_inet_check_ipaddress(gw);
-	if (gw_family < 0)
-		return;
+	int i, ns_family;
 
 	for (i = 0; nameservers[i]; i++) {
 		ns_family = connman_inet_check_ipaddress(nameservers[i]);
@@ -1832,9 +1830,37 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 						const char *gw)
 {
 	int index;
+	int gw_family;
+	int refcount;
+	int typeint;
 
 	if (!service)
 		return;
+
+	gw_family = connman_inet_check_ipaddress(gw);
+	switch (gw_family) {
+	case AF_INET:
+		refcount = __sync_fetch_and_add(
+					&service->nameservers_ipv4_refcount, 1);
+		typeint = 4;
+		break;
+	case AF_INET6:
+		refcount = __sync_fetch_and_add(
+					&service->nameservers_ipv6_refcount, 1);
+		typeint = 6;
+		break;
+	default:
+		return;
+	}
+
+	if (refcount) {
+		DBG("%p IPv%d nameservers already added, refcount %d", service,
+							typeint, refcount);
+		return;
+	}
+
+	DBG("%p IPv%d nameservers refcount %d.", service,
+							typeint, refcount);
 
 	index = __connman_service_get_index(service);
 
@@ -1843,7 +1869,8 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 		 * Configured nameserver takes preference over the
 		 * discoverd nameserver gathered from DHCP, VPN, etc.
 		 */
-		nameserver_add_routes(index, service->nameservers_config, gw);
+		nameserver_add_routes(index, service->nameservers_config, gw,
+								gw_family);
 	} else if (service->nameservers) {
 		/*
 		 * We add nameservers host routes for nameservers that
@@ -1852,7 +1879,8 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 		 * tries to reach them. The subnet route is installed
 		 * when setting the interface IP address.
 		 */
-		nameserver_add_routes(index, service->nameservers, gw);
+		nameserver_add_routes(index, service->nameservers, gw,
+								gw_family);
 	}
 }
 
@@ -1860,9 +1888,56 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	int index;
+	int refcount4 = -1;
+	int refcount6 = -1;
 
 	if (!service)
 		return;
+
+	DBG("service %p type %s", service,
+					__connman_ipconfig_type2string(type));
+
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV6) {
+		if (service->nameservers_ipv4_refcount)
+			refcount4 = __sync_fetch_and_sub(
+					&service->nameservers_ipv4_refcount, 1);
+		else
+			refcount4 = 0;
+
+		DBG("%p IPv4 nameservers refcount %d", service, refcount4);
+	}
+
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV4) {
+		if (service->nameservers_ipv6_refcount)
+			refcount6 = __sync_fetch_and_sub(
+					&service->nameservers_ipv6_refcount, 1);
+		else
+			refcount6 = 0;
+
+		DBG("%p IPv6 nameservers refcount %d", service, refcount6);
+	}
+
+	if (type == CONNMAN_IPCONFIG_TYPE_ALL &&
+					(refcount4 != -1 && refcount4 != 1) &&
+					(refcount6 != -1 && refcount6 != 1))
+		return;
+
+	if (refcount4 != -1 && refcount4 != 1) {
+		if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+			type = CONNMAN_IPCONFIG_TYPE_IPV6;
+		else
+			return;
+	}
+
+	if (refcount6 != -1 && refcount6 != 1) {
+		if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+		else
+			return;
+	}
+
+	DBG("%p removing %s nameservers", service,
+					__connman_ipconfig_type2string(type));
 
 	index = __connman_service_get_index(service);
 
@@ -4880,6 +4955,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 		GString *str;
 		int index;
 		const char *gw;
+		int ipv4_refcount_old = 0;
+		int ipv6_refcount_old = 0;
 
 		if (__connman_provider_is_immutable(service->provider) ||
 				service->immutable)
@@ -4896,9 +4973,30 @@ static DBusMessage *set_property(DBusConnection *conn,
 		gw = __connman_ipconfig_get_gateway_from_index(index,
 			CONNMAN_IPCONFIG_TYPE_ALL);
 
-		if (gw && strlen(gw))
-			__connman_service_nameserver_del_routes(service,
+		if (gw && strlen(gw)) {
+			DBG("nameservers removing for gw %s", gw);
+			/*
+			 * Do a forced reset of nameserver routes since user set
+			 * nameservers overrule any other nameservers set via
+			 * other means. Avoid the forced reset if there isn't
+			 * any route set.
+			 */
+			ipv4_refcount_old = service->nameservers_ipv4_refcount;
+			DBG("nameservers ipv4 old refcount %d", ipv4_refcount_old);
+			if (service->nameservers_ipv4_refcount > 1)
+				service->nameservers_ipv4_refcount = 1;
+
+			ipv6_refcount_old = service->nameservers_ipv6_refcount;
+			DBG("nameservers ipv6 old refcount %d", ipv6_refcount_old);
+			if (service->nameservers_ipv6_refcount > 1)
+				service->nameservers_ipv6_refcount = 1;
+
+			if (ipv4_refcount_old || ipv6_refcount_old) {
+				DBG("nameservers del routes");
+				__connman_service_nameserver_del_routes(service,
 						CONNMAN_IPCONFIG_TYPE_ALL);
+			}
+		}
 
 		dbus_message_iter_recurse(&value, &entry);
 
@@ -4936,8 +5034,33 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		g_string_free(str, TRUE);
 
-		if (gw && strlen(gw))
+		if (gw && strlen(gw)) {
 			__connman_service_nameserver_add_routes(service, gw);
+
+			/*
+			 * After the user set ns routes have been added restore
+			 * old refcounters to avoid situation where online
+			 * check might remove the routes if this change happens
+			 * during the initial resolving of the online check URL.
+			 * Set the old value only for the IP type for which the
+			 * routes were added.
+			 */
+			if (service->nameservers_ipv4_refcount) {
+				DBG("nameservers ipv4 refcount %d -> %d ",
+					service->nameservers_ipv4_refcount,
+					ipv4_refcount_old);
+				service->nameservers_ipv4_refcount =
+							ipv4_refcount_old;
+			}
+
+			if (service->nameservers_ipv6_refcount) {
+				DBG("nameservers ipv6 refcount %d -> %d ",
+					service->nameservers_ipv6_refcount,
+					ipv6_refcount_old);
+				service->nameservers_ipv6_refcount =
+							ipv6_refcount_old;
+			}
+		}
 
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 		dns_configuration_changed(service);
@@ -6814,6 +6937,9 @@ static void service_initialize(struct connman_service *service)
 	service->provider = NULL;
 
 	service->wps = false;
+
+	service->nameservers_ipv4_refcount = 0;
+	service->nameservers_ipv6_refcount = 0;
 }
 
 /**
@@ -8308,11 +8434,24 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 			service_rp_filter(service, false);
 
+		__connman_service_nameserver_del_routes(service, type);
+
 		break;
 
 	case CONNMAN_SERVICE_STATE_IDLE:
 	case CONNMAN_SERVICE_STATE_FAILURE:
 		__connman_ipconfig_disable(ipconfig);
+		if (service->nameservers_ipv4_refcount) {
+			DBG("service %p reset IPv4 refcount (%d)", service,
+					service->nameservers_ipv4_refcount);
+			service->nameservers_ipv4_refcount = 0;
+		}
+
+		if (service->nameservers_ipv6_refcount) {
+			DBG("service %p reset IPv6 refcount (%d)", service,
+					service->nameservers_ipv6_refcount);
+			service->nameservers_ipv6_refcount = 0;
+		}
 
 		break;
 	}
