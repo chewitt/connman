@@ -939,6 +939,7 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 static char *parse_proxy(const char *proxy)
 {
 	char *proxy_server;
+	char *c;
 
 	if (!g_strcmp0(proxy, "DIRECT"))
 		return NULL;
@@ -949,12 +950,9 @@ static char *parse_proxy(const char *proxy)
 	proxy_server = g_strdup(proxy + 6);
 
 	/* Use first proxy server */
-	for (char *c = proxy_server; *c != '\0'; ++c) {
-		if (*c == ';') {
-			*c = '\0';
-			break;
-		}
-	}
+	c = strchr(proxy_server, ';');
+	if (c)
+		*c = '\0';
 
 	g_strstrip(proxy_server);
 
