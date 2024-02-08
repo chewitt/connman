@@ -4693,8 +4693,11 @@ static int reset_ipconfig(struct connman_service *service,
 	old_method = __connman_ipconfig_get_method(ipconfig);
 
 	if (is_connecting_state(service, state) ||
-					is_connected_state(service, state))
+					is_connected_state(service, state)) {
+		__connman_service_nameserver_del_routes(service,
+						CONNMAN_IPCONFIG_TYPE_ALL);
 		__connman_network_clear_ipconfig(service->network, ipconfig);
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->ipconfig_ipv4 = new_ipconfig;
