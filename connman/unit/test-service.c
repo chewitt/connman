@@ -24,9 +24,18 @@
 #include <glib/gstdio.h>
 
 #include <unistd.h>
+#include <net/if.h>
+#include <string.h>
+#include <stdlib.h>
+
+#ifndef IFF_LOWER_UP
+#define IFF_LOWER_UP	0x10000
+#endif
+
 
 #include "src/service.c"
 
+static gint index_counter = 0;
 unsigned int *preferred_list = NULL;
 
 /* Dummies */
@@ -93,6 +102,150 @@ DBusConnection* dbus_connection_ref(DBusConnection *connection)
 }
 
 void dbus_connection_unref(DBusConnection *connection) { return; }
+
+dbus_bool_t dbus_connection_send(DBusConnection *connection,
+				DBusMessage *message, dbus_uint32_t *serial)
+{
+	return true;
+}
+
+gboolean g_dbus_register_interface(DBusConnection *connection,
+					const char *path, const char *name,
+					const GDBusMethodTable *methods,
+					const GDBusSignalTable *signals,
+					const GDBusPropertyTable *properties,
+					void *user_data,
+					GDBusDestroyFunction destroy)
+{
+	return true;
+}
+
+gboolean g_dbus_unregister_interface(DBusConnection *connection,
+					const char *path, const char *name)
+{
+	return true;
+}
+
+gboolean g_dbus_send_reply(DBusConnection *connection,
+				DBusMessage *message, int type, ...)
+{
+	return true;
+}
+
+gboolean g_dbus_send_message(DBusConnection *connection, DBusMessage *message)
+{
+	return true;
+}
+
+static const char *__dbus_sender = "1:00";
+
+const char *g_dbus_get_current_sender(void)
+{
+	return __dbus_sender;
+}
+
+static int __gdbusproxyptr = 0x43211234;
+
+GDBusProxy *g_dbus_proxy_new(GDBusClient *client, const char *path,
+							const char *interface)
+{
+	return (GDBusProxy*)&__gdbusproxyptr;
+}
+
+DBusMessage *g_dbus_create_error_valist(DBusMessage *message, const char *name,
+					const char *format, va_list args)
+{
+	char str[1024];
+
+	if (format)
+		vsnprintf(str, sizeof(str), format, args);
+	else
+		str[0] = '\0';
+
+	return dbus_message_new_error(message, name, str);
+}
+
+DBusMessage *g_dbus_create_error(DBusMessage *message, const char *name,
+						const char *format, ...)
+{
+	va_list args;
+	DBusMessage *reply;
+
+	g_assert(message);
+
+	DBG("message %p serial %u name %s format %s", message,
+				dbus_message_get_serial(message),
+				name, format);
+
+	va_start(args, format);
+
+	reply = g_dbus_create_error_valist(message, name, format, args);
+
+	va_end(args);
+
+	DBG("created error %p", reply);
+
+	return reply;
+}
+
+DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
+{
+	g_assert(message);
+
+	DBG("message %p", message);
+
+	return dbus_message_new_method_return(message);
+}
+
+gboolean g_dbus_send_message_with_reply(DBusConnection *connection,
+					DBusMessage *message,
+					DBusPendingCall **call, int timeout)
+{
+	return true;
+}
+
+gboolean g_dbus_emit_signal(DBusConnection *connection,
+				const char *path, const char *interface,
+				const char *name, int type, ...)
+{
+	return TRUE;
+}
+
+guint g_dbus_add_service_watch(DBusConnection *connection, const char *name,
+				GDBusWatchFunction connect,
+				GDBusWatchFunction disconnect,
+				void *user_data, GDBusDestroyFunction destroy)
+{
+	return 1;
+}
+
+gboolean g_dbus_remove_watch(DBusConnection *connection, guint id)
+{
+	return true;
+}
+
+void g_dbus_client_unref(GDBusClient *client) { return; }
+
+void __connman_peer_list_struct(DBusMessageIter *array) { return; }
+
+int __connman_peer_service_register(const char *owner, DBusMessage *msg,
+					const unsigned char *specification,
+					int specification_length,
+					const unsigned char *query,
+					int query_length, int version,
+					bool master)
+{
+	return 0;
+}
+
+int __connman_peer_service_unregister(const char *owner,
+					const unsigned char *specification,
+					int specification_length,
+					const unsigned char *query,
+					int query_length, int version)
+{
+	return 0;
+}
 
 struct connman_provider {
 	char *name;
@@ -161,8 +314,6 @@ void __connman_provider_append_properties(struct connman_provider *provider,
 {
 	return;
 }
-
-static gint index_counter = 0;
 
 static struct connman_provider *provider_new(void)
 {
@@ -262,13 +413,160 @@ void __connman_stats_clear(const char *identifier, gboolean roaming)
 	return;
 }
 
-int __connman_wispr_start(struct connman_service *service,
-					enum connman_ipconfig_type type)
+int __connman_counter_register(const char *owner, const char *path,
+						unsigned int interval)
 {
 	return 0;
 }
 
-void __connman_wispr_stop(struct connman_service *service) { return; }
+int __connman_counter_unregister(const char *owner, const char *path)
+{
+	return 0;
+}
+
+void __connman_counter_send_usage(const char *counter, DBusMessage *msg)
+{
+	return;
+}
+
+int connman_agent_driver_register(struct connman_agent_driver *driver)
+{
+	return 0;
+}
+
+void connman_agent_driver_unregister(struct connman_agent_driver *driver)
+{
+	return;
+}
+
+int connman_agent_report_error(void *user_context, const char *path,
+				const char *error,
+				report_error_cb_t callback,
+				const char *dbus_sender, void *user_data)
+{
+	return 0;
+}
+
+int connman_agent_register(const char *sender, const char *path)
+{
+	return 0;
+}
+
+int connman_agent_unregister(const char *sender, const char *path)
+{
+	return 0;
+}
+
+void connman_agent_cancel(void *user_context) { return; }
+
+int __connman_agent_report_peer_error(struct connman_peer *peer,
+					const char *path, const char *error,
+					report_error_cb_t callback,
+					const char *dbus_sender,
+					void *user_data)
+{
+	return 0;
+}
+
+int __connman_agent_request_peer_authorization(struct connman_peer *peer,
+						peer_wps_cb_t callback,
+						bool wps_requested,
+						const char *dbus_sender,
+						void *user_data)
+{
+	return 0;
+}
+
+int __connman_agent_request_passphrase_input(struct connman_service *service,
+				authentication_cb_t callback,
+				const char *dbus_sender, void *user_data)
+{
+	return 0;
+}
+
+int __connman_machine_init(void) { return 0; }
+void __connman_machine_cleanup(void) { return; }
+
+enum wispr_status {
+	WISPR_STATUS_IDLE = 0,
+	WISPR_STATUS_START,
+	WISPR_STATUS_RESOLVE,
+	WISPR_STATUS_ONLINE_CHECK,
+	WISPR_STATUS_STOP,
+};
+
+enum wispr_status __wispr_status = WISPR_STATUS_IDLE;
+
+static void do_wispr(struct connman_service *service, const char *gw)
+{
+	g_assert(service);
+
+	switch (__wispr_status) {
+	case WISPR_STATUS_IDLE:
+		DBG("not setup");
+		return;
+	case WISPR_STATUS_START:
+		DBG("start -> resolve");
+		__connman_service_nameserver_add_routes(service, gw);
+		__wispr_status++;
+		break;
+	case WISPR_STATUS_RESOLVE:
+		DBG("resolve -> online check");
+		__connman_service_nameserver_del_routes(service,
+					CONNMAN_IPCONFIG_TYPE_IPV4);
+		__wispr_status++;
+		break;
+	case WISPR_STATUS_ONLINE_CHECK:
+		DBG("online check -> stop");
+		connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ONLINE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+		__wispr_status++;
+		break;
+	case WISPR_STATUS_STOP:
+		DBG("wispr stop");
+		__wispr_status = WISPR_STATUS_IDLE;
+		break;
+	default:
+		DBG("invalid state");
+		break;
+	}
+}
+
+int __connman_wispr_start(struct connman_service *service,
+					enum connman_ipconfig_type type)
+{
+	DBG("");
+
+	g_assert(service);
+	g_assert_cmpint(type, ==, CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	if (__wispr_status != WISPR_STATUS_IDLE)
+		DBG("Restarting");
+
+	/*
+	 * gweb.c would be cancelled as the wp_context in wispr is unref'd,
+	 * when restarting wispr, which will in turn result in gweb.c removing
+	 * the nameserver routes if added at cancel process.
+	 */
+	if (__wispr_status == WISPR_STATUS_RESOLVE)
+		__connman_service_nameserver_del_routes(service,
+					CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	__wispr_status = WISPR_STATUS_START;
+
+	return 0;
+}
+
+void __connman_wispr_stop(struct connman_service *service)
+{
+	DBG("");
+
+	g_assert(service);
+	__wispr_status = WISPR_STATUS_IDLE;
+	return;
+}
 
 static GHashTable *phy_vpn_table = NULL;
 
@@ -326,16 +624,629 @@ int __connman_connection_gateway_add(struct connman_service *service,
 					enum connman_ipconfig_type type,
 					const char *peer)
 {
+	g_assert(service);
+	__connman_service_nameserver_add_routes(service, gateway);
 	return 0;
 }
 
 void __connman_connection_gateway_remove(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
+	g_assert(service);
+	__connman_service_nameserver_del_routes(service, type);
 	return;
 }
 
+int __connman_config_provision_service(struct connman_service *service)
+{
+	g_assert(service);
+	return 0;
+}
+
+int __connman_config_provision_service_ident(struct connman_service *service,
+		const char *ident, const char *file, const char *entry)
+{
+	return 0;
+}
+
+bool __connman_config_address_provisioned(const char *address,
+					const char *netmask)
+{
+	return false;
+}
+
+struct connman_device {
+	int index;
+	char *name;
+	char *ident;
+	struct connman_network *network;
+	bool keep_network;
+	bool scanning;
+};
+
+struct connman_device wifi_device = {
+	.index = -1,
+	.name = "wifi",
+	.ident = "deadbeefbaad",
+	.network = NULL,
+	.keep_network = false,
+	.scanning = false,
+};
+
+int __connman_device_request_scan(enum connman_service_type type)
+{
+	g_assert_cmpint(type, ==, CONNMAN_SERVICE_TYPE_WIFI);
+	return 0;
+}
+
+int __connman_device_request_hidden_scan(struct connman_device *device,
+				const char *ssid, unsigned int ssid_len,
+				const char *identity, const char *passphrase,
+				const char *security, void *user_data)
+{
+	g_assert(device);
+	return -EINPROGRESS;
+}
+
+void __connman_device_keep_network(struct connman_network *network)
+{
+	g_assert(network);
+	g_assert(wifi_device.network == network);
+	wifi_device.keep_network = true;
+}
+
+void __connman_device_set_network(struct connman_device *device,
+					struct connman_network *network)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+
+	device->network = network;
+}
+
+int __connman_device_disable(struct connman_device *device)
+{
+	g_assert(device);
+	return 0;
+}
+
+int __connman_device_disconnect(struct connman_device *device)
+{
+	g_assert(device);
+	return 0;
+}
+
+int __connman_device_enable(struct connman_device *device)
+{
+	g_assert(device);
+	return 0;
+}
+
+struct connman_device *__connman_device_find_device(
+						enum connman_service_type type)
+{
+	if (type == CONNMAN_SERVICE_TYPE_WIFI)
+		return &wifi_device;
+
+	return NULL;
+}
+
+enum connman_service_type __connman_device_get_service_type(
+						struct connman_device *device)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+	return CONNMAN_SERVICE_TYPE_WIFI;
+}
+
+bool __connman_device_isfiltered(const char *devname)
+{
+	g_assert(devname);
+	g_assert_cmpstr(devname, ==, wifi_device.name);
+
+	return false;
+}
+
+struct connman_device *connman_device_create_from_index(int index)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	return &wifi_device;
+}
+
+const char *connman_device_get_ident(struct connman_device *device)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+	return device->ident;
+}
+
+int connman_device_get_index(struct connman_device *device)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+	return device->index;
+}
+
+bool connman_device_get_powered(struct connman_device *device)
+{
+	g_assert(device);
+	if (device == &wifi_device)
+		return true;
+
+	return false;
+}
+
+bool connman_device_get_scanning(struct connman_device *device)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+	return device->scanning;
+}
+
+int connman_device_register(struct connman_device *device)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+	return 0;
+}
+
+int connman_device_set_regdom(struct connman_device *device,
+						const char *alpha2)
+{
+	g_assert(device);
+	g_assert(alpha2);
+	g_assert(device == &wifi_device);
+	return 0;
+}
+
+int connman_device_set_scanning(struct connman_device *device,
+				enum connman_service_type type, bool scanning)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+	g_assert(type == CONNMAN_SERVICE_TYPE_WIFI);
+	if (device->scanning == scanning)
+		return -EALREADY;
+
+	device->scanning = scanning;
+
+	return 0;
+}
+
+struct connman_device *connman_device_ref_debug(struct connman_device *device,
+				const char *file, int line, const char *caller)
+{
+	return device;
+}
+void connman_device_unref_debug(struct connman_device *device,
+				const char *file, int line, const char *caller)
+{
+	return;
+}
+
+void connman_device_unregister(struct connman_device *device)
+{
+	g_assert(device);
+	g_assert(device == &wifi_device);
+}
+
+char *__connman_dhcp_get_server_address(struct connman_ipconfig *ipconfig)
+{
+	g_assert(ipconfig);
+	return g_strdup("192.168.1.1");
+}
+
+int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
+			struct connman_network *network, dhcp_cb callback,
+			gpointer user_data)
+{
+	g_assert(ipconfig);
+	g_assert(network);
+
+	return 0;
+}
+
+void __connman_dhcp_stop(struct connman_ipconfig *ipconfig)
+{
+	g_assert(ipconfig);
+}
+
+int __connman_inet_get_interface_address(int index, int family, void *address)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	g_assert_cmpint(family, ==, AF_INET);
+
+	return 0;
+}
+
+int __connman_inet_get_interface_mac_address(int index, uint8_t *mac_address)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	return 0;
+}
+
+int __connman_inet_ipv6_do_dad(int index, int timeout_ms,
+				struct in6_addr *addr,
+				connman_inet_ns_cb_t callback,
+				void *user_data)
+{
+	return 0;
+}
+
+GSList *__connman_inet_ipv6_get_prefixes(struct nd_router_advert *hdr,
+					unsigned int length)
+{
+	return NULL;
+}
+
+int __connman_inet_ipv6_send_ra(int index, struct in6_addr *src_addr,
+				GSList *prefixes, int router_lifetime)
+{
+	return 0;
+}
+
+int __connman_inet_ipv6_send_rs(int index, int timeout,
+			__connman_inet_rs_cb_t callback, void *user_data)
+{
+	return 0;
+}
+
+int __connman_inet_ipv6_start_recv_rs(int index,
+					__connman_inet_recv_rs_cb_t callback,
+					void *user_data,
+					void **context)
+{
+	return 0;
+}
+
+void __connman_inet_ipv6_stop_recv_rs(void *context) { return; }
+
+int __connman_inet_modify_address(int cmd, int flags,
+				int index, int family,
+				const char *address,
+				const char *peer,
+				unsigned char prefixlen,
+				const char *broadcast,
+				bool is_p2p)
+{
+	return 0;
+}
+
+int __connman_inet_rtnl_addattr32(struct nlmsghdr *n, size_t maxlen, int type,
+				__u32 data)
+{
+	return 0;
+}
+
+int __connman_inet_rtnl_addattr_l(struct nlmsghdr *n, size_t max_length,
+				int type, const void *data, size_t data_length)
+{
+	return 0;
+}
+
+void __connman_inet_rtnl_close(struct __connman_inet_rtnl_handle *rth)
+{
+	return;
+}
+
+int __connman_inet_rtnl_open(struct __connman_inet_rtnl_handle *rth)
+{
+	return 0;
+}
+
+int __connman_inet_rtnl_talk(struct __connman_inet_rtnl_handle *rtnl,
+			struct nlmsghdr *n, int timeout,
+			__connman_inet_rtnl_cb_t callback, void *user_data)
+{
+	return 0;
+}
+
+static GList *__inet_route_list = NULL;
+
+struct inet_route_item {
+	int index;
+	char *host;
+	char *gateway;
+};
+
+static struct inet_route_item *inet_route_item_new(int index,
+							const char *host,
+							const char *gateway)
+{
+	struct inet_route_item *item;
+
+	item = g_try_new0(struct inet_route_item, 1);
+	g_assert(item);
+	item->index = index;
+	item->host = g_strdup(host);
+	item->gateway = g_strdup(gateway);
+
+	return item;
+}
+
+static void inet_route_item_del(struct inet_route_item *item)
+{
+	g_assert(item);
+	g_free(item->host);
+	g_free(item->gateway);
+	g_free(item);
+}
+
+static void inet_route_item_remove(gpointer data, gpointer user_data)
+{
+	struct inet_route_item *item = data;
+	inet_route_item_del(item);
+}
+
+static gint route_item_compare(gconstpointer a, gconstpointer b)
+{
+	const struct inet_route_item *item_a = a;
+	const struct inet_route_item *item_b = b;
+
+	if ((item_a->index == item_b->index) &&
+				!g_strcmp0(item_a->host, item_b->host) &&
+				!g_strcmp0(item_a->gateway, item_b->gateway))
+		return 0;
+
+	return 1;
+}
+
+static gint route_item_compare_no_gw(gconstpointer a, gconstpointer b)
+{
+	const struct inet_route_item *item_a = a;
+	const struct inet_route_item *item_b = b;
+
+	if ((item_a->index == item_b->index) &&
+				!g_strcmp0(item_a->host, item_b->host))
+		return 0;
+
+	return 1;
+}
+
+int connman_inet_add_host_route(int index, const char *host,
+							const char *gateway)
+{
+	struct inet_route_item *item;
+
+	g_assert_cmpint(index, ==, index_counter);
+	g_assert(host);
+	g_assert(gateway);
+
+	DBG("index %d host %s gateway %s", index, host, gateway);
+
+	item = inet_route_item_new(index, host, gateway);
+	g_assert(item);
+
+	g_assert_null(g_list_find_custom(__inet_route_list, item,
+							route_item_compare));
+
+	__inet_route_list = g_list_append(__inet_route_list, item);
+
+	return 0;
+}
+
+int connman_inet_del_host_route(int index, const char *host)
+{
+	GList *list_item;
+	struct inet_route_item item = {
+		.index = index,
+		.host = (char*)host,
+		.gateway = NULL,
+	};
+
+	DBG("index %d host %s", index, host);
+
+	list_item = g_list_find_custom(__inet_route_list, &item,
+						route_item_compare_no_gw);
+	g_assert(list_item);
+
+	__inet_route_list  = g_list_remove_link(__inet_route_list, list_item);
+	inet_route_item_del(list_item->data);
+	g_list_free(list_item);
+
+	return 0;
+}
+
+int connman_inet_add_ipv6_host_route(int index, const char *host,
+					const char *gateway)
+{
+	return 0;
+}
+
+int connman_inet_del_ipv6_host_route(int index, const char *host)
+{
+	return 0;
+}
+
+int connman_inet_check_ipaddress(const char *host)
+{
+	g_assert(host);
+	return AF_INET;
+}
+int connman_inet_clear_address(int index, struct connman_ipaddress *ipaddress)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	g_assert(ipaddress);
+	return 0;
+}
+
+int connman_inet_clear_ipv6_address(int index,
+					struct connman_ipaddress *ipaddress)
+{
+	return 0;
+}
+
+bool connman_inet_compare_subnet(int index, const char *host)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	g_assert(host);
+	return false;
+}
+
+int connman_inet_ifindex(const char *name)
+{
+	g_assert(name);
+	g_assert_cmpstr(name, ==, "wlan0");
+	return index_counter;
+}
+
+char *connman_inet_ifname(int index)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	return g_strdup("wlan0");
+}
+
+bool connman_inet_is_ipv6_supported() { return false; }
+
+int connman_inet_set_address(int index, struct connman_ipaddress *ipaddress)
+{
+	g_assert_cmpint(index, ==, index_counter);
+	g_assert(ipaddress);
+	return 0;
+}
+
+int connman_inet_set_ipv6_address(int index,
+		struct connman_ipaddress *ipaddress)
+{
+	return 0;
+}
+
+int connman_inet_setup_tunnel(char *tunnel, int mtu) { return 0; }
+
+
+void __connman_resolver_append_fallback_nameservers(void) { return; }
+int __connman_resolvfile_append(int index, const char *domain,
+							const char *server)
+{
+	return 0;
+}
+
+int __connman_resolvfile_remove(int index, const char *domain,
+							const char *server)
+{
+	return 0;
+}
+
+int __connman_resolver_redo_servers(int index)
+{
+	return 0;
+}
+
+
+int connman_resolver_append(int index, const char *domain,
+							const char *server)
+{
+	return 0;
+}
+
+int connman_resolver_append_lifetime(int index, const char *domain,
+				const char *server, unsigned int lifetime)
+{
+	return 0;
+}
+
+int connman_resolver_remove(int index, const char *domain,
+							const char *server)
+{
+	return 0;
+}
+
 /* EOD - end of dummies */
+
+/* Prevent fs access with these */
+
+FILE *fopen(const char *pathname, const char *mode)
+{
+	DBG("pathname %s mode %s", pathname, mode);
+	return NULL;
+}
+
+int fclose(FILE *stream)
+{
+	DBG("");
+	return 0;
+}
+
+int fprintf(FILE *stream, const char *format, ...)
+{
+	DBG("");
+	return 0;
+}
+
+int fscanf(FILE *stream, const char *format, ...)
+{
+	DBG("");
+	return 0;
+}
+
+int rmdir(const char *pathname)
+{
+	DBG("pathname %s", pathname);
+	return 0;
+}
+
+DIR *opendir(const char *name)
+{
+	DBG("name %p", name);
+	return NULL;
+}
+
+struct dirent *readdir(DIR *dirp)
+{
+	DBG("DIR %p", dirp);
+	return NULL;
+}
+
+int closedir(DIR *dirp)
+{
+	DBG("DIR %p", dirp);
+	return 0;
+}
+
+gboolean g_file_set_contents(const gchar* filename, const gchar* contents,
+						gssize length, GError** error)
+{
+	DBG("filename %s", filename);
+
+	return TRUE;
+}
+
+gboolean g_key_file_load_from_file(GKeyFile *keyfile, const gchar *filename,
+					GKeyFileFlags flags, GError** error)
+{
+	DBG("filename %s", filename);
+
+	*error = g_error_new_literal(1, G_FILE_ERROR_NOENT, "no file in test");
+
+	return FALSE;
+}
+
+gboolean g_mkdir_with_parents(const char *pathname, gint mode)
+{
+	DBG("pathname %s", pathname);
+
+	return TRUE;
+}
+
+char *realpath(const char *path, char *resolved_path)
+{
+	char *ptr;
+	size_t len;
+
+	g_assert(path);
+	g_assert(resolved_path);
+
+	DBG("path %s", path);
+
+	errno = 0;
+	len = strlen(path);
+	ptr = stpncpy(resolved_path, path, len);
+	g_assert(ptr);
+
+	return ptr;
+}
+
+/* EOFS */
 
 static void set_vpn_phy(struct connman_service *service)
 {
@@ -422,11 +1333,6 @@ static void setup_network_or_provider(struct connman_service *service)
 		NULL,
 	};
 
-	if (service->state != CONNMAN_SERVICE_STATE_ONLINE &&
-		service->state != CONNMAN_SERVICE_STATE_READY) {
-		return;
-	}
-	
 	switch(service->type) {
 	case CONNMAN_SERVICE_TYPE_WIFI:
 		type = CONNMAN_NETWORK_TYPE_WIFI;
@@ -452,15 +1358,19 @@ static void setup_network_or_provider(struct connman_service *service)
 
 	ident = g_strdup_printf("%s_%s", prefixes[prefix_pos],
 			service->identifier);
+	++index_counter;
 
-	if (type != CONNMAN_NETWORK_TYPE_UNKNOWN) {
-		service->network = connman_network_create(ident, type);
-		connman_network_set_index(service->network, ++index_counter);
-	}
+	if (service->state == CONNMAN_SERVICE_STATE_ONLINE ||
+				service->state == CONNMAN_SERVICE_STATE_READY) {
+		if (type != CONNMAN_NETWORK_TYPE_UNKNOWN) {
+			service->network = connman_network_create(ident, type);
+			connman_network_set_index(service->network, index_counter);
+		}
 
-	if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
-		service->provider = connman_provider_get(ident);
-		service->provider->vpn_service = service;
+		if (service->type == CONNMAN_SERVICE_TYPE_VPN) {
+			service->provider = connman_provider_get(ident);
+			service->provider->vpn_service = service;
+		}
 	}
 
 	connman_service_create_ip4config(service, index_counter);
@@ -469,7 +1379,7 @@ static void setup_network_or_provider(struct connman_service *service)
 	g_free(ident);
 }
 
-static void add_service_type(enum connman_service_type type,
+static struct connman_service *add_service_type(enum connman_service_type type,
 			enum connman_service_state state, bool split_routing,
 			uint8_t signal_str)
 {
@@ -498,6 +1408,8 @@ static void add_service_type(enum connman_service_type type,
 	g_hash_table_replace(service_hash, service->identifier, service);
 
 	g_free(ident);
+
+	return service;
 }
 
 static void add_services()
@@ -747,8 +1659,18 @@ static void clean_service_list()
 
 static void test_init()
 {
+	__connman_dbus_init(connection);
+	__connman_ipconfig_init();
+
 	service_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 							NULL, NULL);
+	service_type_hash = g_new0(GHashTable*, MAX_CONNMAN_SERVICE_TYPES);
+	services_notify = g_new0(struct _services_notify, 1);
+	services_notify->remove = g_hash_table_new_full(g_str_hash,
+			g_str_equal, g_free, NULL);
+	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
+	services_notify->update = g_hash_table_new(g_str_hash, g_str_equal);
+
 	ident_counter = index_counter = 0;
 	phy_vpn_table = g_hash_table_new(g_direct_hash, g_direct_equal);
 	g_assert(phy_vpn_table);
@@ -756,9 +1678,42 @@ static void test_init()
 
 static void test_cleanup()
 {
-	g_hash_table_destroy(service_hash);
-	g_hash_table_destroy(phy_vpn_table);
+	DBG("");
+
 	clean_service_list();
+
+	g_hash_table_destroy(service_hash);
+	service_hash = NULL;
+
+	for (int i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++) {
+		if (!service_type_hash[i])
+			continue;
+
+		g_hash_table_destroy(service_type_hash[i]);
+		service_type_hash[i] = NULL;
+	}
+
+	g_free(service_type_hash);
+	service_type_hash = NULL;
+
+	if (services_notify->id != 0) {
+		g_source_remove(services_notify->id);
+		service_send_changed(NULL);
+	}
+
+	g_hash_table_destroy(services_notify->remove);
+	g_hash_table_destroy(services_notify->add);
+	g_hash_table_destroy(services_notify->update);
+	g_free(services_notify);
+
+	g_hash_table_destroy(phy_vpn_table);
+
+	g_list_foreach(__inet_route_list, inet_route_item_remove, NULL);
+	g_list_free(__inet_route_list);
+	__inet_route_list = NULL;
+
+	__connman_ipconfig_cleanup();
+	__connman_dbus_cleanup();
 }
 
 static void test_service_sort_full_positive()
@@ -1051,6 +2006,630 @@ void test_service_sort_single_tech_types()
 	test_cleanup();
 }
 
+static int wlan_probe(struct connman_network *network) { return 0; }
+static void wlan_remove(struct connman_network *network) { return; }
+static int wlan_connect(struct connman_network *network) { return 0; }
+static int wlan_disconnect(struct connman_network *network) { return 0; }
+
+
+struct connman_network_driver driver = {
+	.name = "wifi",
+	.type = CONNMAN_NETWORK_TYPE_WIFI,
+	.priority = 1,
+	.probe = wlan_probe,
+	.remove = wlan_remove,
+	.connect = wlan_connect,
+	.disconnect = wlan_disconnect,
+	.autoconnect_changed = NULL,
+};
+
+static struct connman_service *test_setup_service(void)
+{
+	struct connman_service *service;
+	struct connman_network *network;
+
+	g_assert_cmpint(connman_network_driver_register(&driver), ==, 0);
+	network = connman_network_create("1234567890",
+						CONNMAN_NETWORK_TYPE_WIFI);
+	g_assert(network);
+
+	__connman_network_set_device(network, &wifi_device);
+	connman_network_set_name(network, "TestWiFi");
+	connman_network_set_group(network, "managed_psk");
+	connman_network_set_index(network, ++index_counter);
+
+	g_assert_true(__connman_service_create_from_network(network));
+	service = connman_service_lookup_from_network(network);
+
+	g_assert(service);
+	g_assert(service->ipconfig_ipv4);
+
+	return service;
+}
+
+/* Only IPv4 */
+static void test_service_nameserver_route_refcount1()
+{
+	struct connman_service *service;
+
+	test_init();
+
+	service = test_setup_service();
+
+	print_services();
+
+	/* Associate the service network */
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ASSOCIATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service->strength = 90;
+	service_list = g_list_sort(service_list, service_compare);
+	print_services();
+
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+
+	/* Configure IP  as fixed */
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_CONFIGURATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	__connman_ipconfig_set_config_from_address(service->ipconfig_ipv4,
+					CONNMAN_IPCONFIG_METHOD_FIXED,
+					"192.168.1.2",
+					"255.0.0.0",
+					"255.255.255.0",
+					24);
+	__connman_service_nameserver_append(service, "1.1.1.1", false);
+	__connman_service_nameserver_append(service, "2.2.2.2", false);
+	__connman_ipconfig_set_gateway(service->ipconfig_ipv4, "192.168.1.1");
+	g_assert_cmpint(__connman_network_connect(service->network), ==, 0);
+
+	/* Complete connection to ready - gateway gets added */
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_READY,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(__connman_ipconfig_gateway_add(service->ipconfig_ipv4),
+							==, 0);
+
+	/* Calling __connman_connection_gateway_add() adds DNS routes */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	/* Online check transitions normally to ONLINE, simulate that */
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ONLINE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_DISCONNECT,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+	print_services();
+
+	/* This has no effect, i.e., counters do not go to negative. */
+	__connman_service_nameserver_del_routes(service,
+						CONNMAN_IPCONFIG_TYPE_ALL);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_IDLE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	test_cleanup();
+}
+
+/* Only IPv4 */
+static void test_service_nameserver_route_refcount2()
+{
+	struct connman_service *service;
+	const char *gw = "192.168.1.1";
+
+	test_init();
+
+	service = test_setup_service();
+
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ASSOCIATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service->strength = 90;
+	service_list = g_list_sort(service_list, service_compare);
+	print_services();
+
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_CONFIGURATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	__connman_ipconfig_set_config_from_address(service->ipconfig_ipv4,
+					CONNMAN_IPCONFIG_METHOD_FIXED,
+					"192.168.1.2",
+					"255.0.0.0",
+					"255.255.255.0",
+					24);
+	__connman_service_nameserver_append(service, "1.1.1.1", false);
+	__connman_service_nameserver_append(service, "2.2.2.2", false);
+	__connman_ipconfig_set_gateway(service->ipconfig_ipv4, gw);
+	g_assert_cmpint(__connman_network_connect(service->network), ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_READY,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(__connman_ipconfig_gateway_add(service->ipconfig_ipv4),
+							==, 0);
+	/* Nameserver routes are added */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_START);
+
+	/* Does resolve and tries to add  nameserver routes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_RESOLVE);
+
+	/* Refcount increases but no new routes */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 2);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+
+	/* Removes nameserver routes and sets service to do online check */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_ONLINE_CHECK);
+
+	/* Routes are not removed but request is done */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+
+	/* Sets service to online as online check completes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_STOP);
+
+	/* No update is done to refs/routes as service goes online */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	g_assert_cmpint(service->state, ==, CONNMAN_SERVICE_STATE_ONLINE);
+
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_DISCONNECT,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_IDLE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	test_cleanup();
+}
+
+static void add_test_dnsconfig(DBusMessageIter *iter, void *user_data)
+{
+	char **servers = user_data;
+	int i;
+
+	if (!servers)
+		return;
+
+	for (i = 0; servers[i]; i++)
+		dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING,
+								&servers[i]);
+}
+
+static void add_test_ipconfig_value(DBusMessageIter *iter, void *user_data)
+{
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, user_data);
+}
+
+static void add_test_ipconfig(DBusMessageIter *iter, void *user_data)
+{
+	const char *method = user_data;
+
+	if (!g_strcmp0(method, "dhcp")) {
+		connman_dbus_property_append_dict(iter, "Method",
+					add_test_ipconfig_value, user_data);
+	} else if (!g_strcmp0(method, "manual")) {
+		connman_dbus_property_append_dict(iter, "Method",
+					add_test_ipconfig_value, user_data);
+		connman_dbus_property_append_dict(iter, "Address",
+					add_test_ipconfig_value, "192.168.2.2");
+		connman_dbus_property_append_dict(iter, "Gateway",
+					add_test_ipconfig_value, "192.168.2.1");
+		connman_dbus_property_append_dict(iter, "Netmask",
+					add_test_ipconfig_value,
+					"255.255.255.0");
+	}
+}
+
+static int dbus_serial = 0;
+
+static void test_call_set_property(struct connman_service *service,
+					const char *key, char **nameservers,
+					const char *method)
+{
+	DBusMessage *msg;
+	DBusMessage *reply;
+	DBusMessageIter iter;
+
+	g_assert(service);
+	g_assert(key);
+
+	msg = dbus_message_new(DBUS_MESSAGE_TYPE_METHOD_CALL);
+	g_assert(msg);
+
+	dbus_message_set_serial(msg, ++dbus_serial);
+	dbus_message_iter_init_append(msg, &iter);
+
+	if (!g_strcmp0(key, "Nameservers.Configuration"))
+		connman_dbus_property_append_array(&iter, key,
+					DBUS_TYPE_STRING, add_test_dnsconfig,
+					nameservers);
+	else if (!g_strcmp0(key, "IPv4.Configuration"))
+		connman_dbus_property_append_array(&iter, key,
+					DBUS_TYPE_VARIANT, add_test_ipconfig,
+					(char*)method);
+	else
+		goto out;
+
+	/* This replaces the routes but leaves the refcount as is */
+	reply = set_property(connection, msg, service);
+	g_assert(reply);
+
+	g_assert_false(dbus_message_is_error(reply, "Invalid arguments"));
+	g_assert_false(dbus_message_is_error(reply, "Not supported"));
+
+out:
+	dbus_message_unref(msg);
+}
+
+/* Only IPv4, manual change during resolve */
+static void test_service_nameserver_route_refcount3()
+{
+	struct connman_service *service;
+	const char *gw = "192.168.1.1";
+	char **nameservers;
+	struct rtnl_link_stats64 stats = { 0 };
+
+	test_init();
+
+	service = test_setup_service();
+
+	print_services();
+
+	__connman_ipconfig_newlink(index_counter, 1, IFF_UP,
+						"aabbccddeeff", 1500, &stats);
+	__connman_ipconfig_newlink(index_counter, 1,
+						(IFF_RUNNING | IFF_LOWER_UP),
+						"aabbccddeeff", 1500, &stats);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ASSOCIATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service->strength = 90;
+	service_list = g_list_sort(service_list, service_compare);
+	print_services();
+
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_CONFIGURATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	__connman_ipconfig_set_config_from_address(service->ipconfig_ipv4,
+					CONNMAN_IPCONFIG_METHOD_FIXED,
+					"192.168.1.2",
+					"255.0.0.0",
+					"255.255.255.0",
+					24);
+	__connman_service_nameserver_append(service, "1.1.1.1", false);
+	__connman_service_nameserver_append(service, "2.2.2.2", false);
+	__connman_ipconfig_set_gateway(service->ipconfig_ipv4, gw);
+	g_assert_cmpint(__connman_network_connect(service->network), ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_READY,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(__connman_ipconfig_gateway_add(service->ipconfig_ipv4),
+							==, 0);
+	/* Nameserver routes are added */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_START);
+
+	/* Does resolve and tries to add  nameserver routes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_RESOLVE);
+
+	/* Refcount increases but no new routes */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 2);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+
+	/* Manual change to nameservers via D-Bus */
+	nameservers = g_try_new0(char *, 4);
+	nameservers[0] = g_strdup("3.3.3.3");
+	nameservers[1] = g_strdup("4.4.4.4");
+	nameservers[2] = g_strdup("5.5.5.5");
+
+	test_call_set_property(service, "Nameservers.Configuration",
+							nameservers, NULL);
+
+	g_strfreev(nameservers);
+
+	/* Since the gweb.c request has been restarted it has removed the ref */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+
+	/* Since setting user nameservers restarts wispr */
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_START);
+
+	/* Do resolve and try to add  nameserver routes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_RESOLVE);
+
+	/* Refcount increases but no new routes */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 2);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+
+	/* Removes nameserver routes and sets service to do online check */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_ONLINE_CHECK);
+
+	/* Routes are not removed but request is done */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+
+	/* Sets service to online as online check completes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_STOP);
+
+	/* No update is done to refs/routes as service goes online */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+	g_assert_cmpint(service->state, ==, CONNMAN_SERVICE_STATE_ONLINE);
+
+	/* New nameservers set by user */
+	nameservers = g_try_new0(char *, 3);
+	nameservers[0] = g_strdup("6.6.6.6");
+	nameservers[1] = g_strdup("7.7.7.7");
+
+	test_call_set_property(service, "Nameservers.Configuration",
+							nameservers, NULL);
+
+	g_strfreev(nameservers);
+
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_DISCONNECT,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_IDLE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	test_cleanup();
+}
+
+/*
+ * Only IPv4, manual change during resolve and reset ipconf after online check
+ * is done to use DHCP.
+ */
+static void test_service_nameserver_route_refcount4()
+{
+	struct connman_service *service;
+	const char *gw = "192.168.1.1";
+	char **nameservers;
+	struct rtnl_link_stats64 stats = { 0 };
+
+	test_init();
+
+	service = test_setup_service();
+
+	print_services();
+
+	__connman_ipconfig_newlink(index_counter, 1, IFF_UP,
+						"aabbccddeeff", 1500, &stats);
+	__connman_ipconfig_newlink(index_counter, 1,
+						(IFF_RUNNING | IFF_LOWER_UP),
+						"aabbccddeeff", 1500, &stats);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_ASSOCIATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service->strength = 90;
+	service_list = g_list_sort(service_list, service_compare);
+	print_services();
+
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_CONFIGURATION,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	__connman_ipconfig_set_config_from_address(service->ipconfig_ipv4,
+					CONNMAN_IPCONFIG_METHOD_FIXED,
+					"192.168.1.2",
+					"255.0.0.0",
+					"255.255.255.0",
+					24);
+	__connman_service_nameserver_append(service, "1.1.1.1", false);
+	__connman_service_nameserver_append(service, "2.2.2.2", false);
+	__connman_ipconfig_set_gateway(service->ipconfig_ipv4, gw);
+	g_assert_cmpint(__connman_network_connect(service->network), ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_READY,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(__connman_ipconfig_gateway_add(service->ipconfig_ipv4),
+							==, 0);
+
+	/* Nameserver routes are added */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_START);
+
+	/* Does resolve and tries to add nameserver routes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_RESOLVE);
+
+	/* Refcount increases but no new routes */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 2);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+
+	/* Manual change to nameservers via D-Bus */
+	nameservers = g_try_new0(char *, 4);
+	nameservers[0] = g_strdup("3.3.3.3");
+	nameservers[1] = g_strdup("4.4.4.4");
+	nameservers[2] = g_strdup("5.5.5.5");
+
+	test_call_set_property(service, "Nameservers.Configuration",
+							nameservers, NULL);
+
+	g_strfreev(nameservers);
+
+	/* Since the gweb.c request has been restarted it has removed the ref */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+
+	/* Since setting user nameservers restarts wispr */
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_START);
+
+	/* Do resolve and try to add  nameserver routes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_RESOLVE);
+
+	/* Refcount increases but no new routes */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 2);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+
+	/* Removes nameserver routes and sets service to do online check */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_ONLINE_CHECK);
+
+	/* Routes are not removed but request is done */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+
+	/* Sets service to online as online check completes */
+	do_wispr(service, gw);
+	g_assert_cmpint(__wispr_status, ==, WISPR_STATUS_STOP);
+
+	/* No update is done to refs/routes as service goes online */
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 3);
+	g_assert_cmpint(service->state, ==, CONNMAN_SERVICE_STATE_ONLINE);
+
+	/*
+	 * Reset IPv4 configuration manually to use dhcp -> nameservers changed
+	 * to empty before this (also domains but no need to use here)
+	 */
+	test_call_set_property(service, "Nameservers.Configuration", NULL,
+									NULL);
+	test_call_set_property(service, "IPv4.Configuration", NULL, "dhcp");
+
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 1);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 2);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_DISCONNECT,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	g_assert_cmpint(g_list_length(__inet_route_list), ==, 0);
+	print_services();
+
+	connman_service_ipconfig_indicate_state(service,
+					CONNMAN_SERVICE_STATE_IDLE,
+					CONNMAN_IPCONFIG_TYPE_IPV4,
+					false);
+	service_list = g_list_sort(service_list, service_compare);
+	g_assert_cmpint(service->nameservers_ipv4_refcount, ==, 0);
+	print_services();
+
+	test_cleanup();
+}
+
 int rmdir_r(const gchar* path)
 {
 	DIR *d = opendir(path);
@@ -1151,8 +2730,6 @@ int main(int argc, char **argv)
 
 	connection = (DBusConnection*)&ptr;
 	dbus_path_data = g_hash_table_new(g_str_hash, g_str_equal);
-	services_notify = g_new0(struct _services_notify, 1);
-	services_notify->add = g_hash_table_new(g_str_hash, g_str_equal);
 
 	g_test_add_func("/service/service_sort_full_positive",
 				test_service_sort_full_positive);
@@ -1172,12 +2749,17 @@ int main(int argc, char **argv)
 				test_service_sort_vpn_split_preferred_list);
 	g_test_add_func("/service/service_sort_single_tech_types",
 				test_service_sort_single_tech_types);
+	g_test_add_func("/service/service_nameserver_route_refcount1",
+				test_service_nameserver_route_refcount1);
+	g_test_add_func("/service/service_nameserver_route_refcount2",
+				test_service_nameserver_route_refcount2);
+	g_test_add_func("/service/service_nameserver_route_refcount3",
+				test_service_nameserver_route_refcount3);
+	g_test_add_func("/service/service_nameserver_route_refcount4",
+				test_service_nameserver_route_refcount4);
+
 
 	ret = g_test_run();
-
-	g_hash_table_destroy(services_notify->add);
-	if (dbus_path_data)
-		g_hash_table_destroy(dbus_path_data);
 
 	__connman_notifier_cleanup();
 	__connman_storage_cleanup();

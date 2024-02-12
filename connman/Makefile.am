@@ -371,24 +371,19 @@ unit_test_service_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DSTATEDIR=\""$(statedir)"\"
 unit_test_service_SOURCES = $(backtrace_sources) $(gdhcp_sources) \
 				$(gweb_sources) $(shared_sources) \
-				unit/test-service.c \
-				src/connman.h src/log.c src/error.c src/task.c \
-				src/device.c src/network.c \
-				src/manager.c src/agent-connman.c src/clock.c \
-				src/timezone.c src/agent.c src/notifier.c \
-				src/resolver.c src/ipconfig.c src/detect.c \
-				src/inet.c src/dhcp.c src/dhcpv6.c src/rtnl.c \
+				unit/test-service.c src/connman.h src/log.c \
+				src/error.c src/task.c src/network.c \
+				src/manager.c src/clock.c src/timezone.c \
+				src/notifier.c src/ipconfig.c \
+				src/detect.c src/dhcpv6.c src/rtnl.c \
 				src/proxy.c src/utsname.c src/timeserver.c \
-				src/rfkill.c src/storage.c src/dbus.c \
-				src/config.c src/technology.c src/counter.c \
+				src/rfkill.c src/storage.c src/technology.c \
 				src/ntp.c src/wpad.c src/dnsproxy.c \
 				src/6to4.c src/ippool.c src/ipaddress.c \
-				src/inotify.c src/ipv6pd.c src/peer.c \
-				src/peer_service.c src/machine.c src/util.c \
-				src/wakeup_timer.c src/access.c
-unit_test_service_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-				@GLIB_LIBS@ @DBUS_LIBS@ @GNUTLS_LIBS@ -lresolv \
-				-ldl
+				src/inotify.c src/ipv6pd.c src/util.c \
+				src/wakeup_timer.c src/access.c src/dbus.c
+unit_test_service_LDADD = $(builtin_libadd) @GLIB_LIBS@ @DBUS_LIBS@ \
+				@GNUTLS_LIBS@ -lresolv -ldl
 
 unit_test_sailfish_iptables_ext_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
