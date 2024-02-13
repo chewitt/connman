@@ -5021,13 +5021,13 @@ static DBusMessage *set_property(DBusConnection *conn,
 		g_strfreev(service->nameservers_config);
 
 		if (str->len > 0) {
-			char **nameservers, **iter;
+			char **nameservers, **ns_iter;
 
 			nameservers = g_strsplit_set(str->str, " ", 0);
 
-			for (iter = nameservers; *iter; iter++)
-				if (connman_inet_check_ipaddress(*iter) <= 0)
-					*iter[0] = '\0';
+			for (ns_iter = nameservers; *ns_iter; ns_iter++)
+				if (connman_inet_check_ipaddress(*ns_iter) <= 0)
+					*ns_iter[0] = '\0';
 
 			nameservers = remove_empty_strings(nameservers);
 			service->nameservers_config = nameservers;
@@ -5199,7 +5199,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		enum connman_service_state state =
 						CONNMAN_SERVICE_STATE_UNKNOWN;
-		enum connman_ipconfig_type type =
+		enum connman_ipconfig_type ipconfig_type =
 			CONNMAN_IPCONFIG_TYPE_UNKNOWN;
 		int err = 0;
 
@@ -5214,17 +5214,17 @@ static DBusMessage *set_property(DBusConnection *conn,
 			return __connman_error_invalid_property(msg);
 
 		if (g_str_equal(name, "IPv4.Configuration"))
-			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+			ipconfig_type = CONNMAN_IPCONFIG_TYPE_IPV4;
 		else
-			type = CONNMAN_IPCONFIG_TYPE_IPV6;
+			ipconfig_type = CONNMAN_IPCONFIG_TYPE_IPV6;
 
-		err = __connman_service_reset_ipconfig(service, type, &value,
-								&state);
+		err = __connman_service_reset_ipconfig(service, ipconfig_type,
+								&value, &state);
 
 		if (err < 0) {
 			if (is_connected_state(service, state) ||
 					is_connecting_state(service, state)) {
-				if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+				if (ipconfig_type == CONNMAN_IPCONFIG_TYPE_IPV4)
 					__connman_network_enable_ipconfig(
 							service->network,
 							service->ipconfig_ipv4);
@@ -5237,13 +5237,13 @@ static DBusMessage *set_property(DBusConnection *conn,
 			return __connman_error_failed(msg, -err);
 		}
 
-		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		if (ipconfig_type == CONNMAN_IPCONFIG_TYPE_IPV4)
 			ipv4_configuration_changed(service);
 		else
 			ipv6_configuration_changed(service);
 
 		if (is_connecting(service) || is_connected(service)) {
-			if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+			if (ipconfig_type == CONNMAN_IPCONFIG_TYPE_IPV4)
 				__connman_network_enable_ipconfig(
 							service->network,
 							service->ipconfig_ipv4);
