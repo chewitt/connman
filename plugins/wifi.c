@@ -2547,6 +2547,16 @@ static bool handle_sae_authentication_failure(struct connman_network *network,
 	return true;
 }
 
+static void wifi_data_free_tethering_info(struct wifi_data *wifi)
+{
+	if (!wifi->tethering_param)
+		return;
+
+	g_assert(wifi->tethering_param->ssid == NULL);
+	g_free(wifi->tethering_param);
+	wifi->tethering_param = NULL;
+}
+
 static void interface_state(GSupplicantInterface *interface)
 {
 	struct connman_network *network;
@@ -2568,11 +2578,7 @@ static void interface_state(GSupplicantInterface *interface)
 		return;
 
 	if (state == G_SUPPLICANT_STATE_COMPLETED) {
-		if (wifi->tethering_param) {
-			g_free(wifi->tethering_param->ssid);
-			g_free(wifi->tethering_param);
-			wifi->tethering_param = NULL;
-		}
+		wifi_data_free_tethering_info(wifi);
 
 		if (wifi->tethering)
 			stop_autoscan(device);
@@ -2832,9 +2838,7 @@ static void ap_create_fail(GSupplicantInterface *interface)
 			connman_technology_tethering_notify(wifi_technology,false);
 		}
 
-		g_free(wifi->tethering_param->ssid);
-		g_free(wifi->tethering_param);
-		wifi->tethering_param = NULL;
+		wifi_data_free_tethering_info(wifi);
 	}
 }
 
@@ -3387,7 +3391,7 @@ static GSupplicantSSID *ssid_ap_init(const struct connman_technology *technology
 		return NULL;
 
 	ap->mode = G_SUPPLICANT_MODE_MASTER;
-	ap->ssid = ssid;
+	ap->ssid = g_strdup(ssid);
 	ap->ssid_len = strlen(ssid);
 	ap->scan_ssid = 0;
 	if (freq)
@@ -3403,7 +3407,7 @@ static GSupplicantSSID *ssid_ap_init(const struct connman_technology *technology
 	       ap->protocol = G_SUPPLICANT_PROTO_RSN;
 	       ap->pairwise_cipher = G_SUPPLICANT_PAIRWISE_CCMP;
 	       ap->group_cipher = G_SUPPLICANT_GROUP_CCMP;
-	       ap->passphrase = passphrase;
+	       ap->passphrase = g_strdup(passphrase);
 	}
 
 	return ap;
@@ -3423,9 +3427,7 @@ static void ap_start_callback(int result, GSupplicantInterface *interface,
 
 		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
 			connman_technology_tethering_notify(info->technology, false);
-			g_free(info->wifi->tethering_param->ssid);
-			g_free(info->wifi->tethering_param);
-			info->wifi->tethering_param = NULL;
+			wifi_data_free_tethering_info(info->wifi);
 		}
 	}
 
@@ -3448,14 +3450,10 @@ static void ap_create_callback(int result,
 
 		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
 			connman_technology_tethering_notify(info->technology, false);
-			g_free(info->wifi->tethering_param->ssid);
-			g_free(info->wifi->tethering_param);
-			info->wifi->tethering_param = NULL;
-
+			wifi_data_free_tethering_info(info->wifi);
 		}
 
 		g_free(info->ifname);
-		g_free(info->ssid);
 		g_free(info);
 		return;
 	}
@@ -3483,14 +3481,10 @@ static void sta_remove_callback(int result,
 		info->wifi->tethering = false;
 		connman_technology_tethering_notify(info->technology, false);
 
-		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED) {
-			g_free(info->wifi->tethering_param->ssid);
-			g_free(info->wifi->tethering_param);
-			info->wifi->tethering_param = NULL;
-		}
+		if (info->wifi->ap_supported == WIFI_AP_SUPPORTED)
+			wifi_data_free_tethering_info(info->wifi);
 
 		g_free(info->ifname);
-		g_free(info->ssid);
 		g_free(info);
 		return;
 	}
@@ -3563,9 +3557,6 @@ static int enable_wifi_tethering(struct connman_technology *technology,
 		info->ifname = g_strdup(ifname);
 
 		wifi->tethering_param->technology = technology;
-		wifi->tethering_param->ssid = ssid_ap_init(technology);
-		if (!wifi->tethering_param->ssid)
-			goto failed;
 
 		info->wifi->tethering = true;
 		info->wifi->ap_supported = WIFI_AP_SUPPORTED;
@@ -3584,10 +3575,13 @@ static int enable_wifi_tethering(struct connman_technology *technology,
 
 	failed:
 		g_free(info->ifname);
-		g_free(info->ssid);
+		if (info->ssid) {
+			g_free((char *)info->ssid->ssid);
+			g_free((char *)info->ssid->passphrase);
+			g_free(info->ssid);
+		}
 		g_free(info);
-		g_free(wifi->tethering_param);
-		wifi->tethering_param = NULL;
+		wifi_data_free_tethering_info(wifi);
 
 		/*
 		 * Remove bridge if it was correctly created but remove
