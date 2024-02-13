@@ -479,8 +479,10 @@ static void technology_load(struct connman_technology *technology)
 
 	enc = g_key_file_get_string(keyfile,
 				identifier, "Tethering.Passphrase", NULL);
-	if (enc)
+	if (enc) {
 		technology->tethering_passphrase = g_strcompress(enc);
+		g_free(enc);
+	}
 
 	technology->tethering_freq = g_key_file_get_integer(keyfile,
 				identifier, "Tethering.Freq", NULL);
