@@ -51,7 +51,6 @@ tools/wispr
 tools/dhcp-test
 tools/dhcp-server-test
 tools/addr-test
-tools/tap-test
 tools/web-test
 tools/wpad-test
 tools/resolv-test

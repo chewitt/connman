@@ -337,8 +337,7 @@ if TOOLS
 noinst_PROGRAMS += tools/supplicant-test \
 			tools/dhcp-test tools/dhcp-server-test \
 			tools/addr-test tools/web-test tools/resolv-test \
-			tools/dbus-test tools/polkit-test \
-			tools/tap-test tools/wpad-test \
+			tools/dbus-test tools/polkit-test tools/wpad-test \
 			tools/stats-tool tools/private-network-test \
 			tools/session-test \
 			tools/dnsproxy-test
