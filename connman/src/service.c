@@ -270,6 +270,8 @@ static bool services_dirty = false;
 static bool autoconnect_paused = false;
 static guint load_wifi_services_id = 0;
 static GHashTable **service_type_hash;
+static unsigned int online_check_initial_interval = 0;
+static unsigned int online_check_max_interval = 0;
 
 struct connman_service_boolean_property {
 	const char *name;
@@ -324,6 +326,8 @@ struct connman_service {
 	char **nameservers_config;
 	char **nameservers_auto;
 	int nameservers_timeout;
+	int nameservers_ipv4_refcount;
+	int nameservers_ipv6_refcount;
 	char **domains;
 	char *hostname;
 	char *domainname;
@@ -360,10 +364,10 @@ struct connman_service {
 	char **excludes;
 	char *pac;
 	bool wps;
-	int online_check_count_ipv4;
-	int online_check_count_ipv6;
-	guint online_check_timer_ipv4;
-	guint online_check_timer_ipv6;
+	unsigned int online_check_interval_ipv4;
+	unsigned int online_check_interval_ipv6;
+	guint online_timeout_ipv4;
+	guint online_timeout_ipv6;
 	guint connect_retry_timer;
 	guint connect_retry_timeout;
 	bool do_split_routing;
@@ -389,6 +393,8 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
+static void start_online_check(struct connman_service *service,
+				enum connman_ipconfig_type type);
 
 static void vpn_auto_connect(void);
 static bool is_connecting(struct connman_service *service);
@@ -438,54 +444,6 @@ enum connman_service_connect_reason
 bool __connman_service_is_really_hidden(struct connman_service *service)
 {
 	return service && (service->hidden || service->hidden_service);
-}
-
-static void do_single_online_check(struct connman_service *service, enum connman_ipconfig_type type)
-{
-	if (!service)
-		return;
-
-	if (!__connman_service_is_connected_state(service, type))
-		return;
-
-	switch (type) {
-	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		service->online_check_count_ipv4 = ONLINE_CHECK_RETRY_COUNT;
-		break;
-	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		service->online_check_count_ipv6 = ONLINE_CHECK_RETRY_COUNT;
-		break;
-	default:
-		;
-	}
-
-	__connman_wispr_start(service, type);
-}
-
-static void stop_recurring_online_check(struct connman_service *service)
-{
-	gboolean remove_ipv4 = false;
-	gboolean remove_ipv6 = false;
-
-	if (!service)
-		return;
-
-	if (service->online_check_timer_ipv4 > 0)
-		remove_ipv4 = true;
-	if (service->online_check_timer_ipv6 > 0)
-		remove_ipv6 = true;
-
-	if (remove_ipv4) {
-		g_source_remove(service->online_check_timer_ipv4);
-		service->online_check_timer_ipv4 = 0;
-		connman_service_unref(service);
-	}
-
-	if (remove_ipv6) {
-		g_source_remove(service->online_check_timer_ipv6);
-		service->online_check_timer_ipv6 = 0;
-		connman_service_unref(service);
-	}
 }
 
 static void get_config_string(GKeyFile *keyfile, const char *group,
@@ -1830,13 +1788,9 @@ static void add_nameserver_route(int family, int index, char *nameserver,
 }
 
 static void nameserver_add_routes(int index, char **nameservers,
-					const char *gw)
+					const char *gw, int gw_family)
 {
-	int i, ns_family, gw_family;
-
-	gw_family = connman_inet_check_ipaddress(gw);
-	if (gw_family < 0)
-		return;
+	int i, ns_family;
 
 	for (i = 0; nameservers[i]; i++) {
 		ns_family = connman_inet_check_ipaddress(nameservers[i]);
@@ -1876,9 +1830,37 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 						const char *gw)
 {
 	int index;
+	int gw_family;
+	int refcount;
+	int typeint;
 
 	if (!service)
 		return;
+
+	gw_family = connman_inet_check_ipaddress(gw);
+	switch (gw_family) {
+	case AF_INET:
+		refcount = __sync_fetch_and_add(
+					&service->nameservers_ipv4_refcount, 1);
+		typeint = 4;
+		break;
+	case AF_INET6:
+		refcount = __sync_fetch_and_add(
+					&service->nameservers_ipv6_refcount, 1);
+		typeint = 6;
+		break;
+	default:
+		return;
+	}
+
+	if (refcount) {
+		DBG("%p IPv%d nameservers already added, refcount %d", service,
+							typeint, refcount);
+		return;
+	}
+
+	DBG("%p IPv%d nameservers refcount %d.", service,
+							typeint, refcount);
 
 	index = __connman_service_get_index(service);
 
@@ -1887,7 +1869,8 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 		 * Configured nameserver takes preference over the
 		 * discoverd nameserver gathered from DHCP, VPN, etc.
 		 */
-		nameserver_add_routes(index, service->nameservers_config, gw);
+		nameserver_add_routes(index, service->nameservers_config, gw,
+								gw_family);
 	} else if (service->nameservers) {
 		/*
 		 * We add nameservers host routes for nameservers that
@@ -1896,7 +1879,8 @@ void __connman_service_nameserver_add_routes(struct connman_service *service,
 		 * tries to reach them. The subnet route is installed
 		 * when setting the interface IP address.
 		 */
-		nameserver_add_routes(index, service->nameservers, gw);
+		nameserver_add_routes(index, service->nameservers, gw,
+								gw_family);
 	}
 }
 
@@ -1904,9 +1888,56 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
 	int index;
+	int refcount4 = -1;
+	int refcount6 = -1;
 
 	if (!service)
 		return;
+
+	DBG("service %p type %s", service,
+					__connman_ipconfig_type2string(type));
+
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV6) {
+		if (service->nameservers_ipv4_refcount)
+			refcount4 = __sync_fetch_and_sub(
+					&service->nameservers_ipv4_refcount, 1);
+		else
+			refcount4 = 0;
+
+		DBG("%p IPv4 nameservers refcount %d", service, refcount4);
+	}
+
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV4) {
+		if (service->nameservers_ipv6_refcount)
+			refcount6 = __sync_fetch_and_sub(
+					&service->nameservers_ipv6_refcount, 1);
+		else
+			refcount6 = 0;
+
+		DBG("%p IPv6 nameservers refcount %d", service, refcount6);
+	}
+
+	if (type == CONNMAN_IPCONFIG_TYPE_ALL &&
+					(refcount4 != -1 && refcount4 != 1) &&
+					(refcount6 != -1 && refcount6 != 1))
+		return;
+
+	if (refcount4 != -1 && refcount4 != 1) {
+		if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+			type = CONNMAN_IPCONFIG_TYPE_IPV6;
+		else
+			return;
+	}
+
+	if (refcount6 != -1 && refcount6 != 1) {
+		if (type == CONNMAN_IPCONFIG_TYPE_ALL)
+			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+		else
+			return;
+	}
+
+	DBG("%p removing %s nameservers", service,
+					__connman_ipconfig_type2string(type));
 
 	index = __connman_service_get_index(service);
 
@@ -1917,6 +1948,62 @@ void __connman_service_nameserver_del_routes(struct connman_service *service,
 		nameserver_del_routes(index, service->nameservers, type);
 }
 
+static bool check_proxy_setup(struct connman_service *service)
+{
+	/*
+	 * We start WPAD if we haven't got a PAC URL from DHCP and
+	 * if our proxy manual configuration is either empty or set
+	 * to AUTO with an empty URL.
+	 */
+
+	if (service->proxy != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN)
+		return true;
+
+	if (service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN &&
+		(service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_AUTO ||
+			service->pac))
+		return true;
+
+	if (__connman_wpad_start(service) < 0) {
+		service->proxy = CONNMAN_SERVICE_PROXY_METHOD_DIRECT;
+		__connman_notifier_proxy_changed(service);
+		return true;
+	}
+
+	return false;
+}
+
+static void cancel_online_check(struct connman_service *service)
+{
+	if (!service)
+		return;
+
+	if (service->online_timeout_ipv4) {
+		g_source_remove(service->online_timeout_ipv4);
+		service->online_timeout_ipv4 = 0;
+		connman_service_unref(service);
+	}
+	if (service->online_timeout_ipv6) {
+		g_source_remove(service->online_timeout_ipv6);
+		service->online_timeout_ipv6 = 0;
+		connman_service_unref(service);
+	}
+}
+
+static void start_online_check(struct connman_service *service,
+				enum connman_ipconfig_type type)
+{
+	online_check_initial_interval =
+		connman_setting_get_uint("OnlineCheckInitialInterval");
+	online_check_max_interval =
+		connman_setting_get_uint("OnlineCheckMaxInterval");
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV6 || check_proxy_setup(service)) {
+		cancel_online_check(service);
+		__connman_service_wispr_start(service, type);
+	}
+}
+
 static void address_updated(struct connman_service *service,
 			enum connman_ipconfig_type type)
 {
@@ -1924,6 +2011,7 @@ static void address_updated(struct connman_service *service,
 			service == connman_service_get_default()) {
 		nameserver_remove_all(service, type);
 		nameserver_add_all(service, type);
+		start_online_check(service, type);
 
 		__connman_timeserver_sync(service);
 	}
@@ -2051,6 +2139,19 @@ static void print_service_list_debug()
 	}
 }
 
+static void start_wispr_when_connected(struct connman_service *service)
+{
+	if (__connman_service_is_connected_state(service,
+			CONNMAN_IPCONFIG_TYPE_IPV4))
+		__connman_service_wispr_start(service,
+					CONNMAN_IPCONFIG_TYPE_IPV4);
+
+	if (__connman_service_is_connected_state(service,
+			CONNMAN_IPCONFIG_TYPE_IPV6))
+		__connman_service_wispr_start(service,
+					CONNMAN_IPCONFIG_TYPE_IPV6);
+}
+
 static void default_changed(void)
 {
 	struct connman_service *service = connman_service_get_default();
@@ -2092,6 +2193,8 @@ static void default_changed(void)
 			__connman_utsname_set_domainname(service->domainname);
 
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
+
+		start_wispr_when_connected(service);
 
 		/*
 		 * Connect VPN automatically when new default service
@@ -4590,8 +4693,11 @@ static int reset_ipconfig(struct connman_service *service,
 	old_method = __connman_ipconfig_get_method(ipconfig);
 
 	if (is_connecting_state(service, state) ||
-					is_connected_state(service, state))
+					is_connected_state(service, state)) {
+		__connman_service_nameserver_del_routes(service,
+						CONNMAN_IPCONFIG_TYPE_ALL);
 		__connman_network_clear_ipconfig(service->network, ipconfig);
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->ipconfig_ipv4 = new_ipconfig;
@@ -4766,6 +4872,21 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 static void set_error(struct connman_service *service,
 					enum connman_service_error error);
 
+void __connman_service_wispr_start(struct connman_service *service,
+					enum connman_ipconfig_type type)
+{
+	DBG("service %p type %s", service, __connman_ipconfig_type2string(type));
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		service->online_check_interval_ipv4 =
+					online_check_initial_interval;
+	else
+		service->online_check_interval_ipv6 =
+					online_check_initial_interval;
+
+	__connman_wispr_start(service, type);
+}
+
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
 {
@@ -4837,6 +4958,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 		GString *str;
 		int index;
 		const char *gw;
+		int ipv4_refcount_old = 0;
+		int ipv6_refcount_old = 0;
 
 		if (__connman_provider_is_immutable(service->provider) ||
 				service->immutable)
@@ -4853,9 +4976,30 @@ static DBusMessage *set_property(DBusConnection *conn,
 		gw = __connman_ipconfig_get_gateway_from_index(index,
 			CONNMAN_IPCONFIG_TYPE_ALL);
 
-		if (gw && strlen(gw))
-			__connman_service_nameserver_del_routes(service,
+		if (gw && strlen(gw)) {
+			DBG("nameservers removing for gw %s", gw);
+			/*
+			 * Do a forced reset of nameserver routes since user set
+			 * nameservers overrule any other nameservers set via
+			 * other means. Avoid the forced reset if there isn't
+			 * any route set.
+			 */
+			ipv4_refcount_old = service->nameservers_ipv4_refcount;
+			DBG("nameservers ipv4 old refcount %d", ipv4_refcount_old);
+			if (service->nameservers_ipv4_refcount > 1)
+				service->nameservers_ipv4_refcount = 1;
+
+			ipv6_refcount_old = service->nameservers_ipv6_refcount;
+			DBG("nameservers ipv6 old refcount %d", ipv6_refcount_old);
+			if (service->nameservers_ipv6_refcount > 1)
+				service->nameservers_ipv6_refcount = 1;
+
+			if (ipv4_refcount_old || ipv6_refcount_old) {
+				DBG("nameservers del routes");
+				__connman_service_nameserver_del_routes(service,
 						CONNMAN_IPCONFIG_TYPE_ALL);
+			}
+		}
 
 		dbus_message_iter_recurse(&value, &entry);
 
@@ -4877,13 +5021,13 @@ static DBusMessage *set_property(DBusConnection *conn,
 		g_strfreev(service->nameservers_config);
 
 		if (str->len > 0) {
-			char **nameservers, **iter;
+			char **nameservers, **ns_iter;
 
 			nameservers = g_strsplit_set(str->str, " ", 0);
 
-			for (iter = nameservers; *iter; iter++)
-				if (connman_inet_check_ipaddress(*iter) <= 0)
-					*iter[0] = '\0';
+			for (ns_iter = nameservers; *ns_iter; ns_iter++)
+				if (connman_inet_check_ipaddress(*ns_iter) <= 0)
+					*ns_iter[0] = '\0';
 
 			nameservers = remove_empty_strings(nameservers);
 			service->nameservers_config = nameservers;
@@ -4893,16 +5037,40 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		g_string_free(str, TRUE);
 
-		if (gw && strlen(gw))
+		if (gw && strlen(gw)) {
 			__connman_service_nameserver_add_routes(service, gw);
+
+			/*
+			 * After the user set ns routes have been added restore
+			 * old refcounters to avoid situation where online
+			 * check might remove the routes if this change happens
+			 * during the initial resolving of the online check URL.
+			 * Set the old value only for the IP type for which the
+			 * routes were added.
+			 */
+			if (service->nameservers_ipv4_refcount) {
+				DBG("nameservers ipv4 refcount %d -> %d ",
+					service->nameservers_ipv4_refcount,
+					ipv4_refcount_old);
+				service->nameservers_ipv4_refcount =
+							ipv4_refcount_old;
+			}
+
+			if (service->nameservers_ipv6_refcount) {
+				DBG("nameservers ipv6 refcount %d -> %d ",
+					service->nameservers_ipv6_refcount,
+					ipv6_refcount_old);
+				service->nameservers_ipv6_refcount =
+							ipv6_refcount_old;
+			}
+		}
 
 		nameserver_add_all(service, CONNMAN_IPCONFIG_TYPE_ALL);
 		dns_configuration_changed(service);
 
-		stop_recurring_online_check(service);
+		cancel_online_check(service);
 
-		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV4);
-		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+		start_wispr_when_connected(service);
 
 		service_save(service);
 	} else if (g_str_equal(name, "Timeservers.Configuration")) {
@@ -5021,10 +5189,9 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		__connman_notifier_proxy_changed(service);
 
-		stop_recurring_online_check(service);
+		cancel_online_check(service);
 
-		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV4);
-		do_single_online_check(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+		start_wispr_when_connected(service);
 
 		service_save(service);
 	} else if (g_str_equal(name, "IPv4.Configuration") ||
@@ -5032,7 +5199,7 @@ static DBusMessage *set_property(DBusConnection *conn,
 
 		enum connman_service_state state =
 						CONNMAN_SERVICE_STATE_UNKNOWN;
-		enum connman_ipconfig_type type =
+		enum connman_ipconfig_type ipconfig_type =
 			CONNMAN_IPCONFIG_TYPE_UNKNOWN;
 		int err = 0;
 
@@ -5047,17 +5214,17 @@ static DBusMessage *set_property(DBusConnection *conn,
 			return __connman_error_invalid_property(msg);
 
 		if (g_str_equal(name, "IPv4.Configuration"))
-			type = CONNMAN_IPCONFIG_TYPE_IPV4;
+			ipconfig_type = CONNMAN_IPCONFIG_TYPE_IPV4;
 		else
-			type = CONNMAN_IPCONFIG_TYPE_IPV6;
+			ipconfig_type = CONNMAN_IPCONFIG_TYPE_IPV6;
 
-		err = __connman_service_reset_ipconfig(service, type, &value,
-								&state);
+		err = __connman_service_reset_ipconfig(service, ipconfig_type,
+								&value, &state);
 
 		if (err < 0) {
 			if (is_connected_state(service, state) ||
 					is_connecting_state(service, state)) {
-				if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+				if (ipconfig_type == CONNMAN_IPCONFIG_TYPE_IPV4)
 					__connman_network_enable_ipconfig(
 							service->network,
 							service->ipconfig_ipv4);
@@ -5070,13 +5237,13 @@ static DBusMessage *set_property(DBusConnection *conn,
 			return __connman_error_failed(msg, -err);
 		}
 
-		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+		if (ipconfig_type == CONNMAN_IPCONFIG_TYPE_IPV4)
 			ipv4_configuration_changed(service);
 		else
 			ipv6_configuration_changed(service);
 
 		if (is_connecting(service) || is_connected(service)) {
-			if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
+			if (ipconfig_type == CONNMAN_IPCONFIG_TYPE_IPV4)
 				__connman_network_enable_ipconfig(
 							service->network,
 							service->ipconfig_ipv4);
@@ -6713,7 +6880,7 @@ static void service_free(gpointer user_data)
 	g_free(service->access);
 	g_free(service->path);
 
-	stop_recurring_online_check(service);
+	cancel_online_check(service);
 	if (service->connect_retry_timer)
 		g_source_remove(service->connect_retry_timer);
 
@@ -6766,13 +6933,16 @@ static void service_initialize(struct connman_service *service)
 
 	service->order = 0;
 
-	service->online_check_timer_ipv4 = 0;
-	service->online_check_timer_ipv6 = 0;
+	service->online_timeout_ipv4 = 0;
+	service->online_timeout_ipv6 = 0;
 	service->policy = __connman_access_service_policy_create(NULL);
 
 	service->provider = NULL;
 
 	service->wps = false;
+
+	service->nameservers_ipv4_refcount = 0;
+	service->nameservers_ipv6_refcount = 0;
 }
 
 /**
@@ -7890,9 +8060,31 @@ static int service_indicate_state(struct connman_service *service)
 		default_changed();
 	}
 
-	if (new_state == CONNMAN_SERVICE_STATE_READY &&
-				service->type == CONNMAN_SERVICE_TYPE_VPN)
-		default_changed();
+	if (new_state == CONNMAN_SERVICE_STATE_READY) {
+		/*
+		 * Start online check always when upgrading to ready state.
+		 * This is because sorting is based also on the state and in
+		 * case there is an online service as default, e.g., mobile
+		 * data then other, a WLAN service, for instance, would not
+		 * start online check when becoming ready.
+		*/
+		if (old_state != CONNMAN_SERVICE_STATE_ONLINE) {
+			if (__connman_ipconfig_get_method(
+					service->ipconfig_ipv4) !=
+						CONNMAN_IPCONFIG_METHOD_OFF)
+				__connman_service_wispr_start(service,
+						CONNMAN_IPCONFIG_TYPE_IPV4);
+
+			if (__connman_ipconfig_get_method(
+					service->ipconfig_ipv6) !=
+						CONNMAN_IPCONFIG_METHOD_OFF)
+				__connman_service_wispr_start(service,
+						CONNMAN_IPCONFIG_TYPE_IPV6);
+		}
+
+		if (service->type == CONNMAN_SERVICE_TYPE_VPN)
+			default_changed();
+	}
 
 	return 0;
 }
@@ -7984,34 +8176,6 @@ enum connman_service_state __connman_service_ipconfig_get_state(
 	return CONNMAN_SERVICE_STATE_UNKNOWN;
 }
 
-static void check_proxy_setup(struct connman_service *service)
-{
-	/*
-	 * We start WPAD if we haven't got a PAC URL from DHCP and
-	 * if our proxy manual configuration is either empty or set
-	 * to AUTO with an empty URL.
-	 */
-
-	if (service->proxy != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN)
-		goto done;
-
-	if (service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN &&
-		(service->proxy_config != CONNMAN_SERVICE_PROXY_METHOD_AUTO ||
-			service->pac))
-		goto done;
-
-	if (__connman_wpad_start(service) < 0) {
-		service->proxy = CONNMAN_SERVICE_PROXY_METHOD_DIRECT;
-		__connman_notifier_proxy_changed(service);
-		goto done;
-	}
-
-	return;
-
-done:
-	__connman_wispr_start(service, CONNMAN_IPCONFIG_TYPE_IPV4);
-}
-
 /*
  * How many networks are connected at the same time. If more than 1,
  * then set the rp_filter setting properly (loose mode routing) so that network
@@ -8065,7 +8229,8 @@ static void service_rp_filter(struct connman_service *service,
 		connected_networks_count, original_rp_filter);
 }
 
-static void redo_wispr(struct connman_service *service, enum connman_ipconfig_type type)
+static void redo_wispr(struct connman_service *service,
+					enum connman_ipconfig_type type)
 {
 	DBG("service %p type %d", service, type);
 
@@ -8076,22 +8241,32 @@ static void redo_wispr(struct connman_service *service, enum connman_ipconfig_ty
 		return;
 	}
 
+	DBG("Retrying %s WISPr for %p %s",
+		__connman_ipconfig_type2string(type),
+		service, service->name);
+
 	__connman_wispr_start(service, type);
 }
 
 static gboolean redo_wispr_ipv4(gpointer user_data)
 {
 	struct connman_service *service = user_data;
-	service->online_check_timer_ipv4 = 0;
+
+	service->online_timeout_ipv4 = 0;
+
 	redo_wispr(service, CONNMAN_IPCONFIG_TYPE_IPV4);
+
 	return FALSE;
 }
 
 static gboolean redo_wispr_ipv6(gpointer user_data)
 {
 	struct connman_service *service = user_data;
-	service->online_check_timer_ipv6 = 0;
+
+	service->online_timeout_ipv6 = 0;
+
 	redo_wispr(service, CONNMAN_IPCONFIG_TYPE_IPV6);
+
 	return FALSE;
 }
 
@@ -8112,29 +8287,26 @@ static gboolean downgrade_state_ipv6(gpointer user_data)
 int __connman_service_online_check_failed(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
-	int *online_check_count;
-	guint *online_check_timer;
 	GSourceFunc downgrade_func;
 	GSourceFunc redo_func;
+	unsigned int *interval;
+	guint timeout;
 
-	switch (type) {
-	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		online_check_count = &service->online_check_count_ipv4;
-		online_check_timer = &service->online_check_timer_ipv4;
+	DBG("service %p type %s\n",
+		service, __connman_ipconfig_type2string(type));
+
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
 		downgrade_func = downgrade_state_ipv4;
+		interval = &service->online_check_interval_ipv4;
 		redo_func = redo_wispr_ipv4;
-		break;
-	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		online_check_count = &service->online_check_count_ipv6;
-		online_check_timer = &service->online_check_timer_ipv6;
+	} else {
 		downgrade_func = downgrade_state_ipv6;
+		interval = &service->online_check_interval_ipv6;
 		redo_func = redo_wispr_ipv6;
-		break;
-	default:
-		return -EAGAIN;
 	}
 
-	DBG("service %p type %d count %d", service, type, *online_check_count);
+	DBG("service %p type %s interval %d", service,
+		__connman_ipconfig_type2string(type), *interval);
 
 	if (!__connman_service_is_connected_state(service, type))
 		return 0;
@@ -8153,16 +8325,26 @@ int __connman_service_online_check_failed(struct connman_service *service,
 		;
 	}
 
-	if (*online_check_count > 1)
-		--(*online_check_count);
-	else
-		connman_warn("Online check failed for %p %s", service, service->name);
+	timeout = connman_wakeup_timer_add_seconds(*interval * *interval,
+				redo_func, connman_service_ref(service));
+	if (type == CONNMAN_IPCONFIG_TYPE_IPV4) {
+		if (service->online_timeout_ipv4)
+			g_source_remove(service->online_timeout_ipv4);
 
-	int timeout = ONLINE_CHECK_RETRY_COUNT - *online_check_count;
-	DBG("Next online check for service %p type %d in %d seconds",
-					service, type, timeout * timeout);
-	*online_check_timer = connman_wakeup_timer_add_seconds
-		(timeout * timeout, redo_func, connman_service_ref(service));
+		service->online_timeout_ipv4 = timeout;
+	} else {
+		if (service->online_timeout_ipv6)
+			g_source_remove(service->online_timeout_ipv6);
+
+		service->online_timeout_ipv6 = timeout;
+	}
+
+
+	/* Increment the interval for the next time, set a maximum timeout of
+	 * online_check_max_interval seconds * online_check_max_interval seconds.
+	 */
+	if (*interval < online_check_max_interval)
+		(*interval)++;
 
 	return -EAGAIN;
 }
@@ -8184,14 +8366,14 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		return -EINVAL;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV4:
-		service->online_check_count_ipv4 = ONLINE_CHECK_RETRY_COUNT;
+		service->online_check_interval_ipv4 = ONLINE_CHECK_RETRY_COUNT;
 		old_state = service->state_ipv4;
 		ipconfig = service->ipconfig_ipv4;
 
 		break;
 
 	case CONNMAN_IPCONFIG_TYPE_IPV6:
-		service->online_check_count_ipv6 = ONLINE_CHECK_RETRY_COUNT;
+		service->online_check_interval_ipv6 = ONLINE_CHECK_RETRY_COUNT;
 		old_state = service->state_ipv6;
 		ipconfig = service->ipconfig_ipv6;
 
@@ -8242,8 +8424,8 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 			check_proxy_setup(service);
 			service_rp_filter(service, true);
 		} else {
-			service->online_check_count_ipv6 = ONLINE_CHECK_RETRY_COUNT;
-			__connman_wispr_start(service, type);
+			service->online_check_interval_ipv6 = ONLINE_CHECK_RETRY_COUNT;
+			__connman_service_wispr_start(service, type);
 		}
 		break;
 	case CONNMAN_SERVICE_STATE_ONLINE:
@@ -8255,11 +8437,24 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 			service_rp_filter(service, false);
 
+		__connman_service_nameserver_del_routes(service, type);
+
 		break;
 
 	case CONNMAN_SERVICE_STATE_IDLE:
 	case CONNMAN_SERVICE_STATE_FAILURE:
 		__connman_ipconfig_disable(ipconfig);
+		if (service->nameservers_ipv4_refcount) {
+			DBG("service %p reset IPv4 refcount (%d)", service,
+					service->nameservers_ipv4_refcount);
+			service->nameservers_ipv4_refcount = 0;
+		}
+
+		if (service->nameservers_ipv6_refcount) {
+			DBG("service %p reset IPv6 refcount (%d)", service,
+					service->nameservers_ipv6_refcount);
+			service->nameservers_ipv6_refcount = 0;
+		}
 
 		break;
 	}
@@ -8658,7 +8853,7 @@ int __connman_service_disconnect(struct connman_service *service)
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_UNKNOWN;
 
 	__connman_wispr_stop(service);
-	stop_recurring_online_check(service);
+	cancel_online_check(service);
 
 	reply_pending(service, ECONNABORTED);
 
@@ -9849,7 +10044,7 @@ void __connman_service_remove_from_network(struct connman_network *network)
 	__connman_connection_gateway_remove(service,
 					CONNMAN_IPCONFIG_TYPE_ALL);
 
-	stop_recurring_online_check(service);
+	cancel_online_check(service);
 	if (service->connect_retry_timer) {
 		g_source_remove(service->connect_retry_timer);
 		service->connect_retry_timer = 0;

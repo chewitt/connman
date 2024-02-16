@@ -500,6 +500,34 @@ static void portal_manage_status(GWebResult *result,
 	connman_service_unref(service);
 }
 
+static bool wispr_dns_route_request(int if_index, bool add, gpointer user_data)
+{
+	struct connman_wispr_portal_context *wp_context = user_data;
+	struct connman_service *service;
+	const char *gateway;
+
+	DBG("index %d type %s", if_index, add ? "add" : "remove");
+
+	service = __connman_service_lookup_from_index(if_index);
+	if (!service)
+		return false;
+
+	gateway = __connman_ipconfig_get_gateway_from_index(if_index,
+			wp_context->type);
+	if (!gateway)
+		return false;
+
+	DBG("service %p gw %s", service, gateway);
+
+	if (add)
+		__connman_service_nameserver_add_routes(service, gateway);
+	else
+		__connman_service_nameserver_del_routes(service,
+				wp_context->type);
+
+	return true;
+}
+
 static bool wispr_route_request(const char *address, int ai_family,
 		int if_index, gpointer user_data)
 {
@@ -538,6 +566,8 @@ static bool wispr_route_request(const char *address, int ai_family,
 
 	if (result < 0) {
 		g_free(route);
+		DBG("could not add host route %d address %s gateway %s",
+				if_index, address, gateway);
 		return false;
 	}
 
@@ -558,6 +588,7 @@ static void wispr_portal_request_portal(
 	wp_context->request_id = g_web_request_get(wp_context->web,
 					wp_context->status_url,
 					wispr_portal_web_result,
+					wispr_dns_route_request,
 					wispr_route_request,
 					wp_context);
 
@@ -648,7 +679,7 @@ static void wispr_portal_browser_reply_cb(struct connman_service *service,
 	}
 
 	/* Restarting the test */
-	__connman_wispr_start(service, wp_context->type);
+	__connman_service_wispr_start(service, wp_context->type);
 	wispr_portal_context_unref(wp_context);
 }
 
@@ -868,7 +899,8 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 		wispr_portal_context_ref(wp_context);
 		wp_context->request_id = g_web_request_get(wp_context->web,
 				redirect, wispr_portal_web_result,
-				wispr_route_request, wp_context);
+				wispr_dns_route_request, wispr_route_request,
+				wp_context);
 		skip_failed = true;
 
 		break;
@@ -904,9 +936,33 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 	return false;
 }
 
+static char *parse_proxy(const char *proxy)
+{
+	char *proxy_server;
+	char *c;
+
+	if (!g_strcmp0(proxy, "DIRECT"))
+		return NULL;
+
+	if (!g_str_has_prefix(proxy, "PROXY "))
+		return NULL;
+
+	proxy_server = g_strdup(proxy + 6);
+
+	/* Use first proxy server */
+	c = strchr(proxy_server, ';');
+	if (c)
+		*c = '\0';
+
+	g_strstrip(proxy_server);
+
+	return proxy_server;
+}
+
 static void proxy_callback(const char *proxy, void *user_data)
 {
 	struct connman_wispr_portal_context *wp_context = user_data;
+	char *proxy_server;
 
 	DBG("proxy %s", proxy);
 
@@ -915,12 +971,10 @@ static void proxy_callback(const char *proxy, void *user_data)
 
 	wp_context->token = 0;
 
-	if (proxy && g_strcmp0(proxy, "DIRECT") != 0) {
-		if (g_str_has_prefix(proxy, "PROXY")) {
-			proxy += 5;
-			for (; *proxy == ' ' && *proxy != '\0'; proxy++);
-		}
-		g_web_set_proxy(wp_context->web, proxy);
+	proxy_server = parse_proxy(proxy);
+	if (proxy_server) {
+		g_web_set_proxy(wp_context->web, proxy_server);
+		g_free(proxy_server);
 	}
 
 	g_web_set_accept(wp_context->web, NULL);

@@ -318,7 +318,7 @@ static void tun_newlink(unsigned flags, unsigned change, void *user_data)
 		const char *url = connman_setting_get_string(CONF_STATUS_URL_IPV6);
 
 		web_request_id = g_web_request_get(web, url,
-				web_result, NULL,  NULL);
+				web_result, NULL, NULL, NULL);
 
 		newlink_timeout(NULL);
 	}

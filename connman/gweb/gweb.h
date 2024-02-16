@@ -41,6 +41,8 @@ typedef struct _GWebParser GWebParser;
 
 typedef bool (*GWebResultFunc)(GWebResult *result, gpointer user_data);
 
+typedef bool (*GWebDnsRouteFunc)(int if_index, bool add, gpointer user_data);
+
 typedef bool (*GWebRouteFunc)(const char *addr, int ai_family,
 		int if_index, gpointer user_data);
 
@@ -80,8 +82,8 @@ void g_web_set_close_connection(GWeb *web, bool enabled);
 bool g_web_get_close_connection(GWeb *web);
 
 guint g_web_request_get(GWeb *web, const char *url,
-				GWebResultFunc func, GWebRouteFunc route,
-				gpointer user_data);
+				GWebResultFunc func, GWebDnsRouteFunc,
+				GWebRouteFunc route, gpointer user_data);
 guint g_web_request_post(GWeb *web, const char *url,
 				const char *type, GWebInputFunc input,
 				GWebResultFunc func, gpointer user_data);
