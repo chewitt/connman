@@ -9189,12 +9189,14 @@ static int service_indicate_state(struct connman_service *service)
 	case CONNMAN_SERVICE_STATE_FAILURE:
 		if (service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_USER ||
 			service->connect_reason == CONNMAN_SERVICE_CONNECT_REASON_NATIVE) {
-			connman_agent_report_error(service, service->path,
+			result = connman_agent_report_error(service,
+						service->path,
 						error2string(service->error),
 						report_error_cb,
 						get_dbus_sender(service),
 						NULL);
-			goto notifier;
+			if (result == -EINPROGRESS)
+				goto notifier;
 		}
 		service_complete(service);
 		break;
