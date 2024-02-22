@@ -36,6 +36,11 @@
 
 static const char *program_exec;
 static const char *program_path;
+/*
+ * Provide a log identy to syslog whose lifetime is greater than the timespan
+ * we're logging. The result from basename does not guarantee that.
+ */
+static char *syslog_identity;
 
 /* This makes sure we always have a __debug section. */
 CONNMAN_DEBUG_ALIAS(dummy);
@@ -212,7 +217,11 @@ int __connman_log_init(const char *program, const char *debug,
 	if (backtrace)
 		signal_setup(signal_handler);
 
-	openlog(basename(program), option, LOG_DAEMON);
+	/* Clean up any previos identity and set the new one. */
+	g_free(syslog_identity);
+	syslog_identity = g_path_get_basename(program);
+
+	openlog(syslog_identity, option, LOG_DAEMON);
 
 	syslog(LOG_INFO, "%s version %s", program_name, program_version);
 
@@ -227,6 +236,9 @@ void __connman_log_cleanup(gboolean backtrace)
 
 	if (backtrace)
 		signal_setup(SIG_DFL);
+
+	g_free(syslog_identity);
+	syslog_identity = NULL;
 
 	g_strfreev(enabled);
 }
