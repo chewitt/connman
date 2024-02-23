@@ -3424,7 +3424,7 @@ static int ipv6_neigbour_proxy(int index, bool enable, const char *ipv6_address,
 	attr->rta_type = NDA_DST;
 	attr->rta_len = RTA_LENGTH(sizeof(struct in6_addr));
 
-	if (!inet_pton(AF_INET6, ipv6_address, RTA_DATA(attr))) {
+	if (inet_pton(AF_INET6, ipv6_address, RTA_DATA(attr)) != 1) {
 		connman_error("Invalid ndproxy IPv6 address %s", ipv6_address);
 		goto out;
 	}
