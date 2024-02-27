@@ -124,11 +124,11 @@ int __connman_inet_modify_address(int cmd, int flags,
 	ifaddrmsg->ifa_index = index;
 
 	if (family == AF_INET) {
-		if (inet_pton(AF_INET, address, &ipv4_addr) < 1)
+		if (inet_pton(AF_INET, address, &ipv4_addr) != 1)
 			return -1;
 
 		if (peer) {
-			if (inet_pton(AF_INET, peer, &ipv4_dest) < 1)
+			if (inet_pton(AF_INET, peer, &ipv4_dest) != 1)
 				return -1;
 
 			err = __connman_inet_rtnl_addattr_l(header,
@@ -168,7 +168,7 @@ int __connman_inet_modify_address(int cmd, int flags,
 				return err;
 		}
 	} else if (family == AF_INET6) {
-		if (inet_pton(AF_INET6, address, &ipv6_addr) < 1)
+		if (inet_pton(AF_INET6, address, &ipv6_addr) != 1)
 			return -1;
 
 		err = __connman_inet_rtnl_addattr_l(header,
@@ -720,7 +720,7 @@ int connman_inet_del_ipv6_network_route_with_metric(int index, const char *host,
 
 	rt.rtmsg_dst_len = prefix_len;
 
-	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 1) {
+	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) != 1) {
 		err = -errno;
 		goto out;
 	}
@@ -781,7 +781,7 @@ int connman_inet_add_ipv6_network_route_with_metric(int index, const char *host,
 
 	rt.rtmsg_dst_len = prefix_len;
 
-	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) < 1) {
+	if (inet_pton(AF_INET6, host, &rt.rtmsg_dst) != 1) {
 		err = -errno;
 		goto out;
 	}
@@ -804,7 +804,7 @@ int connman_inet_add_ipv6_network_route_with_metric(int index, const char *host,
 	 */
 
 	if (gateway && !__connman_inet_is_any_addr(gateway, AF_INET6) &&
-		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) > 0)
+		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) == 1)
 		rt.rtmsg_flags |= RTF_GATEWAY;
 
 	rt.rtmsg_metric = metric;
@@ -855,7 +855,7 @@ int connman_inet_clear_ipv6_gateway_address(int index, const char *gateway)
 
 	memset(&rt, 0, sizeof(rt));
 
-	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) < 1) {
+	if (inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) != 1) {
 		err = -errno;
 		goto out;
 	}
@@ -1294,7 +1294,7 @@ bool connman_inet_compare_subnet(int index, const char *host)
 	if (!host)
 		return false;
 
-	if (inet_pton(AF_INET, host, &haddr) <= 0)
+	if (inet_pton(AF_INET, host, &haddr) != 1)
 		return false;
 
 	if_addr.index = index;
@@ -1331,7 +1331,7 @@ bool connman_inet_compare_ipv6_subnet(int index, const char *host)
 	struct in6_addr imask = { 0 };
 	struct in6_addr haddr = { 0 };
 
-	if (inet_pton(AF_INET6, host, &haddr) <= 0)
+	if (inet_pton(AF_INET6, host, &haddr) != 1)
 		return false;
 
 	addr.index = index;
@@ -3244,12 +3244,15 @@ int __connman_inet_del_fwmark_rule(uint32_t table_id, int family, uint32_t fwmar
 }
 
 static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
-			const char *gateway)
+			const char *gateway, unsigned char prefixlen)
 {
 	struct __connman_inet_rtnl_handle rth;
 	unsigned char buf[sizeof(struct in6_addr)];
 	int ret, len;
 	int family = connman_inet_check_ipaddress(gateway);
+	char *dst = NULL;
+
+	DBG("gateway %s/%u table %u", gateway, prefixlen, table_id);
 
 	switch (family) {
 	case AF_INET:
@@ -3262,8 +3265,20 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 		return -EINVAL;
 	}
 
-	ret = inet_pton(family, gateway, buf);
-	if (ret <= 0)
+	if (prefixlen) {
+		struct in_addr ipv4_subnet_addr, ipv4_mask;
+
+		memset(&ipv4_subnet_addr, 0, sizeof(ipv4_subnet_addr));
+		ipv4_mask.s_addr = htonl((0xffffffff << (32 - prefixlen)) & 0xffffffff);
+		ipv4_subnet_addr.s_addr = inet_addr(gateway);
+		ipv4_subnet_addr.s_addr &= ipv4_mask.s_addr;
+
+		dst = g_strdup(inet_ntoa(ipv4_subnet_addr));
+	}
+
+	ret = inet_pton(family, dst ? dst : gateway, buf);
+	g_free(dst);
+	if (ret != 1)
 		return -EINVAL;
 
 	memset(&rth, 0, sizeof(rth));
@@ -3277,9 +3292,11 @@ static int iproute_default_modify(int cmd, uint32_t table_id, int ifindex,
 	rth.req.u.r.rt.rtm_protocol = RTPROT_BOOT;
 	rth.req.u.r.rt.rtm_scope = RT_SCOPE_UNIVERSE;
 	rth.req.u.r.rt.rtm_type = RTN_UNICAST;
+	rth.req.u.r.rt.rtm_dst_len = prefixlen;
 
-	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req), RTA_GATEWAY,
-								buf, len);
+	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req),
+		prefixlen > 0 ? RTA_DST : RTA_GATEWAY, buf, len);
+
 	if (table_id < 256) {
 		rth.req.u.r.rt.rtm_table = table_id;
 	} else {
@@ -3308,7 +3325,7 @@ int __connman_inet_add_default_to_table(uint32_t table_id, int ifindex,
 {
 	/* ip route add default via 1.2.3.4 dev wlan0 table 1234 */
 
-	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway);
+	return iproute_default_modify(RTM_NEWROUTE, table_id, ifindex, gateway, 0);
 }
 
 int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
@@ -3316,7 +3333,7 @@ int __connman_inet_del_default_from_table(uint32_t table_id, int ifindex,
 {
 	/* ip route del default via 1.2.3.4 dev wlan0 table 1234 */
 
-	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway);
+	return iproute_default_modify(RTM_DELROUTE, table_id, ifindex, gateway, 0);
 }
 
 int __connman_inet_get_interface_ll_address(int index, int family,
@@ -3407,7 +3424,7 @@ static int ipv6_neigbour_proxy(int index, bool enable, const char *ipv6_address,
 	attr->rta_type = NDA_DST;
 	attr->rta_len = RTA_LENGTH(sizeof(struct in6_addr));
 
-	if (!inet_pton(AF_INET6, ipv6_address, RTA_DATA(attr))) {
+	if (inet_pton(AF_INET6, ipv6_address, RTA_DATA(attr)) != 1) {
 		connman_error("Invalid ndproxy IPv6 address %s", ipv6_address);
 		goto out;
 	}

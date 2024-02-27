@@ -934,7 +934,7 @@ static void do_dad(GDHCPClient *dhcp_client, struct connman_dhcpv6 *dhcp)
 
 		ref_own_address(user_data);
 
-		if (inet_pton(AF_INET6, address, &addr) < 1) {
+		if (inet_pton(AF_INET6, address, &addr) != 1) {
 			DBG("Invalid IPv6 address %s %d/%s", address,
 				-errno, strerror(errno));
 			goto fail;
