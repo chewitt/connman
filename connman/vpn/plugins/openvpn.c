@@ -89,6 +89,9 @@ struct {
 	{ "OpenVPN.TLSCipher", "--tls-cipher", NULL, OPT_STRING},
 	{ "OpenVPN.TLSAuthDir", NULL, NULL, OPT_NONE},
 	{ "OpenVPN.Cipher", "--cipher", NULL, OPT_STRING},
+	{ "OpenVPN.DataCiphers", "--data-ciphers", NULL, OPT_STRING},
+	{ "OpenVPN.DataCiphersFallback", "--data-ciphers-fallback", NULL,
+								OPT_STRING},
 	{ "OpenVPN.Auth", "--auth", NULL, OPT_STRING},
 	/* Is set to adaptive by default if value is omitted */
 	{ "OpenVPN.CompLZO", "--comp-lzo", NULL, OPT_STRING},
