@@ -479,6 +479,8 @@ static int task_append_config_data(struct vpn_provider *provider,
 
 static void close_management_interface(struct ov_private_data *data)
 {
+	DBG("");
+
 	if (data->mgmt_path) {
 		if (unlink(data->mgmt_path) && errno != ENOENT)
 			connman_warn("Unable to unlink management socket %s: "
@@ -1072,6 +1074,45 @@ out:
 	return -EINPROGRESS;
 }
 
+static gboolean is_auth_error_terminal(const char *str)
+{
+	/* From OpenVPN 2.6.9 OpenVPN src/openvpn/multi.c */
+	static const char * const errors[] = {
+		"Data channel negotiation failed (missing DATA_V2)",
+		"Client incompatible with this server.",
+			/*
+			 * continues with; "Keying Material Exporters (RFC 5705)
+			 * support missing. Upgrade to a client that supports
+			 * this feature (OpenVPN 2.6.0+)."
+			 */
+		"Data channel cipher negotiation failed (no shared cipher)"};
+	int i;
+
+	if (!str)
+		return false;
+
+	for (i = 0; i < G_N_ELEMENTS(errors); i++) {
+		if (g_strrstr(str, errors[i]))
+			return true;
+	}
+
+	return false;
+}
+
+static bool error_limit_reached(struct vpn_provider *provider)
+{
+	unsigned int limit;
+
+	if (!provider)
+		return false;
+
+	limit = vpn_provider_get_auth_error_limit(provider);
+	if (!limit)
+		return false;
+
+	return vpn_provider_get_authentication_errors(provider) >= limit;
+}
+
 static gboolean ov_management_handle_input(GIOChannel *source,
 				GIOCondition condition, gpointer user_data)
 {
@@ -1113,6 +1154,26 @@ static gboolean ov_management_handle_input(GIOChannel *source,
 			 */
 			vpn_provider_add_error(data->provider,
 					VPN_PROVIDER_ERROR_AUTH_FAILED);
+
+			/*
+			 * If the auth error does not terminate the process or
+			 * request anything new, such as plain auth error does,
+			 * it is required to restart the process in order to
+			 * make the connection error detection work and stop
+			 * connecting process when limit is reached. Calling
+			 * ov_connect_done() with EACCES adds auth error, so
+			 * since we need to abort this connection call with
+			 * ECONNABORTED as these errors need user interaction.
+			 * ECONNABORTED also triggers disabling of autoconnect
+			 * in connmand.
+			 */
+			if (error_limit_reached(data->provider) ||
+						is_auth_error_terminal(str)) {
+				ov_connect_done(data, ECONNABORTED);
+
+				if (data->task)
+					connman_task_stop(data->task);
+			}
 		/*
 		 * According to the OpenVPN manual about management interface
 		 * https://openvpn.net/community-resources/management-interface/
