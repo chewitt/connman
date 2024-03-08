@@ -5086,6 +5086,10 @@ static int get_nfs_server_ip(const char *cmdline_file, const char *pnp_file,
 	for (pp = args; *pp; pp++) {
 		if (!strcmp(*pp, "root=/dev/nfs"))
 			break;
+		if (!strncmp(*pp, "root=/dev/nbd", strlen("root=/dev/nbd")))
+			break;
+		if (!strncmp(*pp, "nbddev=", strlen("nbddev=")))
+			break;
 	}
 	/* no rootnfs found */
 	if (!*pp)
@@ -5094,6 +5098,8 @@ static int get_nfs_server_ip(const char *cmdline_file, const char *pnp_file,
 	/* locate nfsroot argument */
 	for (pp = args; *pp; pp++) {
 		if (!strncmp(*pp, "nfsroot=", strlen("nfsroot=")))
+			break;
+		if (!strncmp(*pp, "nbdroot=", strlen("nbdroot=")))
 			break;
 	}
 	/* no nfsroot argument found */
