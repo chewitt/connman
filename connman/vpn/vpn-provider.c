@@ -461,6 +461,16 @@ static void send_value_boolean(const char *path, const char *key,
 					&value);
 }
 
+static void send_value_uint32(const char *path, const char *key,
+							dbus_uint32_t value)
+{
+	connman_dbus_property_changed_basic(path,
+					VPN_CONNECTION_INTERFACE,
+					key,
+					DBUS_TYPE_UINT32,
+					&value);
+}
+
 static gboolean provider_send_changed(gpointer data)
 {
 	struct vpn_provider *provider = data;
@@ -1310,7 +1320,8 @@ static void reset_error_counters(struct vpn_provider *provider)
 
 	DBG("provider %p", provider);
 
-	provider->auth_error_counter = provider->conn_error_counter = 0;
+	vpn_provider_set_uint(provider, "AuthErrors", 0);
+	vpn_provider_set_uint(provider, "ConnErrors", 0);
 }
 
 static int vpn_provider_save(struct vpn_provider *provider)
@@ -2013,6 +2024,7 @@ static void append_properties(DBusMessageIter *iter,
 	gpointer value, key;
 	dbus_bool_t immutable;
 	dbus_bool_t split_routing;
+	dbus_uint32_t uint32_value;
 
 	connman_dbus_dict_open(iter, &dict);
 
@@ -2061,6 +2073,11 @@ static void append_properties(DBusMessageIter *iter,
 	connman_dbus_dict_append_array(&dict, "ServerRoutes",
 				DBUS_TYPE_DICT_ENTRY, append_routes,
 				provider->routes);
+
+	/* Add only the auth error limit set for the VPN, errors start from 0 */
+	uint32_value = provider->auth_error_limit;
+	connman_dbus_dict_append_basic(&dict, "AuthErrorLimit",
+					DBUS_TYPE_UINT32, &uint32_value);
 
 	if (provider->setting_strings) {
 		g_hash_table_iter_init(&hash, provider->setting_strings);
@@ -2162,11 +2179,13 @@ void vpn_provider_add_error(struct vpn_provider *provider,
 		break;
 	case VPN_PROVIDER_ERROR_CONNECT_FAILED:
 		provider->previous_connect_time = 0;
-		++provider->conn_error_counter;
+		vpn_provider_set_uint(provider, "ConnErrors",
+					++provider->conn_error_counter);
 		break;
 	case VPN_PROVIDER_ERROR_LOGIN_FAILED:
 	case VPN_PROVIDER_ERROR_AUTH_FAILED:
-		++provider->auth_error_counter;
+		vpn_provider_set_uint(provider, "AuthErrors",
+					++provider->auth_error_counter);
 		break;
 	}
 
@@ -3041,6 +3060,30 @@ bool vpn_provider_get_boolean(struct vpn_provider *provider, const char *key,
 	return default_value;
 }
 
+
+int vpn_provider_set_uint(struct vpn_provider *provider, const char *key,
+							unsigned int value)
+{
+	dbus_uint32_t uint32_value;
+
+	if (value > G_MAXUINT32)
+		return -EINVAL;
+
+	if (g_str_equal(key, "AuthErrorLimit"))
+		provider->auth_error_limit = value;
+	else if (g_str_equal(key, "AuthErrors"))
+		provider->auth_error_counter = value;
+	else if (g_str_equal(key, "ConnErrors"))
+		provider->conn_error_counter = value;
+	else
+		return -EINVAL;
+
+	uint32_value = value;
+	send_value_uint32(provider->path, key, uint32_value);
+
+	return 0;
+}
+
 bool vpn_provider_get_string_immutable(struct vpn_provider *provider,
 							const char *key)
 {
@@ -3079,7 +3122,15 @@ void vpn_provider_set_auth_error_limit(struct vpn_provider *provider,
 	if (!provider)
 		return;
 
-	provider->auth_error_limit = limit;
+	vpn_provider_set_uint(provider, "AuthErrorLimit", limit);
+}
+
+unsigned int vpn_provider_get_auth_error_limit(struct vpn_provider *provider)
+{
+	if (!provider)
+		return 0;
+
+	return provider->auth_error_limit;
 }
 
 int vpn_provider_set_supported_ip_networks(struct vpn_provider *provider,
