@@ -1613,21 +1613,55 @@ static void connect_cb(struct vpn_provider *provider, void *user_data,
 						VPN_PROVIDER_ERROR_UNKNOWN);
 			break;
 		case ECANCELED:
-			/* fall through */
+			/*
+			 * ECANCELED means that agent dialog was canceled and
+			 * if the VPN has been connected make it disconnected.
+			 */
+			if (is_connected_state(provider->state)) {
+				if (provider->driver->set_state)
+					provider->driver->set_state(provider,
+						VPN_PROVIDER_STATE_DISCONNECT);
+
+				vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_DISCONNECT);
+			}
+
+			break;
 		case ECONNABORTED:
+			/*
+			 * When authentication error limit is reached set the
+			 * state of the VPN to failure to be shown to upper
+			 * layers (user) in case the connection got aborted.
+			 * These can be configuration errors or authentication
+			 * errors (in case of OpenVPN, the cipher negotiation
+			 * has failed).
+			 */
+			if (provider->auth_error_counter >=
+						provider->auth_error_limit) {
+				vpn_provider_indicate_error(provider,
+						VPN_PROVIDER_ERROR_CONNECT_FAILED);
+				vpn_provider_set_state(provider,
+					VPN_PROVIDER_STATE_FAILURE);
+
+				/*
+				 * Upper layers have been informed, reset the
+				 * counter so autoconnect works after this
+				 * notify is done.
+				 */
+				reset_error_counters(provider);
 			/*
 			 * This can be called in other situations than when
 			 * VPN agent error checker is called. In such case
-			 * react to both ECONNABORTED and ECANCELED as if the
-			 * connection was called to terminate and do full
-			 * disconnect -> idle cycle when being connected or
-			 * ready. Setting the state also using the driver
-			 * callback (vpn_set_state()) ensures that the driver is
-			 * being disconnected as well and eventually the vpn
-			 * process gets killed and vpn_died() is called to make
-			 * the provider back to idle state.
+			 * react to this as if the connection was called to
+			 * terminate and do a full disconnect -> idle cycle
+			 * when being connected. Setting the state also using
+			 * the driver callback (vpn_set_state()) ensures that
+			 * the driver is being disconnected as well and
+			 * eventually the vpn process gets killed and
+			 * vpn_died() is called to make the provider back to
+			 * idle state.
 			 */
-			if (is_connected_state(provider->state)) {
+			} else if (is_connected_state(provider->state)) {
 				if (provider->driver->set_state)
 					provider->driver->set_state(provider,
 						VPN_PROVIDER_STATE_DISCONNECT);
