@@ -99,6 +99,10 @@ struct connection_data {
 	GResolv *resolv;
 	guint resolv_id;
 	guint remove_resolv_id;
+
+	unsigned int auth_error_counter;
+	unsigned int conn_error_counter;
+	unsigned int auth_error_limit;
 };
 
 static int set_string(struct connman_provider *provider,
@@ -566,9 +570,18 @@ static void connect_reply(DBusPendingCall *call, void *user_data)
 			DBG("%s connect canceled", data->path);
 			connman_provider_set_autoconnect(data->provider, false);
 			break;
+		case -ECONNABORTED:
+			/*
+			 * Coming from VPNs this usually means an auth related
+			 * major error, disable autoconnect to let user resolve
+			 * the issue if auth error counter is met.
+			 */
+			if (data->auth_error_counter >=  data->auth_error_limit)
+				connman_provider_set_autoconnect(data->provider,
+							false);
+			/* fall-through */
 		case -ENOLINK: /* vpnd reports that connmand is not online. */
 		case -EISCONN:
-		case -ECONNABORTED:
 		case -ECONNREFUSED:
 		default:
 			connman_error("Connect reply: %s (%s)", error.message,
@@ -682,6 +695,21 @@ static int connect_provider(struct connection_data *data, void *user_data,
 	return -EINPROGRESS;
 }
 
+static dbus_uint32_t get_dbus_uint32(DBusMessageIter *value)
+{
+	dbus_uint32_t uint32_value;
+
+	if (!value)
+		return 0;
+
+	if (dbus_message_iter_get_arg_type(value) != DBUS_TYPE_UINT32)
+		return 0;
+
+	dbus_message_iter_get_basic(value, &uint32_value);
+
+	return uint32_value;
+}
+
 static void add_connection(const char *path, DBusMessageIter *properties,
 			void *user_data)
 {
@@ -754,6 +782,8 @@ static void add_connection(const char *path, DBusMessageIter *properties,
 			/* Ignored */
 		} else if (g_str_equal(key, "UserRoutes")) {
 			/* Ignored */
+		} else if (g_str_equal(key, "AuthErrorLimit")) {
+			data->auth_error_limit = get_dbus_uint32(&value);
 		} else {
 			if (dbus_message_iter_get_arg_type(&value) ==
 							DBUS_TYPE_STRING) {
@@ -2139,6 +2169,12 @@ static gboolean property_changed(DBusConnection *conn,
 		dbus_message_iter_get_basic(&value, &value_bool);
 		connman_provider_set_ipv6_data_leak_prevention(data->provider,
 								value_bool);
+	} else if (g_str_equal(key, "AuthErrorLimit")) {
+		data->auth_error_limit = get_dbus_uint32(&value);
+	} else if (g_str_equal(key, "AuthErrors")) {
+		data->auth_error_counter = get_dbus_uint32(&value);
+	} else if (g_str_equal(key, "ConnErrors")) {
+		data->conn_error_counter = get_dbus_uint32(&value);
 	}
 
 	if (ip_set && err == 0) {
