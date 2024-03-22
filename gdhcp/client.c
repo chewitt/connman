@@ -2316,6 +2316,7 @@ static gboolean listener_event(GIOChannel *channel, GIOCondition condition,
 		} else {
 			re = dhcp_recv_l3_packet(&packet,
 						dhcp_client->listener_sockfd);
+			pkt_len = (uint16_t)(unsigned int)re;
 			xid = packet.xid;
 		}
 	} else if (dhcp_client->listen_mode == L_ARP) {
