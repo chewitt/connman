@@ -52,6 +52,7 @@
 #define OFONO_NETREG_INTERFACE		OFONO_SERVICE ".NetworkRegistration"
 #define OFONO_CM_INTERFACE		OFONO_SERVICE ".ConnectionManager"
 #define OFONO_CONTEXT_INTERFACE		OFONO_SERVICE ".ConnectionContext"
+#define OFONO_LTE_INTERFACE		OFONO_SERVICE ".LongTermEvolution"
 
 #define MODEM_ADDED			"ModemAdded"
 #define MODEM_REMOVED			"ModemRemoved"
@@ -70,6 +71,11 @@ enum ofono_api {
 	OFONO_API_SIM =		0x1,
 	OFONO_API_NETREG =	0x2,
 	OFONO_API_CM =		0x4,
+	OFONO_API_LTE =		0x8,
+};
+
+enum capabilities {
+	LTE_CAPABLE = 0x1,
 };
 
 /*
@@ -137,6 +143,7 @@ struct modem_data {
 	bool powered;
 	bool online;
 	uint8_t interfaces;
+	uint8_t capabilities;
 	bool ignore;
 
 	bool set_powered;
@@ -169,6 +176,8 @@ static const char *api2string(enum ofono_api api)
 		return "netreg";
 	case OFONO_API_CM:
 		return "cm";
+	case OFONO_API_LTE:
+		return "lte";
 	}
 
 	return "unknown";
@@ -730,11 +739,27 @@ static uint8_t extract_interfaces(DBusMessageIter *array)
 		{ .value = OFONO_SIM_INTERFACE, .flag = OFONO_API_SIM },
 		{ .value = OFONO_NETREG_INTERFACE, .flag = OFONO_API_NETREG },
 		{ .value = OFONO_CM_INTERFACE, .flag = OFONO_API_CM },
+		{ .value = OFONO_LTE_INTERFACE, .flag = OFONO_API_LTE },
 	};
 	uint32_t flags;
 
 	if (string_list_to_flags(array, interfaces_map,
 					G_N_ELEMENTS(interfaces_map),
+					&flags) < 0)
+		return 0;
+
+	return flags;
+}
+
+static uint8_t extract_capabilities(DBusMessageIter *array)
+{
+	static const struct flag_map capabilities_map[] = {
+		{ .value = "lte", .flag = LTE_CAPABLE },
+	};
+	uint32_t flags;
+
+	if (string_list_to_flags(array, capabilities_map,
+					G_N_ELEMENTS(capabilities_map),
 					&flags) < 0)
 		return 0;
 
@@ -972,6 +997,9 @@ static bool try_create_device(struct modem_data *modem)
 	if (!modem->imsi)
 		return false;
 
+	if ((modem->capabilities & LTE_CAPABLE) &&
+			!has_interface(modem->interfaces, OFONO_API_LTE))
+		return false;
 
 	/*
 	 * Create the device and register it at the core. Enabling (setting
@@ -1940,6 +1968,9 @@ static void modem_update_interfaces(struct modem_data *modem,
 			netreg_get_properties(modem);
 	}
 
+	if (api_added(old_ifaces, new_ifaces, OFONO_API_LTE))
+		try_create_device(modem);
+
 	if (api_removed(old_ifaces, new_ifaces, OFONO_API_CM)) {
 		if (modem->call_get_contexts) {
 			DBG("cancelling pending GetContexts call");
@@ -2017,6 +2048,9 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 		modem->serial = g_strdup(serial);
 
 		DBG("%s Serial %s", modem->path, modem->serial);
+	} else if (g_str_equal(key, "Capabilities")) {
+		modem->capabilities = extract_capabilities(&value);
+		return TRUE;
 	}
 
 	return TRUE;
@@ -2092,6 +2126,12 @@ static void add_modem(const char *path, DBusMessageIter *prop)
 				DBG("%s Ignore this modem", modem->path);
 				modem->ignore = true;
 			}
+		} else if (g_str_equal(key, "Capabilities")) {
+			modem->capabilities = extract_capabilities(&value);
+
+			DBG("lte capable: %s",
+					modem->capabilities & LTE_CAPABLE ?
+					"yes" : "no");
 		}
 
 		dbus_message_iter_next(prop);
