@@ -957,57 +957,56 @@ out:
 
 /*
  * This functions tests if we have the necessary information gathered
- * before we are able to create a device.
+ * in order to create the device.
  */
-static bool ready_to_create_device(struct modem_data *modem)
+static bool try_create_device(struct modem_data *modem)
 {
+	struct connman_device *device;
+	char *ident;
+
+	DBG("%s", modem->path);
+
 	if (modem->device)
 		return false;
 
 	if (!modem->imsi)
 		return false;
 
-	return true;
-}
 
-static void create_device(struct modem_data *modem)
-{
-	struct connman_device *device;
-	char *ident = NULL;
-
-	DBG("%s", modem->path);
-
-	if (modem->imsi)
-		ident = modem->imsi;
-
-	if (!connman_dbus_validate_ident(ident))
-		ident = connman_dbus_encode_string(ident);
-	else
-		ident = g_strdup(ident);
-
+	/*
+	 * Create the device and register it at the core. Enabling (setting
+	 * it online is done through the modem_enable() callback.
+	 */
 	device = connman_device_create("ofono", CONNMAN_DEVICE_TYPE_CELLULAR);
-	if (!device)
-		goto out;
+	if (!device) {
+		connman_error("Failed to create device for modem on path: %s",
+				modem->path);
+		return false;
+	}
 
-	DBG("device %p", device);
+	DBG("created device %p", device);
+
+	if (!connman_dbus_validate_ident(modem->imsi))
+		ident = connman_dbus_encode_string(modem->imsi);
+	else
+		ident = g_strdup(modem->imsi);
 
 	connman_device_set_ident(device, ident);
+	g_free(ident);
 
 	connman_device_set_string(device, "Path", modem->path);
-
 	connman_device_set_data(device, modem);
 
 	if (connman_device_register(device) < 0) {
-		connman_error("Failed to register cellular device");
+		connman_error("Failed to register cellular device %p", device);
 		connman_device_unref(device);
-		goto out;
+		return false;
 	}
 
 	modem->device = device;
-
 	connman_device_set_powered(modem->device, modem->online);
-out:
-	g_free(ident);
+
+	return true;
 }
 
 static void destroy_device(struct modem_data *modem)
@@ -1835,17 +1834,7 @@ static gboolean sim_changed(DBusConnection *conn, DBusMessage *message,
 
 	if (g_str_equal(key, "SubscriberIdentity")) {
 		sim_update_imsi(modem, &value);
-
-		if (!ready_to_create_device(modem))
-			return TRUE;
-
-		/*
-		 * This is a GSM modem. Create the device and
-		 * register it at the core. Enabling (setting
-		 * it online is done through the
-		 * modem_enable() callback.
-		 */
-		create_device(modem);
+		try_create_device(modem);
 	}
 
 	return TRUE;
@@ -1869,16 +1858,8 @@ static void sim_properties_reply(struct modem_data *modem,
 		if (g_str_equal(key, "SubscriberIdentity")) {
 			sim_update_imsi(modem, &value);
 
-			if (!ready_to_create_device(modem))
+			if (!try_create_device(modem))
 				return;
-
-			/*
-			 * This is a GSM modem. Create the device and
-			 * register it at the core. Enabling (setting
-			 * it online is done through the
-			 * modem_enable() callback.
-			 */
-			create_device(modem);
 
 			if (!modem->online)
 				return;
