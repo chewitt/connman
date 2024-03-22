@@ -685,29 +685,60 @@ static bool has_interface(uint8_t interfaces,
 	return false;
 }
 
-static uint8_t extract_interfaces(DBusMessageIter *array)
+struct flag_map {
+	const char *value;
+	uint32_t flag;
+};
+
+static int string_list_to_flags(DBusMessageIter *array,
+				const struct flag_map *map, size_t map_len,
+				uint32_t *out_flags)
 {
 	DBusMessageIter entry;
-	uint8_t interfaces = 0;
+	uint32_t flags = 0;
+
+	if (dbus_message_iter_get_arg_type(array) != DBUS_TYPE_ARRAY)
+		return -EINVAL;
+
+	if (dbus_message_iter_get_element_type(array) != DBUS_TYPE_STRING)
+		return -EINVAL;
 
 	dbus_message_iter_recurse(array, &entry);
 
 	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING) {
+		size_t i;
 		const char *name;
 
 		dbus_message_iter_get_basic(&entry, &name);
 
-		if (g_str_equal(name, OFONO_SIM_INTERFACE))
-			interfaces |= OFONO_API_SIM;
-		else if (g_str_equal(name, OFONO_NETREG_INTERFACE))
-			interfaces |= OFONO_API_NETREG;
-		else if (g_str_equal(name, OFONO_CM_INTERFACE))
-			interfaces |= OFONO_API_CM;
+		for (i = 0; i < map_len; i++)
+			if (!strcmp(name, map[i].value))
+				flags |= map[i].flag;
 
 		dbus_message_iter_next(&entry);
 	}
 
-	return interfaces;
+	if (out_flags)
+		*out_flags = flags;
+
+	return 0;
+}
+
+static uint8_t extract_interfaces(DBusMessageIter *array)
+{
+	static const struct flag_map interfaces_map[] = {
+		{ .value = OFONO_SIM_INTERFACE, .flag = OFONO_API_SIM },
+		{ .value = OFONO_NETREG_INTERFACE, .flag = OFONO_API_NETREG },
+		{ .value = OFONO_CM_INTERFACE, .flag = OFONO_API_CM },
+	};
+	uint32_t flags;
+
+	if (string_list_to_flags(array, interfaces_map,
+					G_N_ELEMENTS(interfaces_map),
+					&flags) < 0)
+		return 0;
+
+	return flags;
 }
 
 static char *extract_nameservers(DBusMessageIter *array)
