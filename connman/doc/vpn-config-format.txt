@@ -173,7 +173,15 @@ OpenVPN VPN supports following options (see openvpn(8) for details):
                                          and attacks on the TLS stack. Static
                                          key file given as parameter (0)
  OpenVPN.Cipher         --cipher         Encrypt packets with cipher algorithm
-                                         given as parameter (O)
+                                         given as parameter. With OpenVPN 2.6
+                                         DataCiphers list is recommended (O)
+ OpenVPN.DataCiphers    --data-ciphers   List of cipher algorithms separated
+                                         with colon (:) that are used with the
+                                         server in negotiating the packet
+                                         encryption cipher (O)
+ OpenVPN.DataCiphersFallback --data-ciphers-fallback The fallback cipher to be
+                                         used when negotiation with the server
+                                         fails (O)
  OpenVPN.Auth           --auth           Authenticate  packets with HMAC using
                                          message digest algorithm alg (O)
  OpenVPN.CompLZO        --comp-lzo       Use  fast  LZO compression. Value can
