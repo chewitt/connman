@@ -2018,18 +2018,15 @@ static gboolean modem_changed(DBusConnection *conn, DBusMessage *message,
 
 		connman_device_set_powered(modem->device, modem->online);
 	} else if (g_str_equal(key, "Interfaces")) {
-		uint8_t interfaces;
+		uint8_t new_interfaces = extract_interfaces(&value);
+		uint8_t old_interfaces = modem->interfaces;
 
-		interfaces = extract_interfaces(&value);
-
-		if (interfaces == modem->interfaces)
+		if (new_interfaces == old_interfaces)
 			return TRUE;
 
-		DBG("%s Interfaces 0x%02x", modem->path, interfaces);
-
-		modem_update_interfaces(modem, modem->interfaces, interfaces);
-
-		modem->interfaces = interfaces;
+		DBG("%s Interfaces 0x%02x", modem->path, new_interfaces);
+		modem->interfaces = new_interfaces;
+		modem_update_interfaces(modem, old_interfaces, new_interfaces);
 	} else if (g_str_equal(key, "Serial")) {
 		char *serial;
 
