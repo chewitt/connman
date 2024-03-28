@@ -146,7 +146,7 @@ static void ofv_died(struct connman_task *task, int exit_code, void *user_data)
 	struct ofv_private_data *data = user_data;
 
 	DBG("task %p, code %d, data %p", task, exit_code, user_data);
-	vpn_died(task, exit_code, user_data);
+	vpn_died(task, exit_code, data->provider);
 	free_private_data(data);
 }
 
