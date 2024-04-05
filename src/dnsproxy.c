@@ -424,23 +424,23 @@ static size_t dns_name_length(const unsigned char *buf)
 	return strlen((const char *)buf) + 1;
 }
 
-static void update_cached_ttl(unsigned char *ptr, int len, int new_ttl)
+static void update_cached_ttl(unsigned char *ptr, size_t len, int new_ttl)
 {
 	size_t name_len;
 	const uint32_t raw_ttl = ntohl((uint32_t)new_ttl);
 
-	if (new_ttl < 0)
+	if (new_ttl < 0 || len < DNS_HEADER_SIZE + DNS_QUESTION_SIZE + 1)
 		return;
 
 	/* skip the header */
 	ptr += DNS_HEADER_SIZE;
 	len -= DNS_HEADER_SIZE;
 
-	if (len < DNS_QUESTION_SIZE + 1)
-		return;
-
 	/* skip the query, which is a name and a struct domain_question */
 	name_len = dns_name_length(ptr);
+
+	if (len < name_len + DNS_QUESTION_SIZE)
+		return;
 
 	ptr += name_len + DNS_QUESTION_SIZE;
 	len -= name_len + DNS_QUESTION_SIZE;
@@ -453,10 +453,11 @@ static void update_cached_ttl(unsigned char *ptr, int len, int new_ttl)
 
 		/* first a name */
 		name_len = dns_name_length(ptr);
+		if (len < name_len)
+			break;
+
 		ptr += name_len;
 		len -= name_len;
-		if (len < 0)
-			break;
 
 		rr = (void*)ptr;
 		if (len < sizeof(*rr))
@@ -468,6 +469,9 @@ static void update_cached_ttl(unsigned char *ptr, int len, int new_ttl)
 
 		/* skip to the next record */
 		rr_len = sizeof(*rr) + ntohs(rr->rdlen);
+		if (len < rr_len)
+			break;
+
 		ptr += rr_len;
 		len -= rr_len;
 	}
@@ -479,6 +483,7 @@ static void send_cached_response(int sk, const unsigned char *ptr, size_t len,
 {
 	struct domain_hdr *hdr = NULL;
 	int err;
+	size_t bytes_sent;
 	const size_t offset = protocol_offset(protocol);
 	/*
 	 * The cached packet contains always the TCP offset (two bytes)
@@ -520,7 +525,9 @@ static void send_cached_response(int sk, const unsigned char *ptr, size_t len,
 		connman_error("Cannot send cached DNS response: %s",
 				strerror(errno));
 	}
-	else if (err != len || dns_len != (len - offset))
+
+	bytes_sent = err;
+	if (bytes_sent != len || dns_len != (len - offset))
 		debug("Packet length mismatch, sent %d wanted %zd dns %zd",
 			err, len, dns_len);
 }
@@ -655,8 +662,8 @@ static int append_data(unsigned char *buf, size_t size, const char *data)
 	size_t len;
 
 	while (true) {
-		const char *dot = strchr(data, '.');
-		len = dot ? dot - data : strlen(data);
+		const char *dot = strchrnul(data, '.');
+		len = dot - data;
 
 		if (len == 0)
 			break;
@@ -1063,7 +1070,7 @@ static int parse_response(const unsigned char *buf, size_t buflen,
 	qlen = strlen(question);
 	ptr += qlen + 1; /* skip \0 */
 
-	if ((eptr - ptr) < DNS_QUESTION_SIZE)
+	if (ptr + DNS_QUESTION_SIZE >= eptr)
 		return -EINVAL;
 
 	q = (void *) ptr;
@@ -2031,7 +2038,7 @@ static int dns_reply_fixup_domains(
 	const char *domain;
 
 	/* full header plus at least one byte for the hostname length */
-	if (reply_len < header_len + 1)
+	if (reply_len < header_len + 1U)
 		return -EINVAL;
 
 	section_counts[0] = hdr->ancount;
@@ -2510,6 +2517,7 @@ hangup:
 
 		if (!reply) {
 			uint16_t reply_len;
+			size_t bytes_len;
 
 			bytes_recv = recv(sk, &reply_len, sizeof(reply_len), MSG_PEEK);
 			if (!bytes_recv) {
@@ -2521,7 +2529,10 @@ hangup:
 				connman_error("DNS proxy error %s",
 						strerror(errno));
 				goto hangup;
-			} else if (bytes_recv < sizeof(reply_len))
+			}
+
+			bytes_len = bytes_recv;
+			if (bytes_len < sizeof(reply_len))
 				return TRUE;
 
 			/* the header contains the length of the message
