@@ -1355,8 +1355,13 @@ static int dhcp_recv_l2_packet(struct dhcp_packet *dhcp_pkt, int fd,
 	packet.ip.tot_len = packet.udp.len; /* yes, this is needed */
 	check = packet.udp.check;
 	packet.udp.check = 0;
-	if (check && check != dhcp_checksum(&packet, bytes))
-		return -1;
+
+	if (check) {
+		uint16_t partial = ~dhcp_checksum(&packet, sizeof(struct iphdr));
+
+		if (check != partial && check != dhcp_checksum(&packet, bytes))
+			return -1;
+	}
 
 	memcpy(dhcp_pkt, &packet.data, bytes - (sizeof(packet.ip) +
 							sizeof(packet.udp)));
