@@ -1514,7 +1514,8 @@ static void test_init(const char *pname)
 	__connman_log_init(pname, g_test_verbose() ? "*" : NULL, FALSE, FALSE,
 						pname, CONNMAN_VERSION);
 	__connman_inotify_init();
-	__connman_storage_init(test_tmp_dir, 0755, 0644);
+	g_assert_cmpint(__connman_storage_init(test_tmp_dir, ".local", 0755,
+								0644), ==, 0);
 
 	service_dir = test_service_dir();
 	mkdir(STORAGEDIR, 0755);
