@@ -228,8 +228,9 @@ scriptdir = $(libdir)/connman/scripts
 
 storageroot = $(localstatedir)/lib
 
-# Path in users' home dir to use as storage dir
-userstorage = ".local/share/system/privileged"
+# Path in users' home dir to use as a storage dir. connman/connman-vpn will
+# be created when omitted.
+userstorage = ".config"
 
 configdir = ${sysconfdir}/connman
 
