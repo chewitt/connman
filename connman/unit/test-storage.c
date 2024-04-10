@@ -43,6 +43,7 @@ static void *connmand_data = NULL;
 static GDBusMethodFunction vpnd_method = NULL;
 static void *vpnd_data = NULL;
 static GHashTable *technology_methods = NULL;
+static const char *test_user_dir = ".local/share";
 
 struct technology_dbus_item {
 	GDBusMethodFunction function;
@@ -1025,7 +1026,13 @@ static void storage_test_basic1()
 	mode_t m_dir = 0;
 	mode_t m_file = 0;
 
-	g_assert_cmpint(__connman_storage_init(NULL, m_dir, m_file), ==, 0);
+	g_assert_cmpint(__connman_storage_init(NULL, NULL, m_dir, m_file),
+						==, -EINVAL);
+	g_assert_cmpint(__connman_storage_init(NULL, test_user_dir, m_dir,
+						m_file), ==, -EINVAL);
+	g_assert_cmpint(__connman_storage_init(DEFAULT_STORAGE_ROOT,
+						DEFAULT_USER_STORAGE, m_dir,
+						m_file), ==, 0);
 	connman_path = g_build_filename(DEFAULT_STORAGE_ROOT, "connman", NULL);
 	vpn_path = g_build_filename(DEFAULT_STORAGE_ROOT, "connman-vpn", NULL);
 	g_assert(!g_strcmp0(STORAGEDIR, connman_path));
@@ -1055,8 +1062,8 @@ static void storage_test_basic2()
 	connman_path = g_build_filename(test_path, "connman", NULL);
 	vpn_path = g_build_filename(test_path, "connman-vpn", NULL);
 
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert(!g_strcmp0(STORAGEDIR, connman_path));
 	g_assert(!g_strcmp0(VPN_STORAGEDIR, vpn_path));
 	g_assert(__connman_storage_dir_mode() == m_dir);
@@ -1090,15 +1097,15 @@ static void storage_test_basic2()
 	__connman_storage_cleanup();
 
 	/* vpnd register succeeds */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_VPN, NULL), ==, 0);
 	__connman_storage_cleanup();
 
 	/* Register succeeds but unregister will return false */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_register_dbus(
 				STORAGE_DIR_TYPE_MAIN, NULL), ==, 0);
 	clean_dbus(); 
@@ -1127,8 +1134,8 @@ static void storage_test_basic3()
 	init_dbus(TRUE);
 
 	/* Main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_true(g_file_test(STORAGEDIR, G_FILE_TEST_IS_DIR));
@@ -1175,8 +1182,8 @@ static void storage_test_basic3()
 	__connman_inotify_cleanup();
 
 	/* VPNd */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR, m_dir),
 									==, 0);
 	g_assert_true(g_file_test(VPN_STORAGEDIR, G_FILE_TEST_IS_DIR));
@@ -1205,8 +1212,8 @@ static void storage_test_basic3()
 	__connman_inotify_cleanup();
 
 	/* Init main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_true(g_file_test(STORAGEDIR, G_FILE_TEST_IS_DIR));
@@ -1232,8 +1239,8 @@ static void storage_test_basic3()
 	__connman_inotify_cleanup();
 
 	/* VPNd */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR, m_dir),
 									==, 0);
 	g_assert_true(g_file_test(VPN_STORAGEDIR, G_FILE_TEST_IS_DIR));
@@ -1277,8 +1284,8 @@ static void storage_test_global1()
 	init_dbus(TRUE);
 
 	/* Main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_true(g_file_test(STORAGEDIR, G_FILE_TEST_IS_DIR));
@@ -1343,8 +1350,8 @@ static void storage_test_global2()
 	init_dbus(TRUE);
 
 	/* Main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_true(g_file_test(STORAGEDIR, G_FILE_TEST_IS_DIR));
@@ -1623,8 +1630,8 @@ static void storage_test_user_change1()
 	mode_t m_file = 0600;
 
 	test_path = setup_test_directory();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -1653,8 +1660,8 @@ static void storage_test_user_change2()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -1684,8 +1691,8 @@ static void storage_test_user_change3()
 	set_user_pw_dir_root(test_path);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -1725,8 +1732,8 @@ static void storage_test_user_change4()
 	set_user_pw_dir_root(test_path);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -1823,8 +1830,8 @@ static void storage_test_user_change5()
 
 	test_path = setup_test_directory();
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 	current_uid = 0;
@@ -1862,8 +1869,8 @@ static void storage_test_user_change6()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 	current_uid = 0;
@@ -2104,8 +2111,8 @@ static void storage_test_user_change7()
 	current_uid = 0;
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR,
@@ -2564,8 +2571,8 @@ static void storage_test_user_change8()
 	current_uid = 0;
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR,
@@ -2916,8 +2923,8 @@ static void storage_test_user_change9()
 	set_user_pw_dir_root(test_path);
 	current_uid = 0;
 
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3032,8 +3039,8 @@ static void storage_test_user_change10()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3068,8 +3075,8 @@ static void storage_test_user_change11()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3126,8 +3133,8 @@ static void storage_test_user_change12()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3165,8 +3172,8 @@ static void storage_test_user_change13()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3243,8 +3250,8 @@ static void storage_test_user_change14()
 				sizeof(struct connman_storage_callbacks));
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3400,8 +3407,8 @@ static void storage_test_vpn_crash1()
 	dbus_error_init(&error);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3518,8 +3525,8 @@ static void storage_test_vpn_crash2()
 	dbus_error_init(&error);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3623,8 +3630,8 @@ static void storage_test_vpn_crash3()
 	set_user_pw_dir_root(test_path);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3680,8 +3687,8 @@ static void storage_test_vpn_crash4()
 	dbus_error_init(&error);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3805,8 +3812,8 @@ static void storage_test_vpn_crash5()
 	dbus_error_init(&error);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -3895,8 +3902,8 @@ static void storage_test_vpn_crash6()
 	dbus_error_init(&error);
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4010,8 +4017,8 @@ static void storage_test_invalid_user_change1()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4066,8 +4073,8 @@ static void storage_test_invalid_user_change2()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4107,8 +4114,8 @@ static void storage_test_invalid_user_change3()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4146,8 +4153,8 @@ static void storage_test_invalid_user_change4()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4192,9 +4199,8 @@ static void storage_test_dbus_security_user_change1()
 	set_user_pw_dir_root(test_path);
 	current_uid = 0;
 
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
-
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	init_dbus(TRUE);
 
 	g_assert_cmpint(__connman_storage_register_dbus(
@@ -4226,8 +4232,8 @@ static void storage_test_dbus_security_user_change2()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4264,8 +4270,8 @@ static void storage_test_dbus_security_user_change3()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4310,8 +4316,8 @@ static void storage_test_dbus_security_user_change4()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4346,8 +4352,8 @@ static void storage_test_dbus_security_user_change5()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4384,8 +4390,8 @@ static void storage_test_dbus_security_user_change6()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4451,8 +4457,8 @@ static void storage_test_dbus_security_user_change7()
 	dbus_error_init(&error);
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	init_dbus(TRUE);
 
 	g_assert_cmpint(__connman_storage_register_dbus(
@@ -4521,8 +4527,8 @@ static void storage_test_dbus_security_user_change8()
 	dbus_error_init(&error);
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	init_dbus(TRUE);
 
 	g_assert_cmpint(__connman_storage_register_dbus(
@@ -4593,8 +4599,8 @@ static void storage_test_dbus_security_user_change9()
 	dbus_error_init(&error);
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	init_dbus(TRUE);
 
 	__connman_inotify_init();
@@ -4736,8 +4742,8 @@ static void storage_test_dbus_error1()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4817,8 +4823,8 @@ static void storage_test_dbus_error2()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -4882,8 +4888,8 @@ static void storage_test_error_user_change1()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -5029,8 +5035,8 @@ static void storage_test_error_user_change2()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -5097,8 +5103,8 @@ static void storage_test_error_user_change3()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -5164,8 +5170,8 @@ static void storage_test_error_user_change4()
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	init_dbus(TRUE);
 
@@ -5284,8 +5290,8 @@ static void storage_test_technology_callbacks1()
 	init_dbus(TRUE);
 
 	/* Main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 
@@ -5440,8 +5446,8 @@ static void storage_test_technology_callbacks2()
 	init_dbus(TRUE);
 
 	/* Main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 
@@ -5571,6 +5577,7 @@ static void storage_test_technology_callbacks3()
 				"",
 				NULL,
 	};
+	const char *user_storage_dir = ".local/share/system/privileged";
 
 	test_path = setup_test_directory();
 	set_user_pw_dir_root(test_path);
@@ -5578,8 +5585,8 @@ static void storage_test_technology_callbacks3()
 	init_dbus(TRUE);
 
 	/* Main */
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, user_storage_dir,
+							m_dir, m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 
@@ -5591,14 +5598,14 @@ static void storage_test_technology_callbacks3()
 	g_free(settings_file);
 
 	/* Create user settings file */
-	settings_file = g_build_filename("user", ".local", "share",
-				"system", "privileged", "connman", NULL);
+	settings_file = g_build_filename("user", user_storage_dir, "connman",
+									NULL);
 	create_settings_file(test_path, settings_file, content_user);
 	g_free(settings_file);
 
 	/* Create user2 settings file */
-	settings_file = g_build_filename("user2", ".local", "share",
-				"system", "privileged", "connman", NULL);
+	settings_file = g_build_filename("user2", user_storage_dir, "connman",
+									NULL);
 	create_settings_file(test_path, settings_file, content_user2);
 	g_free(settings_file);
 
@@ -5714,8 +5721,8 @@ static void storage_test_path_validation_error1()
 
 	/* Init storage with symlink as STORAGEDIR */
 	g_assert_cmpint(symlink(target, linkpath), ==, 0);
-	g_assert_cmpint(__connman_storage_init(linkpath, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(linkpath, test_user_dir, m_dir,
+								m_file), ==, 0);
 
 	/* Create the target/connman dir and add files there. */
 	g_assert_cmpint(__connman_storage_create_dir(realpath,
@@ -5767,8 +5774,8 @@ static void storage_test_path_validation_error2()
 	test_path = setup_test_directory();
 
 	__connman_inotify_init();
-	g_assert_cmpint(__connman_storage_init(test_path, m_dir, m_file), ==,
-									0);
+	g_assert_cmpint(__connman_storage_init(test_path, test_user_dir, m_dir,
+								m_file), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 					__connman_storage_dir_mode()), ==, 0);
 
