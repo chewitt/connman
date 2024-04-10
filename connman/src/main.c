@@ -102,6 +102,7 @@ static struct {
 	mode_t storage_dir_permissions;
 	mode_t storage_file_permissions;
 	mode_t umask;
+	char *user_storage_dir;
 	bool enable_6to4;
 	char *vendor_class_id;
 	GHashTable *fallback_device_types;
@@ -156,6 +157,7 @@ static struct {
 #define CONF_STORAGE_ROOT_PERMISSIONS   "StorageRootPermissions"
 #define CONF_STORAGE_DIR_PERMISSIONS    "StorageDirPermissions"
 #define CONF_STORAGE_FILE_PERMISSIONS   "StorageFilePermissions"
+#define CONF_USER_STORAGE_DIR           "UserStorage"
 #define CONF_UMASK                      "Umask"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
@@ -185,6 +187,7 @@ static const char *supported_options[] = {
 	CONF_STORAGE_ROOT_PERMISSIONS,
 	CONF_STORAGE_DIR_PERMISSIONS,
 	CONF_STORAGE_FILE_PERMISSIONS,
+	CONF_USER_STORAGE_DIR,
 	CONF_UMASK,
 	CONF_STATUS_URL_IPV4,
 	CONF_STATUS_URL_IPV6,
@@ -518,7 +521,19 @@ static void parse_config(GKeyFile *config)
 			CONF_DONT_BRING_DOWN_AT_STARTUP, &len, NULL);
 
 	connman_settings.storage_root = __connman_config_get_string(config,
-				group, CONF_STORAGE_ROOT, NULL);
+				group, CONF_STORAGE_ROOT, &error);
+	if (error)
+		connman_settings.storage_root = g_strdup(DEFAULT_STORAGE_ROOT);
+
+	g_clear_error(&error);
+
+	connman_settings.user_storage_dir = __connman_config_get_string(config,
+				group, CONF_USER_STORAGE_DIR, &error);
+	if (error)
+		connman_settings.user_storage_dir =
+						g_strdup(DEFAULT_USER_STORAGE);
+
+	g_clear_error(&error);
 
 	connman_settings.fs_identity = __connman_config_get_string(config,
 				group, CONF_FILE_SYSTEM_IDENTITY, NULL);
@@ -1003,6 +1018,7 @@ int main(int argc, char *argv[])
 
 	__connman_inotify_init();
 	__connman_storage_init(connman_settings.storage_root,
+				connman_settings.user_storage_dir,
 				connman_settings.storage_dir_permissions,
 				connman_settings.storage_file_permissions);
 
@@ -1150,6 +1166,7 @@ int main(int argc, char *argv[])
 	g_free(connman_settings.tethering_subnet_block);
 	g_free(connman_settings.storage_root);
 	g_free(connman_settings.fs_identity);
+	g_free(connman_settings.user_storage_dir);
 	g_free(connman_settings.localtime);
 
 	if (connman_settings.fallback_device_types)
