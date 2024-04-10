@@ -338,8 +338,8 @@ typedef void (*connman_storage_change_user_result_cb_t)(uid_t uid, int err,
 
 mode_t __connman_storage_dir_mode(void);
 mode_t __connman_storage_file_mode(void);
-int __connman_storage_init(const char *root, mode_t dir_mode,
-			mode_t file_mode);
+int __connman_storage_init(const char *root, const char *user_dir,
+				mode_t dir_mode, mode_t file_mode);
 int __connman_storage_create_dir(const char *dir, mode_t permissions);
 int __connman_storage_register_dbus(enum connman_storage_dir_type type,
 				struct connman_storage_callbacks *callbacks);
