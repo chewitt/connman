@@ -1748,7 +1748,8 @@ int main(int argc, char *argv[])
 	g_test_init(&argc, &argv, NULL);
 
 	test_directory = setup_test_directory();
-	__connman_storage_init(test_directory, 0700, 0600);
+	g_assert_cmpint(__connman_storage_init(test_directory, ".local", 0700,
+								0600), ==, 0);
 	__connman_inotify_init();
 
 	g_test_add_func(PREFIX "active_changed", test_global_proxy_notify_active);
