@@ -2720,7 +2720,8 @@ int main(int argc, char **argv)
 				"Unit Tests Connection Manager",
 				CONNMAN_VERSION);
 
-	__connman_storage_init(test_dir, 0755, 0644);
+	g_assert_cmpint(__connman_storage_init(test_dir, ".local", 0755,
+								0644), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(STORAGEDIR,
 				__connman_storage_dir_mode()), ==, 0);
 	g_assert_cmpint(__connman_storage_create_dir(VPN_STORAGEDIR,
