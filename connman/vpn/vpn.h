@@ -133,6 +133,7 @@ unsigned int __vpn_settings_get_timeout_inputreq(void);
 
 const char *__vpn_settings_get_fs_identity(void);
 const char *__vpn_settings_get_storage_root(void);
+const char *__vpn_settings_get_user_storage_dir(void);
 mode_t __vpn_settings_get_storage_dir_permissions(void);
 mode_t __vpn_settings_get_storage_file_permissions(void);
 mode_t __vpn_settings_get_umask(void);
