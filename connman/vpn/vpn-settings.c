@@ -45,6 +45,7 @@ static struct {
 	char *fs_identity;
 	char *storage_root;
 	char *state_dir;
+	char *user_storage_dir;
 	mode_t storage_dir_permissions;
 	mode_t storage_file_permissions;
 	mode_t umask;
@@ -58,6 +59,7 @@ static struct {
 	.fs_identity 			= NULL,
 	.storage_root			= NULL,
 	.state_dir			= NULL,
+	.user_storage_dir		= NULL,
 	.storage_dir_permissions	= DEFAULT_STORAGE_DIR_PERMISSIONS,
 	.storage_file_permissions	= DEFAULT_STORAGE_FILE_PERMISSIONS,
 	.umask				= DEFAULT_UMASK,
@@ -94,6 +96,13 @@ const char *__vpn_settings_get_storage_root()
 	return connman_vpn_settings.storage_root ?
 				connman_vpn_settings.storage_root :
 				DEFAULT_STORAGE_ROOT;
+}
+
+const char *__vpn_settings_get_user_storage_dir()
+{
+	return connman_vpn_settings.user_storage_dir ?
+				connman_vpn_settings.user_storage_dir :
+				DEFAULT_USER_STORAGE;
 }
 
 mode_t __vpn_settings_get_storage_dir_permissions()
@@ -307,6 +316,8 @@ static void parse_config(GKeyFile *config, const char *file)
 		get_string(config, group, "StorageRoot");
 	connman_vpn_settings.state_dir =
 		get_string(config, group, "StateDirectory");
+	connman_vpn_settings.user_storage_dir =
+		get_string(config, group, "UserStorage");
 
 	get_perm(config, group, "StorageDirPermissions",
 			&connman_vpn_settings.storage_dir_permissions);
@@ -454,6 +465,9 @@ void __vpn_settings_cleanup()
 
 	g_free(connman_vpn_settings.storage_root);
 	connman_vpn_settings.storage_root = NULL;
+
+	g_free(connman_vpn_settings.user_storage_dir);
+	connman_vpn_settings.user_storage_dir = NULL;
 
 	g_free(connman_vpn_settings.state_dir);
 	connman_vpn_settings.state_dir = NULL;

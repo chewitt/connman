@@ -3,11 +3,17 @@ Connman configuration file format
 
 Connman uses configuration files to provision existing services. Connman will
 be looking for its configuration files at STORAGEDIR which by default points
-to /var/lib/connman/. Configuration file names must not include other
-characters than letters or numbers and must have a .config suffix.
-Those configuration files are text files with a simple key-value pair format,
-organized into sections. Values do not comprise leading or trailing whitespace.
-We typically have one file per provisioned network.
+to /var/lib/connman/. This can be overridden with a value "StorageRoot" in the
+main configuration file, typically in /etc/connman/main.conf. With multiuser
+support enabled, the user-specific configuration data is stored by default into
+users' home at $HOME/.config and can be overridden with a value "UserStorage"
+in the configuration file.
+
+Configuration file names must not include other characters than letters or
+numbers and must have a .config suffix. Those configuration files are text
+files with a simple key-value pair format, organized into sections. Values do
+not comprise leading or trailing whitespace. We typically have one file per
+provisioned network.
 
 If the config file is removed, then Connman tries to remove the
 provisioned services. If an individual service inside a config is removed,

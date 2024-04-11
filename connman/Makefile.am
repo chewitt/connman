@@ -228,8 +228,9 @@ scriptdir = $(libdir)/connman/scripts
 
 storageroot = $(localstatedir)/lib
 
-# Path in users' home dir to use as storage dir
-userstorage = ".local/share/system/privileged"
+# Path in users' home dir to use as a storage dir. connman/connman-vpn will
+# be created when omitted.
+userstorage = ".config"
 
 configdir = ${sysconfdir}/connman
 
@@ -356,7 +357,8 @@ unit_test_sailfish_access_SOURCES = unit/test-sailfish_access.c \
 unit_test_sailfish_access_LDADD = @GLIB_LIBS@ @DBUSACCESS_LIBS@ -ldl
 
 unit_test_vpn_settings_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
-				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\"
+				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
+				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\"
 unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
 				vpn/vpn-settings.c src/log.c vpn/vpn-util.c
 unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl

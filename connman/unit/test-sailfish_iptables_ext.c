@@ -490,7 +490,11 @@ static void cleanup_test_directory(gchar *test_path)
 
 static void test_iptables_file_access_basic()
 {
-	__connman_storage_init(NULL, 0700, 0600); // From main.c
+	gchar *test_path = setup_test_directory();
+	g_assert(test_path);
+
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(iptables_set_file_contents(NULL, NULL, true));
 	g_assert(iptables_set_file_contents(NULL, NULL, false));
@@ -513,6 +517,8 @@ static void test_iptables_file_access_basic()
 	g_string_free(str, true);
 
 	__connman_storage_cleanup();
+
+	cleanup_test_directory(test_path);
 }
 
 static void test_iptables_file_access_fail()
@@ -522,7 +528,8 @@ static void test_iptables_file_access_fail()
 	gchar *test_path = setup_test_directory();
 	g_assert(test_path);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	for (i = 0; invalid_paths[i]; i++) {
 		for (j = 0; test_files[j]; j++) {
@@ -556,7 +563,8 @@ static void test_iptables_file_access_fail2()
 	gchar *test_path = setup_test_directory();
 	g_assert(test_path);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	for (i = 0; invalid_paths[i]; i++) {
 		gchar *path = g_strdup_printf("%s%s", test_path,
@@ -592,7 +600,8 @@ static void test_iptables_file_access_write_fail()
 
 	init_path = g_strdup_printf("%s%s", test_path, "/var/lib");
 
-	__connman_storage_init(init_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	for (i = 0; invalid_paths[i]; i++) {
 		for (j = 0; test_files[j]; j++) {
@@ -665,7 +674,8 @@ static void test_iptables_file_access_success()
 	path = g_strconcat(test_path, "/connman/iptables-test/test.file",
 				NULL);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(!check_save_directory(path));
 
@@ -693,7 +703,8 @@ static void test_iptables_save_fail()
 	char* test_path = setup_test_directory();
 	g_assert(test_path);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(iptables_save(NULL));
 	g_assert(iptables_save(""));
@@ -721,7 +732,8 @@ static void test_iptables_save_ok()
 	char* test_path = setup_test_directory();
 	g_assert(test_path);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	for (i = 0 ; tables[i] ; i++) {
 		g_assert(iptables_save(tables[i]) == 0);
@@ -737,7 +749,8 @@ static void test_iptables_restore_fail()
 	char* test_path = setup_test_directory();
 	g_assert(test_path);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(iptables_restore(NULL));
 	g_assert(iptables_restore(""));
@@ -752,7 +765,8 @@ static void test_iptables_clear_fail()
 	char* test_path = setup_test_directory();
 	g_assert(test_path);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(connman_iptables_clear(NULL));
 	g_assert(connman_iptables_clear(""));
@@ -1014,7 +1028,9 @@ static void test_iptables_default_save_path()
 {
 	gint i = 0;
 
-	g_assert_cmpint(__connman_storage_init(NULL, 0, 0), ==, 0);
+	g_assert_cmpint(__connman_storage_init(DEFAULT_STORAGE_ROOT,
+						DEFAULT_USER_STORAGE, 0700,
+						0600), ==, 0);
 	for (i = 0; i < 4 ; i++)
 		g_assert(!connman_iptables_default_save_path(i));
 
@@ -1034,7 +1050,8 @@ static void test_iptables_save_restore_all()
 {
 	char* test_path = setup_test_directory();
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(__connman_iptables_save_all());
 	g_assert(__connman_iptables_restore_all());
@@ -1076,7 +1093,8 @@ static void test_iptables_restore_rules_1()
 
 	GString *str = g_string_new(rules);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	g_assert(iptables_set_file_contents(rule_path, str, true) == 0);
 
@@ -1104,7 +1122,8 @@ static void test_iptables_restore_rules_2()
 	gchar *rule_path = g_strconcat(test_path,
 				"/connman/iptables/filter.v4", NULL);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	GString *str = g_string_new(rules);
 
@@ -1134,7 +1153,8 @@ static void test_iptables_restore_rules_3()
 	gchar *rule_path = g_strconcat(test_path,
 				"/connman/iptables/filter.v4", NULL);
 
-	__connman_storage_init(test_path, 0700, 0600); // From main.c
+	g_assert_cmpint(__connman_storage_init(test_path, ".local", 0700,
+								0600), ==, 0);
 
 	GString *str = g_string_new(rules);
 

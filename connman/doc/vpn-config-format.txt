@@ -3,11 +3,18 @@ Connman configuration file format for VPN
 
 Connman VPN uses configuration files to provision existing providers.
 vpnd will be looking for its configuration files at VPN_STORAGEDIR
-which by default points to /var/lib/connman-vpn. Configuration file names
-must not include other characters than letters or numbers and must have
-a .config suffix. Those configuration files are text files with a simple
-key-value pair format organized into sections. Values do not comprise leading
-trailing whitespace. We typically have one file per provisioned network.
+which by default points to /var/lib/connman-vpn. This can be overridden with a
+value "StorageRoot" in the connman-vpn configuration file, typically in
+/etc/connman/connman-vpn.conf. With multiuser support enabled, the
+user-specific configuration data is stored by default into users' home at
+$HOME/.config and can be overridden with a value "UserStorage" in the
+configuration file.
+
+Configuration file names must not include other characters than letters or
+numbers and must have a .config suffix. Those configuration files are text
+files with a simple key-value pair format organized into sections. Values do
+not comprise leading or trailing whitespace. We typically have one file per
+provisioned network.
 
 If the config file is removed, then vpnd tries to remove the
 provisioned service. If an individual service entry inside a config is removed,

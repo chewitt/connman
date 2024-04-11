@@ -1632,6 +1632,7 @@ gchar **__connman_storage_get_providers(void)
 
 static char *storage_dir = NULL;
 static char *vpn_storage_dir = NULL;
+static char *user_storage_dir_path = NULL;
 static char *user_storage_dir = NULL;
 static char *user_vpn_storage_dir = NULL;
 static mode_t storage_dir_mode;
@@ -2105,7 +2106,7 @@ static struct change_user_data *new_change_user_data(DBusMessage *msg,
 
 	/* For system user path is NULL */
 	if (!system_user)
-		data->path = g_build_filename(path, DEFAULT_USER_STORAGE,
+		data->path = g_build_filename(path, user_storage_dir_path,
 					NULL);
 
 	data->prepare_only = prepare_only;
@@ -2570,7 +2571,7 @@ static DBusMessage *change_user_vpn(DBusConnection *conn,
 	DBG("user %d:%s", uid, pwd->pw_name);
 
 	if (!system_user)
-		path = g_build_filename(pwd->pw_dir, DEFAULT_USER_STORAGE,
+		path = g_build_filename(pwd->pw_dir, user_storage_dir_path,
 					NULL);
 
 	DBG("path \"%s\"", path);
@@ -2855,13 +2856,16 @@ bool connman_storage_user_change_in_progress()
 	return vpn_change_call ? true : false;
 }
 
-int __connman_storage_init(const char *dir, mode_t dir_mode, mode_t file_mode)
+int __connman_storage_init(const char *dir, const char *user_dir,
+					mode_t dir_mode, mode_t file_mode)
 {
-	const char *root = dir ? dir : DEFAULT_STORAGE_ROOT;
+	if (!dir || !user_dir)
+		return -EINVAL;
 
-	DBG("%s 0%o 0%o", root, dir_mode, file_mode);
-	storage_dir = build_filename(root, STORAGE_DIR_TYPE_MAIN);
-	vpn_storage_dir = build_filename(root, STORAGE_DIR_TYPE_VPN);
+	DBG("%s 0%o 0%o", dir, dir_mode, file_mode);
+	storage_dir = build_filename(dir, STORAGE_DIR_TYPE_MAIN);
+	vpn_storage_dir = build_filename(dir, STORAGE_DIR_TYPE_VPN);
+	user_storage_dir_path = g_strdup(user_dir);
 	storage_dir_mode = dir_mode;
 	storage_file_mode = file_mode;
 	storage.current_uid = geteuid();
@@ -2906,6 +2910,7 @@ void __connman_storage_cleanup(void)
 	g_free(storage_dir);
 	g_free(vpn_storage_dir);
 	g_free(user_storage_dir);
+	g_free(user_storage_dir_path);
 	g_free(user_vpn_storage_dir);
 
 	storage_dir = NULL;

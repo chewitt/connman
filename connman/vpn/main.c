@@ -263,6 +263,7 @@ int main(int argc, char *argv[])
 
 	__connman_inotify_init();
 	__connman_storage_init(__vpn_settings_get_storage_root(),
+			__vpn_settings_get_user_storage_dir(),
 			__vpn_settings_get_storage_dir_permissions(),
 			__vpn_settings_get_storage_file_permissions());
 
