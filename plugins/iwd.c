@@ -1830,6 +1830,9 @@ static void create_network(GDBusProxy *proxy)
 			network_property_change, NULL);
 
 	add_network(path, iwdn);
+
+	if (iwdn->connected)
+		update_network_connected(iwdn);
 }
 
 static void known_network_property_change(GDBusProxy *proxy, const char *name,
