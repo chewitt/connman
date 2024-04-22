@@ -512,10 +512,8 @@ static void send_cached_response(int sk, const unsigned char *ptr, size_t len,
 	/* if this is a negative reply, we are authoritative */
 	if (answers == 0)
 		hdr->aa = 1;
-	else {
-		const int adj_len = len - 2;
-		update_cached_ttl((unsigned char *)hdr, adj_len, ttl);
-	}
+	else
+		update_cached_ttl((unsigned char *)hdr, dns_len, ttl);
 
 	debug("sk %d id 0x%04x answers %d ptr %p length %zd dns %zd",
 		sk, hdr->id, answers, ptr, len, dns_len);
