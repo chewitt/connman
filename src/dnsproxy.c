@@ -3847,7 +3847,12 @@ static GIOChannel *get_listener(int family, int protocol, int index)
 			return NULL;
 		}
 
-		fcntl(sk, F_SETFL, O_NONBLOCK);
+		if (fcntl(sk, F_SETFL, O_NONBLOCK) < 0) {
+			connman_error("Failed to set TCP listener socket to non-blocking %d/%s",
+				-errno, strerror(errno));
+			close(sk);
+			return NULL;
+		}
 	}
 
 	channel = g_io_channel_unix_new(sk);
