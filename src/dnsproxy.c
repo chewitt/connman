@@ -1877,7 +1877,7 @@ static const char* uncompress(int16_t field_count, const char *start, const char
 		} else if (dns_type == DNS_TYPE_A || dns_type == DNS_TYPE_AAAA) {
 			dlen = uptr[-2] << 8 | uptr[-1];
 
-			if ((ptr + dlen) > end || (uptr + dlen) > uncomp_end) {
+			if (dlen > (end - ptr) || dlen > (uncomp_end - uptr)) {
 				debug("data len %d too long", dlen);
 				return NULL;
 			}
