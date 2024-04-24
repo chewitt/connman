@@ -623,9 +623,10 @@ static gboolean request_timeout(gpointer user_data)
 		 * "not found" result), so send that back to client instead
 		 * of more fatal server failed error.
 		 */
-		sendto(sk, req->resp, req->resplen, MSG_NOSIGNAL,
-			sa, req->sa_len);
-
+		if (sendto(sk, req->resp, req->resplen, MSG_NOSIGNAL,
+				sa, req->sa_len) < 0)
+			connman_error("Failed to send response %d: %s",
+					sk, strerror(errno));
 	} else if (req->request) {
 		/*
 		 * There was not reply from server at all.
