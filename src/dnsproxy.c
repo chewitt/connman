@@ -3464,7 +3464,7 @@ static gboolean tcp_client_event(GIOChannel *channel, GIOCondition condition,
 	}
 
 	len = recvfrom(client_sk, client->buf + client->buf_end,
-			TCP_MAX_BUF_LEN - client->buf_end, 0,
+			TCP_MAX_BUF_LEN - client->buf_end - 1, 0,
 			client_addr, client_addr_len);
 	if (len < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -3476,6 +3476,8 @@ static gboolean tcp_client_event(GIOChannel *channel, GIOCondition condition,
 					GINT_TO_POINTER(client_sk));
 		return FALSE;
 	}
+
+	client->buf[client->buf_end + len] = '\0';
 
 	return read_tcp_data(client, client_addr, *client_addr_len, len);
 }
@@ -3663,7 +3665,7 @@ static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 				struct listener_data *ifdata, int family,
 				guint *listener_watch)
 {
-	unsigned char buf[768];
+	unsigned char buf[769];
 	char query[512];
 	struct request_data *req = NULL;
 	struct domain_hdr *hdr = NULL;
@@ -3692,9 +3694,11 @@ static bool udp_listener_event(GIOChannel *channel, GIOCondition condition,
 
 	memset(client_addr, 0, *client_addr_len);
 	sk = g_io_channel_unix_get_fd(channel);
-	len = recvfrom(sk, buf, sizeof(buf), 0, client_addr, client_addr_len);
+	len = recvfrom(sk, buf, sizeof(buf) - 1, 0, client_addr, client_addr_len);
 	if (len < 2)
 		return true;
+
+	buf[len] = '\0';
 
 	debug("Received %d bytes (id 0x%04x)", len, buf[0] | buf[1] << 8);
 
