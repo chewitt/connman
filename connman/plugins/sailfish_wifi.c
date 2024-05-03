@@ -640,12 +640,12 @@ static void wifi_bss_free(struct wifi_bss *bss_data)
 	g_slice_free(struct wifi_bss, bss_data);
 }
 
-static inline gboolean wifi_bss_weak(const struct wifi_bss *bss_data)
+static int last_weak_rssi = WIFI_WEAK_RSSI;
+
+static inline void wifi_update_weak_rssi()
 {
 	int weak_rssi = WIFI_WEAK_RSSI;
-	int services;
-
-	services = connman_service_get_available_count(
+	int services = connman_service_get_available_count(
 						CONNMAN_SERVICE_TYPE_WIFI);
 	if (services) {
 		int multiplier = services / WIFI_SERVICE_COUNT_INTERVAL;
@@ -656,9 +656,16 @@ static inline gboolean wifi_bss_weak(const struct wifi_bss *bss_data)
 			weak_rssi = WIFI_WEAK_RSSI_MAX;
 	}
 
-	DBG("WEAK_RSSI %d, %d services", weak_rssi, services);
+	if (last_weak_rssi == weak_rssi)
+		return;
 
-	return (bss_data->signal < weak_rssi);
+	DBG("WEAK_RSSI %d, %d services", weak_rssi, services);
+	last_weak_rssi = weak_rssi;
+}
+
+static inline gboolean wifi_bss_weak(const struct wifi_bss *bss_data)
+{
+	return (bss_data->signal < last_weak_rssi);
 }
 
 static inline gboolean wifi_bss_ignorable(const struct wifi_bss *bss_data)
@@ -2229,6 +2236,7 @@ static void wifi_device_scanning_off(struct wifi_device *dev)
 									dev);
 
 	/* Update weak sightings. */
+	wifi_update_weak_rssi();
 	g_hash_table_iter_init(&it, dev->bss_valid);
 	while (g_hash_table_iter_next(&it, NULL, &value)) {
 		struct wifi_bss *bss_data = value;
@@ -2752,7 +2760,8 @@ static gboolean wifi_device_bss_list_check(struct wifi_device *dev,
 	guint i;
 	gboolean significant_change = FALSE;
 
-	/* Make sure the list is sorted */
+	/* Make sure the list is sorted. Update weak RSSI before sort. */
+	wifi_update_weak_rssi();
 	dev->bss_valid_list = g_slist_sort(dev->bss_valid_list,
 					wifi_device_bss_list_compare);
 
@@ -2788,6 +2797,7 @@ static gboolean wifi_device_bss_list_check(struct wifi_device *dev,
 	 * Then only non-ignorable networks (and must_have) up to
 	 * WIFI_BSS_COUNT_MAX.
 	 */
+	wifi_update_weak_rssi();
 	for (; i < WIFI_BSS_COUNT_MAX && l; i++, l = l->next) {
 		struct wifi_bss *bss_data = l->data;
 
