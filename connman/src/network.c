@@ -2031,8 +2031,6 @@ uint16_t connman_network_get_wifi_channel(struct connman_network *network)
 int connman_network_set_string(struct connman_network *network,
 					const char *key, const char *value)
 {
-	DBG("network %p key %s value %s", network, key, value);
-
 	if (g_strcmp0(key, "Name") == 0)
 		return connman_network_set_name(network, value);
 
