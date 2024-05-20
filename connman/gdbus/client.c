@@ -841,45 +841,47 @@ gboolean g_dbus_proxy_method_call(GDBusProxy *proxy, const char *method,
 				GDBusReturnFunction function, void *user_data,
 				GDBusDestroyFunction destroy)
 {
-	struct method_call_data *data;
+	struct method_call_data *data = NULL;
 	GDBusClient *client;
 	DBusMessage *msg;
 	DBusPendingCall *call;
 
-	if (proxy == NULL || method == NULL)
-		return FALSE;
+	if (!proxy || !method)
+		goto out;
 
 	client = proxy->client;
-	if (client == NULL)
-		return FALSE;
-
-	data = g_try_new0(struct method_call_data, 1);
-	if (data == NULL)
-		return FALSE;
-
-	data->function = function;
-	data->user_data = user_data;
-	data->destroy = destroy;
+	if (!client)
+		goto out;
 
 	msg = dbus_message_new_method_call(client->service_name,
 				proxy->obj_path, proxy->interface, method);
-	if (msg == NULL) {
-		g_free(data);
-		return FALSE;
-	}
+	if (!msg)
+		goto out;
 
 	if (setup) {
 		DBusMessageIter iter;
 
 		dbus_message_iter_init_append(msg, &iter);
-		setup(&iter, data->user_data);
+		setup(&iter, user_data);
 	}
 
-	if (g_dbus_send_message_with_reply(client->dbus_conn, msg,
-					&call, METHOD_CALL_TIMEOUT) == FALSE) {
+	if (!function && !destroy)
+		return g_dbus_send_message(client->dbus_conn, msg);
+
+	data = g_try_new0(struct method_call_data, 1);
+	if (!data) {
 		dbus_message_unref(msg);
-		g_free(data);
-		return FALSE;
+		goto out;
+	}
+
+	data->function = function;
+	data->user_data = user_data;
+	data->destroy = destroy;
+
+	if (!g_dbus_send_message_with_reply(client->dbus_conn, msg,
+					&call, METHOD_CALL_TIMEOUT)) {
+		dbus_message_unref(msg);
+		goto out;
 	}
 
 	dbus_pending_call_set_notify(call, method_call_reply, data, g_free);
@@ -888,6 +890,13 @@ gboolean g_dbus_proxy_method_call(GDBusProxy *proxy, const char *method,
 	dbus_message_unref(msg);
 
 	return TRUE;
+
+out:
+	if (destroy)
+		destroy(user_data);
+
+	g_free(data);
+	return FALSE;
 }
 
 gboolean g_dbus_proxy_set_property_watch(GDBusProxy *proxy,
@@ -1073,9 +1082,6 @@ static void parse_managed_objects(GDBusClient *client, DBusMessage *msg)
 
 		dbus_message_iter_next(&dict);
 	}
-
-	if (client->ready)
-		client->ready(client, client->ready_data);
 }
 
 static void get_managed_objects_reply(DBusPendingCall *call, void *user_data)
@@ -1096,6 +1102,9 @@ static void get_managed_objects_reply(DBusPendingCall *call, void *user_data)
 	parse_managed_objects(client, reply);
 
 done:
+	if (client->ready)
+		client->ready(client, client->ready_data);
+
 	dbus_message_unref(reply);
 
 	dbus_pending_call_unref(client->get_objects_call);

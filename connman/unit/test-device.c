@@ -47,6 +47,17 @@ int connman_network_set_connected(struct connman_network *network, bool on)
 	return 0;
 }
 
+int connman_network_set_connectable(struct connman_network *network,
+		bool connectable)
+{
+	return 0;
+}
+
+bool connman_network_get_connectable(struct connman_network *network)
+{
+	return true;
+}
+
 bool connman_network_get_connecting(struct connman_network *network)
 {
 	return true;
