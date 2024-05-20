@@ -800,8 +800,13 @@ static gboolean remove_unavailable_network(gpointer key, gpointer value,
 	if (connman_network_get_available(network))
 		return FALSE;
 
+	/*
+	 * Ignore this for the time being, Sailfish OS WiFi plugin does not
+	 * use this value as it will be anyways dropped in later versions.
+	 * The connectable value is by default false.
 	if (connman_network_get_connectable(network))
 		return FALSE;
+	*/
 
 	if (network == keep_network)
 		return FALSE;
