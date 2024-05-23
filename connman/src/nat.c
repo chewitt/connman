@@ -349,10 +349,8 @@ int connman_nat6_prepare(struct connman_ipconfig *ipconfig,
 						bool enable_ndproxy)
 {
 	struct connman_nat *nat;
-	char **rules = NULL;
 	int index;
 	int err;
-	int i;
 
 	DBG("ipconfig %p ifname_in %s enable_ndproxy %s", ipconfig, ifname_in,
 						enable_ndproxy ? "yes" : "no");
@@ -430,28 +428,8 @@ int connman_nat6_prepare(struct connman_ipconfig *ipconfig,
 		}
 	}
 
-	rules = g_new0(char*, 3);
-	rules[0] = g_strdup_printf("-i %s -o %s -j ACCEPT", nat->interface,
-								nat->ifname);
-	rules[1] = g_strdup_printf("-i %s -o %s -j ACCEPT", nat->ifname,
-								nat->interface);
-
-	for (i = 0; i < 2; i++) {
-		DBG("Enable firewall rule -I FORWARD %s", rules[i]);
-
-		/* Enable forward on IPv6 */
-		err = __connman_firewall_add_ipv6_rule(nat->fw, NULL, NULL,
-						"filter", "FORWARD", rules[i]);
-		if (err < 0) {
-			connman_error("Failed to set FORWARD rule %s on "
-						"ip6tables", rules[i]);
-			break;
-		}
-	}
-
-	g_strfreev(rules);
-
-	err = __connman_firewall_enable(nat->fw);
+	err = __connman_firewall_enable_forward(nat->fw, nat->family,
+						nat->interface, nat->ifname);
 	if (err < 0) {
 		connman_error("Failed to enable firewall");
 		goto err;
@@ -509,8 +487,8 @@ void connman_nat6_restore(struct connman_ipconfig *ipconfig)
 	set_original_ipv6_values(nat);
 
 	if (nat->fw) {
-		if (__connman_firewall_disable(nat->fw))
-			DBG("cannot disable firewall");
+		if (__connman_firewall_disable_forward(nat->fw, nat->family))
+			DBG("cannot disable firewall forwarding");
 	}
 
 	if (nat_hash)

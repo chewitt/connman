@@ -713,6 +713,58 @@ int __connman_firewall_disable_snat(struct firewall_context *ctx)
 	return 0;
 }
 
+int __connman_firewall_enable_forward(struct firewall_context *ctx, int family,
+				const char *interface_in,
+				const char *interface_out)
+{
+	const char *rule = "-i %s -o %s -j ACCEPT";
+	int err;
+
+	/* Enable forward on IPv6 */
+	err = firewall_add_rule(ctx, NULL, NULL, family, "filter", "FORWARD",
+					rule, interface_in, interface_out);
+	if (err < 0) {
+		connman_error("Failed to set FORWARD rule %s on ip6tables"
+						"in %s out %s", rule,
+						interface_in, interface_out);
+		return err;
+	}
+
+	/* On both directions */
+	err = firewall_add_rule(ctx, NULL, NULL, family, "filter", "FORWARD",
+					rule, interface_out, interface_in);
+	if (err < 0) {
+		connman_error("Failed to set FORWARD rule %s  on ip6tables"
+						"in %s out %s", rule,
+						interface_out, interface_in);
+		return err;
+	}
+
+	err = firewall_enable_rules(ctx);
+	if (err) {
+		connman_error("Failed to enable FORWARD rules: %s",
+								strerror(-err));
+		firewall_remove_rules(ctx);
+	}
+
+	return err;
+}
+
+int __connman_firewall_disable_forward(struct firewall_context *ctx, int family)
+{
+	int err;
+
+	err = firewall_disable_rules(ctx);
+	if (err < 0) {
+		connman_error("Failed to disable FORWARD rules: %s",
+								strerror(-err));
+		return err;
+	}
+
+	firewall_remove_rules(ctx);
+	return 0;
+}
+
 static int firewall_enable_connmark(void)
 {
 	int err;

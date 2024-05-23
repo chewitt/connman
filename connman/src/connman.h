@@ -1210,6 +1210,8 @@ int __connman_firewall_disable_snat(struct firewall_context *ctx);
 int __connman_firewall_enable_forward(struct firewall_context *ctx, int family,
 				const char *interface_in,
 				const char *interface_out);
+int __connman_firewall_disable_forward(struct firewall_context *ctx,
+				int family);
 int __connman_firewall_enable_marking(struct firewall_context *ctx,
 					enum connman_session_id_type id_type,
 					char *id, const char *src_ip,
