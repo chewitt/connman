@@ -346,7 +346,7 @@ endif
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-globalproxy unit/test-firewall-iptables unit/test-iptables \
 	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access \
 	unit/test-storage unit/test-systemd_login unit/test-vpn-util
 
@@ -429,15 +429,14 @@ unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
 				src/inotify.c src/storage.c src/dbus.c
 unit_test_globalproxy_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
-unit_test_firewall_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
-				@GLIB_CFLAGS@
+unit_test_firewall_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				@DBUS_CFLAGS@ @GLIB_CFLAGS@
 if XTABLES
-unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
-				src/inotify.c src/dbus.c src/error.c \
-				src/inet.c src/firewall-iptables.c \
-				src/iptables-validate.c \
+unit_test_firewall_iptables_SOURCES = $(backtrace_sources) src/connman.h \
+				src/log.c src/inotify.c src/dbus.c src/error.c \
+				src/inet.c src/iptables-validate.c \
 				unit/test-firewall-iptables.c
-unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_test_firewall_iptables_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 endif
 
 unit_test_device_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
@@ -479,7 +478,7 @@ unit_test_systemd_login_LDADD = @GLIB_LIBS@ -ldl
 TESTS = unit/test-access unit/test-vpn_access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-globalproxy unit/test-firewall-iptables unit/test-iptables \
 	unit/test-device unit/test-sailfish_vpn_access unit/test-storage \
 	unit/test-systemd_login unit/test-vpn-util
 
