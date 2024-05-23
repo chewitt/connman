@@ -397,8 +397,8 @@ static void start_online_check(struct connman_service *service,
 				enum connman_ipconfig_type type);
 
 static void vpn_auto_connect(void);
-static bool is_connecting(struct connman_service *service);
-static bool is_connected(struct connman_service *service);
+static bool is_connecting(enum connman_service_state state);
+static bool is_connected(enum connman_service_state state);
 
 static void switch_default_service(struct connman_service *default_service,
 	struct connman_service *downgrade_service);
@@ -5832,13 +5832,13 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 	 * transport service is not connected or if the  current default service
 	 * is a connected VPN (in ready state).
 	 */
-	if (!def_service || !is_connected(def_service) ||
-		(def_service->type == CONNMAN_SERVICE_TYPE_VPN &&
-		is_connected(def_service))) {
+	if (!def_service || !is_connected(def_service->state) ||
+			(def_service->type == CONNMAN_SERVICE_TYPE_VPN &&
+			is_connected(def_service->state))) {
 
 		DBG("stopped, default service %s connected %d",
 			def_service ? def_service->identifier : "NULL",
-			def_service ? is_connected(def_service) : -1);
+			def_service ? is_connected(def_service->state) : -1);
 		goto out;
 	}
 
@@ -7080,7 +7080,7 @@ static int service_preferred_over(struct connman_service *a,
 	 */
 	if (a->type == CONNMAN_SERVICE_TYPE_VPN) {
 		 /* Prefer a if connected */
-		if (is_connected(a))
+		if (is_connected(a->state))
 			position_a = 0;
 		else if (a->order > b->order)
 			position_a = 0;
@@ -7092,7 +7092,7 @@ static int service_preferred_over(struct connman_service *a,
 
 	if (b->type == CONNMAN_SERVICE_TYPE_VPN) {
 		/* Prefer b if connected */
-		if (is_connected(b))
+		if (is_connected(b->state))
 			position_b = 0;
 		else if (b->order > a->order)
 			position_b = 0;
@@ -9538,7 +9538,7 @@ static void set_ipv6_for_service(gpointer value, gpointer user_data)
 	 * using is set to the previous state.
 	 */
 	if ((!is_connected(service->state || service == data->vpn) &&
-						service != data->transport)
+						service != data->transport))
 		return;
 
 	DBG("%s service %p/%s", data->enable ? "enable" : "disable", service,
