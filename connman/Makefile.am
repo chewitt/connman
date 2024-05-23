@@ -666,7 +666,7 @@ tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
-		src/inotify.c src/iptables.c src/firewall-iptables.c src/nat.c \
+		src/inotify.c src/iptables.c src/nat.c \
 		src/inet.c src/iptables-validate.c tools/iptables-unit.c \
 		src/error.c src/dbus.c
 tools_iptables_unit_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
