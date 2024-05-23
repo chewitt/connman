@@ -653,13 +653,20 @@ static int firewall_disable_rules(struct firewall_context *ctx)
 
 int __connman_firewall_enable_nat(struct firewall_context *ctx,
 				char *address, unsigned char prefixlen,
+				char *dst_address, unsigned char dst_prefixlen,
 				char *interface)
 {
 	char *cmd;
 	int err;
 
-	cmd = g_strdup_printf("-s %s/%u -o %s -j MASQUERADE",
-					address, prefixlen, interface);
+	if (!dst_address)
+		cmd = g_strdup_printf("-s %s/%u -o %s -j MASQUERADE",
+						address, prefixlen, interface);
+	else
+		cmd = g_strdup_printf("-s %s/%u -d %s/%u -o %s -j MASQUERADE",
+						address, prefixlen,
+						dst_address, dst_prefixlen,
+						interface);
 
 	firewall_add_rule(ctx, NULL, NULL, AF_INET, "nat", "POSTROUTING", cmd);
 	g_free(cmd);

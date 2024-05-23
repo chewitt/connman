@@ -1201,6 +1201,7 @@ struct firewall_context *__connman_firewall_create(void);
 void __connman_firewall_destroy(struct firewall_context *ctx);
 int __connman_firewall_enable_nat(struct firewall_context *ctx,
 				char *address, unsigned char prefixlen,
+				char *dst_address, unsigned char dst_prefixlen,
 				char *interface);
 int __connman_firewall_disable_nat(struct firewall_context *ctx);
 int __connman_firewall_enable_snat(struct firewall_context *ctx,

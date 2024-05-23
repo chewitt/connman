@@ -139,7 +139,8 @@ static int enable_nat(struct connman_nat *nat)
 	DBG("name %s interface %s", nat->ifname, nat->interface);
 
 	return __connman_firewall_enable_nat(nat->fw, nat->address,
-					nat->prefixlen, nat->interface);
+					nat->prefixlen, nat->dst_address,
+					nat->dst_prefixlen, nat->interface);
 }
 
 static void disable_nat(struct connman_nat *nat)
