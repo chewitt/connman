@@ -343,13 +343,13 @@ err:
 	g_free(full_rule);
 
 	return err;
- }
+}
 
 static int delete_managed_rule(int family, const char *table_name,
 				const char *chain_name,
 				const char *ifname,
 				const char *rule_spec)
- {
+{
 	struct connman_managed_table *mtable = NULL;
 	GSList *list;
 	int id, err;
@@ -522,6 +522,11 @@ static int firewall_add_rule(struct firewall_context *ctx,
 	struct fw_rule *rule;
 	GCompareFunc comparefunc;
 
+	if (family != AF_INET && family != AF_INET6) {
+		connman_warn("Invalid IP family defined: %d", family);
+		return -1;
+	}
+
 	va_start(args, rule_fmt);
 
 	rule_spec = g_strdup_vprintf(rule_fmt, args);
@@ -551,46 +556,6 @@ static int firewall_add_rule(struct firewall_context *ctx,
 	return rule->id;
 }
 
-int __connman_firewall_add_rule(struct firewall_context *ctx,
-				connman_iptables_manage_cb_t cb,
-				const char *config_file,
-				const char *table,
-				const char *chain,
-				const char *rule_fmt, ...)
-{
-	va_list args;
-	char *rule_spec;
-
-	va_start(args, rule_fmt);
-
-	rule_spec = g_strdup_vprintf(rule_fmt, args);
-
-	va_end(args);
-
-	return firewall_add_rule(ctx, cb, config_file, AF_INET, table, chain,
-				rule_spec);
-}
-
-int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
-				connman_iptables_manage_cb_t cb,
-				const char *config_file,
-				const char *table,
-				const char *chain,
-				const char *rule_fmt, ...)
-{
-	va_list args;
-	char *rule_spec;
-
-	va_start(args, rule_fmt);
-
-	rule_spec = g_strdup_vprintf(rule_fmt, args);
-
-	va_end(args);
-	
-	return firewall_add_rule(ctx, cb, config_file, AF_INET6, table, chain,
-				rule_spec);
-}
-
 static void firewall_remove_rules(struct firewall_context *ctx)
 {
 	struct fw_rule *rule;
@@ -605,39 +570,29 @@ static void firewall_remove_rules(struct firewall_context *ctx)
 	}
 }
 
-int __connman_firewall_remove_rule(struct firewall_context *ctx, int id)
+static int firewall_remove_rule(struct firewall_context *ctx, int id)
 {
 	struct fw_rule *rule;
 	GList *list;
+
+	if (!ctx || id < 0)
+		return -EINVAL;
 
 	list = g_list_last(ctx->rules);
 	while (list) {
 		GList *prev = g_list_previous(list);
 
 		rule = list->data;
-		if (rule->id == id || id == FW_ALL_RULES) {
+		if (rule->id == id) {
 			ctx->rules = g_list_remove(ctx->rules, rule);
 			cleanup_fw_rule(rule);
-			err = 0;
-
-			if (id != FW_ALL_RULES)
-				break;
+			return 0;
 		}
 
 		list = prev;
 	}
 
-	/* An empty list of rules is not an error if all rules are removed */
-	if (id == FW_ALL_RULES && !g_list_length(ctx->rules))
-		return 0;
-
-	return err;
-}
-
-/* For consistency, both IPv4 and IPv6 rules can be removed in similar way. */
-int __connman_firewall_remove_ipv6_rule(struct firewall_context *ctx, int id)
-{
-	return __connman_firewall_remove_rule(ctx, id);
+	return -ENOENT;
 }
 
 static int firewall_enable_rules(struct firewall_context *ctx)
@@ -652,8 +607,7 @@ static int firewall_enable_rules(struct firewall_context *ctx)
 	for (list = g_list_first(ctx->rules); list; list = g_list_next(list)) {
 		rule = list->data;
 
-		e = firewall_enable_rule(rule);
-		/* Do not stop if enabling all rules */
+		e = enable_rule(rule);
 		if (e == 0 && err == -ENOENT) {
 			err = 0;
 		} else if (e < 0) {
@@ -665,10 +619,8 @@ static int firewall_enable_rules(struct firewall_context *ctx)
 	}
 
 	/* Invalid rules are ignored, just report errors */
-	if (id == FW_ALL_RULES) {
-		DBG("firewall enabled, invalid rules: %d", invalid);
-		ctx->enabled = true;
-	}
+	DBG("firewall enabled, invalid rules: %d/%d", invalid, count);
+	ctx->enabled = true;
 
 	return err;
 }
@@ -693,11 +645,8 @@ static int firewall_disable_rules(struct firewall_context *ctx)
 			err = e;
 	}
 
-	/* An empty list of rules is not an error */
-	if ((!err || !g_list_length(ctx->rules)) && id == FW_ALL_RULES) {
-		DBG("firewall disabled");
-		ctx->enabled = false;
-	}
+	DBG("firewall disabled");
+	ctx->enabled = false;
 
 	return err;
 }
@@ -831,7 +780,7 @@ int __connman_firewall_enable_marking(struct firewall_context *ctx,
 	}
 
 	if (src_ip) {
-		firewall_add_rule(ctx, "mangle", "OUTPUT",
+		firewall_add_rule(ctx, NULL, NULL, AF_INET, "mangle", "OUTPUT",
 				"-s %s -j MARK --set-mark %d",
 					src_ip, mark);
 	}
@@ -1124,7 +1073,7 @@ static int enable_dynamic_rules(struct connman_service *service)
 
 	g_free(ifname);
 
-	return __connman_firewall_enable(ctx);
+	return firewall_enable_rules(ctx);
 }
 
 static int disable_dynamic_rules(struct connman_service *service)
@@ -1149,7 +1098,7 @@ static int disable_dynamic_rules(struct connman_service *service)
 		return -EALREADY;
 
 	/* Only disable rules, do not remove them to reduce mem fragmentation */
-	return __connman_firewall_disable_rule(ctx, FW_ALL_RULES);
+	return firewall_disable_rules(ctx);
 }
 
 static void service_state_changed(struct connman_service *service,
@@ -1220,14 +1169,14 @@ static int add_default_accept_all_rules(struct firewall_context *ctx,
 
 	/* Add tethering rules for both IPv4 and IPv6 when using usb */
 	for (i = 0; default_rules[i]; i++) {
-		id = __connman_firewall_add_rule(ctx, cb, NULL, "filter",
+		id = firewall_add_rule(ctx, cb, NULL, AF_INET, "filter",
 					"INPUT", default_rules[i]);
 		if (id < 0) {
 			DBG("cannot add IPv4 rule %s", default_rules[i]);
 			err = -EINVAL;
 		}
 
-		id = __connman_firewall_add_ipv6_rule(ctx, cb, NULL, "filter",
+		id = firewall_add_rule(ctx, cb, NULL, AF_INET6, "filter",
 					"INPUT", default_rules[i]);
 		if (id < 0) {
 			DBG("cannot add IPv6 rule %s", default_rules[i]);
@@ -1235,7 +1184,7 @@ static int add_default_accept_all_rules(struct firewall_context *ctx,
 		}
 
 		if (both_directions) {
-			id = __connman_firewall_add_rule(ctx, cb, NULL,
+			id = firewall_add_rule(ctx, cb, NULL, AF_INET,
 						"filter", "OUTPUT",
 						default_rules[i]);
 			if (id < 0) {
@@ -1244,7 +1193,7 @@ static int add_default_accept_all_rules(struct firewall_context *ctx,
 				err = -EINVAL;
 			}
 
-			id = __connman_firewall_add_ipv6_rule(ctx, cb, NULL,
+			id = firewall_add_rule(ctx, cb, NULL, AF_INET6,
 						"filter", "OUTPUT",
 						default_rules[i]);
 			if (id < 0) {
@@ -1377,16 +1326,14 @@ static void tethering_changed(struct connman_technology *tech, bool on)
 	}
 
 	if (on) {
-		err = __connman_firewall_enable(ctx);
-
+		err = firewall_enable_rules(ctx);
 		if (err && err != -EALREADY) {
 			DBG("cannot enable firewall, tethering disabled: "
 						"error %d", err);
 			goto disable;
 		}
 	} else {
-		err = __connman_firewall_disable_rule(ctx, FW_ALL_RULES);
-
+		err = firewall_disable_rules(ctx);
 		if (err && err != -EALREADY)
 			DBG("cannot disable firewall: error %d", err);
 	}
@@ -1515,9 +1462,9 @@ static void device_status_changed(struct connman_device *device, bool on)
 		}
 	}
 	if (on)
-		err = __connman_firewall_enable(ctx);
+		err = firewall_enable_rules(ctx);
 	else
-		err = __connman_firewall_disable_rule(ctx, FW_ALL_RULES);
+		err = firewall_disable_rules(ctx);
 
 out:
 	g_free(ifname);
@@ -1600,27 +1547,10 @@ static int add_dynamic_rules_cb(int family, const char *filename,
 			continue;
 		}
 
-		switch (family) {
-		case AF_INET:
-			id = __connman_firewall_add_rule(
-						dynamic_rules[service_type],
-						cb, filename, table,
+		id = firewall_add_rule(dynamic_rules[service_type], cb,
+						filename, family, table,
 						builtin_chains[chain_id],
 						rules[i]);
-			break;
-		case AF_INET6:
-			id = __connman_firewall_add_ipv6_rule(
-						dynamic_rules[service_type],
-						cb, filename, table,
-						builtin_chains[chain_id],
-						rules[i]);
-			break;
-		default:
-			id = -1;
-			DBG("invalid IP protocol %d", family);
-			break;
-		}
-
 		if (id < 0) {
 			DBG("failed to add rule to firewall");
 			err = -EINVAL;
@@ -1685,26 +1615,10 @@ static int add_general_rules_cb(int family, const char *filename,
 			continue;
 		}
 
-		switch (family) {
-		case AF_INET:
-			id = __connman_firewall_add_rule(general_firewall->ctx,
-						cb, filename, table,
+		id = firewall_add_rule(general_firewall->ctx, cb, filename,
+						family, table,
 						builtin_chains[chain_id],
 						rules[i]);
-			break;
-		case AF_INET6:
-			id = __connman_firewall_add_ipv6_rule(
-						general_firewall->ctx, cb,
-						filename, table,
-						builtin_chains[chain_id],
-						rules[i]);
-			break;
-		default:
-			id = -1;
-			DBG("invalid IP protocol %d", family);
-			break;
-		}
-
 		if (id < 0) {
 			DBG("failed to add group %s chain_id %d rule %s",
 					group, chain_id, rules[i]);
@@ -1764,26 +1678,9 @@ static int add_tethering_rules_cb(int family, const char *filename,
 			continue;
 		}
 
-		switch (family) {
-		case AF_INET:
-			id = __connman_firewall_add_rule(tethering_firewall, cb,
-						filename, table,
-						builtin_chains[chain_id],
+		id = firewall_add_rule(tethering_firewall, cb, filename, family,
+						table, builtin_chains[chain_id],
 						rules[i]);
-			break;
-		case AF_INET6:
-			id = __connman_firewall_add_ipv6_rule(
-						tethering_firewall, cb,
-						filename, table,
-						builtin_chains[chain_id],
-						rules[i]);
-			break;
-		default:
-			id = -1;
-			DBG("invalid IP protocol %d", family);
-			break;
-		}
-
 		if (id < 0) {
 			DBG("failed to add group %s chain_id %d rule %s",
 					group, chain_id, rules[i]);
@@ -2097,7 +1994,7 @@ static int enable_general_firewall()
 
 	DBG("%d general rules", g_list_length(general_firewall->ctx->rules));
 
-	err = __connman_firewall_enable(general_firewall->ctx);
+	err = firewall_enable_rules(general_firewall->ctx);
 
 	/*
 	 * If there is a problem with general firewall, do not apply policies
@@ -2125,7 +2022,7 @@ static int enable_general_firewall()
 
 }
 
-static bool is_valid_policy(char *policy)
+static bool is_valid_policy(const char *policy)
 {
 	const char *valid_policies[] = {"ACCEPT", "DROP", NULL};
 
@@ -2297,7 +2194,7 @@ static void remove_ctx(gpointer user_data)
 	struct firewall_context *ctx = user_data;
 
 	if (ctx->enabled)
-		__connman_firewall_disable_rule(ctx, FW_ALL_RULES);
+		firewall_disable_rules(ctx);
 
 	__connman_firewall_destroy(ctx);
 }
@@ -2514,8 +2411,7 @@ static void cleanup_general_firewall()
 		return;
 
 	if (general_firewall->ctx->enabled) {
-		err = __connman_firewall_disable_rule(general_firewall->ctx,
-				FW_ALL_RULES);
+		err = firewall_disable_rules(general_firewall->ctx);
 
 		if (err)
 			DBG("Cannot disable generic firewall rules");
@@ -2554,8 +2450,7 @@ static void cleanup_dynamic_firewall_rules()
 
 	if (tethering_firewall) {
 		if (tethering_firewall->enabled)
-			__connman_firewall_disable_rule(tethering_firewall,
-						FW_ALL_RULES);
+			firewall_disable_rules(tethering_firewall);
 
 		__connman_firewall_destroy(tethering_firewall);
 		tethering_firewall = NULL;
@@ -2619,7 +2514,7 @@ static int copy_new_dynamic_rules(struct firewall_context *dyn_ctx,
 					firewall_rule_compare_reverse);
 
 		if (srv_ctx->enabled) {
-			err = firewall_enable_rule(new_rule);
+			err = enable_rule(new_rule);
 
 			if (err)
 				DBG("new rule not enabled %d", err);
@@ -2659,9 +2554,7 @@ static int remove_config_from_context(struct firewall_context *ctx,
 			 * to be removed at shutdown.
 			 */
 			if (rule->enabled && disable) {
-				err = __connman_firewall_disable_rule(ctx,
-							rule->id);
-
+				err = disable_rule(rule);
 				if (err) {
 					DBG("cannot disable rule %d", err);
 					e = err;
@@ -2669,16 +2562,7 @@ static int remove_config_from_context(struct firewall_context *ctx,
 				}
 			}
 
-			switch (rule->family) {
-			case AF_INET:
-				err = __connman_firewall_remove_rule(ctx,
-							rule->id);
-				break;
-			case AF_INET6:
-				err = __connman_firewall_remove_ipv6_rule(ctx,
-							rule->id);
-			}
-
+			err = firewall_remove_rule(ctx, rule->id);
 			if (err) {
 				DBG("cannot remove rule, err %d", err);
 				e = err;
@@ -2885,7 +2769,7 @@ static int firewall_reload_configurations()
 	}
 
 	/* Apply general firewall rules that were added */
-	__connman_firewall_enable_rule(general_firewall->ctx, FW_ALL_RULES);
+	firewall_enable_rules(general_firewall->ctx);
 
 	g_hash_table_iter_init(&iter, current_dynamic_rules);
 
