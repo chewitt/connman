@@ -694,9 +694,9 @@ const char *__connman_tethering_get_bridge(void)
 	return "bridge";
 }
 
-void __connman_tethering_set_enabled(void)
+int __connman_tethering_set_enabled(void)
 {
-	return;
+	return 0;
 }
 
 void __connman_tethering_set_disabled(void)
