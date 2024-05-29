@@ -3750,9 +3750,19 @@ static void wifi_device_tether_4(GSupplicant *supplicant, GCancellable *cancel,
 static GCancellable *wifi_device_tether_3(struct wifi_device *dev)
 {
 	GSupplicantCreateInterfaceParams params;
+	int err;
 
-	/* This creates the bridge (at least attempts to) */
-	connman_technology_tethering_notify(dev->tethering, TRUE);
+	/*
+	 * This attempts to create the bridge, bail out if it fails. If the
+	 * tethering has been already enabled bail out similarly as we do
+	 * not want to create another interface.
+	 */
+	err = connman_technology_tethering_notify(dev->tethering, true);
+	if (err) {
+		DBG("creating tethering bridge %s dev failed: %d",
+							dev->bridge, err);
+		return NULL;
+	}
 
 	/*
 	 * Assuming that the above call succeeds, we can create
@@ -4040,7 +4050,7 @@ static void wifi_device_set_state(struct wifi_device *dev,
 
 				dev->tethering = NULL;
 				wifi_device_scan_check(dev);
-				connman_technology_tethering_notify(t, FALSE);
+				connman_technology_tethering_notify(t, false);
 			}
 		}
 
@@ -4448,7 +4458,7 @@ static int wifi_plugin_set_tethering(struct wifi_plugin *plugin,
 			wifi_device_scan_check(dev);
 			wifi_device_on_start(dev);
 		}
-		connman_technology_tethering_notify(plugin->tech, FALSE);
+		connman_technology_tethering_notify(plugin->tech, false);
 		return 0;
 	}
 }
