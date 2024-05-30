@@ -196,10 +196,10 @@ static void read_uevent(struct interface_data *interface)
 		} else if (strcmp(devtype, "vlan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-		} else if (strcmp(devtype + 8, "bond") == 0) {
+		} else if (strcmp(devtype, "bond") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-		} else if (strcmp(devtype + 8, "dsa") == 0) {
+		} else if (strcmp(devtype, "dsa") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 		} else {
