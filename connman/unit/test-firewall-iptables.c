@@ -639,8 +639,10 @@ static struct iptables_rule *new_rule(int type, const char *table,
 
 static void delete_rule(struct iptables_rule *rule)
 {
-	if (!rule)
-		return;
+	g_assert(rule);
+	g_assert(rule->table);
+	g_assert(rule->chain);
+	g_assert(rule->rule_spec);
 
 	g_free(rule->table);
 	g_free(rule->chain);
@@ -672,24 +674,15 @@ static gboolean table_exists(int type, const char *table_name)
 
 static gboolean is_builtin(const char *table, const char *chain)
 {
-	int i;
 	const char *builtin[] = {"INPUT", "FORWARD", "OUTPUT", NULL};
 	const char *builtin_mangle[] = {"PREROUTING", "INPUT", "FORWARD",
 				"OUTPUT", "POSTROUTING", NULL};
 
-	if (!g_strcmp0(table, "filter")) {
-		for (i = 0; builtin[i]; i++) {
-			if (!g_strcmp0(chain, builtin[i]))
-				return TRUE;
-		}
-	}
+	if (!g_strcmp0(table, "filter"))
+		return g_strv_contains(builtin, chain);
 
-	if (!g_strcmp0(table, "mangle")) {
-		for (i = 0; builtin_mangle[i]; i++) {
-			if (!g_strcmp0(chain, builtin_mangle[i]))
-				return TRUE;
-		}
-	}
+	if (!g_strcmp0(table, "mangle"))
+		return g_strv_contains(builtin_mangle, chain);
 
 	return FALSE;
 }
@@ -822,7 +815,6 @@ int __connman_iptables_flush_chain(int type,
 				const char *table_name,
 				const char *chain)
 {
-	GSList *rules = NULL;
 	GSList *iter;
 	GSList *remove;
 	struct iptables_rule *rule;
@@ -843,16 +835,14 @@ int __connman_iptables_flush_chain(int type,
 
 	switch (type) {
 	case AF_INET:
-		rules = rules_ipv4;
+		iter = rules_ipv4;
 		break;
 	case AF_INET6:
-		rules = rules_ipv6;
+		iter = rules_ipv6;
 		break;
 	default:
 		return -EINVAL;
 	}
-
-	iter = rules;
 
 	while (iter) {
 		rule = iter->data;
@@ -902,8 +892,10 @@ int __connman_iptables_change_policy(int type,
 	if (!is_valid_policy(policy))
 		return -EINVAL;
 
-	if (global_iptables_type & IPTABLES_POLICY_FAIL)
+	if (global_iptables_type & IPTABLES_POLICY_FAIL) {
+		DBG("policy fail enabled");
 		return -EINVAL;
+	}
 
 	DBG("table %s chain %s policy %s", table_name, chain, policy);
 
@@ -958,6 +950,7 @@ int __connman_iptables_append(int type,
 				g_slist_length(rules_ipv6));
 
 	rule = new_rule(type, table_name, chain, rule_spec);
+	g_assert(rule);
 
 	switch (type) {
 	case AF_INET:
@@ -1001,6 +994,7 @@ int __connman_iptables_insert(int type,
 				g_slist_length(rules_ipv6));
 
 	rule = new_rule(type, table_name, chain, rule_spec);
+	g_assert(rule);
 
 	switch (type) {
 	case AF_INET:
@@ -1075,7 +1069,7 @@ int __connman_iptables_delete(int type,
 
 			g_assert(remove);
 
-			delete_rule(rule);
+			delete_rule(remove->data);
 			g_slist_free1(remove);
 
 			break;
@@ -1105,11 +1099,12 @@ int __connman_iptables_commit(int type, const char *table_name)
 }
 
 /* This is wrong to have pre/post as last but too big changes otherwise */
-static const char *connman_chains[] = { "connman-INPUT",
+static const char *connman_chains[] = { "connman-PREROUTING",
+					"connman-INPUT",
 					"connman-FORWARD",
 					"connman-OUTPUT",
-					"connman-PREROUTING",
-					"connman-POSTROUTING"
+					"connman-POSTROUTING",
+					NULL
 };
 
 int __connman_iptables_iterate_chains(int type, const char *table_name,
@@ -1117,32 +1112,37 @@ int __connman_iptables_iterate_chains(int type, const char *table_name,
 				void *user_data)
 {
 	const char *chains[] = {
+				"PREROUTING",
 				"INPUT",
 				"OUTPUT",
 				"FORWARD",
-				"PREROUTING",
 				"POSTROUTING",
-				connman_chains[0],
-				connman_chains[1],
-				connman_chains[2],
-				connman_chains[3],
-				connman_chains[4],
+				connman_chains[NF_IP_PRE_ROUTING],
+				connman_chains[NF_IP_LOCAL_IN],
+				connman_chains[NF_IP_FORWARD],
+				connman_chains[NF_IP_LOCAL_OUT],
+				connman_chains[NF_IP_POST_ROUTING],
 				NULL
 	};
 	int i;
-	int limit = 3;
+	int start = 1;
+	int limit = 4;
 
 	DBG("");
 
-	if (!g_strcmp0(table_name, "mangle"))
+	if (!g_strcmp0(table_name, "mangle")) {
+		start = 0;
 		limit = 5;
+	}
 
-	for (i = 0; i < limit; i++)
+	for (i = start; i < limit; i++)
 		cb(chains[i], user_data);
 
 	if (global_iptables_type & IPTABLES_ALL_CHAINS) {
-		for (i = 5; i < limit + 5; i++)
+		for (i = start + 5; i < limit + 5; i++) {
+			DBG("%d chain %s", i, chains[i]);
 			cb(chains[i], user_data);
+		}
 	}
 
 	return 0;
@@ -1203,6 +1203,12 @@ void __connman_iptables_cleanup(void)
 	if (chains_mangle_ipv6)
 		g_slist_free_full(chains_mangle_ipv6, g_free);
 
+	rules_ipv4 = NULL;
+	rules_ipv6 = NULL;
+	chains_ipv4 = NULL;
+	chains_mangle_ipv4 = NULL;
+	chains_ipv6 = NULL;
+	chains_mangle_ipv6 = NULL;
 
 	for (i = 0; i < NF_IP_NUMHOOKS; i++) {
 		g_free(policies_ipv4[i]);
@@ -1531,7 +1537,7 @@ static const char *mangle_post[] = {
 };
 static const char *policies_default[] = {NULL, "ACCEPT", "ACCEPT", "ACCEPT",
 					NULL};
-static const char *general_policies_ok[] = { NULL, "DROP", "ACCEPT", "DROP",
+static const char *general_policies_ok[] = {NULL, "DROP", "ACCEPT", "DROP",
 					NULL};
 static const char *general_policies_fail[] = {NULL, "DENY", "REJECT", "ALLOW",
 					NULL};
@@ -2963,11 +2969,11 @@ static void assert_rule_exists(int type, const char *table, const char *chain,
 	}
 
 	if (device) {
-		if (!g_strcmp0(chain, connman_chains[0]))
+		if (!g_strcmp0(chain, connman_chains[NF_IP_LOCAL_IN]))
 			device_type = 'i';
-		else if (!g_strcmp0(chain, connman_chains[1]))
+		else if (!g_strcmp0(chain, connman_chains[NF_IP_FORWARD]))
 			device_type = 'o';
-		else if (!g_strcmp0(chain, connman_chains[2]))
+		else if (!g_strcmp0(chain, connman_chains[NF_IP_LOCAL_OUT]))
 			device_type = 'o';
 		else
 			device_type = '?';
@@ -2986,6 +2992,7 @@ static void assert_rule_exists(int type, const char *table, const char *chain,
 		g_assert(rule->table);
 		g_assert(rule->chain);
 		g_assert(rule->rule_spec);
+		DBG("chain %s spec %s", rule->chain, rule->rule_spec);
 
 		if (rule->type == type && !g_strcmp0(rule->table, table) &&
 					!g_strcmp0(rule->chain, chain) &&
@@ -3030,11 +3037,11 @@ static void assert_rule_not_exists(int type, const char *table,
 	}
 
 	if (device) {
-		if (!g_strcmp0(chain, connman_chains[0]))
+		if (!g_strcmp0(chain, connman_chains[NF_IP_LOCAL_IN]))
 			device_type = 'i';
-		else if (!g_strcmp0(chain, connman_chains[1]))
+		else if (!g_strcmp0(chain, connman_chains[NF_IP_FORWARD]))
 			device_type = 'o';
-		else if (!g_strcmp0(chain, connman_chains[2]))
+		else if (!g_strcmp0(chain, connman_chains[NF_IP_LOCAL_OUT]))
 			device_type = 'o';
 		else
 			device_type = '?';
@@ -3072,16 +3079,19 @@ static void check_rules(assert_cb_t cb, int type, const char *table,
 			const char **rules[], const char *ifname)
 {
 	int i, j;
-	int max = 3;
+	int start = 1;
+	int max = 4;
 
-	if (!g_strcmp0(table, "mangle"))
+	if (!g_strcmp0(table, "mangle")) {
+		start = 0;
 		max = 5;
+	}
 
-	for (j = 0; j < max; j++) {
+	for (j = start; j < max; j++) {
 		if (!rules[j])
 			continue;
 
-		for (i = 0; rules[j][i]; i++) {
+		for (i = start; rules[j][i]; i++) {
 			if (!type || type == AF_INET)
 				cb(AF_INET, table ? table : "filter",
 							connman_chains[j],
@@ -3098,15 +3108,17 @@ static void check_rules(assert_cb_t cb, int type, const char *table,
 static void check_main_config_rules()
 {
 	const char **general_rules_all[] = {
+				NULL,
 				general_input,
 				general_forward,
-				general_output
+				general_output,
+				NULL
 	};
 	const char **mangle_rules_all[] = {
+				mangle_pre,
 				mangle_input,
 				mangle_forward,
 				mangle_output,
-				mangle_pre,
 				mangle_post
 	};
 	const char **eth_rules_all[] = {eth_input, NULL, eth_output};
@@ -3502,8 +3514,8 @@ static void firewall_test_all_config_duplicates1()
 
 static void firewall_test_icmp_config_ok0()
 {
-	const char **icmpv4_rules[] = { general_icmpv4, NULL, NULL};
-	const char **icmpv6_rules[] = { general_icmpv6, NULL, NULL};
+	const char **icmpv4_rules[] = {NULL, general_icmpv4, NULL, NULL, NULL};
+	const char **icmpv6_rules[] = {NULL, general_icmpv6, NULL, NULL, NULL};
 
 	setup_test_params(CONFIG_ICMP_ONLY);
 
@@ -3526,8 +3538,8 @@ static void firewall_test_icmp_config_ok0()
 
 static void firewall_test_options_config_ok0()
 {
-	const char **opt4_rules[] = { general_options, NULL, NULL};
-	const char **opt6_rules[] = { general_options, NULL, NULL};
+	const char **opt4_rules[] = {NULL, general_options, NULL, NULL, NULL};
+	const char **opt6_rules[] = {NULL, general_options, NULL, NULL, NULL};
 
 	setup_test_params(CONFIG_OPTIONS_ONLY);
 
@@ -3550,8 +3562,10 @@ static void firewall_test_options_config_ok0()
 
 static void firewall_test_options_config_ok1()
 {
-	const char **opt4_rules[] = { general_options_address4, NULL, NULL};
-	const char **opt6_rules[] = { general_options_address6, NULL, NULL};
+	const char **opt4_rules[] = {NULL, general_options_address4, NULL,
+								NULL, NULL};
+	const char **opt6_rules[] = {NULL, general_options_address6, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OPTIONS_ONLY|CONFIG_OPTIONS_ADDR);
 
@@ -3563,8 +3577,10 @@ static void firewall_test_options_config_ok1()
 
 	check_rules(assert_rule_exists, AF_INET, "filter", opt4_rules, NULL);
 	check_rules(assert_rule_exists, AF_INET6, "filter", opt6_rules, NULL);
-	check_rules(assert_rule_not_exists, AF_INET, "filter", opt6_rules, NULL);
-	check_rules(assert_rule_not_exists, AF_INET6, "filter", opt4_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET, "filter", opt6_rules,
+								NULL);
+	check_rules(assert_rule_not_exists, AF_INET6, "filter", opt4_rules,
+								NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3662,8 +3678,10 @@ static void firewall_test_all_config_fail0()
 
 static void firewall_test_options_config_fail0()
 {
-	const char **opt4_rules[] = { invalid_general_options, NULL, NULL};
-	const char **opt6_rules[] = { invalid_general_options, NULL, NULL};
+	const char **opt4_rules[] = {NULL, invalid_general_options, NULL,
+								NULL, NULL};
+	const char **opt6_rules[] = {NULL, invalid_general_options, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OPTIONS_ONLY|CONFIG_INVALID);
 
@@ -3673,8 +3691,10 @@ static void firewall_test_options_config_fail0()
 	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
 	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
-	check_rules(assert_rule_not_exists, AF_INET, "filter", opt4_rules, NULL);
-	check_rules(assert_rule_not_exists, AF_INET6, "filter", opt6_rules, NULL);
+	check_rules(assert_rule_not_exists, AF_INET, "filter", opt4_rules,
+								NULL);
+	check_rules(assert_rule_not_exists, AF_INET6, "filter", opt6_rules,
+								NULL);
 
 	__connman_firewall_pre_cleanup();
 	__connman_firewall_cleanup();
@@ -3686,7 +3706,8 @@ static void firewall_test_dynamic_ok0()
 {
 	char *ifname;
 
-	const char **device_rules[] = { eth_input, NULL, eth_output };
+	const char **device_rules[] = {NULL, eth_input, NULL, eth_output,
+								NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -3742,8 +3763,9 @@ static void firewall_test_dynamic_ok1()
 {
 	char *ifname, *ifname2;
 
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
-	const char **cel_rules[] = { cellular_input, NULL, cellular_output};
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
+	const char **cel_rules[] = {NULL, cellular_input, NULL,
+							cellular_output, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -3818,7 +3840,8 @@ static const char *tethering_default_input[] = {"-j ACCEPT", NULL};
 static void firewall_test_dynamic_ok2()
 {
 	const char *ifname;
-	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+	const char **device_rules[] = {NULL, tethering_default_input, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -3885,11 +3908,11 @@ static void firewall_test_dynamic_ok3()
 {
 	const char *ifname;
 
-	const char **tethering_rules[] = { tethering_input, 
-					tethering_forward,
-					tethering_output,
-	};
-	const char **not_exist_rules[] = { tethering_default_input, NULL, NULL};
+	const char **tethering_rules[] = {NULL, tethering_input,
+					tethering_forward, tethering_output,
+					NULL };
+	const char **not_exist_rules[] = {NULL, tethering_default_input, NULL,
+					NULL, NULL};
 
 	setup_test_params(CONFIG_OK|CONFIG_TETHERING);
 
@@ -3941,17 +3964,22 @@ static void firewall_test_dynamic_ok4()
 	const char *iftether;
 	char *ifname, *ifname2;
 
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
-	const char **cel_rules[] = { cellular_input, NULL, cellular_output};
-	const char **tethering_rules[] = { tethering_input, 
-					tethering_forward,
-					tethering_output,
-	};
-	const char **not_exist_rules[] = { tethering_default_input, NULL, NULL};
-	const char **eth_add_rules1[] = { eth_input_add1, NULL, NULL };
-	const char **eth_add_rules3[] = { eth_input_add3, NULL, NULL };
-	const char **cel_add_rules0[] = { cel_input_add0, NULL, NULL };
-	const char **cel_add_rules2[] = { cel_input_add2, NULL, NULL };
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
+	const char **cel_rules[] = {NULL, cellular_input, NULL,
+							cellular_output, NULL};
+	const char **tethering_rules[] = {NULL, tethering_input,
+							tethering_forward,
+							tethering_output, NULL};
+	const char **not_exist_rules[] = {NULL, tethering_default_input, NULL,
+							NULL, NULL};
+	const char **eth_add_rules1[] = {NULL, eth_input_add1, NULL, NULL,
+							NULL};
+	const char **eth_add_rules3[] = {NULL, eth_input_add3, NULL, NULL,
+							NULL};
+	const char **cel_add_rules0[] = {NULL, cel_input_add0, NULL, NULL,
+							NULL};
+	const char **cel_add_rules2[] = {NULL, cel_input_add2, NULL, NULL,
+							NULL};
 
 	setup_test_params(CONFIG_MIXED|CONFIG_TETHERING|CONFIG_ALL);
 
@@ -4061,7 +4089,7 @@ static void firewall_test_dynamic_ok5()
 {
 	char *ifname;
 
-	const char **device_rules[] = { eth_input, NULL, eth_output };
+	const char **device_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4137,12 +4165,17 @@ static void firewall_test_dynamic_ok6()
 {
 	char *ifname, *ifname2;
 
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
-	const char **cel_rules[] = { cellular_input, NULL, cellular_output };
-	const char **eth_add_rules1[] = { eth_input_add1, NULL, NULL };
-	const char **eth_add_rules3[] = { eth_input_add3, NULL, NULL };
-	const char **cel_add_rules0[] = { cel_input_add0, NULL, NULL };
-	const char **cel_add_rules2[] = { cel_input_add2, NULL, NULL };
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
+	const char **cel_rules[] = {NULL, cellular_input, NULL, cellular_output,
+								NULL};
+	const char **eth_add_rules1[] = {NULL, eth_input_add1, NULL, NULL,
+								NULL};
+	const char **eth_add_rules3[] = {NULL, eth_input_add3, NULL, NULL,
+								NULL};
+	const char **cel_add_rules0[] = {NULL, cel_input_add0, NULL, NULL,
+								NULL};
+	const char **cel_add_rules2[] = {NULL, cel_input_add2, NULL, NULL,
+								NULL};
 
 	setup_test_params(CONFIG_OK|CONFIG_ALL);
 
@@ -4229,8 +4262,9 @@ static void firewall_test_dynamic_ok7()
 {
 	char *ifname, *ifname2;
 
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
-	const char **cel_rules[] = { cellular_input, NULL, cellular_output};
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
+	const char **cel_rules[] = {NULL, cellular_input, NULL,
+							cellular_output, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4305,7 +4339,8 @@ static void firewall_test_dynamic_ok7()
 /* Tethering with invalid rules also added */
 static void firewall_test_dynamic_ok8()
 {
-	const char **tethering_rules[] = { tethering_input, NULL, NULL};
+	const char **tethering_rules[] = {NULL, tethering_input, NULL, NULL,
+								NULL};
 	const char *ifname;
 
 	setup_test_params(CONFIG_TETHERING|CONFIG_INVALID);
@@ -4348,7 +4383,8 @@ static void firewall_test_dynamic_ok8()
 
 static void firewall_test_device_status0()
 {
-	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+	const char **device_rules[] = {NULL, tethering_default_input, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4383,7 +4419,8 @@ static void firewall_test_device_status0()
 /* Tests with two devices */
 static void firewall_test_device_status1()
 {
-	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+	const char **device_rules[] = {NULL, tethering_default_input, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4446,7 +4483,8 @@ static void firewall_test_device_status1()
 /* Tests devices with double notifications */
 static void firewall_test_device_status2()
 {
-	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+	const char **device_rules[] = {NULL, tethering_default_input, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4498,7 +4536,8 @@ static void firewall_test_device_status2()
 /* Notify from managed device - no new rules */
 static void firewall_test_device_status3()
 {
-	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+	const char **device_rules[] = {NULL, tethering_default_input, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4536,7 +4575,8 @@ static void firewall_test_device_status3()
 /* Only off notify from managed device - nothing done */
 static void firewall_test_device_status4()
 {
-	const char **device_rules[] = { tethering_default_input, NULL, NULL};
+	const char **device_rules[] = {NULL, tethering_default_input, NULL,
+								NULL, NULL};
 
 	setup_test_params(CONFIG_OK);
 
@@ -4656,7 +4696,7 @@ static void firewall_test_config_reload1()
 static void firewall_test_config_reload2()
 {
 	char *ifname;
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
 	DBusMessage *msg;
 	DBusMessage *reply;
 
@@ -4723,9 +4763,9 @@ static void firewall_test_config_reload2()
 static void firewall_test_config_reload3()
 {
 	char *ifname;
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
-	const char **add_rules1[] = { eth_input_add1, NULL, NULL};
-	const char **add_rules3[] = { eth_input_add3, NULL, NULL};
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
+	const char **add_rules1[] = {NULL,  eth_input_add1, NULL, NULL, NULL};
+	const char **add_rules3[] = {NULL,  eth_input_add3, NULL, NULL, NULL};
 	DBusMessage *msg;
 	DBusMessage *reply;
 
@@ -4808,9 +4848,9 @@ static void firewall_test_config_reload3()
 static void firewall_test_config_reload4()
 {
 	char *ifname;
-	const char **eth_rules[] = { eth_input, NULL, eth_output };
-	const char **add_rules1[] = { eth_input_add1, NULL, NULL};
-	const char **add_rules3[] = { eth_input_add3, NULL, NULL};
+	const char **eth_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
+	const char **add_rules1[] = {NULL, eth_input_add1, NULL, NULL, NULL};
+	const char **add_rules3[] = {NULL, eth_input_add3, NULL, NULL, NULL};
 	DBusMessage *msg;
 	DBusMessage *reply;
 
@@ -5040,7 +5080,7 @@ static void firewall_test_notifier_fail0()
 {
 	char *ifname;
 
-	const char **device_rules[] = { eth_input, NULL, eth_output };
+	const char **device_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
 
 	setup_test_params(CONFIG_OK|CONFIG_ALL);
 	notifier_fail = true; // No dynamic rules
@@ -5137,7 +5177,7 @@ static void firewall_test_iptables_fail1()
 static void firewall_test_iptables_fail2()
 {
 	char *ifname;
-	const char **device_rules[] = { eth_input, NULL, eth_output };
+	const char **device_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
 
 	setup_test_params(CONFIG_OK|CONFIG_ALL);
 
@@ -5193,7 +5233,7 @@ static void firewall_test_iptables_fail2()
 static void firewall_test_iptables_fail3()
 {
 	char *ifname;
-	const char **device_rules[] = { eth_input, NULL, eth_output };
+	const char **device_rules[] = {NULL, eth_input, NULL, eth_output, NULL};
 
 	setup_test_params(CONFIG_OK|CONFIG_ALL);
 
@@ -5259,8 +5299,9 @@ static void firewall_test_iptables_fail4()
 	__connman_firewall_cleanup();
 	g_assert_false(iptables_init);
 
-	g_assert_cmpint(g_slist_length(rules_ipv4), ==, RULES_GEN4);
-	g_assert_cmpint(g_slist_length(rules_ipv6), ==, RULES_GEN6);
+	/* __connman_iptables_cleanup() does clear all */
+	g_assert_cmpint(g_slist_length(rules_ipv4), ==, 0);
+	g_assert_cmpint(g_slist_length(rules_ipv6), ==, 0);
 
 	setup_iptables_params(IPTABLES_NORMAL);
 }
