@@ -297,6 +297,8 @@ static void ts_recheck_enable(void)
 int __connman_timeserver_sync(struct connman_service *default_service)
 {
 	struct connman_service *service;
+	char **nameservers;
+	int i;
 
 	if (default_service)
 		service = default_service;
@@ -319,6 +321,17 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 
 	if (resolv_id > 0)
 		g_resolv_cancel_lookup(resolv, resolv_id);
+
+	g_resolv_flush_nameservers(resolv);
+
+	nameservers = connman_service_get_nameservers(service);
+	if (!nameservers)
+		return -EINVAL;
+
+	for (i = 0; nameservers[i]; i++)
+		g_resolv_add_nameserver(resolv, nameservers[i], 53, 0);
+
+	g_strfreev(nameservers);
 
 	g_slist_free_full(ts_list, g_free);
 

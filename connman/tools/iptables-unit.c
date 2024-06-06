@@ -30,7 +30,7 @@
 #include <glib/gstdio.h>
 #include <gdbus.h>
 
-#include "../src/connman.h"
+#include "../src/firewall-iptables.c"
 
 struct connman_service {
 	char *dummy;
@@ -209,10 +209,10 @@ enum connman_service_type __connman_technology_get_type(
 	return 0;
 }
 
-void connman_technology_tethering_notify(struct connman_technology *technology,
+int connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled)
 {
-	return;
+	return 0;
 }
 
 struct connman_access_firewall_policy *__connman_access_firewall_policy_create
@@ -589,6 +589,46 @@ static void assert_rule_not_exists(int type, const char *table_name,
 	g_assert(!assert_rule(type, table_name, rule));
 }
 
+static struct fw_rule *get_rule(struct firewall_context *ctx, int id)
+{
+	GList *iter;
+	struct fw_rule *rule;
+
+	for (iter = ctx->rules; iter; iter = iter->next) {
+		rule = iter->data;
+		if (rule->id == id)
+			return rule;
+	}
+
+	return NULL;
+}
+
+static int fw_enable_rule(struct firewall_context *ctx, int id)
+{
+	struct fw_rule *rule;
+
+	g_assert(ctx);
+
+	rule = get_rule(ctx, id);
+	if (!rule)
+		return -ENOENT;
+
+	return enable_rule(rule);
+}
+
+static int fw_disable_rule(struct firewall_context *ctx, int id)
+{
+	struct fw_rule *rule;
+
+	g_assert(ctx);
+
+	rule = get_rule(ctx, id);
+	if (!rule)
+		return -ENOENT;
+
+	return disable_rule(rule);
+}
+
 static void test_iptables_chain0(void)
 {
 	int err;
@@ -833,7 +873,7 @@ static void test_iptables_target0(void)
 }
 
 struct connman_notifier *nat_notifier;
-struct connman_notifier *firewall_notifier;
+struct connman_notifier *test_firewall_notifier;
 
 char *connman_service_get_interface(struct connman_service *service)
 {
@@ -852,7 +892,7 @@ int connman_notifier_register(struct connman_notifier *notifier)
 		nat_notifier = notifier;
 
 	if (!g_strcmp0(notifier->name, "firewall"))
-		firewall_notifier = notifier;
+		test_firewall_notifier = notifier;
 
 	return 0;
 }
@@ -860,7 +900,7 @@ int connman_notifier_register(struct connman_notifier *notifier)
 void connman_notifier_unregister(struct connman_notifier *notifier)
 {
 	nat_notifier = NULL;
-	firewall_notifier = NULL;
+	test_firewall_notifier = NULL;
 }
 
 static void test_nat_basic0(void)
@@ -940,11 +980,11 @@ static void test_firewall_basic0(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "INPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
 	assert_rule_exists(AF_INET, "filter", ":connman-INPUT - [0:0]");
@@ -952,7 +992,7 @@ static void test_firewall_basic0(void)
 	assert_rule_exists(AF_INET, "filter", "-A connman-INPUT "
 					"-m mark --mark 0x3e7 -j LOG");
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	assert_rule_not_exists(AF_INET, "filter", ":connman-INPUT - [0:0]");
@@ -971,18 +1011,18 @@ static void test_firewall_basic1(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "INPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "filter", "INPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "OUTPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "filter", "OUTPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -996,18 +1036,18 @@ static void test_firewall_basic2(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle", "INPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "mangle", "INPUT",
 				"-j CONNMARK --restore-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "mangle",
 				"POSTROUTING", "-j CONNMARK --save-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -1021,20 +1061,20 @@ static void test_firewall_basic3(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	id = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle", "INPUT",
+	id = firewall_add_rule(ctx, NULL, NULL, AF_INET, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(id >= 0);
 
-	err = __connman_firewall_enable_rule(ctx, id);
+	err = fw_enable_rule(ctx, id);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable_rule(ctx, id);
+	err = fw_disable_rule(ctx, id);
 	g_assert(err == 0);
 
-	err = __connman_firewall_remove_rule(ctx, id);
+	err = firewall_remove_rule(ctx, id);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -1316,11 +1356,11 @@ static void test_firewall6_basic0(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "filter",
 					"INPUT", "-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
 	assert_rule_exists(AF_INET6, "filter", ":connman-INPUT - [0:0]");
@@ -1328,7 +1368,7 @@ static void test_firewall6_basic0(void)
 	assert_rule_exists(AF_INET6, "filter",
 				"-A connman-INPUT -m mark --mark 0x3e7 -j LOG");
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	assert_rule_not_exists(AF_INET6, "filter", ":connman-INPUT - [0:0]");
@@ -1347,18 +1387,18 @@ static void test_firewall6_basic1(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "filter",
 					"INPUT", "-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "OUTPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "filter", "OUTPUT",
 					"-m mark --mark 999 -j LOG");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -1372,18 +1412,18 @@ static void test_firewall6_basic2(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "mangle",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "mangle",
 				"INPUT", "-j CONNMARK --restore-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "mangle",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "mangle",
 				"POSTROUTING", "-j CONNMARK --save-mark");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -1397,20 +1437,20 @@ static void test_firewall6_basic3(void)
 	ctx = __connman_firewall_create();
 	g_assert(ctx);
 
-	id = __connman_firewall_add_rule(ctx, NULL, NULL, "mangle", "INPUT",
+	id = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "mangle", "INPUT",
 					"-j CONNMARK --restore-mark");
 	g_assert(id >= 0);
 
-	err = __connman_firewall_enable_rule(ctx, id);
+	err = fw_enable_rule(ctx, id);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable_rule(ctx, id);
+	err = fw_disable_rule(ctx, id);
 	g_assert(err == 0);
 
-	err = __connman_firewall_remove_rule(ctx, id);
+	err = firewall_remove_rule(ctx, id);
 	g_assert(err == 0);
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -1425,29 +1465,29 @@ static void test_firewall_4and6_basic0(void)
 
 	g_assert(ctx);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "INPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "filter", "INPUT",
 			"-p icmp -m icmp "
 			"--icmp-type 8/0 -j DROP");
 
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_rule(ctx, NULL, NULL, "filter", "OUTPUT",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET, "filter", "OUTPUT",
 				"-p icmp -m icmp "
 				"--icmp-type 0/0 -j DROP");
 
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "filter",
 					"INPUT", "-p icmpv6 -m icmpv6 "
 					"--icmpv6-type 128/0 -j DROP");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_add_ipv6_rule(ctx, NULL, NULL, "filter",
+	err = firewall_add_rule(ctx, NULL, NULL, AF_INET6, "filter",
 					"OUTPUT", "-p icmpv6 -m icmpv6 "
 					"--icmpv6-type 129/0 -j DROP");
 	g_assert(err >= 0);
 
-	err = __connman_firewall_enable(ctx);
+	err = firewall_enable_rules(ctx);
 	g_assert(err == 0);
 
 	assert_rule_exists(AF_INET, "filter", ":connman-INPUT - [0:0]");
@@ -1474,7 +1514,7 @@ static void test_firewall_4and6_basic0(void)
 						"-p ipv6-icmp -m icmp6 "
 						"--icmpv6-type 129/0 -j DROP");
 
-	err = __connman_firewall_disable(ctx);
+	err = firewall_disable_rules(ctx);
 	g_assert(err == 0);
 
 	__connman_firewall_destroy(ctx);
@@ -1984,7 +2024,6 @@ static void test_firewall_managed_prep(void)
 	 * new content for testing
 	 */
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 
 	g_assert(init_firewall_config(true));
 }
@@ -1993,7 +2032,6 @@ static void test_firewall_managed_rules0(void)
 {
 	int i;
 
-	__connman_iptables_init();
 	__connman_firewall_init();
 
 	for (i = 0; general_input[i]; i++)
@@ -2009,7 +2047,6 @@ static void test_firewall_managed_rules0(void)
 					general_forward[i]);
 
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 
 	/* Check that iptables is clean */
 	for (i = 0; general_input[i]; i++)
@@ -2044,12 +2081,11 @@ static void test_firewall_managed_rules1(void)
 {
 	int i;
 
-	__connman_iptables_init();
 	__connman_firewall_init();
 
 	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
 
-	firewall_notifier->service_state_changed(&test_service,
+	test_firewall_notifier->service_state_changed(&test_service,
 				CONNMAN_SERVICE_STATE_READY);
 
 	for (i = 0; eth_input[i]; i++)
@@ -2062,7 +2098,7 @@ static void test_firewall_managed_rules1(void)
 
 	test_service.state = CONNMAN_SERVICE_STATE_DISCONNECT;
 
-	firewall_notifier->service_state_changed(&test_service,
+	test_firewall_notifier->service_state_changed(&test_service,
 				CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	for (i = 0; eth_input[i]; i++)
@@ -2074,7 +2110,6 @@ static void test_firewall_managed_rules1(void)
 					eth_output[i]);
 
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 
 	/* Check that iptables is clean */
 	assert_rule_not_exists(AF_INET, "filter",
@@ -2097,13 +2132,12 @@ static void test_firewall_managed_rules2(void)
 {
 	int i;
 
-	__connman_iptables_init();
 	__connman_firewall_init();
 
 	/* Test service 1 ethernet */
 	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
 
-	firewall_notifier->service_state_changed(&test_service,
+	test_firewall_notifier->service_state_changed(&test_service,
 				CONNMAN_SERVICE_STATE_READY);
 
 	for (i = 0; eth_input[i]; i++)
@@ -2117,7 +2151,7 @@ static void test_firewall_managed_rules2(void)
 	/* Test service 2 cellular */
 	test_service2.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
 
-	firewall_notifier->service_state_changed(&test_service2,
+	test_firewall_notifier->service_state_changed(&test_service2,
 				CONNMAN_SERVICE_STATE_READY);
 
 	for (i = 0; cellular_input[i]; i++)
@@ -2131,7 +2165,7 @@ static void test_firewall_managed_rules2(void)
 	/* Test service 1 ethernet disconnect*/
 	test_service.state = CONNMAN_SERVICE_STATE_DISCONNECT;
 
-	firewall_notifier->service_state_changed(&test_service,
+	test_firewall_notifier->service_state_changed(&test_service,
 				CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	for (i = 0; eth_input[i]; i++)
@@ -2145,7 +2179,7 @@ static void test_firewall_managed_rules2(void)
 	/* Test service 2 cellular disconnect */
 	test_service2.state = CONNMAN_SERVICE_STATE_DISCONNECT;
 
-	firewall_notifier->service_state_changed(&test_service2,
+	test_firewall_notifier->service_state_changed(&test_service2,
 				CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	for (i = 0; cellular_input[i]; i++)
@@ -2157,7 +2191,6 @@ static void test_firewall_managed_rules2(void)
 					cellular_output[i]);
 
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 
 	/* Check that iptables is clean */
 	assert_rule_not_exists(AF_INET, "filter",
@@ -2189,7 +2222,6 @@ static void test_firewall_managed_invalid_rules0(void)
 {
 	int i;
 
-	__connman_iptables_init();
 	__connman_firewall_init();
 
 	for (i = 0; invalid_general_input[i]; i++)
@@ -2220,7 +2252,6 @@ static void test_firewall_managed_invalid_rules0(void)
 				":connman-FORWARD - [0:0]");
 
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 }
 
 static void test_firewall_managed_invalid_rules1(void)
@@ -2229,12 +2260,11 @@ static void test_firewall_managed_invalid_rules1(void)
 
 	g_assert(init_firewall_config(false));
 
-	__connman_iptables_init();
 	__connman_firewall_init();
 
 	test_service.state = CONNMAN_SERVICE_STATE_CONFIGURATION;
 
-	firewall_notifier->service_state_changed(&test_service,
+	test_firewall_notifier->service_state_changed(&test_service,
 				CONNMAN_SERVICE_STATE_READY);
 
 	for (i = 0; invalid_eth_input[i]; i++)
@@ -2247,7 +2277,7 @@ static void test_firewall_managed_invalid_rules1(void)
 
 	test_service.state = CONNMAN_SERVICE_STATE_DISCONNECT;
 
-	firewall_notifier->service_state_changed(&test_service,
+	test_firewall_notifier->service_state_changed(&test_service,
 				CONNMAN_SERVICE_STATE_DISCONNECT);
 
 	/* Check that iptables is clean */
@@ -2266,7 +2296,6 @@ static void test_firewall_managed_invalid_rules1(void)
 				":connman-FORWARD - [0:0]");
 
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
 }
 
 static void test_firewall_managed_invalid_clean(void)
@@ -2322,7 +2351,6 @@ int main(int argc, char *argv[])
 	clean_firewall_config();
 
 	__connman_iptables_init();
-	__connman_firewall_init();
 	__connman_nat_init();
 
 	g_test_add_func("/iptables/chain0", test_iptables_chain0);
@@ -2371,7 +2399,6 @@ int main(int argc, char *argv[])
 	err = g_test_run();
 
 	__connman_nat_cleanup();
-	//__connman_firewall_cleanup();
 	//__connman_iptables_cleanup();
 
 	g_free(option_debug);

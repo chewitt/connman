@@ -84,6 +84,7 @@ static struct {
 	char **pref_timeservers;
 	unsigned int *auto_connect;
 	unsigned int *preferred_techs;
+	unsigned int *always_connected_techs;
 	char **fallback_nameservers;
 	unsigned int timeout_inputreq;
 	unsigned int timeout_browserlaunch;
@@ -105,6 +106,7 @@ static struct {
 	char *user_storage_dir;
 	bool enable_6to4;
 	char *vendor_class_id;
+	bool enable_online_check;
 	GHashTable *fallback_device_types;
 	bool enable_login_manager;
 	char *localtime;
@@ -116,6 +118,7 @@ static struct {
 	.pref_timeservers = NULL,
 	.auto_connect = NULL,
 	.preferred_techs = NULL,
+	.always_connected_techs = NULL,
 	.fallback_nameservers = NULL,
 	.timeout_inputreq = DEFAULT_INPUT_REQUEST_TIMEOUT,
 	.timeout_browserlaunch = DEFAULT_BROWSER_LAUNCH_TIMEOUT,
@@ -130,6 +133,7 @@ static struct {
 	.umask = DEFAULT_UMASK,
 	.enable_6to4 = false,
 	.vendor_class_id = NULL,
+	.enable_online_check = true,
 	.fallback_device_types = NULL,
 	.enable_login_manager = false,
 	.localtime = NULL,
@@ -141,6 +145,7 @@ static struct {
 #define CONF_BG_SCAN                    "BackgroundScanning"
 #define CONF_PREF_TIMESERVERS           "FallbackTimeservers"
 #define CONF_AUTO_CONNECT               "DefaultAutoConnectTechnologies"
+#define CONF_ALWAYS_CONNECTED_TECHS     "AlwaysConnectedTechnologies"
 #define CONF_PREFERRED_TECHS            "PreferredTechnologies"
 #define CONF_FALLBACK_NAMESERVERS       "FallbackNameservers"
 #define CONF_TIMEOUT_INPUTREQ           "InputRequestTimeout"
@@ -161,6 +166,7 @@ static struct {
 #define CONF_UMASK                      "Umask"
 #define CONF_ENABLE_6TO4                "Enable6to4"
 #define CONF_VENDOR_CLASS_ID            "VendorClassID"
+#define CONF_ENABLE_ONLINE_CHECK        "EnableOnlineCheck"
 #define CONF_FALLBACK_DEVICE_TYPES      "FallbackDeviceTypes"
 #define CONF_ENABLE_LOGIN_MANAGER       "EnableLoginManager"
 #define CONF_LOCALTIME                  "Localtime"
@@ -173,6 +179,7 @@ static const char *supported_options[] = {
 	CONF_BG_SCAN,
 	CONF_PREF_TIMESERVERS,
 	CONF_AUTO_CONNECT,
+	CONF_ALWAYS_CONNECTED_TECHS,
 	CONF_PREFERRED_TECHS,
 	CONF_FALLBACK_NAMESERVERS,
 	CONF_TIMEOUT_INPUTREQ,
@@ -196,6 +203,7 @@ static const char *supported_options[] = {
 	CONF_DISABLE_PLUGINS,
 	CONF_ENABLE_6TO4,
 	CONF_VENDOR_CLASS_ID,
+	CONF_ENABLE_ONLINE_CHECK,
 	CONF_FALLBACK_DEVICE_TYPES,
 	CONF_ENABLE_LOGIN_MANAGER,
 	CONF_LOCALTIME,
@@ -439,6 +447,17 @@ static void parse_config(GKeyFile *config)
 	g_clear_error(&error);
 
 	str_list = __connman_config_get_string_list(config, "General",
+			CONF_ALWAYS_CONNECTED_TECHS, &len, &error);
+
+	if (!error)
+		connman_settings.always_connected_techs =
+			parse_service_types(str_list, len);
+
+	g_strfreev(str_list);
+
+	g_clear_error(&error);
+
+	str_list = __connman_config_get_string_list(config, "General",
 			CONF_FALLBACK_NAMESERVERS, &len, &error);
 
 	if (!error)
@@ -575,6 +594,16 @@ static void parse_config(GKeyFile *config)
 					CONF_VENDOR_CLASS_ID, &error);
 	if (!error)
 		connman_settings.vendor_class_id = vendor_class_id;
+
+	g_clear_error(&error);
+
+	boolean = __connman_config_get_bool(config, "General",
+					CONF_ENABLE_ONLINE_CHECK, &error);
+	if (!error) {
+		connman_settings.enable_online_check = boolean;
+		if (!boolean)
+			connman_info("Online check disabled by main config.");
+	}
 
 	g_clear_error(&error);
 
@@ -864,6 +893,9 @@ bool connman_setting_get_bool(const char *key)
 	if (g_str_equal(key, CONF_ENABLE_6TO4))
 		return connman_settings.enable_6to4;
 
+	if (g_str_equal(key, CONF_ENABLE_ONLINE_CHECK))
+		return connman_settings.enable_online_check;
+
 	if (g_str_equal(key, CONF_ENABLE_LOGIN_MANAGER))
 		return connman_settings.enable_login_manager;
 
@@ -911,6 +943,9 @@ unsigned int *connman_setting_get_uint_list(const char *key)
 
 	if (g_str_equal(key, CONF_PREFERRED_TECHS))
 		return connman_settings.preferred_techs;
+
+	if (g_str_equal(key, CONF_ALWAYS_CONNECTED_TECHS))
+		return connman_settings.always_connected_techs;
 
 	return NULL;
 }
@@ -1059,9 +1094,8 @@ int main(int argc, char *argv[])
 
 	__connman_ippool_init();
 	__connman_iptables_validate_init();
-	__connman_iptables_init();
-	__connman_iptables_restore_all();
 	__connman_firewall_init();
+	__connman_iptables_restore_all();
 	__connman_nat_init();
 	__connman_tethering_init();
 	__connman_counter_init();
@@ -1125,9 +1159,8 @@ int main(int argc, char *argv[])
 	__connman_counter_cleanup();
 	__connman_tethering_cleanup();
 	__connman_nat_cleanup();
-	__connman_iptables_validate_cleanup();
 	__connman_firewall_cleanup();
-	__connman_iptables_cleanup();
+	__connman_iptables_validate_cleanup();
 	__connman_peer_service_cleanup();
 	__connman_peer_cleanup();
 	__connman_ippool_cleanup();

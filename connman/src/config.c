@@ -1488,7 +1488,7 @@ static int try_provision_service(struct connman_config_service *config,
 		virtual->service = service;
 		virtual->vfile = config->virtual_file;
 
-		g_timeout_add(0, remove_virtual_config, virtual);
+		g_idle_add(remove_virtual_config, virtual);
 
 		return 0;
 	}
@@ -1650,7 +1650,7 @@ int connman_config_provision_mutable_service(GKeyFile *keyfile)
 {
 	struct connman_config_service *service_config;
 	struct connman_config *config;
-	char *vfile, *group;
+	char *vfile, *group = NULL;
 	char rstr[11];
 
 	DBG("");
@@ -1686,13 +1686,14 @@ int connman_config_provision_mutable_service(GKeyFile *keyfile)
 	if (g_strcmp0(service_config->type, "wifi") == 0)
 		__connman_device_request_scan(CONNMAN_SERVICE_TYPE_WIFI);
 
+	g_free(group);
 	return 0;
 
 error:
 	DBG("Could not proceed");
 	g_hash_table_remove(config_table, vfile);
 	g_free(vfile);
-
+	g_free(group);
 	return -EINVAL;
 }
 

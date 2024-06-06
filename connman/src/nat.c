@@ -123,9 +123,6 @@ static int enable_ip_forward(int family, bool enable)
 
 static int enable_nat(struct connman_nat *nat)
 {
-	char *cmd;
-	int err;
-
 	/*
 	 * If the nat has dst_address set the interface is pre configured and
 	 * must not be changed here. If the adress is omitted the
@@ -141,29 +138,9 @@ static int enable_nat(struct connman_nat *nat)
 
 	DBG("name %s interface %s", nat->ifname, nat->interface);
 
-	/* Enable masquerading */
-	if (!nat->dst_address)
-		cmd = g_strdup_printf("-s %s/%u -o %s -j MASQUERADE",
-						nat->address,
-						nat->prefixlen,
-						nat->interface);
-	else
-		cmd = g_strdup_printf("-s %s/%u -d %s/%u -o %s -j MASQUERADE",
-						nat->address,
-						nat->prefixlen,
-						nat->dst_address,
-						nat->dst_prefixlen,
-						nat->interface);
-
-	DBG("rule %s", cmd);
-
-	err = __connman_firewall_add_rule(nat->fw, NULL, NULL, "nat",
-				"POSTROUTING", cmd);
-	g_free(cmd);
-	if (err < 0)
-		return err;
-
-	return __connman_firewall_enable(nat->fw);
+	return __connman_firewall_enable_nat(nat->fw, nat->address,
+					nat->prefixlen, nat->dst_address,
+					nat->dst_prefixlen, nat->interface);
 }
 
 static void disable_nat(struct connman_nat *nat)
@@ -174,7 +151,7 @@ static void disable_nat(struct connman_nat *nat)
 	DBG("interface %s", nat->interface);
 
 	/* Disable masquerading */
-	__connman_firewall_disable(nat->fw);
+	__connman_firewall_disable_nat(nat->fw);
 }
 
 static void free_nat(struct connman_nat *nat)
@@ -373,10 +350,8 @@ int connman_nat6_prepare(struct connman_ipconfig *ipconfig,
 						bool enable_ndproxy)
 {
 	struct connman_nat *nat;
-	char **rules = NULL;
 	int index;
 	int err;
-	int i;
 
 	DBG("ipconfig %p ifname_in %s enable_ndproxy %s", ipconfig, ifname_in,
 						enable_ndproxy ? "yes" : "no");
@@ -454,28 +429,8 @@ int connman_nat6_prepare(struct connman_ipconfig *ipconfig,
 		}
 	}
 
-	rules = g_new0(char*, 3);
-	rules[0] = g_strdup_printf("-i %s -o %s -j ACCEPT", nat->interface,
-								nat->ifname);
-	rules[1] = g_strdup_printf("-i %s -o %s -j ACCEPT", nat->ifname,
-								nat->interface);
-
-	for (i = 0; i < 2; i++) {
-		DBG("Enable firewall rule -I FORWARD %s", rules[i]);
-
-		/* Enable forward on IPv6 */
-		err = __connman_firewall_add_ipv6_rule(nat->fw, NULL, NULL,
-						"filter", "FORWARD", rules[i]);
-		if (err < 0) {
-			connman_error("Failed to set FORWARD rule %s on "
-						"ip6tables", rules[i]);
-			break;
-		}
-	}
-
-	g_strfreev(rules);
-
-	err = __connman_firewall_enable(nat->fw);
+	err = __connman_firewall_enable_forward(nat->fw, nat->family,
+						nat->interface, nat->ifname);
 	if (err < 0) {
 		connman_error("Failed to enable firewall");
 		goto err;
@@ -533,8 +488,8 @@ void connman_nat6_restore(struct connman_ipconfig *ipconfig)
 	set_original_ipv6_values(nat);
 
 	if (nat->fw) {
-		if (__connman_firewall_disable(nat->fw))
-			DBG("cannot disable firewall");
+		if (__connman_firewall_disable_forward(nat->fw, nat->family))
+			DBG("cannot disable firewall forwarding");
 	}
 
 	if (nat_hash)

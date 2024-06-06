@@ -233,22 +233,25 @@ static void tethering_changed(struct connman_technology *technology)
 	technology_save(technology);
 }
 
-void connman_technology_tethering_notify(struct connman_technology *technology,
+int connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled)
 {
+	int err;
+
 	DBG("technology %p enabled %u", technology, enabled);
 
 	if (technology->tethering == enabled)
-		return;
+		return -EALREADY;
+
+	if (enabled) {
+		err = __connman_tethering_set_enabled();
+		if (err < 0)
+			return err;
+	} else
+		__connman_tethering_set_disabled();
 
 	technology->tethering = enabled;
-
 	tethering_changed(technology);
-
-	if (enabled)
-		__connman_tethering_set_enabled();
-	else
-		__connman_tethering_set_disabled();
 
 	/*
 	 * Notify about tethering having been turned off after it's actually
@@ -257,6 +260,7 @@ void connman_technology_tethering_notify(struct connman_technology *technology,
 	if (!enabled)
 		__connman_notifier_tethering_changed(technology, FALSE);
 
+	return 0;
 }
 
 static int set_tethering(struct connman_technology *technology,
@@ -553,15 +557,31 @@ enum connman_service_type __connman_technology_get_type(
 static void connman_technology_save_offlinemode(void)
 {
 	GKeyFile *keyfile;
+	GError *error = NULL;
+	bool offlinemode;
 
 	keyfile = __connman_storage_load_global();
-	if (!keyfile)
-		keyfile = g_key_file_new();
 
-	g_key_file_set_boolean(keyfile, "global",
+	if (!keyfile) {
+		keyfile = g_key_file_new();
+		g_key_file_set_boolean(keyfile, "global",
 					"OfflineMode", global_offlinemode);
 
-	__connman_storage_save_global(keyfile);
+		__connman_storage_save_global(keyfile);
+	}
+	else {
+		offlinemode = g_key_file_get_boolean(keyfile, "global",
+						"OfflineMode", &error);
+
+		if (error || offlinemode != global_offlinemode) {
+			g_key_file_set_boolean(keyfile, "global",
+					"OfflineMode", global_offlinemode);
+			if (error)
+				g_clear_error(&error);
+
+			__connman_storage_save_global(keyfile);
+		}
+	}
 
 	g_key_file_unref(keyfile);
 
@@ -1309,6 +1329,10 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 
 	DBG("technology %p request from %s", technology,
 			dbus_message_get_sender(msg));
+
+	if (technology->type == CONNMAN_SERVICE_TYPE_P2P &&
+				!technology->enabled)
+		return __connman_error_permission_denied(msg);
 
 	dbus_message_ref(msg);
 	technology->scan_pending =

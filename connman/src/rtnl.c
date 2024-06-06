@@ -196,10 +196,10 @@ static void read_uevent(struct interface_data *interface)
 		} else if (strcmp(devtype, "vlan") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-		} else if (strcmp(devtype + 8, "bond") == 0) {
+		} else if (strcmp(devtype, "bond") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
-		} else if (strcmp(devtype + 8, "dsa") == 0) {
+		} else if (strcmp(devtype, "dsa") == 0) {
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 		} else {
@@ -512,7 +512,9 @@ static void process_newlink(unsigned short type, int index, unsigned flags,
 
 		if (type == ARPHRD_ETHER)
 			read_uevent(interface);
-	} else
+	} else if (type == ARPHRD_ETHER && interface->device_type == CONNMAN_DEVICE_TYPE_UNKNOWN)
+		read_uevent(interface);
+	else
 		interface = NULL;
 
 	for (list = rtnl_list; list; list = list->next) {
@@ -1476,8 +1478,6 @@ static int process_response(guint32 seq)
 
 static void rtnl_message(void *buf, size_t len)
 {
-	DBG("buf %p len %zd", buf, len);
-
 	while (len > 0) {
 		struct nlmsghdr *hdr = buf;
 		struct nlmsgerr *err;

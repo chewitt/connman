@@ -261,6 +261,9 @@ int __connman_inet_add_ipv6_neigbour_proxy(int index, const char *ipv6_address,
 int __connman_inet_del_ipv6_neigbour_proxy(int index, const char *ipv6_address,
 						unsigned char ipv6_prefixlen);
 
+bool __connman_inet_isrootnfs_device(const char *devname);
+char **__connman_inet_get_pnp_nameservers(const char *pnp_file);
+
 #include <connman/resolver.h>
 
 int __connman_resolver_init(gboolean dnsproxy);
@@ -769,7 +772,7 @@ int __connman_tethering_init(void);
 void __connman_tethering_cleanup(void);
 
 const char *__connman_tethering_get_bridge(void);
-void __connman_tethering_set_enabled(void);
+int __connman_tethering_set_enabled(void);
 void __connman_tethering_set_disabled(void);
 
 int __connman_private_network_request(DBusMessage *msg, const char *owner);
@@ -1196,24 +1199,26 @@ struct firewall_context;
 
 struct firewall_context *__connman_firewall_create(void);
 void __connman_firewall_destroy(struct firewall_context *ctx);
-int __connman_firewall_add_rule(struct firewall_context *ctx,
-				connman_iptables_manage_cb_t cb,
-				const char *config_file,
-				const char *table,
-				const char *chain,
-				const char *rule_fmt, ...);
-int __connman_firewall_add_ipv6_rule(struct firewall_context *ctx,
-				connman_iptables_manage_cb_t cb,
-				const char *config_file,
-				const char *table,
-				const char *chain,
-				const char *rule_fmt, ...);
-int __connman_firewall_remove_rule(struct firewall_context *ctx, int id);
-int __connman_firewall_remove_ipv6_rule(struct firewall_context *ctx, int id);
-int __connman_firewall_enable_rule(struct firewall_context *ctx, int id);
-int __connman_firewall_disable_rule(struct firewall_context *ctx, int id);
-int __connman_firewall_enable(struct firewall_context *ctx);
-int __connman_firewall_disable(struct firewall_context *ctx);
+int __connman_firewall_enable_nat(struct firewall_context *ctx,
+				char *address, unsigned char prefixlen,
+				char *dst_address, unsigned char dst_prefixlen,
+				char *interface);
+int __connman_firewall_disable_nat(struct firewall_context *ctx);
+int __connman_firewall_enable_snat(struct firewall_context *ctx,
+				int index, const char *ifname,
+				const char *addr);
+int __connman_firewall_disable_snat(struct firewall_context *ctx);
+int __connman_firewall_enable_forward(struct firewall_context *ctx, int family,
+				const char *interface_in,
+				const char *interface_out);
+int __connman_firewall_disable_forward(struct firewall_context *ctx,
+				int family);
+int __connman_firewall_enable_marking(struct firewall_context *ctx,
+					enum connman_session_id_type id_type,
+					char *id, const char *src_ip,
+					uint32_t mark);
+int __connman_firewall_disable_marking(struct firewall_context *ctx);
+
 bool __connman_firewall_is_up(void);
 
 int __connman_firewall_init(void);

@@ -64,7 +64,7 @@ int __connman_session_create(DBusMessage *msg) { return 0; }
 const char *connman_setting_get_string(const char *key) { return NULL; }
 const char *__connman_tethering_get_bridge(void) { return NULL; }
 void __connman_tethering_set_disabled(void) { return; }
-void __connman_tethering_set_enabled(void) { return; }
+int __connman_tethering_set_enabled(void) { return 0; }
 int __connman_private_network_release(const char *path) { return 0; }
 int __connman_private_network_request(DBusMessage *msg, const char *owner)
 {
@@ -1453,7 +1453,7 @@ static void print_test_service(struct connman_service *service, void *user_data)
 	printf("%p %2d %-56s %-3d %-6s %-10s %-16s %-12s %u\n",
 			service, __connman_service_get_index(service),
 			service->identifier, service->order,
-			is_connected(service) ? "true" : "false",
+			is_connected(service->state) ? "true" : "false",
 			is_available(service) ? "available" : "non-avail",
 			state2string(service->state),
 			__connman_service_is_split_routing(service) ?
@@ -1483,11 +1483,13 @@ static bool check_preferred_type_order(struct connman_service *a,
 
 	DBG("%p vs %p", a, b);
 
-	if (is_connected(a) && is_connected(b)) {
-		if (a->type == CONNMAN_SERVICE_TYPE_VPN && is_connected(a))
+	if (is_connected(a->state) && is_connected(b->state)) {
+		if (a->type == CONNMAN_SERVICE_TYPE_VPN &&
+							is_connected(a->state))
 			return true;
 
-		if (b->type == CONNMAN_SERVICE_TYPE_VPN && is_connected(b))
+		if (b->type == CONNMAN_SERVICE_TYPE_VPN &&
+							is_connected(b->state))
 			return true;
 
 		for (i = 0 ; preferred_list[i] != 0; i++) {
@@ -1570,7 +1572,7 @@ static void service_order_check(bool(*order_cb)(struct connman_service *a,
 			 * which need to be connected for state comparison to
 			 * to work.
 			 */
-			if(is_connected(a) && is_connected(b)) {
+			if(is_connected(a->state) && is_connected(b->state)) {
 				/* Both are VPNs */
 				if (b->type == CONNMAN_SERVICE_TYPE_VPN) {
 					struct connman_service* a_transport;
@@ -1612,8 +1614,9 @@ static void service_order_check(bool(*order_cb)(struct connman_service *a,
 		 * If a is connected and b is connected or not, a
 		 * should be on top.
 		 */
-		if (is_connected(a)) {
-			if (is_connected(b) || (is_connecting(b)))
+		if (is_connected(a->state)) {
+			if (is_connected(b->state) ||
+						(is_connecting(b->state)))
 				g_assert(a->state >= b->state);
 			else
 				g_assert(is_available(a) && !is_available(b));
@@ -1622,10 +1625,10 @@ static void service_order_check(bool(*order_cb)(struct connman_service *a,
 		}
 
 		/* Non-conn. must not be on top of connected.*/
-		g_assert_false(is_connected(b));
+		g_assert_false(is_connected(b->state));
 
 		/* configuration & association */
-		if (is_connecting(a) && is_connecting(b)) {
+		if (is_connecting(a->state) && is_connecting(b->state)) {
 			g_assert(a->state >= b->state);
 			continue;
 		}
@@ -1633,13 +1636,13 @@ static void service_order_check(bool(*order_cb)(struct connman_service *a,
 		/* Connected or connecting should not be on top of
 		 * not-connected or not connecting.
 		 */
-		g_assert_false(is_connecting(b));
+		g_assert_false(is_connecting(b->state));
 
 		/*
 		 * If both are not connected the state should be
 		 * orderd.
 		 */
-		if (!is_connecting(a))
+		if (!is_connecting(a->state))
 			g_assert(a->state >= b->state);
 	}
 }

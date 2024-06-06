@@ -134,9 +134,9 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(backtrace_sources) \
 			src/storage.c src/dbus.c src/config.c \
 			src/technology.c src/counter.c src/ntp.c \
 			src/session.c src/tethering.c src/wpad.c src/wispr.c \
-			src/iptables.c src/dnsproxy.c src/6to4.c \
+			src/dnsproxy.c src/6to4.c \
 			src/ippool.c src/bridge.c src/nat.c src/ipaddress.c \
-			src/inotify.c src/firewall.c src/ipv6pd.c src/peer.c \
+			src/inotify.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
 			src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c vpn/vpn-util.c \
@@ -148,8 +148,9 @@ src_connmand_SOURCES += src/systemd_login.c
 endif
 
 src_connmand_LDADD = gdbus/libgdbus-internal.la $(builtin_libadd) \
-			@GIO_LIBS@ @GOBJECT_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @GNUTLS_LIBS@ \
-			@IPHB_LIBS@ @LIBIPTC_LIBS@ @DBUSACCESS_LIBS@ -lresolv -ldl -lrt
+			@GIO_LIBS@ @GOBJECT_LIBS@ @GLIB_LIBS@ @DBUS_LIBS@ \
+			@GNUTLS_LIBS@ @IPHB_LIBS@ @LIBIPTC_LIBS@ \
+			@DBUSACCESS_LIBS@ -lresolv -ldl -lrt
 
 src_connmand_LDFLAGS = -Wl,--export-dynamic \
 				-Wl,--version-script=$(srcdir)/src/connman.ver
@@ -172,6 +173,16 @@ src_connmand_SOURCES += src/sailfish_datacounter.c \
 			src/sailfish_stats.c
 else
 src_connmand_SOURCES += src/jolla-stats.c
+endif
+
+if XTABLES
+src_connmand_SOURCES += src/iptables.c src/firewall-iptables.c
+src_connmand_LDADD += @XTABLES_LIBS@
+endif
+
+if NFTABLES
+src_connmand_SOURCES += src/firewall-nftables.c
+src_connmand_LDADD +=  @NFTABLES_LIBS@
 endif
 
 if VPN
@@ -250,7 +261,7 @@ build_vpn_plugindir = $(vpn_plugindir)
 endif
 endif
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
 				@GNUTLS_CFLAGS@ $(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
 				-DPLUGINDIR=\""$(build_plugindir)"\" \
@@ -265,7 +276,7 @@ else
 AM_CPPFLAGS = -I$(builddir)/include -I$(builddir)/src -I$(srcdir)/gdbus
 endif
 
-src_connmand_CFLAGS = @DBUS_CFLAGS@ @GIO_CFLAGS@ @GOBJECT_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
+src_connmand_CFLAGS = @DBUS_CFLAGS@ @GIO_CFLAGS@ @GOBJECT_CFLAGS@ @GLIB_CFLAGS@ \
 				@GNUTLS_CFLAGS@ @IPHB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 				$(builtin_cflags) \
 				-DCONNMAN_PLUGIN_BUILTIN \
@@ -298,6 +309,16 @@ vpn_connman_vpnd_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @DBUSACCESS_CFLAGS@ \
 
 endif
 
+if XTABLES
+AM_CFLAGS += @XTABLES_CFLAGS@
+src_connmand_CFLAGS += @XTABLES_CFLAGS@
+endif
+
+if NFTABLES
+AM_CFLAGS += @NFTABLES_CFLAGS@
+src_connmand_CFLAGS += @NFTABLES_CFLAGS@
+endif
+
 EXTRA_DIST += vpn/vpn-dbus.conf vpn/vpn-polkit.conf
 
 script_DATA =
@@ -325,7 +346,7 @@ endif
 noinst_PROGRAMS += unit/test-access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-globalproxy unit/test-firewall-iptables unit/test-iptables \
 	unit/test-device unit/test-vpn_access unit/test-sailfish_vpn_access \
 	unit/test-storage unit/test-systemd_login unit/test-vpn-util
 
@@ -408,13 +429,15 @@ unit_test_globalproxy_SOURCES = unit/test-globalproxy.c \
 				src/inotify.c src/storage.c src/dbus.c
 unit_test_globalproxy_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
-unit_test_firewall_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @DBUS_CFLAGS@ \
-				@GLIB_CFLAGS@
-unit_test_firewall_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
-				src/inotify.c src/dbus.c src/error.c \
-				src/inet.c src/firewall.c \
-				src/iptables-validate.c unit/test-firewall.c
-unit_test_firewall_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+unit_test_firewall_iptables_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
+				@DBUS_CFLAGS@ @GLIB_CFLAGS@
+if XTABLES
+unit_test_firewall_iptables_SOURCES = $(backtrace_sources) src/connman.h \
+				src/log.c src/inotify.c src/dbus.c src/error.c \
+				src/inet.c src/iptables-validate.c \
+				unit/test-firewall-iptables.c
+unit_test_firewall_iptables_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+endif
 
 unit_test_device_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) @GLIB_CFLAGS@
 unit_test_device_SOURCES = $(backtrace_sources) src/connman.h src/log.c \
@@ -455,7 +478,7 @@ unit_test_systemd_login_LDADD = @GLIB_LIBS@ -ldl
 TESTS = unit/test-access unit/test-vpn_access unit/test-ippool \
 	unit/test-sailfish_access unit/test-vpn-settings \
 	unit/test-sailfish_iptables_ext unit/test-service \
-	unit/test-globalproxy unit/test-firewall unit/test-iptables \
+	unit/test-globalproxy unit/test-firewall-iptables unit/test-iptables \
 	unit/test-device unit/test-sailfish_vpn_access unit/test-storage \
 	unit/test-systemd_login unit/test-vpn-util
 
@@ -580,9 +603,9 @@ noinst_PROGRAMS += tools/supplicant-test \
 			tools/dhcp-test tools/dhcp-server-test \
 			tools/addr-test tools/web-test tools/resolv-test \
 			tools/dbus-test tools/polkit-test \
-			tools/iptables-test tools/tap-test tools/wpad-test \
+			tools/tap-test tools/wpad-test \
 			tools/stats-tool tools/private-network-test \
-			tools/session-test tools/iptables-unit \
+			tools/session-test \
 			tools/dnsproxy-test tools/ip6tables-test
 
 tools_supplicant_test_SOURCES = tools/supplicant-test.c \
@@ -618,18 +641,8 @@ tools_dbus_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ @DBUS_LIBS@
 tools_polkit_test_LDADD = @DBUS_LIBS@
 
 tools_iptables_test_CFLAGS = @DBUS_CFLAGS@
-tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c \
-		src/inotify.c src/iptables.c tools/iptables-test.c \
-		src/error.c src/dbus.c
-tools_iptables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
-			@XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_ip6tables_test_CFLAGS = @DBUS_CFLAGS@
-tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c \
-		src/inotify.c src/iptables.c tools/ip6tables-test.c \
-		src/error.c src/dbus.c
-tools_ip6tables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
-		@XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
 
 tools_private_network_test_LDADD = @GLIB_LIBS@ @DBUS_LIBS@
 
@@ -639,6 +652,13 @@ tools_session_test_SOURCES = $(backtrace_sources) src/log.c src/dbus.c src/error
 tools_session_test_LDADD = gdbus/libgdbus-internal.la \
 				@GLIB_LIBS@ @DBUS_LIBS@ -ldl
 
+if XTABLES
+noinst_PROGRAMS += tools/iptables-test tools/iptables-unit
+
+tools_iptables_test_SOURCES = $(backtrace_sources) src/log.c src/iptables.c \
+				tools/iptables-test.c
+tools_iptables_test_LDADD = @GLIB_LIBS@ @XTABLES_LIBS@ -ldl
+
 tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
 		-DIPTABLES_SAVE=\""${IPTABLES_SAVE}"\" \
@@ -646,10 +666,18 @@ tools_iptables_unit_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @XTABLES_CFLAGS@ \
 		-DDEFAULT_STORAGE_ROOT=\""$(storageroot)"\" \
 		-DCONFIGDIR=\""$(testconfigdir)"\"
 tools_iptables_unit_SOURCES = $(backtrace_sources) src/log.c src/storage.c \
-		src/inotify.c src/iptables.c src/firewall.c src/nat.c \
+		src/inotify.c src/iptables.c src/nat.c \
 		src/inet.c src/iptables-validate.c tools/iptables-unit.c \
 		src/error.c src/dbus.c
 tools_iptables_unit_LDADD = @GLIB_LIBS@ @DBUS_LIBS@ @XTABLES_LIBS@ @LIBIPTC_LIBS@ -ldl
+
+tools_ip6tables_test_SOURCES = $(backtrace_sources) src/log.c \
+		src/inotify.c src/iptables.c tools/ip6tables-test.c \
+		src/error.c src/dbus.c
+tools_ip6tables_test_LDADD = gdbus/libgdbus-internal.la @GLIB_LIBS@ \
+		@XTABLES_LIBS@ @LIBIPTC_LIBS@ @DBUS_LIBS@ -ldl
+
+endif
 
 tools_dnsproxy_test_SOURCES = tools/dnsproxy-test.c
 tools_dnsproxy_test_LDADD = @GLIB_LIBS@
@@ -756,6 +784,7 @@ if POLKIT
 else
 	$(AM_V_GEN)cp $(srcdir)/vpn/vpn-dbus.conf $@
 endif
+CLEANFILES += vpn/connman-vpn-dbus.conf
 endif
 
 if SELINUX

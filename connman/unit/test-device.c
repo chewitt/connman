@@ -237,10 +237,10 @@ bool connman_technology_is_tethering_allowed(enum connman_service_type type)
 	return type == CONNMAN_SERVICE_TYPE_ETHERNET ? true : false;
 }
 
-void connman_technology_tethering_notify(struct connman_technology *technology,
+int connman_technology_tethering_notify(struct connman_technology *technology,
 							bool enabled)
 {
-	return;
+	return 0;
 }
 
 int __connman_technology_enabled(enum connman_service_type type)
@@ -350,6 +350,11 @@ int connman_inet_remove_from_bridge(int index, const char *bridge)
 char **__connman_inet_get_running_interfaces(void)
 {
 	return NULL;
+}
+
+bool __connman_inet_isrootnfs_device(const char *devname)
+{
+	return false;
 }
 
 // setting dummies
