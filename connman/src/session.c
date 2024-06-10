@@ -1762,7 +1762,7 @@ static void session_activate(struct connman_session *session)
 
 		while (g_hash_table_iter_next(&iter, &key, &value)) {
 			struct connman_service_info *info = value;
-			state = __connman_service_get_state(info->service);
+			state = connman_service_get_state(info->service);
 
 			if (is_session_connected(session, state))
 				service_list = g_slist_prepend(service_list,
