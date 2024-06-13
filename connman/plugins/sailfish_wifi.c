@@ -3339,7 +3339,7 @@ static int wifi_device_scan(struct wifi_device *dev,
 {
 	if (dev->tethering) {
 		DBG("tethering on!");
-		return 0;
+		return -EBUSY;
 	} else if (ssid && ssid_len) {
 		GBytes *ssid_bytes = g_bytes_new(ssid, ssid_len);
 
