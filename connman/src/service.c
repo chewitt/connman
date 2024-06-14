@@ -6016,7 +6016,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 	timeout = timeout + (int)(attempts / VPN_AUTOCONNECT_TIMEOUT_STEP);
 
 	/* Re add this to main loop */
-	vpn_autoconnect_timeout =
+	vpn_autoconnect_id =
 		g_timeout_add_seconds(timeout, run_vpn_auto_connect,
 			GINT_TO_POINTER(attempts));
 
@@ -6026,7 +6026,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 	return G_SOURCE_REMOVE;
 
 out:
-	vpn_autoconnect_timeout = 0;
+	vpn_autoconnect_id = 0;
 	return G_SOURCE_REMOVE;
 }
 
@@ -6038,8 +6038,8 @@ static void vpn_auto_connect(void)
 	 * Remove existing autoconnect from main loop to reset the attempt
 	 * counter in order to get VPN connected when there is a network change.
 	 */
-	if (vpn_autoconnect_timeout) {
-		if (!g_source_remove(vpn_autoconnect_timeout)) {
+	if (vpn_autoconnect_id) {
+		if (!g_source_remove(vpn_autoconnect_id)) {
 			return;
 		}
 	}
