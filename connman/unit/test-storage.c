@@ -648,7 +648,8 @@ int __connman_device_disable(struct connman_device *device)
 	return 0;
 }
 
-bool connman_device_get_scanning(struct connman_device *device)
+bool connman_device_get_scanning(struct connman_device *device,
+						enum connman_service_type type)
 {
 	return device->scanning;
 }
@@ -665,6 +666,11 @@ struct connman_device *connman_device_find_by_index(int index)
 	default:
 		return NULL;
 	}
+}
+
+void __connman_device_stop_scan(enum connman_service_type type)
+{
+	return;
 }
 
 char *connman_inet_ifname(int index)
