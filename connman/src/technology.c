@@ -1936,7 +1936,8 @@ bool __connman_technology_disable_all(void)
 					devlist = devlist->next) {
 			struct connman_device *device = list->data;
 
-			if (!connman_device_get_scanning(device))
+			if (!connman_device_get_scanning(device,
+							technology->type))
 				continue;
 
 			err = connman_device_set_scanning(device,
