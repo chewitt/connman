@@ -57,11 +57,12 @@ else
 gweb_sources += gweb/giognutls.h gweb/gionotls.c
 endif
 
-if STATS
-stats_sources = src/stats.c
-else
-stats_sources = src/nostats.c
-endif
+# Disable any upstream stats use. We have it so much modified these do not work.
+#if STATS
+#stats_sources = src/stats.c
+#else
+#stats_sources = src/nostats.c
+#endif
 
 if BACKTRACE
 backtrace_sources = src/backtrace.c
