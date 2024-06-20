@@ -2884,6 +2884,15 @@ gboolean g_key_file_load_from_file(GKeyFile *key_file, const gchar *file,
 	}
 }
 
+
+// sailfish iptables ext dummies
+
+int __connman_iptables_restore_all(void)
+{
+	return 0;
+}
+
+
 // End of dummies
 
 static DBusMessage *construct_message_reload()
