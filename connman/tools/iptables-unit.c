@@ -510,6 +510,13 @@ void connman_rtnl_unregister(struct connman_rtnl *rtnl)
 	return;
 }
 
+// sailfish iptables ext dummies
+
+int __connman_iptables_restore_all(void)
+{
+	return 0;
+}
+
 static bool assert_rule(int type, const char *table_name, const char *rule)
 {
 	char *cmd, *output, **lines;
