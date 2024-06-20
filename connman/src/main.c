@@ -1095,7 +1095,6 @@ int main(int argc, char *argv[])
 	__connman_ippool_init();
 	__connman_iptables_validate_init();
 	__connman_firewall_init();
-	__connman_iptables_restore_all();
 	__connman_nat_init();
 	__connman_tethering_init();
 	__connman_counter_init();
