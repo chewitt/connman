@@ -2911,6 +2911,7 @@ int __connman_firewall_init(void)
 	DBG("");
 
 	__connman_iptables_init();
+	__connman_iptables_restore_all();
 	flush_all_tables(AF_INET);
 	flush_all_tables(AF_INET6);
 	restore_policies_set = false;
