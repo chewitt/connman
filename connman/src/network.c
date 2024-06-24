@@ -105,6 +105,7 @@ struct connman_network {
 		char *private_key_passphrase;
 		char *phase2_auth;
 		bool wps;
+		bool wps_advertizing;
 		bool use_wps;
 		char *pin_wps;
 		char* encryption_mode;
@@ -2191,6 +2192,8 @@ int connman_network_set_bool(struct connman_network *network,
 		network->roaming = value;
 	else if (g_strcmp0(key, "WiFi.WPS") == 0)
 		network->wifi.wps = value;
+	else if (g_strcmp0(key, "WiFi.WPSAdvertising") == 0)
+		network->wifi.wps_advertizing = value;
 	else if (g_strcmp0(key, "WiFi.UseWPS") == 0)
 		network->wifi.use_wps = value;
 
@@ -2211,6 +2214,8 @@ bool connman_network_get_bool(struct connman_network *network,
 		return network->roaming;
 	else if (g_str_equal(key, "WiFi.WPS"))
 		return network->wifi.wps;
+	else if (g_str_equal(key, "WiFi.WPSAdvertising"))
+		return network->wifi.wps_advertizing;
 	else if (g_str_equal(key, "WiFi.UseWPS"))
 		return network->wifi.use_wps;
 

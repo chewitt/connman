@@ -2096,7 +2096,8 @@ static void wifi_device_update_scanning(struct wifi_device *dev)
 		/* Don't indicate scanning when we are connecting */
 		(!dev->selected || !wifi_network_connecting(dev->selected));
 
-	if (connman_device_get_scanning(dev->device) != scanning) {
+	if (connman_device_get_scanning(dev->device,
+				CONNMAN_SERVICE_TYPE_WIFI) != scanning) {
 		connman_device_set_scanning(dev->device,
 				CONNMAN_SERVICE_TYPE_WIFI, scanning);
 		if (scanning) {
@@ -3362,7 +3363,8 @@ static int wifi_device_scan(struct wifi_device *dev,
 		 */
 		g_bytes_unref(ssid_bytes);
 		return 0;
-	} else if (connman_device_get_scanning(dev->device)) {
+	} else if (connman_device_get_scanning(dev->device,
+						CONNMAN_SERVICE_TYPE_WIFI)) {
 		DBG("already scanning!");
 		return (-EALREADY);
 	} else if (!ssid || !ssid_len) {

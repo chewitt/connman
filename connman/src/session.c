@@ -63,7 +63,9 @@ struct connman_session {
 	struct firewall_context *fw;
 	uint32_t mark;
 	int index;
+	char *addr;
 	char *gateway;
+	unsigned char prefixlen;
 	bool policy_routing;
 	bool snat_enabled;
 };
@@ -77,6 +79,7 @@ struct fw_snat {
 	GSList *sessions;
 	int id;
 	int index;
+	char *addr;
 	struct firewall_context *fw;
 };
 
@@ -198,7 +201,7 @@ static char *service2bearer(enum connman_service_type type)
 	return "";
 }
 
-static struct fw_snat *fw_snat_lookup(int index)
+static struct fw_snat *fw_snat_lookup(int index, const char *addr)
 {
 	struct fw_snat *fw_snat;
 	GSList *list;
@@ -206,8 +209,11 @@ static struct fw_snat *fw_snat_lookup(int index)
 	for (list = fw_snat_list; list; list = list->next) {
 		fw_snat = list->data;
 
-		if (fw_snat->index == index)
+		if (fw_snat->index == index) {
+			if (g_strcmp0(addr, fw_snat->addr) != 0)
+				continue;
 			return fw_snat;
+		}
 	}
 	return NULL;
 }
@@ -222,6 +228,7 @@ static int fw_snat_create(struct connman_session *session,
 
 	fw_snat->fw = __connman_firewall_create();
 	fw_snat->index = index;
+	fw_snat->addr = g_strdup(addr);
 
 	fw_snat->id = __connman_firewall_enable_snat(fw_snat->fw,
 						index, ifname, addr);
@@ -236,6 +243,7 @@ static int fw_snat_create(struct connman_session *session,
 	return 0;
 err:
 	__connman_firewall_destroy(fw_snat->fw);
+	g_free(fw_snat->addr);
 	g_free(fw_snat);
 	return err;
 }
@@ -345,13 +353,17 @@ static void del_default_route(struct connman_session *session)
 	if (!session->gateway)
 		return;
 
-	DBG("index %d routing table %d default gateway %s",
-		session->index, session->mark, session->gateway);
+	DBG("index %d routing table %d default gateway %s/%u",
+		session->index, session->mark, session->gateway, session->prefixlen);
+
+	__connman_inet_del_subnet_from_table(session->mark,
+		session->index, session->gateway, session->prefixlen);
 
 	__connman_inet_del_default_from_table(session->mark,
 					session->index, session->gateway);
 	g_free(session->gateway);
 	session->gateway = NULL;
+	session->prefixlen = 0;
 	session->index = -1;
 }
 
@@ -371,13 +383,20 @@ static void add_default_route(struct connman_session *session)
 	if (!session->gateway)
 		session->gateway = g_strdup(inet_ntoa(addr));
 
-	DBG("index %d routing table %d default gateway %s",
-		session->index, session->mark, session->gateway);
+	session->prefixlen = __connman_ipconfig_get_prefixlen(ipconfig);
+
+	DBG("index %d routing table %d default gateway %s/%u",
+		session->index, session->mark, session->gateway, session->prefixlen);
 
 	err = __connman_inet_add_default_to_table(session->mark,
 					session->index, session->gateway);
 	if (err < 0)
 		DBG("session %p %s", session, strerror(-err));
+
+	err = __connman_inet_add_subnet_to_table(session->mark,
+					session->index, session->gateway, session->prefixlen);
+	if (err < 0)
+		DBG("session add subnet route %p %s", session, strerror(-err));
 }
 
 static void del_nat_rules(struct connman_session *session)
@@ -388,7 +407,7 @@ static void del_nat_rules(struct connman_session *session)
 		return;
 
 	session->snat_enabled = false;
-	fw_snat = fw_snat_lookup(session->index);
+	fw_snat = fw_snat_lookup(session->index, session->addr);
 
 	if (!fw_snat)
 		return;
@@ -415,8 +434,11 @@ static void add_nat_rules(struct connman_session *session)
 	if (!addr)
 		return;
 
+	g_free(session->addr);
+	session->addr = g_strdup(addr);
+
 	session->snat_enabled = true;
-	fw_snat = fw_snat_lookup(index);
+	fw_snat = fw_snat_lookup(index, session->addr);
 	if (fw_snat) {
 		fw_snat_ref(session, fw_snat);
 		return;
@@ -497,6 +519,7 @@ static void free_session(struct connman_session *session)
 	g_free(session->info);
 	g_free(session->info_last);
 	g_free(session->gateway);
+	g_free(session->addr);
 
 	g_free(session);
 }
@@ -543,6 +566,7 @@ struct creation_data {
 	GSList *allowed_bearers;
 	char *allowed_interface;
 	bool source_ip_rule;
+	char *context_identifier;
 };
 
 static void cleanup_creation_data(struct creation_data *creation_data)
@@ -552,6 +576,8 @@ static void cleanup_creation_data(struct creation_data *creation_data)
 
 	if (creation_data->pending)
 		dbus_message_unref(creation_data->pending);
+	if (creation_data->context_identifier)
+		g_free(creation_data->context_identifier);
 
 	g_slist_free(creation_data->allowed_bearers);
 	g_free(creation_data->allowed_interface);
@@ -919,6 +945,17 @@ static void append_notify(DBusMessageIter *dict,
 						DBUS_TYPE_STRING,
 						&ifname);
 		info_last->config.allowed_interface = info->config.allowed_interface;
+	}
+
+	if (session->append_all ||
+			info->config.context_identifier != info_last->config.context_identifier) {
+		char *ifname = info->config.context_identifier;
+		if (!ifname)
+			ifname = "";
+		connman_dbus_dict_append_basic(dict, "ContextIdentifier",
+						DBUS_TYPE_STRING,
+						&ifname);
+		info_last->config.context_identifier = info->config.context_identifier;
 	}
 
 	if (session->append_all ||
@@ -1365,7 +1402,6 @@ static int session_policy_config_cb(struct connman_session *session,
 					session_methods, NULL, NULL,
 					session, NULL)) {
 		connman_error("Failed to register %s", session->session_path);
-		g_hash_table_remove(session_hash, session->session_path);
 		err = -EINVAL;
 		goto err;
 	}
@@ -1392,6 +1428,7 @@ static int session_policy_config_cb(struct connman_session *session,
 	return 0;
 
 err:
+	g_hash_table_remove(session_hash, session->session_path);
 	reply = __connman_error_failed(creation_data->pending, -err);
 	g_dbus_send_message(connection, reply);
 	creation_data->pending = NULL;
@@ -1469,6 +1506,9 @@ int __connman_session_create(DBusMessage *msg)
 					connman_session_parse_connection_type(val);
 
 				user_connection_type = true;
+			} else if (g_str_equal(key, "ContextIdentifier")) {
+				dbus_message_iter_get_basic(&value, &val);
+				creation_data->context_identifier = g_strdup(val);
 			} else if (g_str_equal(key, "AllowedInterface")) {
 				dbus_message_iter_get_basic(&value, &val);
 				creation_data->allowed_interface = g_strdup(val);

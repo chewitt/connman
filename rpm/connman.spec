@@ -1,6 +1,6 @@
 Name:       connman
 Summary:    Connection Manager
-Version:    1.35
+Version:    1.36
 Release:    1
 License:    GPLv2
 URL:        http://connman.net/
@@ -203,7 +203,8 @@ This package provides OpenFortiNet VPN plugin for connman.
     runstatedir=/run \
     --enable-blacklist-monitor \
     --enable-clat \
-    --with-firewall=iptables
+    --with-firewall=iptables \
+    --with-dns-backend=internal
 
 %make_build
 
@@ -270,7 +271,7 @@ systemctl daemon-reload || :
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/plugins-vpn
 %{_prefix}/lib/tmpfiles.d/connman_resolvconf.conf
-%config %{_sysconfdir}/dbus-1/system.d/*.conf
+%config %{_datadir}/dbus-1/system.d/*.conf
 %{_unitdir}/connman.service
 %{_unitdir}/multi-user.target.wants/connman.service
 %{_unitdir}/multi-user.target.wants/connman-vpn.service

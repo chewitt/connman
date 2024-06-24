@@ -776,7 +776,8 @@ bool connman_device_get_powered(struct connman_device *device)
 	return false;
 }
 
-bool connman_device_get_scanning(struct connman_device *device)
+bool connman_device_get_scanning(struct connman_device *device,
+						enum connman_service_type type)
 {
 	g_assert(device);
 	g_assert(device == &wifi_device);
@@ -812,6 +813,12 @@ int connman_device_set_scanning(struct connman_device *device,
 
 	return 0;
 }
+
+void __connman_device_stop_scan(enum connman_service_type type)
+{
+	return;
+}
+
 
 struct connman_device *connman_device_ref_debug(struct connman_device *device,
 				const char *file, int line, const char *caller)
@@ -1147,6 +1154,11 @@ int connman_resolver_append_lifetime(int index, const char *domain,
 
 int connman_resolver_remove(int index, const char *domain,
 							const char *server)
+{
+	return 0;
+}
+
+int __connman_resolver_set_mdns(int index, bool enabled)
 {
 	return 0;
 }
