@@ -243,17 +243,13 @@ GSList *__connman_timeserver_add_list(GSList *server_list,
 GSList *__connman_timeserver_get_all(struct connman_service *service)
 {
 	GSList *list = NULL;
+	struct connman_network *network;
 	char **timeservers;
 	char **service_ts;
 	char **service_ts_config;
-	char **fallback_ts;
-	int i;
-
-#ifdef DEFAULT_GW_SUPPORTS_NTP
-	struct connman_network *network;
 	const char *service_gw;
-	int index;
-#endif
+	char **fallback_ts;
+	int index, i;
 
 	if (__connman_clock_timeupdates() == TIME_UPDATES_MANUAL)
 		return NULL;
@@ -272,7 +268,6 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 	for (i = 0; service_ts && service_ts[i]; i++)
 		list = __connman_timeserver_add_list(list, service_ts[i]);
 
-#ifdef DEFAULT_GW_SUPPORTS_NTP
 	network = __connman_service_get_network(service);
 	if (network) {
 		index = connman_network_get_index(network);
@@ -283,7 +278,6 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 		if (service_gw)
 			list = __connman_timeserver_add_list(list, service_gw);
 	}
-#endif
 
 	/* Then add Global Timeservers to the list */
 	timeservers = load_timeservers();
