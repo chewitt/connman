@@ -4358,23 +4358,21 @@ static int wifi_device_driver_disable(struct connman_device *device)
 	}
 }
 
-static int wifi_device_driver_scan(enum connman_service_type type,
-			struct connman_device *device,
-			const char *ssid, unsigned int ssid_len,
-			const char *identity, const char *passphrase,
-			const char *security, void *user_data)
+static int wifi_device_driver_scan(struct connman_device *device,
+			struct connman_device_scan_params *params)
 {
 	struct wifi_device *dev = connman_device_get_data(device);
 
 	if (!dev) {
 		return (-ENODEV);
-	} else if (type != CONNMAN_SERVICE_TYPE_WIFI &&
-				type != CONNMAN_SERVICE_TYPE_UNKNOWN) {
+	} else if (params->type != CONNMAN_SERVICE_TYPE_WIFI &&
+				params->type != CONNMAN_SERVICE_TYPE_UNKNOWN) {
 		DBG("only WiFi scans are supported");
 		return (-EINVAL);
 	} else {
-		return wifi_device_scan(dev, ssid, ssid_len, identity,
-					passphrase, security, user_data);
+		return wifi_device_scan(dev, params->ssid, params->ssid_len,
+					params->identity, params->passphrase,
+					params->security, params->user_data);
 	}
 }
 
