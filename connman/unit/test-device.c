@@ -380,16 +380,16 @@ static enum notify_type notify = NOTIFY_TYPE_UNSET;
 
 // notifier dummies
 
-struct connman_notifier* ethernet_notifier = NULL;
+static const struct connman_notifier* ethernet_notifier = NULL;
 
-int connman_notifier_register(struct connman_notifier *notifier)
+int connman_notifier_register(const struct connman_notifier *notifier)
 {
 	g_assert(!g_strcmp0(notifier->name, "ethernet_plugin"));
 	ethernet_notifier = notifier;
 	return 0;
 }
 
-void connman_notifier_unregister(struct connman_notifier *notifier)
+void connman_notifier_unregister(const struct connman_notifier *notifier)
 {
 	g_assert(!g_strcmp0(notifier->name, "ethernet_plugin"));
 	ethernet_notifier = NULL;
