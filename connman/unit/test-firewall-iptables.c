@@ -522,10 +522,10 @@ DBusMessage *g_dbus_create_reply(DBusMessage *message, int type, ...)
 
 // Notifier dummies
 
-static struct connman_notifier *test_firewall_notifier;
+static const struct connman_notifier *test_firewall_notifier;
 static bool notifier_fail = false;
 
-int connman_notifier_register(struct connman_notifier *notifier)
+int connman_notifier_register(const struct connman_notifier *notifier)
 {
 	DBG("");
 
@@ -540,7 +540,7 @@ int connman_notifier_register(struct connman_notifier *notifier)
 	return 0;
 }
 
-void connman_notifier_unregister(struct connman_notifier *notifier)
+void connman_notifier_unregister(const struct connman_notifier *notifier)
 {
 	DBG("");
 
