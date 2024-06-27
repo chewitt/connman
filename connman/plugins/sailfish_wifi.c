@@ -2583,14 +2583,16 @@ static gboolean wifi_device_passive_scan_perform(struct wifi_device *dev)
 	return FALSE;
 }
 
-static void wifi_device_autoscan_restart(struct wifi_device *dev)
+static void wifi_device_autoscan_restart(struct wifi_device *dev,
+							bool force_full_scan)
 {
 	if (dev->autoscan_restart_id) {
 		g_source_remove(dev->autoscan_restart_id);
 		dev->autoscan_restart_id = 0;
 	}
 	wifi_device_autoscan_reset(dev);
-	wifi_device_scan_request(dev, SCAN_AUTO);
+	wifi_device_scan_request(dev, force_full_scan ?
+						SCAN_MANUAL : SCAN_AUTO);
 }
 
 static void wifi_device_clear_bss_net(gpointer list_data, gpointer user_data)
@@ -3336,7 +3338,8 @@ static void wifi_device_update_bss_list(struct wifi_device *dev)
 static int wifi_device_scan(struct wifi_device *dev,
 			const char *ssid, unsigned int ssid_len,
 			const char *identity, const char *passphrase,
-			const char *security, void *user_data)
+			const char *security, bool force_full_scan,
+			void *user_data)
 {
 	if (dev->tethering) {
 		DBG("tethering on!");
@@ -3369,7 +3372,7 @@ static int wifi_device_scan(struct wifi_device *dev,
 		return (-EALREADY);
 	} else if (!ssid || !ssid_len) {
 		DBG("restarting autoscan");
-		wifi_device_autoscan_restart(dev);
+		wifi_device_autoscan_restart(dev, force_full_scan);
 		return 0;
 	}
 	return (-EINVAL);
@@ -3393,7 +3396,7 @@ static void wifi_device_bsss_changed(GSupplicantInterface *iface, void *data)
 	if (dev->screen_active && (!dev->selected ||
 			dev->selected->state != WIFI_NETWORK_CONNECTED)) {
 		if (may_restart_autoscan) {
-			wifi_device_autoscan_restart(dev);
+			wifi_device_autoscan_restart(dev, false);
 		} else {
 			DBG("not restarting autoscan");
 		}
@@ -4095,7 +4098,7 @@ static gboolean wifi_device_autoscan_restart_cb(void *user_data)
 
 	GASSERT(dev->autoscan_restart_id);
 	dev->autoscan_restart_id = 0;
-	wifi_device_autoscan_restart(dev);
+	wifi_device_autoscan_restart(dev, false);
 	return G_SOURCE_REMOVE;
 }
 
@@ -4372,7 +4375,9 @@ static int wifi_device_driver_scan(struct connman_device *device,
 	} else {
 		return wifi_device_scan(dev, params->ssid, params->ssid_len,
 					params->identity, params->passphrase,
-					params->security, params->user_data);
+					params->security,
+					params->force_full_scan,
+					params->user_data);
 	}
 }
 
