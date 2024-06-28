@@ -203,7 +203,7 @@ static void read_uevent(struct interface_data *interface)
 			interface->service_type = CONNMAN_SERVICE_TYPE_ETHERNET;
 			interface->device_type = CONNMAN_DEVICE_TYPE_ETHERNET;
 		} else {
-			connman_warn("%s DEVTYPE=%s not supported, ignoring",
+			DBG("%s DEVTYPE=%s not supported, ignoring",
 					name, devtype);
 		}
 	} else {
