@@ -398,8 +398,8 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
-
 static void vpn_auto_connect(void);
+
 static bool is_connecting(enum connman_service_state state);
 static bool is_connected(enum connman_service_state state);
 
@@ -2328,6 +2328,16 @@ static const struct connman_service_boolean_property service_saved =
 
 #define autoconnect_changed(s) service_boolean_changed(s, &service_autoconnect)
 
+static void service_set_new_service(struct connman_service *service,
+							bool new_service)
+{
+	const bool newval = new_service ? true : false;
+	if (service->new_service != newval) {
+		service->new_service = newval;
+		service_boolean_changed(service, &service_saved);
+	}
+}
+
 bool connman_service_set_autoconnect(struct connman_service *service,
 							bool autoconnect)
 {
@@ -2342,16 +2352,6 @@ bool connman_service_set_autoconnect(struct connman_service *service,
 							service->autoconnect);
 
 	return true;
-}
-
-static void service_set_new_service(struct connman_service *service,
-							bool new_service)
-{
-	const bool newval = new_service ? true : false;
-	if (service->new_service != newval) {
-		service->new_service = newval;
-		service_boolean_changed(service, &service_saved);
-	}
 }
 
 static void append_security(DBusMessageIter *iter, void *user_data)
@@ -4921,9 +4921,6 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 	}
 }
 
-static void set_error(struct connman_service *service,
-					enum connman_service_error error);
-
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -4938,6 +4935,9 @@ void __connman_service_wispr_start(struct connman_service *service,
 
 	__connman_wispr_start(service, type);
 }
+
+static void set_error(struct connman_service *service,
+					enum connman_service_error error);
 
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
@@ -5675,8 +5675,6 @@ static GList *preferred_tech_list_get(void)
 	return tech_data.preferred_list;
 }
 
-static int service_indicate_state(struct connman_service *service);
-
 static void set_always_connecting_technologies()
 {
 	unsigned int *always_connected_techs =
@@ -5713,6 +5711,8 @@ static bool autoconnect_already_connecting(struct connman_service *service,
 
 	return false;
 }
+
+static int service_indicate_state(struct connman_service *service);
 
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
@@ -5938,7 +5938,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 			continue;
 
 		if (is_connected(service->state) ||
-				is_connecting(service->state)) {
+					is_connecting(service->state)) {
 			if (!service->do_split_routing)
 				need_split = true;
 
