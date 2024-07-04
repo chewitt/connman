@@ -49,6 +49,7 @@ BuildRequires:  libtool
 BuildRequires:  usb-moded-devel >= 0.86.0+mer31
 BuildRequires:  libglibutil-devel
 BuildRequires:  libdbusaccess-devel
+BuildRequires:  libmnl-devel
 
 %description
 Connection Manager provides a daemon for managing Internet connections
@@ -165,6 +166,15 @@ Requires:   ppp
 %description plugin-vpn-openfortivpn
 This package provides OpenFortiNet VPN plugin for connman.
 
+%package plugin-vpn-wireguard
+Summary:    Connection Manager Wireguard VPN plugin
+Requires:   %{name} = %{version}-%{release}
+Requires:   %{name}-vpn-scripts
+Requires:   libmnl
+
+%description plugin-vpn-wireguard
+This package provides Wireguard VPN plugin for connman.
+
 %prep
 %setup -q -n %{name}-%{version}/connman
 
@@ -180,6 +190,7 @@ This package provides OpenFortiNet VPN plugin for connman.
     --enable-l2tp \
     --enable-pptp \
     --enable-openfortivpn \
+    --enable-wireguard \
     --enable-loopback=builtin \
     --enable-pacrunner=builtin \
     --enable-sailfish-vpn-access=builtin \
@@ -345,4 +356,9 @@ systemctl daemon-reload || :
 %defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/openfortivpn.so
+
+%files plugin-vpn-wireguard
+%defattr(-,root,root,-)
+%license COPYING
+%{_libdir}/%{name}/plugins-vpn/wireguard.so
 
