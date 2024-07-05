@@ -56,6 +56,7 @@ tools/wpad-test
 tools/resolv-test
 tools/polkit-test
 tools/iptables-test
+tools/ip6tables-test
 tools/iptables-unit
 tools/dnsproxy-test
 tools/supplicant-test
