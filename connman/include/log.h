@@ -60,8 +60,8 @@ struct connman_debug_desc {
 	const char *file;
 #define CONNMAN_DEBUG_FLAG_DEFAULT (0)
 #define CONNMAN_DEBUG_FLAG_PRINT   (1 << 0)
-//#define CONNMAN_DEBUG_FLAG_ALIAS   (1 << 1)
-//#define CONNMAN_DEBUG_FLAG_HIDE_NAME (1 << 2)
+#define CONNMAN_DEBUG_FLAG_ALIAS   (1 << 1)
+#define CONNMAN_DEBUG_FLAG_HIDE_NAME (1 << 2)
 	unsigned int flags;
 	void (*notify)(struct connman_debug_desc* desc);
 } __attribute__((aligned(CONNMAN_DEBUG_ALIGN)));

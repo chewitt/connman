@@ -34,6 +34,7 @@
 
 #define TS_RECHECK_INTERVAL     7200
 
+static struct connman_service *ts_service;
 static GSList *timeservers_list = NULL;
 static GSList *ts_list = NULL;
 static char *ts_current = NULL;
@@ -105,24 +106,21 @@ static void resolv_result(GResolvResultStatus status, char **results,
 
 	if (status == G_RESOLV_RESULT_STATUS_SUCCESS) {
 		if (results) {
-			for (i = 0; results[i]; i++) {
+			/* prepend the results in reverse order */
+
+			for (i = 0; results[i]; i++)
+				/* count */;
+			i--;
+
+			for (; i >= 0; i--) {
 				DBG("result[%d]: %s", i, results[i]);
-				if (i == 0)
-					continue;
 
 				ts_list = __connman_timeserver_add_list(
-							ts_list, results[i]);
+					ts_list, results[i]);
 			}
-
-			DBG("Using timeserver %s", results[0]);
-
-			__connman_ntp_start(results[0], ntp_callback, NULL);
-
-			return;
 		}
 	}
 
-	/* If resolving fails, move to the next server */
 	sync_next();
 }
 
@@ -144,25 +142,7 @@ static void timeserver_sync_start(void)
 	}
 	ts_list = g_slist_reverse(ts_list);
 
-	ts_current = ts_list->data;
-
-	ts_list = g_slist_delete_link(ts_list, ts_list);
-
-	/* if it's an IP, directly query it. */
-	if (connman_inet_check_ipaddress(ts_current) > 0) {
-		DBG("Using timeserver %s", ts_current);
-
-		__connman_ntp_start(ts_current, ntp_callback, NULL);
-
-		return;
-	}
-
-	DBG("Resolving timeserver %s", ts_current);
-
-	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
-						resolv_result, NULL);
-
-	return;
+	sync_next();
 }
 
 static gboolean timeserver_sync_restart(gpointer user_data)
@@ -179,7 +159,7 @@ static gboolean timeserver_sync_restart(gpointer user_data)
  * none of the server did work we start over with the first server
  * with a backoff.
  */
-static void sync_next()
+static void sync_next(void)
 {
 	if (ts_current) {
 		g_free(ts_current);
@@ -188,34 +168,25 @@ static void sync_next()
 
 	__connman_ntp_stop();
 
-	/* Get the 1st server in the list */
-	if (!ts_list) {
-		DBG("No timeserver could be used, restart probing in 5 seconds");
+	while (ts_list) {
+		ts_current = ts_list->data;
+		ts_list = g_slist_delete_link(ts_list, ts_list);
 
-		ts_backoff_id = g_timeout_add_seconds(5,
-					timeserver_sync_restart, NULL);
-		return;
-	}
+		/* if it's an IP, directly query it. */
+		if (connman_inet_check_ipaddress(ts_current) > 0) {
+			DBG("Using timeserver %s", ts_current);
+			__connman_ntp_start(ts_current, ntp_callback, NULL);
+			return;
+		}
 
-	ts_current = ts_list->data;
-
-	ts_list = g_slist_delete_link(ts_list, ts_list);
-
-	/* if it's an IP, directly query it. */
-	if (connman_inet_check_ipaddress(ts_current) > 0) {
-		DBG("Using timeserver %s", ts_current);
-
-		__connman_ntp_start(ts_current, ntp_callback, NULL);
-
-		return;
-	}
-
-	DBG("Resolving timeserver %s", ts_current);
-
-	resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
+		DBG("Resolving timeserver %s", ts_current);
+		resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
 						resolv_result, NULL);
+		return;
+	}
 
-	return;
+	DBG("No timeserver could be used, restart probing in 5 seconds");
+	ts_backoff_id = g_timeout_add_seconds(5, timeserver_sync_restart, NULL);
 }
 
 GSList *__connman_timeserver_add_list(GSList *server_list,
@@ -243,17 +214,13 @@ GSList *__connman_timeserver_add_list(GSList *server_list,
 GSList *__connman_timeserver_get_all(struct connman_service *service)
 {
 	GSList *list = NULL;
+	struct connman_network *network;
 	char **timeservers;
 	char **service_ts;
 	char **service_ts_config;
+	const char *service_gw = NULL;
 	char **fallback_ts;
-	int i;
-
-#ifdef DEFAULT_GW_SUPPORTS_NTP
-	struct connman_network *network;
-	const char *service_gw;
-	int index;
-#endif
+	int index, i;
 
 	if (__connman_clock_timeupdates() == TIME_UPDATES_MANUAL)
 		return NULL;
@@ -272,18 +239,22 @@ GSList *__connman_timeserver_get_all(struct connman_service *service)
 	for (i = 0; service_ts && service_ts[i]; i++)
 		list = __connman_timeserver_add_list(list, service_ts[i]);
 
-#ifdef DEFAULT_GW_SUPPORTS_NTP
-	network = __connman_service_get_network(service);
-	if (network) {
-		index = connman_network_get_index(network);
-		service_gw = __connman_ipconfig_get_gateway_from_index(index,
-			CONNMAN_IPCONFIG_TYPE_ALL);
+	/*
+	 * Then add Service Gateway to the list, if UseGatewaysAsTimeservers
+	 * configuration option is set to true.
+	 */
+	if (connman_setting_get_bool("UseGatewaysAsTimeservers")) {
+		network = __connman_service_get_network(service);
+		if (network) {
+			index = connman_network_get_index(network);
+			service_gw = __connman_ipconfig_get_gateway_from_index(index,
+				CONNMAN_IPCONFIG_TYPE_ALL);
+		}
 
 		/* Then add Service Gateway to the list */
 		if (service_gw)
 			list = __connman_timeserver_add_list(list, service_gw);
 	}
-#endif
 
 	/* Then add Global Timeservers to the list */
 	timeservers = load_timeservers();
@@ -377,6 +348,9 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 	if (!service)
 		return -EINVAL;
 
+	if (service == ts_service)
+		return -EALREADY;
+
 	if (!resolv)
 		return 0;
 	/*
@@ -415,6 +389,7 @@ int __connman_timeserver_sync(struct connman_service *default_service)
 
 	ts_recheck_enable();
 
+	ts_service = service;
 	timeserver_sync_start();
 
 	return 0;
@@ -466,6 +441,8 @@ static void timeserver_stop(void)
 {
 	DBG(" ");
 
+	ts_service = NULL;
+
 	if (resolv) {
 		g_resolv_unref(resolv);
 		resolv = NULL;
@@ -507,7 +484,7 @@ static void default_changed(struct connman_service *default_service)
 		timeserver_stop();
 }
 
-static struct connman_notifier timeserver_notifier = {
+static const struct connman_notifier timeserver_notifier = {
 	.name			= "timeserver",
 	.default_changed	= default_changed,
 };

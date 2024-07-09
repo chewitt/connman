@@ -216,7 +216,7 @@ static void idle_state(bool idle)
 		return;
 }
 
-static struct connman_notifier technology_notifier = {
+static const struct connman_notifier technology_notifier = {
 	.name		= "manager",
 	.priority	= CONNMAN_NOTIFIER_PRIORITY_HIGH,
 	.idle_state	= idle_state,
@@ -258,6 +258,27 @@ static DBusMessage *get_peers(DBusConnection *conn,
 
 	__connman_dbus_append_objpath_dict_array(reply,
 					append_peer_structs, NULL);
+	return reply;
+}
+
+static DBusMessage *get_tethering_clients(DBusConnection *conn,
+					DBusMessage *msg, void *data)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, array;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply)
+		return NULL;
+
+	dbus_message_iter_init_append(reply, &iter);
+
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+				DBUS_TYPE_STRING_AS_STRING, &array);
+
+	__connman_tethering_list_clients(&array);
+
+	dbus_message_iter_close_container(&iter, &array);
 	return reply;
 }
 
@@ -809,6 +830,9 @@ static const GDBusMethodTable manager_methods[] = {
 	{ GDBUS_METHOD("GetPeers",
 			NULL, GDBUS_ARGS({ "peers", "a(oa{sv})" }),
 			get_peers) },
+	{ GDBUS_METHOD("GetTetheringClients",
+			NULL, GDBUS_ARGS({ "tethering_clients", "as" }),
+			get_tethering_clients) },
 	{ GDBUS_DEPRECATED_ASYNC_METHOD("ConnectProvider",
 			      GDBUS_ARGS({ "provider", "a{sv}" }),
 			      GDBUS_ARGS({ "path", "o" }),

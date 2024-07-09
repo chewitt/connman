@@ -614,6 +614,30 @@ static void callback_network_associated(GSupplicantNetwork *network)
 	callbacks_pointer->network_associated(network);
 }
 
+static void callback_sta_authorized(GSupplicantInterface *interface,
+					const char *addr)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->sta_authorized)
+		return;
+
+	callbacks_pointer->sta_authorized(interface, addr);
+}
+
+static void callback_sta_deauthorized(GSupplicantInterface *interface,
+					const char *addr)
+{
+	if (!callbacks_pointer)
+		return;
+
+	if (!callbacks_pointer->sta_deauthorized)
+		return;
+
+	callbacks_pointer->sta_deauthorized(interface, addr);
+}
+
 static void callback_peer_found(GSupplicantPeer *peer)
 {
 	if (!callbacks_pointer)
@@ -1501,7 +1525,6 @@ static void interface_network_added(DBusMessageIter *iter, void *user_data)
 static void interface_network_removed(DBusMessageIter *iter, void *user_data)
 {
 	SUPPLICANT_DBG("");
-	return;
 }
 
 static char *create_name(unsigned char *ssid, int ssid_len)
@@ -2183,6 +2206,7 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 	GSupplicantNetwork *network;
 	struct g_supplicant_bss *bss = NULL;
 	const char *path = NULL;
+	bool is_current_network_bss = false;
 
 	dbus_message_iter_get_basic(iter, &path);
 	if (!path)
@@ -2196,6 +2220,7 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 	if (network->best_bss == bss) {
 		network->best_bss = NULL;
 		network->signal = BSS_UNKNOWN_STRENGTH;
+		is_current_network_bss = true;
 	}
 
 	g_hash_table_remove(bss_mapping, path);
@@ -2205,8 +2230,12 @@ static void interface_bss_removed(DBusMessageIter *iter, void *user_data)
 
 	update_network_signal(network);
 
-	if (g_hash_table_size(network->bss_table) == 0)
+	if (g_hash_table_size(network->bss_table) == 0) {
 		g_hash_table_remove(interface->network_table, network->group);
+	} else {
+		if (is_current_network_bss && network->best_bss)
+			callback_network_changed(network, "");
+	}
 }
 
 static void set_config_methods(DBusMessageIter *iter, void *user_data)
@@ -2730,6 +2759,42 @@ static void signal_network_removed(const char *path, DBusMessageIter *iter)
 		return;
 
 	interface_network_removed(iter, interface);
+}
+
+static void signal_sta_authorized(const char *path, DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+	const char *addr = NULL;
+
+	SUPPLICANT_DBG("");
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+	dbus_message_iter_get_basic(iter, &addr);
+	if (!addr)
+		return;
+
+	callback_sta_authorized(interface, addr);
+}
+
+static void signal_sta_deauthorized(const char *path, DBusMessageIter *iter)
+{
+	GSupplicantInterface *interface;
+	const char *addr = NULL;
+
+	SUPPLICANT_DBG("");
+
+	interface = g_hash_table_lookup(interface_table, path);
+	if (!interface)
+		return;
+
+	dbus_message_iter_get_basic(iter, &addr);
+	if (!addr)
+		return;
+
+	callback_sta_deauthorized(interface, addr);
 }
 
 static void signal_bss_changed(const char *path, DBusMessageIter *iter)
@@ -3506,6 +3571,8 @@ static struct {
 	{ SUPPLICANT_INTERFACE ".Interface", "BSSRemoved",        signal_bss_removed       },
 	{ SUPPLICANT_INTERFACE ".Interface", "NetworkAdded",      signal_network_added     },
 	{ SUPPLICANT_INTERFACE ".Interface", "NetworkRemoved",    signal_network_removed   },
+	{ SUPPLICANT_INTERFACE ".Interface", "StaAuthorized",     signal_sta_authorized    },
+	{ SUPPLICANT_INTERFACE ".Interface", "StaDeauthorized",   signal_sta_deauthorized  },
 
 	{ SUPPLICANT_INTERFACE ".BSS", "PropertiesChanged", signal_bss_changed   },
 
@@ -4242,11 +4309,13 @@ static void interface_scan_params(DBusMessageIter *iter, void *user_data)
 		supplicant_dbus_dict_append_basic(&dict, "Type",
 					DBUS_TYPE_STRING, &type);
 
-		supplicant_dbus_dict_append_array(&dict, "SSIDs",
-						DBUS_TYPE_STRING,
-						append_ssids,
-						data->scan_params);
 
+		if (data->scan_params->ssids) {
+			supplicant_dbus_dict_append_array(&dict, "SSIDs",
+							DBUS_TYPE_STRING,
+							append_ssids,
+							data->scan_params);
+		}
 		supplicant_add_scan_frequency(&dict, add_scan_frequencies,
 						data->scan_params);
 	} else
@@ -4635,7 +4704,9 @@ static void add_network_security_peap(DBusMessageIter *dict,
 
 	}
 
-	if (g_str_has_prefix(ssid->phase2_auth, "EAP-")) {
+	if (g_strcmp0(ssid->phase2_auth, "GTC") == 0 && g_strcmp0(ssid->eap, "ttls") == 0)
+		phase2_auth = g_strdup_printf("autheap=%s", ssid->phase2_auth);
+	else if (g_str_has_prefix(ssid->phase2_auth, "EAP-")) {
 		phase2_auth = g_strdup_printf("autheap=%s",
 					ssid->phase2_auth + strlen("EAP-"));
 	} else

@@ -120,6 +120,7 @@ char *connman_service_get_interface(struct connman_service *service);
 
 const char *connman_service_get_identifier(struct connman_service *service);
 const char *connman_service_get_domainname(struct connman_service *service);
+const char *connman_service_get_dbuspath(struct connman_service *service);
 char **connman_service_get_nameservers(struct connman_service *service);
 char **connman_service_get_timeservers_config(struct connman_service *service);
 char **connman_service_get_timeservers(struct connman_service *service);

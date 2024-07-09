@@ -1794,7 +1794,6 @@ void connman_config_free_entries(struct connman_config_entry **entries)
 	}
 
 	g_free(entries);
-	return;
 }
 
 bool __connman_config_address_provisioned(const char *address,

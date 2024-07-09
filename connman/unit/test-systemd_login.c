@@ -318,12 +318,12 @@ bool __connman_technology_disable_all(void)
 
 /* notifier stubs */
 
-int connman_notifier_register(struct connman_notifier *notifier)
+int connman_notifier_register(const struct connman_notifier *notifier)
 {
 	return 0;
 }
 
-void connman_notifier_unregister(struct connman_notifier *notifier)
+void connman_notifier_unregister(const struct connman_notifier *notifier)
 {
 	return;
 }

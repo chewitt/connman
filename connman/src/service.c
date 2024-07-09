@@ -3658,6 +3658,9 @@ static void append_properties(DBusMessageIter *dict, dbus_bool_t limited,
 	connman_dbus_dict_append_dict(dict, "Provider",
 						append_provider, service);
 
+	if (service->network)
+		connman_network_append_acddbus(dict, service->network);
+
 	service_append_boolean(service, &service_available, dict);
 	service_append_boolean(service, &service_saved, dict);
 	append_restricted_string(dict, service, PROP_ACCESS,
@@ -3830,6 +3833,14 @@ const char *connman_service_get_domainname(struct connman_service *service)
 		return service->domains[0];
 	else
 		return service->domainname;
+}
+
+const char *connman_service_get_dbuspath(struct connman_service *service)
+{
+	if (!service)
+		return NULL;
+
+	return service->path;
 }
 
 char **connman_service_get_nameservers(struct connman_service *service)
@@ -6070,7 +6081,6 @@ void __connman_service_set_provider_pending(struct connman_service *service,
 	}
 
 	service->provider_pending = msg;
-	return;
 }
 
 static void check_pending_msg(struct connman_service *service)
@@ -8595,8 +8605,10 @@ int __connman_service_ipconfig_indicate_state(struct connman_service *service,
 		break;
 	}
 
-	if (is_connected(old_state) && !is_connected(new_state))
+	if (is_connected(old_state) && !is_connected(new_state)) {
 		nameserver_remove_all(service, type);
+		cancel_online_check(service);
+	}
 
 	if (type == CONNMAN_IPCONFIG_TYPE_IPV4)
 		service->state_ipv4 = new_state;
@@ -10003,7 +10015,7 @@ bool __connman_service_create_from_network(struct connman_network *network)
 	struct connman_device *device;
 	const char *ident, *group;
 	char *name;
-	unsigned int *auto_connect_types;
+	unsigned int *auto_connect_types, *favorite_types;
 	int i, index;
 
 	DBG("network %p", network);
@@ -10064,21 +10076,13 @@ bool __connman_service_create_from_network(struct connman_network *network)
 		}
 	}
 
-	switch (service->type) {
-	case CONNMAN_SERVICE_TYPE_UNKNOWN:
-	case CONNMAN_SERVICE_TYPE_SYSTEM:
-	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
-	case CONNMAN_SERVICE_TYPE_GPS:
-	case CONNMAN_SERVICE_TYPE_GADGET:
-	case CONNMAN_SERVICE_TYPE_WIFI:
-	case CONNMAN_SERVICE_TYPE_CELLULAR:
-	case CONNMAN_SERVICE_TYPE_P2P:
-		break;
-	case CONNMAN_SERVICE_TYPE_ETHERNET:
-		service->favorite = true;
-		break;
-	case CONNMAN_SERVICE_TYPE_VPN:
-		break;
+	favorite_types = connman_setting_get_uint_list("DefaultFavoriteTechnologies");
+	service->favorite = false;
+	for (i = 0; favorite_types && favorite_types[i] != 0; i++) {
+		if (service->type == favorite_types[i]) {
+			service->favorite = true;
+			break;
+		}
 	}
 
 	service->state_ipv4 = service->state_ipv6 = CONNMAN_SERVICE_STATE_IDLE;

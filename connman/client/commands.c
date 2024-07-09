@@ -39,6 +39,7 @@
 #include "dbus_helpers.h"
 #include "input.h"
 #include "services.h"
+#include "tethering.h"
 #include "peers.h"
 #include "commands.h"
 #include "agent.h"
@@ -311,6 +312,18 @@ static int peers_list(DBusMessageIter *iter,
 {
 	if (!error) {
 		__connmanctl_peers_list(iter);
+		fprintf(stdout, "\n");
+	} else
+		fprintf(stderr, "Error: %s\n", error);
+
+	return 0;
+}
+
+static int tethering_clients_list(DBusMessageIter *iter,
+					const char *error, void *user_data)
+{
+	if (!error) {
+		__connmanctl_tethering_clients_list(iter);
 		fprintf(stdout, "\n");
 	} else
 		fprintf(stderr, "Error: %s\n", error);
@@ -639,6 +652,17 @@ static int cmd_tether(char *args[], int num, struct connman_option *options)
 	return tether_set(args[1], set_tethering);
 }
 
+static int cmd_tethering_clients(char *args[], int num, struct connman_option *options)
+{
+	if (num > 1)
+		return -E2BIG;
+
+	return __connmanctl_dbus_method_call(connection,
+				CONNMAN_SERVICE, CONNMAN_PATH,
+				"net.connman.Manager", "GetTetheringClients",
+				tethering_clients_list, NULL, NULL, NULL);
+}
+
 static int scan_return(DBusMessageIter *iter, const char *error,
 		void *user_data)
 {
@@ -792,8 +816,6 @@ static void move_before_append_args(DBusMessageIter *iter, void *user_data)
 
 	dbus_message_iter_append_basic(iter,
 				DBUS_TYPE_OBJECT_PATH, &path);
-
-	return;
 }
 
 static int cmd_service_move_before(char *args[], int num,
@@ -852,8 +874,6 @@ static void move_after_append_args(DBusMessageIter *iter, void *user_data)
 
 	dbus_message_iter_append_basic(iter,
 				DBUS_TYPE_OBJECT_PATH, &path);
-
-	return;
 }
 
 static int cmd_service_move_after(char *args[], int num,
@@ -1930,8 +1950,6 @@ static void session_create_append_dict(DBusMessageIter *iter, void *user_data)
 
 		index += append.values;
 	}
-
-	return;
 }
 
 static void session_create_append(DBusMessageIter *iter, void *user_data)
@@ -2736,6 +2754,8 @@ static const struct {
 	                                  NULL,            cmd_tether,
 	  "Enable, disable tethering, set SSID and passphrase for wifi",
 	  lookup_tether },
+	{ "tethering_clients", NULL,      NULL,            cmd_tethering_clients,
+	  "Display tethering clients", NULL },
 	{ "services",     "[<service>]",  service_options, cmd_services,
 	  "Display services", lookup_service_arg },
 	{ "peers",        "[peer]",       NULL,            cmd_peers,

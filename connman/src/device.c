@@ -610,6 +610,7 @@ const char *connman_device_get_ident(struct connman_device *device)
 int connman_device_set_powered(struct connman_device *device,
 						bool powered)
 {
+	struct connman_device_scan_params params;
 	enum connman_service_type type;
 	const char *alpha2;
 	int i;
@@ -646,9 +647,12 @@ int connman_device_set_powered(struct connman_device *device,
 	for (i = 0; i < MAX_CONNMAN_SERVICE_TYPES; i++)
 		device->scanning[i] = false;
 
-	if (device->driver && device->driver->scan)
-		device->driver->scan(CONNMAN_SERVICE_TYPE_UNKNOWN, device,
-					NULL, 0, NULL, NULL, NULL, NULL);
+	if (device->driver && device->driver->scan) {
+		memset(&params, 0, sizeof(params));
+		params.type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+
+		device->driver->scan(device, &params);
+	}
 
 	return 0;
 }
@@ -659,16 +663,22 @@ bool connman_device_get_powered(struct connman_device *device)
 }
 
 static int device_scan(enum connman_service_type type,
-				struct connman_device *device)
+				struct connman_device *device,
+				bool force_full_scan)
 {
+	struct connman_device_scan_params params;
+
 	if (!device->driver || !device->driver->scan)
 		return -EOPNOTSUPP;
 
 	if (!device->powered)
 		return -ENOLINK;
 
-	return device->driver->scan(type, device, NULL, 0,
-					NULL, NULL, NULL, NULL);
+	memset(&params, 0, sizeof(params));
+	params.type = type;
+	params.force_full_scan = force_full_scan;
+
+	return device->driver->scan(device, &params);
 }
 
 int __connman_device_disconnect(struct connman_device *device)
@@ -1193,7 +1203,8 @@ void connman_device_regdom_notify(struct connman_device *device,
 	__connman_technology_notify_regdom_by_device(device, result, alpha2);
 }
 
-int __connman_device_request_scan(enum connman_service_type type)
+static int connman_device_request_scan(enum connman_service_type type,
+					bool force_full_scan)
 {
 	bool success = false;
 	int last_err = -ENOSYS;
@@ -1221,7 +1232,7 @@ int __connman_device_request_scan(enum connman_service_type type)
 		if (!device_has_service_type(device, type))
 			continue;
 
-		err = device_scan(type, device);
+		err = device_scan(type, device, force_full_scan);
 		if (err == 0 || err == -EALREADY || err == -EINPROGRESS) {
 			success = true;
 		} else {
@@ -1236,20 +1247,38 @@ int __connman_device_request_scan(enum connman_service_type type)
 	return last_err;
 }
 
+int __connman_device_request_scan(enum connman_service_type type)
+{
+	return connman_device_request_scan(type, false);
+}
+
+int __connman_device_request_scan_full(enum connman_service_type type)
+{
+	return connman_device_request_scan(type, true);
+}
+
 int __connman_device_request_hidden_scan(struct connman_device *device,
 				const char *ssid, unsigned int ssid_len,
 				const char *identity, const char *passphrase,
 				const char *security, void *user_data)
 {
+	struct connman_device_scan_params params;
+
 	DBG("device %p", device);
 
 	if (!device || !device->driver ||
 			!device->driver->scan)
 		return -EINVAL;
 
-	return device->driver->scan(CONNMAN_SERVICE_TYPE_UNKNOWN,
-					device, ssid, ssid_len, identity,
-					passphrase, security, user_data);
+	params.type = CONNMAN_SERVICE_TYPE_UNKNOWN;
+	params.ssid = ssid;
+	params.ssid_len = ssid_len;
+	params.identity = identity;
+	params.passphrase = passphrase;
+	params.security = security;
+	params.user_data = user_data;
+
+	return device->driver->scan(device, &params);
 }
 
 void __connman_device_stop_scan(enum connman_service_type type)

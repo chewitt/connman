@@ -34,6 +34,7 @@
 
 
 #include "src/service.c"
+#include "include/acd.h"
 
 static gint index_counter = 0;
 unsigned int *preferred_list = NULL;
@@ -65,6 +66,7 @@ const char *connman_setting_get_string(const char *key) { return NULL; }
 const char *__connman_tethering_get_bridge(void) { return NULL; }
 void __connman_tethering_set_disabled(void) { return; }
 int __connman_tethering_set_enabled(void) { return 0; }
+void __connman_tethering_list_clients(DBusMessageIter *array) { return; }
 int __connman_private_network_release(const char *path) { return 0; }
 int __connman_private_network_request(DBusMessage *msg, const char *owner)
 {
@@ -245,6 +247,11 @@ int __connman_peer_service_unregister(const char *owner,
 					int query_length, int version)
 {
 	return 0;
+}
+
+void __connman_peer_disconnect_all(void)
+{
+	return;
 }
 
 struct connman_provider {
@@ -679,6 +686,11 @@ int __connman_device_request_scan(enum connman_service_type type)
 	return 0;
 }
 
+int __connman_device_request_scan_full(enum connman_service_type type)
+{
+	return 0;
+}
+
 int __connman_device_request_hidden_scan(struct connman_device *device,
 				const char *ssid, unsigned int ssid_len,
 				const char *identity, const char *passphrase,
@@ -856,6 +868,11 @@ int __connman_dhcp_start(struct connman_ipconfig *ipconfig,
 void __connman_dhcp_stop(struct connman_ipconfig *ipconfig)
 {
 	g_assert(ipconfig);
+}
+
+void __connman_dhcp_decline(struct connman_ipconfig *ipconfig)
+{
+	return;
 }
 
 int __connman_inet_get_interface_address(int index, int family, void *address)
@@ -1161,6 +1178,44 @@ int connman_resolver_remove(int index, const char *domain,
 int __connman_resolver_set_mdns(int index, bool enabled)
 {
 	return 0;
+}
+
+void acd_host_append_dbus_property(struct acd_host *acd, DBusMessageIter *dict)
+{
+	return;
+}
+
+void acd_host_free(struct acd_host *acd)
+{
+	return;
+}
+
+unsigned int acd_host_get_conflicts_count(struct acd_host *acd)
+{
+	return 0;
+}
+
+struct acd_host *acd_host_new(int ifindex, const char* path)
+{
+	return NULL;
+}
+
+void acd_host_register_event(struct acd_host *acd,
+		enum acd_host_event event,
+		acd_host_cb_t func,
+		gpointer user_data)
+{
+	return;
+}
+
+int acd_host_start(struct acd_host *acd, uint32_t ip)
+{
+	return 0;
+}
+
+void acd_host_stop(struct acd_host *acd)
+{
+	return;
 }
 
 /* EOD - end of dummies */

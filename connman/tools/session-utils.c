@@ -192,7 +192,7 @@ struct test_data_cb {
 	util_test_func_t teardown;
 };
 
-static void run_test_cb(gconstpointer data)
+static void run_test_cb(gpointer fixture, gconstpointer data)
 {
 	const struct test_data_cb *cbd = data;
 	struct test_fix *fix;
@@ -211,7 +211,7 @@ static void run_test_cb(gconstpointer data)
 
 	g_test_trap_assert_passed();
 #else
-	util_call(fix, func, NULL);
+	util_call(fix, cbd->func, NULL);
 	g_main_loop_run(fix->main_loop);
 #endif
 
@@ -219,6 +219,13 @@ static void run_test_cb(gconstpointer data)
 	g_main_loop_run(fix->main_loop);
 
 	cleanup_fix(fix);
+}
+
+static void cleanup_test_cb(gpointer fixture, gconstpointer data)
+{
+	struct test_data_cb *cbd = (void *)data;
+
+	g_free(cbd);
 }
 
 void util_test_add(const char *test_name, util_test_func_t test_func,
@@ -230,9 +237,7 @@ void util_test_add(const char *test_name, util_test_func_t test_func,
 	cbd->setup = setup;
 	cbd->teardown = teardown;
 
-	g_test_add_vtable(test_name, 0, cbd, NULL,
-			(GTestFixtureFunc) run_test_cb,
-			(GTestFixtureFunc) g_free);
+	g_test_add_vtable(test_name, 0, cbd, NULL, run_test_cb, cleanup_test_cb);
 }
 
 void util_session_create(struct test_fix *fix, unsigned int max_sessions)
@@ -304,6 +309,8 @@ void util_session_cleanup(struct test_session *session)
 	g_slist_foreach(session->info->allowed_bearers,
 			bearer_info_cleanup, NULL);
 	g_slist_free(session->info->allowed_bearers);
+	g_free(session->info->allowed_interface);
+	g_free(session->info->context_identifier);
 
 	session->notify = NULL;
 	g_free(session->notify_path);

@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(connman, 1.36)
+AC_INIT(connman, 1.37)
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -20,6 +20,7 @@ AC_SUBST(abs_top_srcdir)
 AC_SUBST(abs_top_builddir)
 
 AC_LANG_C
+AC_USE_SYSTEM_EXTENSIONS
 
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -282,6 +283,8 @@ AC_CHECK_LIB(resolv, ns_initparse, dummy=yes, [
 AC_CHECK_HEADERS([execinfo.h])
 AM_CONDITIONAL([BACKTRACE], [test "${ac_cv_header_execinfo_h}" = "yes"])
 
+AC_CHECK_MEMBERS([struct in6_pktinfo.ipi6_addr], [], [], [[#include <netinet/in.h>]])
+
 AC_CHECK_FUNC(signalfd, dummy=yes,
 			AC_MSG_ERROR(signalfd support is required))
 
@@ -315,8 +318,8 @@ fi
 
 AC_DEFINE_UNQUOTED([STATS_MAX_FILE_SIZE], (${stats_max_file_size}), [Maximal size of a statistics round robin file])
 
-PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.62, dummy=yes,
-				AC_MSG_ERROR(GLib >= 2.62 is required))
+PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.40, dummy=yes,
+				AC_MSG_ERROR(GLib >= 2.40 is required))
 AC_SUBST(GLIB_CFLAGS)
 AC_SUBST(GLIB_LIBS)
 

@@ -23,13 +23,12 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 
 #include <netinet/in.h>

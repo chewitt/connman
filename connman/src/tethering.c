@@ -61,6 +61,13 @@ static struct connman_ippool *dhcp_ippool = NULL;
 static DBusConnection *connection;
 static GHashTable *pn_hash;
 
+static GHashTable *clients_table;
+
+struct _clients_notify {
+	int id;
+	GHashTable *remove;
+} *clients_notify;
+
 struct connman_private_network {
 	char *owner;
 	char *path;
@@ -181,6 +188,18 @@ static void tethering_restart(struct connman_ippool *pool, void *user_data)
 	__connman_tethering_set_enabled();
 }
 
+static void unregister_client(gpointer key,
+					gpointer value, gpointer user_data)
+{
+	const char *addr = key;
+	__connman_tethering_client_unregister(addr);
+}
+
+static void unregister_all_clients(void)
+{
+	g_hash_table_foreach(clients_table, unregister_client, NULL);
+}
+
 int __connman_tethering_set_enabled(void)
 {
 	int index;
@@ -225,7 +244,8 @@ int __connman_tethering_set_enabled(void)
 			connman_ipaddress_calc_netmask_len(subnet_mask),
 			broadcast);
 	if (err < 0 && err != -EALREADY) {
-		__connman_ippool_unref(dhcp_ippool);
+		__connman_ippool_free(dhcp_ippool);
+		dhcp_ippool = NULL;
 		__connman_bridge_remove(BRIDGE_NAME);
 		__sync_fetch_and_sub(&tethering_enabled, 1);
 		return -EADDRNOTAVAIL;
@@ -261,7 +281,8 @@ int __connman_tethering_set_enabled(void)
 						24 * 3600, dns);
 	if (!tethering_dhcp_server) {
 		__connman_bridge_disable(BRIDGE_NAME);
-		__connman_ippool_unref(dhcp_ippool);
+		__connman_ippool_free(dhcp_ippool);
+		dhcp_ippool = NULL;
 		__connman_bridge_remove(BRIDGE_NAME);
 		__sync_fetch_and_sub(&tethering_enabled, 1);
 		return -EOPNOTSUPP;
@@ -273,7 +294,8 @@ int __connman_tethering_set_enabled(void)
 		connman_error("Cannot enable NAT %d/%s", err, strerror(-err));
 		dhcp_server_stop(tethering_dhcp_server);
 		__connman_bridge_disable(BRIDGE_NAME);
-		__connman_ippool_unref(dhcp_ippool);
+		__connman_ippool_free(dhcp_ippool);
+		dhcp_ippool = NULL;
 		__connman_bridge_remove(BRIDGE_NAME);
 		__sync_fetch_and_sub(&tethering_enabled, 1);
 		return -EOPNOTSUPP;
@@ -298,6 +320,8 @@ void __connman_tethering_set_disabled(void)
 	if (__sync_fetch_and_sub(&tethering_enabled, 1) != 1)
 		return;
 
+	unregister_all_clients();
+
 	__connman_ipv6pd_cleanup();
 
 	index = connman_inet_ifindex(BRIDGE_NAME);
@@ -311,7 +335,8 @@ void __connman_tethering_set_disabled(void)
 
 	__connman_bridge_disable(BRIDGE_NAME);
 
-	__connman_ippool_unref(dhcp_ippool);
+	__connman_ippool_free(dhcp_ippool);
+	dhcp_ippool = NULL;
 
 	__connman_bridge_remove(BRIDGE_NAME);
 
@@ -321,6 +346,21 @@ void __connman_tethering_set_disabled(void)
 	private_network_secondary_dns = NULL;
 
 	DBG("tethering stopped");
+}
+
+static void append_client(gpointer key, gpointer value,
+						gpointer user_data)
+{
+	const char *addr = key;
+	DBusMessageIter *array = user_data;
+
+	dbus_message_iter_append_basic(array, DBUS_TYPE_STRING,
+							&addr);
+}
+
+void __connman_tethering_list_clients(DBusMessageIter *array)
+{
+	g_hash_table_foreach(clients_table, append_client, array);
 }
 
 static void setup_tun_interface(unsigned int flags, unsigned change,
@@ -400,7 +440,7 @@ static void remove_private_network(gpointer user_data)
 
 	__connman_nat_disable(BRIDGE_NAME);
 	connman_rtnl_remove_watch(pn->iface_watch);
-	__connman_ippool_unref(pn->pool);
+	__connman_ippool_free(pn->pool);
 
 	if (pn->watch > 0) {
 		g_dbus_remove_watch(connection, pn->watch);
@@ -435,6 +475,70 @@ static void ippool_disconnect(struct connman_ippool *pool, void *user_data)
 	DBG("block used externally");
 
 	g_hash_table_remove(pn_hash, pn->path);
+}
+
+static gboolean client_send_changed(gpointer data)
+{
+	DBusMessage *signal;
+	DBusMessageIter iter, array;
+
+	DBG("");
+
+	clients_notify->id = 0;
+
+	signal = dbus_message_new_signal(CONNMAN_MANAGER_PATH,
+				CONNMAN_MANAGER_INTERFACE, "TetheringClientsChanged");
+	if (!signal)
+		return FALSE;
+
+	dbus_message_iter_init_append(signal, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+				DBUS_TYPE_STRING_AS_STRING, &array);
+
+	g_hash_table_foreach(clients_table, append_client, &array);
+
+	dbus_message_iter_close_container(&iter, &array);
+
+	dbus_message_iter_init_append(signal, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
+				DBUS_TYPE_STRING_AS_STRING, &array);
+
+	g_hash_table_foreach(clients_notify->remove, append_client, &array);
+
+	dbus_message_iter_close_container(&iter, &array);
+
+	dbus_connection_send(connection, signal, NULL);
+	dbus_message_unref(signal);
+
+	g_hash_table_remove_all(clients_notify->remove);
+
+	return FALSE;
+}
+
+static void client_schedule_changed(void)
+{
+	if (clients_notify->id != 0)
+		return;
+
+	clients_notify->id = g_timeout_add(100, client_send_changed, NULL);
+}
+
+static void client_added(const char *addr)
+{
+	DBG("client %s", addr);
+
+	g_hash_table_remove(clients_notify->remove, addr);
+
+	client_schedule_changed();
+}
+
+static void client_removed(const char *addr)
+{
+	DBG("client %s", addr);
+
+	g_hash_table_replace(clients_notify->remove, g_strdup(addr), NULL);
+
+	client_schedule_changed();
 }
 
 int __connman_private_network_request(DBusMessage *msg, const char *owner)
@@ -526,6 +630,18 @@ int __connman_private_network_release(const char *path)
 	return 0;
 }
 
+void __connman_tethering_client_register(const char *addr)
+{
+	g_hash_table_insert(clients_table, g_strdup(addr), NULL);
+	client_added(addr);
+}
+
+void __connman_tethering_client_unregister(const char *addr)
+{
+	g_hash_table_remove(clients_table, addr);
+	client_removed(addr);
+}
+
 int __connman_tethering_init(void)
 {
 	DBG("");
@@ -539,6 +655,12 @@ int __connman_tethering_init(void)
 	pn_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
 						NULL, remove_private_network);
 
+	clients_table = g_hash_table_new_full(g_str_hash, g_str_equal,
+							g_free, NULL);
+
+	clients_notify = g_new0(struct _clients_notify, 1);
+	clients_notify->remove = g_hash_table_new_full(g_str_hash, g_str_equal,
+							g_free, NULL);
 	return 0;
 }
 
@@ -559,5 +681,13 @@ void __connman_tethering_cleanup(void)
 		return;
 
 	g_hash_table_destroy(pn_hash);
+
+	g_hash_table_destroy(clients_notify->remove);
+	g_free(clients_notify);
+	clients_notify = NULL;
+
+	g_hash_table_destroy(clients_table);
+	clients_table = NULL;
+
 	dbus_connection_unref(connection);
 }

@@ -25,7 +25,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
@@ -406,6 +405,40 @@ done:
 	close(sk);
 
 	return err;
+}
+
+bool connman_inet_is_ifup(int index)
+{
+	int sk;
+	struct ifreq ifr;
+	bool ret = false;
+
+	sk = socket(PF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+	if (sk < 0) {
+		connman_warn("Failed to open socket");
+		return false;
+	}
+
+	memset(&ifr, 0, sizeof(ifr));
+	ifr.ifr_ifindex = index;
+
+	if (ioctl(sk, SIOCGIFNAME, &ifr) < 0) {
+		connman_warn("Failed to get interface name for interface %d", index);
+		goto done;
+	}
+
+	if (ioctl(sk, SIOCGIFFLAGS, &ifr) < 0) {
+		connman_warn("Failed to get interface flags for index %d", index);
+		goto done;
+	}
+
+	if (ifr.ifr_flags & IFF_UP)
+		ret = true;
+
+done:
+	close(sk);
+
+	return ret;
 }
 
 struct in6_ifreq {
@@ -2868,8 +2901,6 @@ out:
 		data->callback(addr, index, data->user_data);
 
 	g_free(data);
-
-	return;
 }
 
 /*
@@ -2971,9 +3002,10 @@ int connman_inet_check_ipaddress(const char *host)
 	addr = NULL;
 
 	result = getaddrinfo(host, NULL, &hints, &addr);
-	if (result == 0)
+	if (result == 0) {
 		result = addr->ai_family;
-	freeaddrinfo(addr);
+		freeaddrinfo(addr);
+	}
 
 	return result;
 }
@@ -3631,6 +3663,9 @@ char **__connman_inet_get_pnp_nameservers(const char *pnp_file)
 
 	if (!pnp_file)
 		pnp_file = "/proc/net/pnp";
+
+	if (!g_file_test(pnp_file, G_FILE_TEST_EXISTS))
+		goto out;
 
 	if (!g_file_get_contents(pnp_file, &pnp, NULL, &error)) {
 		connman_error("%s: Cannot read %s %s\n", __func__,

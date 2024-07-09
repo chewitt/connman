@@ -13,7 +13,8 @@ include_HEADERS = include/log.h include/plugin.h \
 			include/session.h include/ipaddress.h include/agent.h \
 			include/inotify.h include/peer.h include/machine.h \
 			include/technology.h include/iptables_ext.h \
-			include/dbus.h gdbus/gdbus.h include/nat.h
+			include/dbus.h gdbus/gdbus.h include/nat.h \
+			include/acd.h include/tethering.h
 
 if VPN
 include_HEADERS += include/task.h include/setting.h \
@@ -63,10 +64,6 @@ endif
 #else
 #stats_sources = src/nostats.c
 #endif
-
-if BACKTRACE
-backtrace_sources = src/backtrace.c
-endif
 
 shared_sources = src/shared/util.h src/shared/util.c \
 		src/shared/arp.h src/shared/arp.c
@@ -144,7 +141,7 @@ src_connmand_SOURCES = $(gdhcp_sources) $(gweb_sources) $(stats_sources) \
 			src/6to4.c src/ippool.c src/bridge.c src/nat.c \
 			src/ipaddress.c src/inotify.c src/ipv6pd.c src/peer.c \
 			src/peer_service.c src/machine.c src/util.c \
-			src/wakeup_timer.c src/fsid.c \
+			src/acd.c src/wakeup_timer.c src/fsid.c \
 			src/access.c vpn/vpn-settings.c vpn/vpn-util.c \
 			src/sailfish_iptables_ext.c src/iptables-validate.c \
 			src/login_manager.c
@@ -353,6 +350,7 @@ client_connmanctl_SOURCES = client/dbus_helpers.h client/dbus_helpers.c \
 			client/input.h client/input.c \
 			client/agent.h client/agent.c \
 			client/peers.h client/peers.c \
+			client/tethering.h client/tethering.c \
 			client/vpnconnections.h client/vpnconnections.c \
 			client/main.c
 

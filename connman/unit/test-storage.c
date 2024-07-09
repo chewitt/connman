@@ -570,6 +570,12 @@ int __connman_device_request_scan(enum connman_service_type type)
 	return 0;
 }
 
+int __connman_device_request_scan_full(enum connman_service_type type)
+{
+	return 0;
+}
+
+
 int connman_device_set_scanning(struct connman_device *device,
 				enum connman_service_type type, bool scanning)
 {
@@ -746,6 +752,11 @@ enum connman_access __connman_access_tech_set_property
 			const char *sender, enum connman_access default_access)
 {
 	return CONNMAN_ACCESS_ALLOW;
+}
+
+void __connman_peer_disconnect_all(void)
+{
+	return;
 }
 
 struct passwd {

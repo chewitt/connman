@@ -510,6 +510,9 @@ static void free_session(struct connman_session *session)
 	if (session->notify_watch > 0)
 		g_dbus_remove_watch(connection, session->notify_watch);
 
+	g_dbus_unregister_interface(connection, session->session_path,
+				    CONNMAN_SESSION_INTERFACE);
+
 	destroy_policy_config(session);
 	g_slist_free(session->info->config.allowed_bearers);
 	g_free(session->info->config.allowed_interface);
@@ -1402,8 +1405,9 @@ static int session_policy_config_cb(struct connman_session *session,
 					session_methods, NULL, NULL,
 					session, NULL)) {
 		connman_error("Failed to register %s", session->session_path);
+		g_hash_table_remove(session_hash, session->session_path);
 		err = -EINVAL;
-		goto err;
+		goto err_notify;
 	}
 
 	reply = g_dbus_create_reply(creation_data->pending,
@@ -1428,12 +1432,13 @@ static int session_policy_config_cb(struct connman_session *session,
 	return 0;
 
 err:
-	g_hash_table_remove(session_hash, session->session_path);
+	cleanup_session(session);
+
+err_notify:
 	reply = __connman_error_failed(creation_data->pending, -err);
 	g_dbus_send_message(connection, reply);
 	creation_data->pending = NULL;
 
-	cleanup_session(session);
 	cleanup_creation_data(creation_data);
 
 	return err;
@@ -1993,7 +1998,7 @@ static void ipconfig_changed(struct connman_service *service,
 	}
 }
 
-static struct connman_notifier session_notifier = {
+static const struct connman_notifier session_notifier = {
 	.name			= "session",
 	.service_state_changed	= service_state_changed,
 	.ipconfig_changed	= ipconfig_changed,

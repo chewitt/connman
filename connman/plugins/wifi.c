@@ -30,9 +30,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <linux/if_arp.h>
-#include <linux/wireless.h>
 #include <net/ethernet.h>
+#include <linux/wireless.h>
 
 #ifndef IFF_LOWER_UP
 #define IFF_LOWER_UP	0x10000
@@ -55,6 +54,7 @@
 #include <connman/provision.h>
 #include <connman/utsname.h>
 #include <connman/machine.h>
+#include <connman/tethering.h>
 
 #include <gsupplicant/gsupplicant.h>
 
@@ -162,7 +162,7 @@ static GList *iface_list = NULL;
 
 static GList *pending_wifi_device = NULL;
 static GList *p2p_iface_list = NULL;
-bool wfd_service_registered = false;
+static bool wfd_service_registered = false;
 
 static void start_autoscan(struct connman_device *device);
 static int tech_set_tethering(struct connman_technology *technology,
@@ -598,10 +598,8 @@ static int peer_register_service(const unsigned char *specification,
 		params = fill_in_peer_service_params(specification,
 						specification_length, query,
 						query_length, version);
-		if (!params) {
-			ret = -ENOMEM;
+		if (!params)
 			continue;
-		}
 
 		if (!found) {
 			ret_f = g_supplicant_interface_p2p_add_service(iface,
@@ -686,10 +684,8 @@ static int peer_unregister_service(const unsigned char *specification,
 		params = fill_in_peer_service_params(specification,
 						specification_length, query,
 						query_length, version);
-		if (!params) {
-			ret = -ENOMEM;
+		if (!params)
 			continue;
-		}
 
 		ret = g_supplicant_interface_p2p_del_service(iface, params);
 		if (ret != 0 && ret != -EINPROGRESS)
@@ -1783,7 +1779,7 @@ static gboolean p2p_find_stop(gpointer data)
 	connman_device_set_scanning(device, CONNMAN_SERVICE_TYPE_P2P, false);
 
 	connman_device_unref(device);
-	reset_autoscan(device);
+	start_autoscan(device);
 
 	return FALSE;
 }
@@ -1852,11 +1848,8 @@ static int p2p_find(struct connman_device *device)
  * Note that the hidden scan is only used when connecting to this specific
  * hidden AP first time. It is not used when system autoconnects to hidden AP.
  */
-static int wifi_scan(enum connman_service_type type,
-			struct connman_device *device,
-			const char *ssid, unsigned int ssid_len,
-			const char *identity, const char* passphrase,
-			const char *security, void *user_data)
+static int wifi_scan(struct connman_device *device,
+			struct connman_device_scan_params *params)
 {
 	struct wifi_data *wifi = connman_device_get_data(device);
 	GSupplicantScanParams *scan_params = NULL;
@@ -1876,14 +1869,15 @@ static int wifi_scan(enum connman_service_type type,
 	if (wifi->tethering)
 		return -EBUSY;
 
-	if (type == CONNMAN_SERVICE_TYPE_P2P)
+	if (params->type == CONNMAN_SERVICE_TYPE_P2P)
 		return p2p_find(device);
 
-	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface, ssid);
+	DBG("device %p wifi %p hidden ssid %s", device, wifi->interface,
+		params->ssid);
 
 	scanning = connman_device_get_scanning(device, CONNMAN_SERVICE_TYPE_WIFI);
 
-	if (!ssid || ssid_len == 0 || ssid_len > 32) {
+	if (!params->ssid || params->ssid_len == 0 || params->ssid_len > 32) {
 		if (scanning)
 			return -EALREADY;
 
@@ -1912,8 +1906,8 @@ static int wifi_scan(enum connman_service_type type,
 			return -ENOMEM;
 		}
 
-		memcpy(scan_ssid->ssid, ssid, ssid_len);
-		scan_ssid->ssid_len = ssid_len;
+		memcpy(scan_ssid->ssid, params->ssid, params->ssid_len);
+		scan_ssid->ssid_len = params->ssid_len;
 		scan_params->ssids = g_slist_prepend(scan_params->ssids,
 								scan_ssid);
 		scan_params->num_ssids = 1;
@@ -1929,12 +1923,12 @@ static int wifi_scan(enum connman_service_type type,
 			wifi->hidden = NULL;
 		}
 
-		memcpy(hidden->ssid, ssid, ssid_len);
-		hidden->ssid_len = ssid_len;
-		hidden->identity = g_strdup(identity);
-		hidden->passphrase = g_strdup(passphrase);
-		hidden->security = g_strdup(security);
-		hidden->user_data = user_data;
+		memcpy(hidden->ssid, params->ssid, params->ssid_len);
+		hidden->ssid_len = params->ssid_len;
+		hidden->identity = g_strdup(params->identity);
+		hidden->passphrase = g_strdup(params->passphrase);
+		hidden->security = g_strdup(params->security);
+		hidden->user_data = params->user_data;
 		wifi->hidden = hidden;
 
 		if (scanning) {
@@ -1948,7 +1942,7 @@ static int wifi_scan(enum connman_service_type type,
 	} else if (wifi->connected) {
 		g_supplicant_free_scan_params(scan_params);
 		return wifi_scan_simple(device);
-	} else {
+	} else if (!params->force_full_scan) {
 		ret = get_latest_connections(driver_max_ssids, scan_params);
 		if (ret <= 0) {
 			g_supplicant_free_scan_params(scan_params);
@@ -2723,8 +2717,6 @@ static void ap_create_fail(GSupplicantInterface *interface)
 		g_free(wifi->tethering_param);
 		wifi->tethering_param = NULL;
 	}
-
-	return;
 }
 
 static unsigned char calculate_strength(GSupplicantNetwork *supplicant_network)
@@ -2979,6 +2971,32 @@ static void network_associated(GSupplicantNetwork *network)
 	interface_state(interface);
 }
 
+static void sta_authorized(GSupplicantInterface *interface,
+					const char *addr)
+{
+	struct wifi_data *wifi = g_supplicant_interface_get_data(interface);
+
+	DBG("wifi %p station %s authorized", wifi, addr);
+
+	if (!wifi || !wifi->tethering)
+		return;
+
+	__connman_tethering_client_register(addr);
+}
+
+static void sta_deauthorized(GSupplicantInterface *interface,
+					const char *addr)
+{
+	struct wifi_data *wifi = g_supplicant_interface_get_data(interface);
+
+	DBG("wifi %p station %s deauthorized", wifi, addr);
+
+	if (!wifi || !wifi->tethering)
+		return;
+
+	__connman_tethering_client_unregister(addr);
+}
+
 static void apply_peer_services(GSupplicantPeer *peer,
 				struct connman_peer *connman_peer)
 {
@@ -3199,6 +3217,8 @@ static const GSupplicantCallbacks callbacks = {
 	.network_removed	= network_removed,
 	.network_changed	= network_changed,
 	.network_associated	= network_associated,
+	.sta_authorized		= sta_authorized,
+	.sta_deauthorized	= sta_deauthorized,
 	.peer_found		= peer_found,
 	.peer_lost		= peer_lost,
 	.peer_changed		= peer_changed,

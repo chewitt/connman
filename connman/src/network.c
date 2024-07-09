@@ -28,6 +28,8 @@
 #include <stdio.h>
 
 #include "connman.h"
+#include <connman/acd.h>
+#include "src/shared/arp.h"
 
 /*
  * How many times to send RS with the purpose of
@@ -52,6 +54,8 @@
  */
 #define RTR_SOLICITATION_INTERVAL	4
 
+#define DHCP_RETRY_TIMEOUT     10
+
 static GSList *network_list = NULL;
 static GSList *driver_list = NULL;
 
@@ -71,6 +75,9 @@ struct connman_network {
 	int index;
 	int router_solicit_count;
 	int router_solicit_refresh_count;
+	struct acd_host *acd_host;
+	guint ipv4ll_timeout;
+	guint dhcp_timeout;
 
 	struct connman_network_driver *driver;
 	void *driver_data;
@@ -166,6 +173,260 @@ static void set_configuration(struct connman_network *network,
 					type);
 }
 
+void connman_network_append_acddbus(DBusMessageIter *dict,
+		struct connman_network *network)
+{
+	if (!network->acd_host)
+		return;
+
+	acd_host_append_dbus_property(network->acd_host, dict);
+}
+
+static int start_acd(struct connman_network *network);
+
+static void remove_ipv4ll_timeout(struct connman_network *network)
+{
+	if (network->ipv4ll_timeout > 0) {
+		g_source_remove(network->ipv4ll_timeout);
+		network->ipv4ll_timeout = 0;
+	}
+}
+
+static void acd_host_ipv4_available(struct acd_host *acd, gpointer user_data)
+{
+	struct connman_network *network = user_data;
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	int err;
+
+	if (!network)
+		return;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4) {
+		connman_error("Service has no IPv4 configuration");
+		return;
+	}
+
+	err = __connman_ipconfig_address_add(ipconfig_ipv4);
+	if (err < 0)
+		goto err;
+
+	err = __connman_ipconfig_gateway_add(ipconfig_ipv4);
+	if (err < 0)
+		goto err;
+
+	__connman_service_save(service);
+
+	return;
+
+err:
+	connman_network_set_error(__connman_service_get_network(service),
+				CONNMAN_NETWORK_ERROR_CONFIGURE_FAIL);
+}
+
+static int start_ipv4ll(struct connman_network *network)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	struct in_addr addr;
+	char *address;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return -EINVAL;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4) {
+		connman_error("Service has no IPv4 configuration");
+		return -EINVAL;
+	}
+
+	/* Apply random IPv4 address. */
+	addr.s_addr = htonl(arp_random_ip());
+	address = inet_ntoa(addr);
+	if (!address) {
+		connman_error("Could not convert IPv4LL random address %u",
+				addr.s_addr);
+		return -EINVAL;
+	}
+	__connman_ipconfig_set_local(ipconfig_ipv4, address);
+
+	connman_info("Probing IPv4LL address %s", address);
+	return start_acd(network);
+}
+
+static gboolean start_ipv4ll_ontimeout(gpointer data)
+{
+	struct connman_network *network = data;
+
+	if (!network)
+		return FALSE;
+
+	/* Start IPv4LL ACD. */
+	start_ipv4ll(network);
+
+	return FALSE;
+}
+
+static void acd_host_ipv4_lost(struct acd_host *acd, gpointer user_data)
+{
+	struct connman_network *network = user_data;
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	enum connman_ipconfig_type type;
+	enum connman_ipconfig_method method;
+
+	if (!network)
+		return;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4) {
+		connman_error("Service has no IPv4 configuration");
+		return;
+	}
+
+	type = __connman_ipconfig_get_config_type(ipconfig_ipv4);
+	if (type != CONNMAN_IPCONFIG_TYPE_IPV4)
+		return;
+
+	__connman_ipconfig_address_remove(ipconfig_ipv4);
+
+	method = __connman_ipconfig_get_method(ipconfig_ipv4);
+	if (method == CONNMAN_IPCONFIG_METHOD_DHCP) {
+		/*
+		 * We have one more chance for DHCP. If this fails
+		 * acd_host_ipv4_conflict will be called.
+		 */
+		network = __connman_service_get_network(service);
+		if (network)
+			__connman_network_enable_ipconfig(network, ipconfig_ipv4);
+	} else {
+		/* Start IPv4LL ACD. */
+		start_ipv4ll(network);
+	}
+}
+
+static void acd_host_ipv4_conflict(struct acd_host *acd, gpointer user_data)
+{
+	struct connman_network *network = user_data;
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	enum connman_ipconfig_method method;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4) {
+		connman_error("Service has no IPv4 configuration");
+		return;
+	}
+
+	method = __connman_ipconfig_get_method(ipconfig_ipv4);
+	connman_info("%s conflict counts=%u", __FUNCTION__,
+			acd_host_get_conflicts_count(acd));
+
+	if (method == CONNMAN_IPCONFIG_METHOD_DHCP &&
+			acd_host_get_conflicts_count(acd) < 2) {
+		connman_info("%s Sending DHCP decline", __FUNCTION__);
+		__connman_dhcp_decline(ipconfig_ipv4);
+
+		connman_network_set_connected_dhcp_later(network, DHCP_RETRY_TIMEOUT);
+		__connman_ipconfig_set_local(ipconfig_ipv4, NULL);
+	} else {
+		if (method == CONNMAN_IPCONFIG_METHOD_DHCP) {
+			__connman_ipconfig_set_method(ipconfig_ipv4,
+					CONNMAN_IPCONFIG_METHOD_AUTO);
+			__connman_dhcp_decline(ipconfig_ipv4);
+		}
+		/* Start IPv4LL ACD. */
+		start_ipv4ll(network);
+	}
+}
+
+static void acd_host_ipv4_maxconflict(struct acd_host *acd, gpointer user_data)
+{
+	struct connman_network *network = user_data;
+
+	remove_ipv4ll_timeout(network);
+	connman_info("Had maximum number of conflicts. Next IPv4LL address will be "
+			"tried in %d seconds", RATE_LIMIT_INTERVAL);
+	/* Wait, then start IPv4LL ACD. */
+	network->ipv4ll_timeout =
+		g_timeout_add_seconds_full(G_PRIORITY_HIGH,
+				RATE_LIMIT_INTERVAL,
+				start_ipv4ll_ontimeout,
+				network,
+				NULL);
+}
+
+static int start_acd(struct connman_network *network)
+{
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig_ipv4;
+	const char* address;
+	struct in_addr addr;
+
+	remove_ipv4ll_timeout(network);
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return -EINVAL;
+
+	ipconfig_ipv4 = __connman_service_get_ip4config(service);
+	if (!ipconfig_ipv4) {
+		connman_error("Service has no IPv4 configuration");
+		return -EINVAL;
+	}
+
+	if (!network->acd_host) {
+		int index;
+
+		index = __connman_ipconfig_get_index(ipconfig_ipv4);
+		network->acd_host = acd_host_new(index,
+				connman_service_get_dbuspath(service));
+		if (!network->acd_host) {
+			connman_error("Could not create ACD data structure");
+			return -EINVAL;
+		}
+
+		acd_host_register_event(network->acd_host,
+				ACD_HOST_EVENT_IPV4_AVAILABLE,
+				acd_host_ipv4_available, network);
+		acd_host_register_event(network->acd_host,
+				ACD_HOST_EVENT_IPV4_LOST,
+				acd_host_ipv4_lost, network);
+		acd_host_register_event(network->acd_host,
+				ACD_HOST_EVENT_IPV4_CONFLICT,
+				acd_host_ipv4_conflict, network);
+		acd_host_register_event(network->acd_host,
+				ACD_HOST_EVENT_IPV4_MAXCONFLICT,
+				acd_host_ipv4_maxconflict, network);
+	}
+
+	address = __connman_ipconfig_get_local(ipconfig_ipv4);
+	if (!address)
+		return -EINVAL;
+
+	connman_info("Starting ACD for address %s", address);
+	if (inet_pton(AF_INET, address, &addr) != 1)
+		connman_error("Could not convert address %s", address);
+
+	acd_host_start(network->acd_host, htonl(addr.s_addr));
+
+	return 0;
+}
+
 static void dhcp_success(struct connman_network *network,
 					struct connman_ipconfig *ipconfig)
 {
@@ -187,6 +448,14 @@ static void dhcp_success(struct connman_network *network,
 	}
 
 	DBG("lease acquired for ipconfig %p", ipconfig_ipv4);
+
+	if (connman_setting_get_bool("AddressConflictDetection")) {
+		err = start_acd(network);
+		if (!err)
+			return;
+
+		/* On error proceed without ACD. */
+	}
 
 	err = __connman_ipconfig_address_add(ipconfig_ipv4);
 	if (err < 0)
@@ -259,6 +528,14 @@ static int set_connected_manual(struct connman_network *network)
 	if (!__connman_ipconfig_get_local(ipconfig))
 		__connman_service_read_ip4config(service);
 
+	if (connman_setting_get_bool("AddressConflictDetection")) {
+		err = start_acd(network);
+		if (!err)
+			return 0;
+
+		/* On error proceed without ACD. */
+	}
+
 	err = __connman_ipconfig_address_add(ipconfig);
 	if (err < 0)
 		goto err;
@@ -271,6 +548,14 @@ err:
 	return err;
 }
 
+static void remove_dhcp_timeout(struct connman_network *network)
+{
+	if (network->dhcp_timeout > 0) {
+		g_source_remove(network->dhcp_timeout);
+		network->dhcp_timeout = 0;
+	}
+}
+
 static int set_connected_dhcp(struct connman_network *network)
 {
 	struct connman_service *service;
@@ -278,6 +563,7 @@ static int set_connected_dhcp(struct connman_network *network)
 	int err;
 
 	DBG("network %p", network);
+	remove_dhcp_timeout(network);
 
 	service = connman_service_lookup_from_network(network);
 	ipconfig_ipv4 = __connman_service_get_ip4config(service);
@@ -291,6 +577,44 @@ static int set_connected_dhcp(struct connman_network *network)
 	}
 
 	return 0;
+}
+
+static gboolean set_connected_dhcp_timout(gpointer data)
+{
+	struct connman_network *network = data;
+	struct connman_service *service;
+	struct connman_ipconfig *ipconfig;
+	enum connman_ipconfig_method method;
+
+	network->dhcp_timeout = 0;
+
+	service = connman_service_lookup_from_network(network);
+	if (!service)
+		return FALSE;
+
+	ipconfig = __connman_service_get_ip4config(service);
+	if (!ipconfig)
+		return FALSE;
+
+	/* Method is still DHCP? */
+	method = __connman_ipconfig_get_method(ipconfig);
+	if (method == CONNMAN_IPCONFIG_METHOD_DHCP)
+		set_connected_dhcp(network);
+
+	return FALSE;
+}
+
+void connman_network_set_connected_dhcp_later(struct connman_network *network,
+		uint32_t sec)
+{
+	remove_dhcp_timeout(network);
+
+	network->dhcp_timeout =
+		g_timeout_add_seconds_full(G_PRIORITY_HIGH,
+				sec,
+				set_connected_dhcp_timout,
+				network,
+				NULL);
 }
 
 static int manual_ipv6_set(struct connman_network *network,
@@ -544,7 +868,6 @@ static void receive_refresh_rs_reply(struct nd_router_advert *reply,
 	network->router_solicit_refresh_count = 0;
 
 	connman_network_unref(network);
-	return;
 }
 
 int __connman_network_refresh_rs_ipv6(struct connman_network *network,
@@ -720,6 +1043,7 @@ static void set_disconnected(struct connman_network *network)
 			__connman_service_notify_ipv4_configuration(service);
 			/* fall through */
 		case CONNMAN_IPCONFIG_METHOD_DHCP:
+			remove_dhcp_timeout(network);
 			__connman_dhcp_stop(ipconfig_ipv4);
 			break;
 		}
@@ -973,6 +1297,7 @@ static void network_destruct(struct connman_network *network)
 	g_free(network->node);
 	g_free(network->name);
 	g_free(network->identifier);
+	acd_host_free(network->acd_host);
 
 	network->device = NULL;
 
@@ -1008,8 +1333,12 @@ struct connman_network *connman_network_create(const char *identifier,
 
 	network->type       = type;
 	network->identifier = ident;
+	network->acd_host = NULL;
+	network->ipv4ll_timeout = 0;
 
 	network_list = g_slist_prepend(network_list, network);
+
+	network->dhcp_timeout = 0;
 
 	DBG("network %p identifier %s type %s", network, identifier,
 		type2string(type));
@@ -1605,6 +1934,10 @@ int __connman_network_disconnect(struct connman_network *network)
 
 	DBG("network %p", network);
 
+	remove_ipv4ll_timeout(network);
+	if (network->acd_host)
+		acd_host_stop(network->acd_host);
+
 	if (!network->connected && !network->connecting &&
 						!network->associating)
 		return -ENOTCONN;
@@ -1645,13 +1978,16 @@ int __connman_network_clear_ipconfig(struct connman_network *network,
 	case CONNMAN_IPCONFIG_METHOD_OFF:
 	case CONNMAN_IPCONFIG_METHOD_FIXED:
 		return -EINVAL;
-	case CONNMAN_IPCONFIG_METHOD_AUTO:
-		release_dhcpv6(network);
-		break;
 	case CONNMAN_IPCONFIG_METHOD_MANUAL:
 		__connman_ipconfig_address_remove(ipconfig);
 		break;
+	case CONNMAN_IPCONFIG_METHOD_AUTO:
+		release_dhcpv6(network);
+		if (type == CONNMAN_IPCONFIG_TYPE_IPV6)
+			break;
+		/* fall through */
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
+		remove_dhcp_timeout(network);
 		__connman_dhcp_stop(ipconfig_ipv4);
 		break;
 	}

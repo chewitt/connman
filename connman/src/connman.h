@@ -704,6 +704,7 @@ void __connman_device_list(DBusMessageIter *iter, void *user_data);
 enum connman_service_type __connman_device_get_service_type(struct connman_device *device);
 struct connman_device *__connman_device_find_device(enum connman_service_type type);
 int __connman_device_request_scan(enum connman_service_type type);
+int __connman_device_request_scan_full(enum connman_service_type type);
 int __connman_device_request_hidden_scan(struct connman_device *device,
 				const char *ssid, unsigned int ssid_len,
 				const char *identity, const char *passphrase,
@@ -775,12 +776,15 @@ bool __connman_config_get_bool(GKeyFile *key_file,
 bool __connman_config_address_provisioned(const char *address,
 					const char *netmask);
 
+#include <connman/tethering.h>
+
 int __connman_tethering_init(void);
 void __connman_tethering_cleanup(void);
 
 const char *__connman_tethering_get_bridge(void);
 int __connman_tethering_set_enabled(void);
 void __connman_tethering_set_disabled(void);
+void __connman_tethering_list_clients(DBusMessageIter *array);
 
 int __connman_private_network_request(DBusMessage *msg, const char *owner);
 int __connman_private_network_release(const char *path);
@@ -999,6 +1003,7 @@ void __connman_peer_cleanup(void);
 
 void __connman_peer_list_struct(DBusMessageIter *array);
 const char *__connman_peer_get_path(struct connman_peer *peer);
+void __connman_peer_disconnect_all(void);
 
 int __connman_peer_service_init(void);
 void __connman_peer_service_cleanup(void);
@@ -1165,15 +1170,7 @@ typedef void (*ippool_collision_cb_t) (struct connman_ippool *pool,
 int __connman_ippool_init(void);
 void __connman_ippool_cleanup(void);
 
-#define __connman_ippool_ref(ipconfig) \
-	__connman_ippool_ref_debug(ipconfig, __FILE__, __LINE__, __func__)
-#define __connman_ippool_unref(ipconfig) \
-	__connman_ippool_unref_debug(ipconfig, __FILE__, __LINE__, __func__)
-
-struct connman_ippool *__connman_ippool_ref_debug(struct connman_ippool *pool,
-			const char *file, int line, const char *caller);
-void __connman_ippool_unref_debug(struct connman_ippool *pool,
-			const char *file, int line, const char *caller);
+void __connman_ippool_free(struct connman_ippool *pool);
 
 struct connman_ippool *__connman_ippool_create(int index,
 					unsigned int start,

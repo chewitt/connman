@@ -32,8 +32,8 @@
 
 extern struct connman_plugin_desc __connman_builtin_blacklist_monitor;
 
-struct connman_rtnl *rtnl;
-struct connman_notifier *notifier;
+static struct connman_rtnl *rtnl;
+static const struct connman_notifier *notifier;
 
 struct connman_ipconfig {
 	enum connman_ipconfig_type type;
@@ -175,14 +175,14 @@ bool connman_network_is_configured(struct connman_network *network,
 
 /* Notifier stubs */ 
 
-int connman_notifier_register(struct connman_notifier *n)
+int connman_notifier_register(const struct connman_notifier *n)
 {
 	notifier = n;
 	g_assert(notifier);
 	return 0;
 }
 
-void connman_notifier_unregister(struct connman_notifier *n)
+void connman_notifier_unregister(const struct connman_notifier *n)
 {
 	g_assert(n);
 

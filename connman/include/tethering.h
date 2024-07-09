@@ -2,7 +2,8 @@
  *
  *  Connection Manager
  *
- *  Copyright (C) 2018  Chris Novakovic
+ *  Copyright (C) 2007-2013  Intel Corporation. All rights reserved.
+ *  Copyright (C) 2018 GlobalLogic. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License version 2 as
@@ -19,42 +20,18 @@
  *
  */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
+#ifndef __CONNMAN_TETHERING_H
+#define __CONNMAN_TETHERING_H
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#include <errno.h>
+void __connman_tethering_client_register(const char *addr);
+void __connman_tethering_client_unregister(const char *addr);
 
-#include "connman.h"
-
-int __connman_stats_service_register(struct connman_service *service)
-{
-	return -ENOTSUP;
+#ifdef __cplusplus
 }
+#endif
 
-void __connman_stats_service_unregister(struct connman_service *service)
-{
-}
-
-int  __connman_stats_update(struct connman_service *service,
-				bool roaming,
-				struct connman_stats_data *data)
-{
-	return 0;
-}
-
-int __connman_stats_get(struct connman_service *service,
-				bool roaming,
-				struct connman_stats_data *data)
-{
-	return 0;
-}
-
-int __connman_stats_init(void)
-{
-	return 0;
-}
-
-void __connman_stats_cleanup(void)
-{
-}
+#endif /* __CONNMAN_TETHERING_H */

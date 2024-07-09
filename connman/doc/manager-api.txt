@@ -46,6 +46,11 @@ Methods		dict GetProperties()
 
 			Possible Errors: [service].Error.InvalidArguments
 
+		array{string} GetTetheringClients() [experimental]
+
+			Returns a sorted list of MAC addresses of clients
+			connected to tethered technologies.
+
 		object ConnectProvider(dict provider)	[deprecated]
 
 			Connect to a VPN specified by the given provider
@@ -210,11 +215,12 @@ Signals		TechnologyAdded(object path, dict properties)
 
 		ServicesChanged(array{object, dict}, array{object})
 
-			Signals a list of services that have been changed
-			via the first array. And a list of service that
-			have been removed via the second array.
+			This signal indicates a change in the services.
+			List of all services currently registered is passed
+			via the first array. And a list of services that have
+			been removed via the second array.
 
-			The list of added services is sorted. The dictionary
+			The list of all services is sorted. The dictionary
 			with the properties might be empty in case none of
 			the properties have changed. Or only contains the
 			properties that have changed.
@@ -233,11 +239,12 @@ Signals		TechnologyAdded(object path, dict properties)
 
 		PeersChanged(array{object, dict}, array{object}) [experimental]
 
-			Signals a list of peers that have been changed via the
-			first array. And a list of peer that have been removed
-			via the second array.
+			This signal indicates a change in the peers. List of
+			all peers currently registered is passed via the first
+			array. And a list of peers that have been removed via
+			the second array.
 
-			The list of changed peers is sorted. The dictionary
+			The list of all peers is sorted. The dictionary
 			with the properties might be empty in case none of the
 			properties have changed. Or only contains the
 			properties that have changed.
@@ -252,6 +259,13 @@ Signals		TechnologyAdded(object path, dict properties)
 			will not be emitted if only a property of the peer
 			object changes. For that it is required to watch the
 			PropertyChanged signal of the peer object.
+
+		TetheringClientsChanged(array{string}, array{string}) [experimental]
+
+			This signal indicates a change in the tethering clients.
+			List of all tethering clients currently registered connman is
+			passed via the first array. And a list of tethering clients that
+			have been removed via the second array.
 
 		PropertyChanged(string name, variant value)
 

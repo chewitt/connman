@@ -23,7 +23,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -381,7 +380,7 @@ static void decode_msg(struct ntp_data *nd, void *base, size_t len,
 		tmx.status |= STA_DEL;
 
 	if (adjtimex(&tmx) < 0) {
-		connman_error("Failed to adjust time");
+		connman_error("Failed to adjust time: %s (%d)", strerror(errno), errno);
 		nd->cb(false, nd->user_data);
 		return;
 	}
@@ -569,7 +568,6 @@ err:
 		close(nd->transmit_fd);
 
 	nd->cb(false, nd->user_data);
-	return;
 }
 
 int __connman_ntp_start(char *server, __connman_ntp_cb_t callback,

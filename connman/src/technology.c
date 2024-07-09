@@ -121,7 +121,7 @@ static void rfkill_check(gpointer key, gpointer value, gpointer user_data)
 	struct connman_rfkill *rfkill = value;
 	enum connman_service_type type = GPOINTER_TO_INT(user_data);
 
-	/* Calling _technology_rfkill_add will update the tech. */
+	/* Calling _technology_add_rfkill will update the tech. */
 	if (rfkill->type == type)
 		__connman_technology_add_rfkill(rfkill->index, type,
 				rfkill->softblock, rfkill->hardblock);
@@ -413,6 +413,15 @@ const char *__connman_technology_get_regdom(enum connman_service_type type)
 		return technology->regdom;
 
 	return global_regdom;
+}
+
+enum connman_service_type connman_technology_get_type
+				(struct connman_technology *technology)
+{
+	if (!technology)
+		return CONNMAN_SERVICE_TYPE_UNKNOWN;
+
+	return technology->type;
 }
 
 bool connman_technology_get_wifi_tethering(const char **ssid,
@@ -730,7 +739,7 @@ static gboolean technology_pending_reply(gpointer user_data)
 	struct connman_technology *technology = user_data;
 	DBusMessage *reply;
 
-	/* Power request timedout, send ETIMEDOUT. */
+	/* Power request timed out, send ETIMEDOUT. */
 	if (technology->pending_reply) {
 		reply = __connman_error_failed(technology->pending_reply, ETIMEDOUT);
 		if (reply)
@@ -936,6 +945,7 @@ static int technology_disable(struct connman_technology *technology)
 	if (technology->type == CONNMAN_SERVICE_TYPE_P2P) {
 		technology->enable_persistent = false;
 		__connman_device_stop_scan(CONNMAN_SERVICE_TYPE_P2P);
+		__connman_peer_disconnect_all();
 		return technology_disabled(technology);
 	} else if (technology->type == CONNMAN_SERVICE_TYPE_WIFI) {
 		struct connman_technology *p2p;
@@ -1336,7 +1346,7 @@ static DBusMessage *scan(DBusConnection *conn, DBusMessage *msg, void *data)
 	technology->scan_pending =
 		g_slist_prepend(technology->scan_pending, msg);
 
-	err = __connman_device_request_scan(technology->type);
+	err = __connman_device_request_scan_full(technology->type);
 	if (err < 0)
 		reply_scan_pending(technology, err);
 
@@ -1724,7 +1734,7 @@ int __connman_technology_add_device(struct connman_device *device)
 		int err = __connman_device_enable(device);
 		/*
 		 * connman_technology_add_device() calls __connman_device_enable()
-		 * but since the device is already enabled, the calls does not
+		 * but since the device is already enabled, the call does not
 		 * propagate through to connman_technology_enabled via
 		 * connman_device_set_powered.
 		 */
@@ -1828,7 +1838,7 @@ int __connman_technology_set_offlinemode(bool offlinemode)
 	 * resuming offlinemode from last saved profile. We need that
 	 * information in rfkill_update, otherwise it falls back on the
 	 * technology's persistent state. Hence we set the offline mode here
-	 * but save it & call the notifier only if its successful.
+	 * but save it & call the notifier only if it is successful.
 	 */
 
 	global_offlinemode = offlinemode;
