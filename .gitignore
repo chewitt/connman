@@ -66,6 +66,7 @@ tools/stats-ringbuffer-dump
 tools/private-network-test
 tools/session-test
 tools/netlink-test
+tools/dnsproxy-standalone
 unit/test-ippool
 unit/test-nat
 unit/test-iptables
