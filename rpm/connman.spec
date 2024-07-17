@@ -275,7 +275,6 @@ fi
 systemctl daemon-reload || :
 
 %files
-%defattr(-,root,root,-)
 %license COPYING
 %{_sbindir}/connman-vpnd
 %{_sbindir}/connmand
@@ -295,32 +294,26 @@ systemctl daemon-reload || :
 %{_unitdir}/connman-wait-online.service
 
 %files devel
-%defattr(-,root,root,-)
 %{_includedir}/%{name}
 %{_libdir}/pkgconfig/*.pc
 
 %files test
-%defattr(-,root,root,-)
 %{_libdir}/%{name}/test
 
 %files tools
-%defattr(-,root,root,-)
 %{_bindir}/connmanctl
 %{_libdir}/%{name}/tools
 
 %files configs-mer
-%defattr(-,root,root,-)
 %dir %{_sysconfdir}/connman
 %config %{_sysconfdir}/connman/main.conf
 %config %{_sysconfdir}/connman/vpn-dbus-access.conf
 
 %files doc
-%defattr(-,root,root,-)
 %{_mandir}/man*/%{name}*.*
 %{_docdir}/%{name}-%{version}
 
 %files vpn-scripts
-%defattr(-,root,root,-)
 %license COPYING
 %dir %{_libdir}/%{name}/scripts
 %{_libdir}/%{name}/scripts/libppp-plugin.so
@@ -328,37 +321,30 @@ systemctl daemon-reload || :
 %{_libdir}/%{name}/scripts/openvpn-script
 
 %files plugin-vpn-l2tp
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/l2tp.so
 
 %files plugin-vpn-openvpn
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/openvpn.so
 
 %files plugin-vpn-openconnect
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/openconnect.so
 
 %files plugin-vpn-pptp
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/pptp.so
 
 %files plugin-vpn-vpnc
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/vpnc.so
 
 %files plugin-vpn-openfortivpn
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/openfortivpn.so
 
 %files plugin-vpn-wireguard
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/plugins-vpn/wireguard.so
 
