@@ -138,7 +138,7 @@ struct connman_task *connman_task_create(const char *program,
  * connman_task_destory:
  * @task: task structure
  *
- * Remove and destory #task
+ * Remove and destroy #task
  */
 void connman_task_destroy(struct connman_task *task)
 {
@@ -228,7 +228,7 @@ int connman_task_add_variable(struct connman_task *task,
 /**
  * connman_task_set_notify:
  * @task: task structure
- * @member: notifcation method name
+ * @member: notification method name
  * @function: notification callback
  * @user_data: optional notification user data
  *

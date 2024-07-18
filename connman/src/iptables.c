@@ -62,7 +62,7 @@
  * - ipt_entry->target_offset =  Size of ipt_entry + matches
  * - ipt_entry->next_offset =  Size of ipt_entry + matches + target
  * - IPT_SO_SET_REPLACE is used to write a table (contains the complete
- * - hook_entry and overflow mark the begining and the end of a chain, e.g
+ * - hook_entry and overflow mark the beginning and the end of a chain, e.g
  *     entry hook: pre/in/fwd/out/post -1/0/352/504/-1
  *     underflow:  pre/in/fwd/out/post -1/200/352/904/-1
  *   means that INPUT starts at offset 0 and ends at 200 (the start offset to
@@ -868,7 +868,7 @@ static int iptables_add_entry(struct connman_iptables *table,
 	entry_before = before->data;
 
 	/*
-	 * We've just appended/insterted a new entry. All references
+	 * We've just appended/inserted a new entry. All references
 	 * should be bumped accordingly.
 	 */
 	update_targets_reference(table, entry_before, e, false);
@@ -3214,7 +3214,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 	 *  - if '!' is found, set the invert flag to true and
 	 *    removes the '!' from the optarg string and jumps
 	 *    back to getopt to reparse the current optarg string.
-	 *    After reparsing the invert flag is reseted to false.
+	 *    After reparsing the invert flag is reset to false.
 	 *  - If 'm' or 'j' is found then call either
 	 *    prepare_matches() or prepare_target(). Those function
 	 *    will modify (extend) the longopts for getopt_long.
@@ -3482,7 +3482,7 @@ static int parse_rule_spec(struct connman_iptables *table,
 				optarg[0] = '\0';
 
 				/*
-				 * And recall getopt_long without reseting
+				 * And recall getopt_long without resetting
 				 * invert.
 				 */
 				continue;

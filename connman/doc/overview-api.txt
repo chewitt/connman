@@ -214,7 +214,7 @@ with spaces.
 
 In addition to WiFi naming, WiFi networks are subject to a grouping policy
 performed around SSID and security type. This means that one service will be
-seen for N WiFi networks providing the same SSID and the same security metod.
+seen for N WiFi networks providing the same SSID and the same security method.
 For instance, if 5 APs are servicing an SSID called "TEST" with WPA2
 authentication and 3 APs are servicing the same SSID with open authentication
 method, the user will see only two services listed with the name "TEST"

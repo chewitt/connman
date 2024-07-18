@@ -1681,13 +1681,14 @@ int __connman_ipconfig_address_remove(struct connman_ipconfig *ipconfig)
 	case CONNMAN_IPCONFIG_METHOD_OFF:
 		break;
 	case CONNMAN_IPCONFIG_METHOD_AUTO:
-	case CONNMAN_IPCONFIG_METHOD_FIXED:
 	case CONNMAN_IPCONFIG_METHOD_DHCP:
-	case CONNMAN_IPCONFIG_METHOD_MANUAL:
 		err = __connman_ipconfig_address_unset(ipconfig);
 		connman_ipaddress_clear(ipconfig->address);
 
 		return err;
+	case CONNMAN_IPCONFIG_METHOD_FIXED:
+	case CONNMAN_IPCONFIG_METHOD_MANUAL:
+		return __connman_ipconfig_address_unset(ipconfig);
 	}
 
 	return 0;

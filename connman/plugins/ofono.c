@@ -615,7 +615,7 @@ static void context_set_active_reply(struct modem_data *modem,
 	if (success) {
 		/*
 		 * Don't handle do anything on success here. oFono will send
-		 * the change via PropertyChanged singal.
+		 * the change via PropertyChanged signal.
 		 */
 		return;
 	}
@@ -668,7 +668,7 @@ static void cdma_cm_set_powered_reply(struct modem_data *modem,
 	if (success) {
 		/*
 		 * Don't handle do anything on success here. oFono will send
-		 * the change via PropertyChanged singal.
+		 * the change via PropertyChanged signal.
 		 */
 		return;
 	}
@@ -2973,7 +2973,7 @@ static void ofono_exit(void)
 
 	if (modem_hash) {
 		/*
-		 * We should propably wait for the SetProperty() reply
+		 * We should probably wait for the SetProperty() reply
 		 * message, because ...
 		 */
 		g_hash_table_foreach(modem_hash, modem_power_down, NULL);

@@ -65,6 +65,8 @@ Allowed fields:
   interface is used. The byte values must have prefix 0 added,
   the bytes must be separated by ":" char and its length must be
   exactly 2 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 = 17 characters.
+- DeviceName: The interface name where this setting should be applied, e.g.
+  eth0. The MAC address will take preference over DeviceName in matching.
 - Nameservers: Comma separated list of nameservers
 - SearchDomains: Comma separated list of DNS search domains
 - Timeservers: Comma separated list of timeservers

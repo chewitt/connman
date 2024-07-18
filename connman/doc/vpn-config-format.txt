@@ -39,7 +39,8 @@ Each provisioned provider must start with the [provider_*] tag.
 Replace * with an identifier unique to the config file.
 
 Allowed fields:
-- Type: Provider type. Value of OpenConnect, OpenVPN, VPNC, L2TP or PPTP
+- Type: Provider type. Value of OpenConnect, OpenVPN, VPNC, L2TP, PPTP or
+        WireGuard
 
 VPN related parameters (M = mandatory, O = optional):
 - Name: A user defined name for the VPN (M)
@@ -277,7 +278,6 @@ L2TP VPN supports following options (see xl2tpd.conf(5) and pppd(8) for details)
  PPPD.ReqMPPEStateful mppe-stateful         Allow MPPE to use stateful mode (O)
  PPPD.NoVJ           novj                   No Van Jacobson compression (O)
 
-
 PPTP VPN supports following options (see pptp(8) and pppd(8) for details)
  Option name         pptp config value    Description
  PPTP.User           -                    PPTP user name, asked from the user
@@ -301,6 +301,19 @@ PPTP VPN supports following options (see pptp(8) and pppd(8) for details)
  PPPD.RequirMPPE128  require-mppe-128     Require the use of MPPE 128 bit (O)
  PPPD.RequirMPPEStateful mppe-stateful    Allow MPPE to use stateful mode (O)
  PPPD.NoVJ           novj                 No Van Jacobson compression (O)
+
+WireGuard VPN supports following options
+ Option name                              Description
+ WireGuard.Address                        Internal IP address (local/netmask/peer)
+ WireGuard.ListPort                       Local listen port (optional)
+ WireGuard.DNS                            List of nameservers separated
+                                          by comma (optional)
+ WireGuard.PrivateKey                     Private key of interface
+ WireGuard.PublicKey                      Public key of peer
+ WireGuard.PresharedKey                   Preshared key of peer (optional)
+ WireGuard.AllowedIPs                     See Cryptokey Routing
+ WireGuard.EndpointPort                   Endpoint listen port (optional)
+ WireGuard.PersistentKeepalive            Keep alive in seconds (optional)
 
 
 Example
@@ -341,3 +354,16 @@ Domain = my.home.network
 OpenVPN.CACert = /etc/certs/cacert.pem
 OpenVPN.Cert = /etc/certs/cert.pem
 OpenVPN.Key = /etc/certs/cert.key
+
+[provider_wireguard]
+Type = WireGuard
+Name = Wireguard VPN Tunnel
+Host = 3.2.5.6
+Domain = my.home.network
+WireGuard.Address = 10.2.0.2/24
+WireGuard.ListenPort = 47824
+WireGuard.DNS = 10.2.0.1
+WireGuard.PrivateKey = qKIj010hDdWSjQQyVCnEgthLXusBgm3I6HWrJUaJymc=
+WireGuard.PublicKey = zzqUfWGIil6QxrAGz77HE5BGUEdD2PgHYnCg3CDKagE=
+WireGuard.AllowedIPs = 0.0.0.0/0, ::/0
+WireGuard.EndpointPort = 51820

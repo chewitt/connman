@@ -26,7 +26,7 @@ behind this is that a session doesn't request a connection for itself
 instead waits until another session actively requires to go online.
 This is comparable to piggy-backing.
 
-Connnect()
+Connect()
  +------+
  |      v
 +------------+

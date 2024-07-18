@@ -27,6 +27,8 @@ autom4te.cache
 test-driver
 m4/
 !m4/configmake.m4
+TAGS
+cscope.*
 
 connman.pc
 include/connman

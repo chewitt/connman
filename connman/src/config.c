@@ -75,6 +75,7 @@ struct connman_config_service {
 	char *ipv6_gateway;
 	char *ipv6_privacy;
 	char *mac;
+	char *devname;
 	bool mdns;
 	char **nameservers;
 	char **search_domains;
@@ -125,6 +126,7 @@ static bool cleanup = false;
 #define SERVICE_KEY_IPv6               "IPv6"
 #define SERVICE_KEY_IPv6_PRIVACY       "IPv6.Privacy"
 #define SERVICE_KEY_MAC                "MAC"
+#define SERVICE_KEY_DEVICE_NAME	       "DeviceName"
 #define SERVICE_KEY_NAMESERVERS        "Nameservers"
 #define SERVICE_KEY_SEARCH_DOMAINS     "SearchDomains"
 #define SERVICE_KEY_TIMESERVERS        "Timeservers"
@@ -163,6 +165,7 @@ static const char *service_possible_keys[] = {
 	SERVICE_KEY_IPv6,
 	SERVICE_KEY_IPv6_PRIVACY,
 	SERVICE_KEY_MAC,
+	SERVICE_KEY_DEVICE_NAME,
 	SERVICE_KEY_MDNS,
 	SERVICE_KEY_NAMESERVERS,
 	SERVICE_KEY_SEARCH_DOMAINS,
@@ -269,6 +272,7 @@ free_only:
 	g_free(config_service->ipv6_gateway);
 	g_free(config_service->ipv6_privacy);
 	g_free(config_service->mac);
+	g_free(config_service->devname);
 	g_strfreev(config_service->nameservers);
 	g_strfreev(config_service->search_domains);
 	g_strfreev(config_service->timeservers);
@@ -490,6 +494,12 @@ static bool load_service_generic(GKeyFile *keyfile,
 		service->mac = str;
 	}
 
+	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_DEVICE_NAME, NULL);
+	if (str) {
+		g_free(service->devname);
+		service->devname = str;
+	}
+
 	str = __connman_config_get_string(keyfile, group, SERVICE_KEY_DOMAIN, NULL);
 	if (str) {
 		g_free(service->domain_name);
@@ -543,6 +553,7 @@ err:
 	g_free(service->ipv6_address);
 	g_free(service->ipv6_gateway);
 	g_free(service->mac);
+	g_free(service->devname);
 	g_free(service);
 
 	return false;
@@ -1361,6 +1372,22 @@ static int try_provision_service(struct connman_config_service *config,
 		DBG("wants %s has %s", config->mac, device_addr);
 
 		if (g_ascii_strcasecmp(device_addr, config->mac) != 0)
+			return -ENOENT;
+	} else if (config->devname) {
+		struct connman_device *device;
+		const char *devname;
+
+		device = connman_network_get_device(network);
+		if (!device) {
+			connman_error("Network device is missing");
+			return -ENODEV;
+		}
+
+		devname = connman_device_get_string(device, "Interface");
+
+		DBG("wants %s has %s", config->devname, devname);
+
+		if (g_ascii_strcasecmp(devname, config->devname) != 0)
 			return -ENOENT;
 	}
 

@@ -331,7 +331,7 @@ static void ts_recheck_enable(void)
 }
 
 /*
- * This function must be called everytime the default service changes, the
+ * This function must be called every time the default service changes, the
  * service timeserver(s) or gateway changes or the global timeserver(s) changes.
  */
 int __connman_timeserver_sync(struct connman_service *default_service)

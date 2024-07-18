@@ -41,6 +41,8 @@
 #include <connman/provision.h>
 #include <connman/wakeup_timer.h>
 
+#include "src/shared/util.h"
+
 #include "connman.h"
 
 #define CONNECT_TIMEOUT		120
@@ -53,7 +55,7 @@
 
 #define VPN_AUTOCONNECT_TIMEOUT_DEFAULT 1
 #define VPN_AUTOCONNECT_TIMEOUT_STEP 30
-#define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD 270
+#define VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD 270
 
 /* (Some) property names */
 #define PROP_ACCESS                     "Access"
@@ -313,7 +315,7 @@ struct connman_service {
 	bool hidden;
 	bool ignore;
 	bool autoconnect;
-	GDateTime *modified;
+	struct timeval modified;
 	unsigned int order;
 	char *name;
 	char *passphrase;
@@ -396,10 +398,8 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
-static void start_online_check(struct connman_service *service,
-				enum connman_ipconfig_type type);
-
 static void vpn_auto_connect(void);
+
 static bool is_connecting(enum connman_service_state state);
 static bool is_connected(enum connman_service_state state);
 
@@ -785,31 +785,6 @@ void __connman_service_set_split_routing(struct connman_service *service,
 	__connman_service_split_routing_changed(service);
 }
 
-static void update_modified(struct connman_service *service)
-{
-	GTimeZone *tz;
-
-	if (service->modified)
-		g_date_time_unref(service->modified);
-
-	tz = g_time_zone_new_local();
-	service->modified = g_date_time_new_now(tz);
-	g_time_zone_unref(tz);
-}
-
-static void update_modified_from_iso8601(struct connman_service *service,
-					char *str)
-{
-	GTimeZone *tz;
-
-	if (service->modified)
-		g_date_time_unref(service->modified);
-
-	tz = g_time_zone_new_local();
-	service->modified = g_date_time_new_from_iso8601(str, tz);
-	g_time_zone_unref(tz);
-}
-
 int __connman_service_load_modifiable(struct connman_service *service)
 {
 	GKeyFile *keyfile;
@@ -852,7 +827,7 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Modified", NULL);
 	if (str) {
-		update_modified_from_iso8601(service, str);
+		util_iso8601_to_timeval(str, &service->modified);
 		g_free(str);
 	}
 
@@ -950,7 +925,7 @@ static void service_apply(struct connman_service *service, GKeyFile *keyfile)
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Modified", NULL);
 	if (str) {
-		update_modified_from_iso8601(service, str);
+		util_iso8601_to_timeval(str, &service->modified);
 		g_free(str);
 	}
 
@@ -1201,13 +1176,11 @@ static int service_save(struct connman_service *service)
 	set_config_string(keyfile, service->identifier, PROP_ACCESS,
 					service_get_access(service));
 
-	if (service->modified) {
-		str = g_date_time_format_iso8601(service->modified);
-		if (str) {
-			g_key_file_set_string(keyfile, service->identifier,
-							"Modified", str);
-			g_free(str);
-		}
+	str = util_timeval_to_iso8601(&service->modified);
+	if (str) {
+		g_key_file_set_string(keyfile, service->identifier, "Modified",
+					str);
+		g_free(str);
 	}
 
 	if (service->passphrase && strlen(service->passphrase) > 0)
@@ -1658,11 +1631,12 @@ int __connman_service_nameserver_append(struct connman_service *service,
 	else
 		nameservers = service->nameservers;
 
-	for (i = 0; nameservers && nameservers[i]; i++)
-		if (g_strcmp0(nameservers[i], nameserver) == 0)
-			return -EEXIST;
-
 	if (nameservers) {
+		for (i = 0; nameservers[i]; i++) {
+			if (g_strcmp0(nameservers[i], nameserver) == 0)
+				return -EEXIST;
+		}
+
 		len = g_strv_length(nameservers);
 		nameservers = g_try_renew(char *, nameservers, len + 2);
 	} else {
@@ -2354,6 +2328,16 @@ static const struct connman_service_boolean_property service_saved =
 
 #define autoconnect_changed(s) service_boolean_changed(s, &service_autoconnect)
 
+static void service_set_new_service(struct connman_service *service,
+							bool new_service)
+{
+	const bool newval = new_service ? true : false;
+	if (service->new_service != newval) {
+		service->new_service = newval;
+		service_boolean_changed(service, &service_saved);
+	}
+}
+
 bool connman_service_set_autoconnect(struct connman_service *service,
 							bool autoconnect)
 {
@@ -2368,16 +2352,6 @@ bool connman_service_set_autoconnect(struct connman_service *service,
 							service->autoconnect);
 
 	return true;
-}
-
-static void service_set_new_service(struct connman_service *service,
-							bool new_service)
-{
-	const bool newval = new_service ? true : false;
-	if (service->new_service != newval) {
-		service->new_service = newval;
-		service_boolean_changed(service, &service_saved);
-	}
 }
 
 static void append_security(DBusMessageIter *iter, void *user_data)
@@ -4947,9 +4921,6 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 	}
 }
 
-static void set_error(struct connman_service *service,
-					enum connman_service_error error);
-
 void __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
@@ -4964,6 +4935,9 @@ void __connman_service_wispr_start(struct connman_service *service,
 
 	__connman_wispr_start(service, type);
 }
+
+static void set_error(struct connman_service *service,
+					enum connman_service_error error);
 
 static DBusMessage *set_property(DBusConnection *conn,
 					DBusMessage *msg, void *user_data)
@@ -5513,7 +5487,7 @@ static void service_complete(struct connman_service *service)
 {
 	reply_pending(service, EIO);
 
-	update_modified(service);
+	gettimeofday(&service->modified, NULL);
 	service_save(service);
 }
 
@@ -5701,8 +5675,6 @@ static GList *preferred_tech_list_get(void)
 	return tech_data.preferred_list;
 }
 
-static int service_indicate_state(struct connman_service *service);
-
 static void set_always_connecting_technologies()
 {
 	unsigned int *always_connected_techs =
@@ -5739,6 +5711,8 @@ static bool autoconnect_already_connecting(struct connman_service *service,
 
 	return false;
 }
+
+static int service_indicate_state(struct connman_service *service);
 
 static bool auto_connect_service(GList *services,
 				enum connman_service_connect_reason reason,
@@ -5964,7 +5938,7 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 			continue;
 
 		if (is_connected(service->state) ||
-				is_connecting(service->state)) {
+					is_connecting(service->state)) {
 			if (!service->do_split_routing)
 				need_split = true;
 
@@ -6015,13 +5989,13 @@ static gboolean run_vpn_auto_connect(gpointer data) {
 		goto out;
 	}
 
-	/* Increase the attempt count up to the treshold.*/
-	if (attempts < VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD)
+	/* Increase the attempt count up to the threshold.*/
+	if (attempts < VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD)
 		attempts++;
 
 	/*
 	 * Timeout increases with 1s after VPN_AUTOCONNECT_TIMEOUT_STEP amount
-	 * of attempts made. After VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_TRESHOLD is
+	 * of attempts made. After VPN_AUTOCONNECT_TIMEOUT_ATTEMPTS_THRESHOLD is
 	 * reached the delay does not increase.
 	 */
 	timeout = timeout + (int)(attempts / VPN_AUTOCONNECT_TIMEOUT_STEP);
@@ -6679,7 +6653,7 @@ int __connman_service_move(struct connman_service *service,
 		}
 	}
 
-	update_modified(service);
+	gettimeofday(&service->modified, NULL);
 	service_save(service);
 	service_save(target);
 
@@ -7020,9 +6994,6 @@ static void service_free(gpointer user_data)
 
 	if (service->ssid)
 		g_bytes_unref(service->ssid);
-
-	if (service->modified)
-		g_date_time_unref(service->modified);
 
 	if (current_default == service)
 		current_default = NULL;
@@ -8107,7 +8078,7 @@ static int service_indicate_state(struct connman_service *service)
 							"WiFi.UseWPS", false);
 		}
 
-		update_modified(service);
+		gettimeofday(&service->modified, NULL);
 		service_save(service);
 
 		domain_changed(service);
@@ -10279,7 +10250,7 @@ __connman_service_create_from_provider(struct connman_provider *provider)
 	 * exist set current time as modify time if service is saved as is.
 	 */
 	if (__connman_service_load_modifiable(service) != 0)
-		update_modified(service);
+		gettimeofday(&service->modified, NULL);
 
 	service->order = service->do_split_routing ? 0 : 10;
 	service->favorite = true;

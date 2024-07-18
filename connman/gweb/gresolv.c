@@ -330,7 +330,8 @@ static int match_gai_table(struct sockaddr *sa, const struct gai_table *tbl)
 	}
 }
 
-#define DQUAD(_a,_b,_c,_d) ( ((_a)<<24) | ((_b)<<16) | ((_c)<<8) | (_d) )
+#define DQUAD(_a,_b,_c,_d) ( (((uint32_t)_a)<<24) | (((uint32_t)_b)<<16) | \
+				(((uint32_t)_c)<<8) | ((uint32_t)_d) )
 #define V4MATCH(addr, a,b,c,d, m) ( ((addr) ^ DQUAD(a,b,c,d)) >> (32 - (m)) )
 
 #define RFC3484_SCOPE_LINK	2
@@ -341,7 +342,7 @@ static int addr_scope(struct sockaddr *sa)
 {
 	if (sa->sa_family == AF_INET) {
 		struct sockaddr_in *sin = (void *)sa;
-		guint32 addr = ntohl(sin->sin_addr.s_addr);
+		uint32_t addr = ntohl(sin->sin_addr.s_addr);
 
 		if (V4MATCH(addr, 169,254,0,0, 16) ||
 					V4MATCH(addr, 127,0,0,0, 8))

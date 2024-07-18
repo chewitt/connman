@@ -42,6 +42,9 @@ static GDBusProxy *agent_proxy;
 static GHashTable *adapters;
 static GHashTable *devices;
 static GHashTable *networks;
+static GHashTable *known_networks;
+static GHashTable *stations;
+static GHashTable *access_points;
 static bool agent_registered;
 
 #define IWD_SERVICE			"net.connman.iwd"
@@ -50,6 +53,9 @@ static bool agent_registered;
 #define IWD_ADAPTER_INTERFACE		"net.connman.iwd.Adapter"
 #define IWD_DEVICE_INTERFACE		"net.connman.iwd.Device"
 #define IWD_NETWORK_INTERFACE		"net.connman.iwd.Network"
+#define IWD_KNOWN_NETWORK_INTERFACE	"net.connman.iwd.KnownNetwork"
+#define IWD_STATION_INTERFACE		"net.connman.iwd.Station"
+#define IWD_AP_INTERFACE		"net.connman.iwd.AccessPoint"
 
 #define IWD_AGENT_INTERFACE		"net.connman.iwd.Agent"
 #define IWD_AGENT_ERROR_INTERFACE	"net.connman.iwd.Agent.Error"
@@ -61,6 +67,9 @@ struct iwd_adapter {
 	char *vendor;
 	char *model;
 	bool powered;
+	bool ad_hoc;
+	bool station;
+	bool ap;
 };
 
 struct iwd_device {
@@ -70,7 +79,7 @@ struct iwd_device {
 	char *name;
 	char *address;
 	bool powered;
-	bool scanning;
+	char *mode;
 
 	struct connman_device *device;
 };
@@ -82,9 +91,39 @@ struct iwd_network {
 	char *name;
 	char *type;
 	bool connected;
+	char *known_network;
 
 	struct iwd_device *iwdd;
 	struct connman_network *network;
+};
+
+struct iwd_known_network {
+	GDBusProxy *proxy;
+	char *path;
+	char *name;
+	char *type;
+	bool hidden;
+	char *last_connected_time;
+	bool auto_connect;
+	int auto_connect_id;
+};
+
+struct iwd_station {
+	GDBusProxy *proxy;
+	char *path;
+	char *state;
+	char *connected_network;
+	bool scanning;
+};
+
+struct iwd_ap {
+	GDBusProxy *proxy;
+	char *path;
+	bool started;
+
+	int index;
+	char *bridge;
+	struct connman_technology *tech;
 };
 
 static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
@@ -98,6 +137,27 @@ static const char *proxy_get_string(GDBusProxy *proxy, const char *property)
 	dbus_message_iter_get_basic(&iter, &str);
 
 	return str;
+}
+
+static GSList *proxy_get_strings(GDBusProxy *proxy, const char *property)
+{
+	DBusMessageIter array, entry;
+	GSList *list = NULL;
+
+	if (!g_dbus_proxy_get_property(proxy, property, &array))
+		return NULL;
+
+	dbus_message_iter_recurse(&array, &entry);
+
+	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRING){
+		const char *val;
+
+		dbus_message_iter_get_basic(&entry, &val);
+		list = g_slist_prepend(list, g_strdup(val));
+		dbus_message_iter_next(&entry);
+	}
+
+	return list;
 }
 
 static bool proxy_get_bool(GDBusProxy *proxy, const char *property)
@@ -181,7 +241,11 @@ static void cm_network_connect_cb(DBusMessage *message, void *user_data)
 			return;
 
 		DBG("%s connect failed: %s", path, dbus_error);
-		connman_network_set_error(iwdn->network,
+		if (!strcmp(dbus_error, "net.connman.iwd.Failed"))
+			connman_network_set_error(iwdn->network,
+					CONNMAN_NETWORK_ERROR_INVALID_KEY);
+		else
+			connman_network_set_error(iwdn->network,
 					CONNMAN_NETWORK_ERROR_CONNECT_FAIL);
 		return;
 	}
@@ -238,16 +302,16 @@ static void cm_network_disconnect_cb(DBusMessage *message, void *user_data)
 static int cm_network_disconnect(struct connman_network *network)
 {
 	struct iwd_network *iwdn = connman_network_get_data(network);
-	struct iwd_device *iwdd;
+	struct iwd_station *iwds;
 
-	if (!iwdn)
+	if (!iwdn && !iwdn->iwdd)
 		return -EINVAL;
 
-	iwdd = g_hash_table_lookup(devices, iwdn->device);
-	if (!iwdd)
+	iwds = g_hash_table_lookup(stations, iwdn->iwdd->path);
+	if (!iwds)
 		return -EIO;
 
-	if (!g_dbus_proxy_method_call(iwdd->proxy, "Disconnect",
+	if (!g_dbus_proxy_method_call(iwds->proxy, "Disconnect",
 			NULL, cm_network_disconnect_cb, g_strdup(iwdn->path), g_free))
 		return -EIO;
 
@@ -339,6 +403,42 @@ static int cm_device_disable(struct connman_device *device)
 	return set_device_powered(device, false);
 }
 
+static void cm_device_scan_cb(DBusMessage *message, void *user_data)
+{
+	const char *path = user_data;
+	struct iwd_station *iwds;
+
+	iwds = g_hash_table_lookup(networks, path);
+	if (!iwds)
+		return;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		DBG("%s scan failed: %s", path, dbus_error);
+	}
+}
+
+static int cm_device_scan(struct connman_device *device,
+				struct connman_device_scan_params *params)
+{
+	struct iwd_device *iwdd = connman_device_get_data(device);
+	struct iwd_station *iwds;
+
+	if (strcmp(iwdd->mode, "station"))
+		return -EINVAL;
+
+	iwds = g_hash_table_lookup(stations, iwdd->path);
+	if (!iwds)
+		return -EIO;
+
+	if (!g_dbus_proxy_method_call(iwds->proxy, "Scan",
+			NULL, cm_device_scan_cb, g_strdup(iwds->path), g_free))
+		return -EIO;
+
+	return -EINPROGRESS;
+}
+
 static struct connman_device_driver device_driver = {
 	.name		= "iwd",
 	.type		= CONNMAN_DEVICE_TYPE_WIFI,
@@ -346,6 +446,7 @@ static struct connman_device_driver device_driver = {
 	.remove         = cm_device_remove,
 	.enable         = cm_device_enable,
 	.disable        = cm_device_disable,
+	.scan		= cm_device_scan,
 };
 
 static int cm_tech_probe(struct connman_technology *technology)
@@ -357,91 +458,268 @@ static void cm_tech_remove(struct connman_technology *technology)
 {
 }
 
+struct tech_cb_data {
+	struct iwd_device *iwdd;
+	char *path;
+	char *ssid;
+	char *passphrase;
+	char *bridge;
+	int index;
+	struct connman_technology *tech;
+};
+
+static void tech_cb_free(struct tech_cb_data *cbd)
+{
+	g_free(cbd->path);
+	g_free(cbd->ssid);
+	g_free(cbd->passphrase);
+	g_free(cbd->bridge);
+	g_free(cbd);
+}
+
+static int cm_change_tethering(struct iwd_device *iwdd,
+			struct connman_technology *technology,
+			const char *identifier, const char *passphrase,
+			const char *bridge, bool enabled);
+
+static void tech_ap_start_cb(DBusMessage *message, void *user_data)
+{
+
+	struct tech_cb_data *cbd = user_data;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		connman_warn("iwd device %s could not enable AccessPoint mode: %s",
+			cbd->path, dbus_error);
+		goto out;
+	}
+
+	/* wait for 'Started' signal */
+	return;
+out:
+	cm_change_tethering(cbd->iwdd, cbd->tech,
+			cbd->ssid, cbd->passphrase, cbd->bridge, false);
+	tech_cb_free(cbd);
+}
+
+static void tech_ap_stop_cb(DBusMessage *message, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+
+	if (dbus_message_get_type(message) == DBUS_MESSAGE_TYPE_ERROR) {
+		const char *dbus_error = dbus_message_get_error_name(message);
+
+		connman_warn("iwd device %s could not disable AccessPoint mode: %s",
+			cbd->path, dbus_error);
+		goto out;
+	}
+
+	return;
+out:
+	tech_cb_free(cbd);
+}
+
+static void ap_start_append(DBusMessageIter *iter, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+
+	DBG("ssid %s", cbd->ssid);
+	DBG("passphrase %s", cbd->passphrase);
+
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &cbd->ssid);
+	dbus_message_iter_append_basic(iter, DBUS_TYPE_STRING, &cbd->passphrase);
+}
+
+static void tech_enable_tethering_cb(const DBusError *error, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+	struct iwd_device *iwdd;
+	struct iwd_ap *iwdap;
+
+	DBG("");
+
+	iwdd = g_hash_table_lookup(devices, cbd->path);
+	if (!iwdd) {
+		DBG("device already removed");
+		goto out;
+	}
+
+	if (dbus_error_is_set(error)) {
+		connman_warn("iwd device %s could not enable AcessPoint mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	iwdap = g_hash_table_lookup(access_points, iwdd->path);
+	if (!iwdap) {
+		DBG("%s no ap object found", iwdd->path);
+		goto out;
+	}
+
+	iwdap->index = cbd->index;
+	iwdap->bridge = g_strdup(cbd->bridge);
+	iwdap->tech = cbd->tech;
+
+	if (!g_dbus_proxy_method_call(iwdap->proxy, "Start",
+				ap_start_append, tech_ap_start_cb, cbd, NULL)) {
+		connman_warn("iwd ap %s could not start AccessPoint mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	return;
+out:
+	if (iwdap) {
+		iwdap->index = -1;
+		g_free(iwdap->bridge);
+		iwdap->bridge = NULL;
+	}
+	tech_cb_free(cbd);
+}
+
+static void tech_disable_tethering_cb(const DBusError *error, void *user_data)
+{
+	struct tech_cb_data *cbd = user_data;
+	struct iwd_device *iwdd;
+	struct iwd_ap *iwdap;
+
+	DBG("");
+
+	iwdd = g_hash_table_lookup(devices, cbd->path);
+	if (!iwdd) {
+		DBG("device already removed");
+		goto out;
+	}
+
+	if (dbus_error_is_set(error)) {
+		connman_warn("iwd device %s could not enable Station mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	iwdap = g_hash_table_lookup(access_points, iwdd->path);
+	if (!iwdap) {
+		DBG("%s no ap object found", iwdd->path);
+		goto out;
+	}
+
+	g_free(iwdap->bridge);
+	iwdap->index = -1;
+	iwdap->bridge = NULL;
+	iwdap->tech = NULL;
+
+	if (!connman_inet_remove_from_bridge(cbd->index, cbd->bridge))
+		goto out;
+
+	connman_technology_tethering_notify(cbd->tech, false);
+
+	if (!g_dbus_proxy_method_call(iwdap->proxy, "Stop",
+					NULL, tech_ap_stop_cb, cbd, NULL)) {
+		connman_warn("iwd ap %s could not start AccessPoint mode: %s",
+			cbd->path, error->message);
+		goto out;
+	}
+
+	return;
+out:
+	tech_cb_free(cbd);
+}
+
+static int cm_change_tethering(struct iwd_device *iwdd,
+			struct connman_technology *technology,
+			const char *identifier, const char *passphrase,
+			const char *bridge, bool enabled)
+{
+	struct tech_cb_data *cbd;
+	int index;
+	const char *mode;
+	GDBusResultFunction cb;
+
+	index = connman_inet_ifindex(iwdd->name);
+	if (index < 0)
+		return -ENODEV;
+
+	cbd = g_new(struct tech_cb_data, 1);
+	cbd->iwdd = iwdd;
+	cbd->path = g_strdup(iwdd->path);
+	cbd->ssid = g_strdup(identifier);
+	cbd->passphrase = g_strdup(passphrase);
+	cbd->bridge = g_strdup(bridge);
+	cbd->tech = technology;
+	cbd->index = index;
+
+	if (enabled) {
+		mode = "ap";
+		cb = tech_enable_tethering_cb;
+	} else {
+		mode = "station";
+		cb = tech_disable_tethering_cb;
+	}
+
+	if (!g_dbus_proxy_set_property_basic(iwdd->proxy,
+			"Mode", DBUS_TYPE_STRING, &mode,
+			cb, cbd, NULL)) {
+		tech_cb_free(cbd);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int cm_tech_tethering(struct connman_technology *technology,
+			const char *identifier, const char *passphrase,
+			const char *bridge, bool enabled)
+{
+	GHashTableIter iter;
+	gpointer key, value;
+	int err = 0, res;
+
+	g_hash_table_iter_init(&iter, devices);
+
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
+		struct iwd_device *iwdd = value;
+		struct iwd_adapter *iwda;
+
+		iwda = g_hash_table_lookup(adapters, iwdd->adapter);
+		if (!iwda)
+			continue;
+
+		if (!iwda->station || !iwda->ap )
+			/* No support for Station and AccessPoint mode */
+			continue;
+
+		if (!enabled && !g_strcmp0("ap", iwdd->mode)) {
+			res = cm_change_tethering(iwdd, technology, identifier,
+						passphrase, bridge, enabled);
+			if (res)
+				connman_warn("%s switching to Station mode failed",
+					iwdd->path);
+			if (!err)
+				err = res;
+			continue;
+		}
+
+		if (enabled && !g_strcmp0("station", iwdd->mode)) {
+			err = cm_change_tethering(iwdd, technology, identifier,
+					passphrase, bridge, enabled);
+			if (err)
+				connman_warn("%s switching to AccessPoint mode failed",
+					iwdd->path);
+			break;
+		}
+	}
+
+	return err;
+}
+
 static struct connman_technology_driver tech_driver = {
 	.name		= "iwd",
 	.type		= CONNMAN_SERVICE_TYPE_WIFI,
 	.probe          = cm_tech_probe,
 	.remove         = cm_tech_remove,
+	.set_tethering	= cm_tech_tethering,
 };
-
-static unsigned char calculate_strength(int strength)
-{
-	unsigned char res;
-
-	/*
-	 * Network's maximum signal strength expressed in 100 * dBm.
-	 * The value is the range of 0 (strongest signal) to -10000
-	 * (weakest signal)
-	 *
-	 * ConnMan expects it in the range from 100 (strongest) to 0
-	 * (weakest).
-	 */
-	res = (unsigned char)((strength * -10000) / 100);
-
-	return res;
-}
-
-static void _update_signal_strength(const char *path, int16_t signal_strength)
-{
-	struct iwd_network *iwdn;
-
-	iwdn = g_hash_table_lookup(networks, path);
-	if (!iwdn)
-		return;
-
-	if (!iwdn->network)
-		return;
-
-	connman_network_set_strength(iwdn->network,
-					calculate_strength(signal_strength));
-}
-
-static void ordered_networks_cb(DBusMessage *message, void *user_data)
-{
-	DBusMessageIter array, entry;
-
-	DBG("");
-
-	if (!dbus_message_iter_init(message, &array))
-		return;
-
-	if (dbus_message_iter_get_arg_type(&array) != DBUS_TYPE_ARRAY)
-		return;
-
-	dbus_message_iter_recurse(&array, &entry);
-	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRUCT) {
-		DBusMessageIter value;
-		const char *path, *name, *type;
-		int16_t signal_strength;
-
-
-		dbus_message_iter_recurse(&entry, &value);
-
-		dbus_message_iter_get_basic(&value, &path);
-
-		dbus_message_iter_next(&value);
-		dbus_message_iter_get_basic(&value, &name);
-
-		dbus_message_iter_next(&value);
-		dbus_message_iter_get_basic(&value, &signal_strength);
-
-		dbus_message_iter_next(&value);
-		dbus_message_iter_get_basic(&value, &type);
-
-		_update_signal_strength(path, signal_strength);
-
-		dbus_message_iter_next(&entry);
-	}
-}
-
-static void update_signal_strength(struct iwd_device *iwdd)
-{
-	if (!g_dbus_proxy_method_call(iwdd->proxy,
-					"GetOrderedNetworks",
-					NULL, ordered_networks_cb,
-					NULL, NULL))
-		DBG("GetOrderedNetworks() failed");
-}
 
 static const char *security_remap(const char *security)
 {
@@ -498,7 +776,7 @@ static void add_network(const char *path, struct iwd_network *iwdn)
 	connman_network_set_blob(iwdn->network, "WiFi.SSID", iwdn->name,
 					strlen(iwdn->name));
 	connman_network_set_string(iwdn->network, "WiFi.Security",
-					iwdn->type);
+					security_remap(iwdn->type));
 	connman_network_set_string(iwdn->network, "WiFi.Mode", "managed");
 
 	if (connman_device_add_network(iwdd->device, iwdn->network) < 0) {
@@ -630,17 +908,14 @@ static void device_property_change(GDBusProxy *proxy, const char *name,
 		iwdd->powered = powered;
 
 		DBG("%s powered %d", path, iwdd->powered);
-	} else if (!strcmp(name, "Scanning")) {
-		dbus_bool_t scanning;
+	} else if (!strcmp(name, "Mode")) {
+		const char *mode;
 
-		dbus_message_iter_get_basic(iter, &scanning);
-		iwdd->scanning = scanning;
+		dbus_message_iter_get_basic(iter, &mode);
+		g_free(iwdd->mode);
+		iwdd->mode = g_strdup(mode);
 
-		DBG("%s scanning %d", path, iwdd->scanning);
-
-		if (!iwdd->scanning)
-			update_signal_strength(iwdd);
-
+		DBG("%s mode %s", path, iwdd->mode);
 	}
 }
 
@@ -667,6 +942,153 @@ static void network_property_change(GDBusProxy *proxy, const char *name,
 			update_network_connected(iwdn);
 		else
 			update_network_disconnected(iwdn);
+	}
+}
+
+static unsigned char calculate_strength(int strength)
+{
+	unsigned char res;
+
+	/*
+	 * Network's maximum signal strength expressed in 100 * dBm.
+	 * The value is the range of 0 (strongest signal) to -10000
+	 * (weakest signal)
+	 *
+	 * ConnMan expects it in the range from 100 (strongest) to 0
+	 * (weakest).
+	 */
+	res = (unsigned char)((strength + 10000) / 100);
+
+	return res;
+}
+
+static void _update_signal_strength(const char *path, int16_t signal_strength)
+{
+	struct iwd_network *iwdn;
+
+	iwdn = g_hash_table_lookup(networks, path);
+	if (!iwdn)
+		return;
+
+	connman_network_set_strength(iwdn->network,
+					calculate_strength(signal_strength));
+	connman_network_update(iwdn->network);
+}
+
+static void ordered_networks_cb(DBusMessage *message, void *user_data)
+{
+	DBusMessageIter array, entry;
+
+	DBG("");
+
+	if (!dbus_message_iter_init(message, &array))
+		return;
+
+	if (dbus_message_iter_get_arg_type(&array) != DBUS_TYPE_ARRAY)
+		return;
+
+	dbus_message_iter_recurse(&array, &entry);
+	while (dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_STRUCT) {
+		DBusMessageIter value;
+		const char *path;
+		int16_t signal_strength;
+
+
+		dbus_message_iter_recurse(&entry, &value);
+
+		dbus_message_iter_get_basic(&value, &path);
+
+		dbus_message_iter_next(&value);
+		dbus_message_iter_get_basic(&value, &signal_strength);
+
+		_update_signal_strength(path, signal_strength);
+
+		dbus_message_iter_next(&entry);
+	}
+}
+
+static void update_signal_strength(struct iwd_station *iwds)
+{
+	if (!g_dbus_proxy_method_call(iwds->proxy,
+					"GetOrderedNetworks",
+					NULL, ordered_networks_cb,
+					NULL, NULL))
+		DBG("GetOrderedNetworks() failed");
+}
+
+static void station_property_change(GDBusProxy *proxy, const char *name,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct iwd_station *iwds;
+	const char *path;
+
+	path = g_dbus_proxy_get_path(proxy);
+	iwds = g_hash_table_lookup(stations, path);
+	if (!iwds)
+		return;
+
+	if (!strcmp(name, "State")) {
+		const char *state;
+
+		dbus_message_iter_get_basic(iter, &state);
+		g_free(iwds->state);
+		iwds->state = g_strdup(state);
+
+		DBG("%s state %s", path, iwds->state);
+	} else if (!strcmp(name, "ConnectedNetwork")) {
+		const char *connected_network;
+
+		g_free(iwds->connected_network);
+		if (iter) {
+			dbus_message_iter_get_basic(iter, &connected_network);
+			iwds->connected_network = g_strdup(connected_network);
+		} else {
+			iwds->connected_network = NULL;
+		}
+
+		DBG("%s connected_network %s", path, iwds->connected_network);
+	} else if (!strcmp(name, "Scanning")) {
+		dbus_bool_t scanning;
+
+		dbus_message_iter_get_basic(iter, &scanning);
+		iwds->scanning = scanning;
+
+		if (!iwds->scanning)
+			update_signal_strength(iwds);
+
+		DBG("%s scanning %d", path, iwds->scanning);
+	}
+}
+
+static void ap_property_change(GDBusProxy *proxy, const char *name,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct iwd_ap *iwdap;
+	const char *path;
+	int err;
+
+	path = g_dbus_proxy_get_path(proxy);
+	iwdap = g_hash_table_lookup(access_points, path);
+	if (!iwdap)
+		return;
+
+        if (!strcmp(name, "Started")) {
+		dbus_bool_t started;
+
+		dbus_message_iter_get_basic(iter, &started);
+		iwdap->started = started;
+
+		DBG("%s started %d", path, iwdap->started);
+
+		if (iwdap->started && iwdap->index != -1) {
+			DBG("index %d bridge %s", iwdap->index, iwdap->bridge);
+			err = connman_technology_tethering_notify(
+						iwdap->tech, true);
+			if (err)
+				return;
+			err = connman_inet_add_to_bridge(
+						iwdap->index, iwdap->bridge);
+		}
 	}
 }
 
@@ -718,13 +1140,59 @@ static void network_free(gpointer data)
 	g_free(iwdn->device);
 	g_free(iwdn->name);
 	g_free(iwdn->type);
+	g_free(iwdn->known_network);
 	g_free(iwdn);
+}
+
+static void known_network_free(gpointer data)
+{
+	struct iwd_known_network *iwdkn = data;
+
+	if (iwdkn->proxy) {
+		g_dbus_proxy_unref(iwdkn->proxy);
+		iwdkn->proxy = NULL;
+	}
+
+	if (iwdkn->auto_connect_id)
+		g_source_remove(iwdkn->auto_connect_id);
+
+	g_free(iwdkn->path);
+	g_free(iwdkn->name);
+	g_free(iwdkn->type);
+	g_free(iwdkn->last_connected_time);
+	g_free(iwdkn);
+}
+
+static void station_free(gpointer data)
+{
+	struct iwd_station *iwds = data;
+
+	if (iwds->proxy) {
+		g_dbus_proxy_unref(iwds->proxy);
+		iwds->proxy = NULL;
+	}
+	g_free(iwds->path);
+	g_free(iwds->connected_network);
+	g_free(iwds);
+}
+
+static void ap_free(gpointer data)
+{
+	struct iwd_ap *iwdap = data;
+
+	if (iwdap->proxy) {
+		g_dbus_proxy_unref(iwdap->proxy);
+		iwdap->proxy = NULL;
+	}
+	g_free(iwdap->bridge);
+	g_free(iwdap);
 }
 
 static void create_adapter(GDBusProxy *proxy)
 {
 	const char *path = g_dbus_proxy_get_path(proxy);
 	struct iwd_adapter *iwda;
+	GSList *modes, *list;
 
 	iwda = g_try_new0(struct iwd_adapter, 1);
 
@@ -748,8 +1216,25 @@ static void create_adapter(GDBusProxy *proxy)
 	iwda->model = g_strdup(proxy_get_string(proxy, "Model"));
 	iwda->powered = proxy_get_bool(proxy, "Powered");
 
-	DBG("%s vendor '%s' model '%s' powered %d", path, iwda->vendor,
-		iwda->model, iwda->powered);
+	modes = proxy_get_strings(proxy, "SupportedModes");
+	for (list = modes; list; list = list->next) {
+		char *m = list->data;
+
+		if (!m)
+			continue;
+
+		if (!strcmp(m, "ad-hoc"))
+			iwda->ad_hoc = true;
+		else if (!strcmp(m, "station"))
+			iwda->station = true;
+		else if (!strcmp(m, "ap"))
+			iwda->ap = true;
+	}
+	g_slist_free_full(modes, g_free);
+
+	DBG("%s vendor '%s' model '%s' powered %d ad-hoc %d station %d ap %d",
+		path, iwda->vendor, iwda->model, iwda->powered,
+		iwda->ad_hoc, iwda->station, iwda->ap);
 
 	g_dbus_proxy_set_property_watch(iwda->proxy,
 			adapter_property_change, NULL);
@@ -782,11 +1267,11 @@ static void create_device(GDBusProxy *proxy)
 	iwdd->name = g_strdup(proxy_get_string(proxy, "Name"));
 	iwdd->address = g_strdup(proxy_get_string(proxy, "Address"));
 	iwdd->powered = proxy_get_bool(proxy, "Powered");
-	iwdd->scanning = proxy_get_bool(proxy, "Scanning");
+	iwdd->mode = g_strdup(proxy_get_string(proxy, "Mode"));
 
-	DBG("adapter %s name %s address %s powered %d scanning %d",
+	DBG("adapter %s name %s address %s powered %d mode %s",
 		iwdd->adapter, iwdd->name, iwdd->address,
-		iwdd->powered, iwdd->scanning);
+		iwdd->powered, iwdd->mode);
 
 	g_dbus_proxy_set_property_watch(iwdd->proxy,
 			device_property_change, NULL);
@@ -955,17 +1440,224 @@ static void create_network(GDBusProxy *proxy)
 	iwdn->name = g_strdup(proxy_get_string(proxy, "Name"));
 	iwdn->type = g_strdup(proxy_get_string(proxy, "Type"));
 	iwdn->connected = proxy_get_bool(proxy, "Connected");
+	iwdn->known_network = g_strdup(proxy_get_string(proxy, "KnownNetwork"));
 
-	DBG("device %s name '%s' type %s connected %d",
-		iwdn->device,
-		iwdn->name,
-		iwdn->type,
-		iwdn->connected);
+	DBG("device %s name '%s' type %s connected %d known_network %s",
+		iwdn->device, iwdn->name, iwdn->type, iwdn->connected,
+		iwdn->known_network);
 
 	g_dbus_proxy_set_property_watch(iwdn->proxy,
 			network_property_change, NULL);
 
 	add_network(path, iwdn);
+}
+
+struct auto_connect_cb_data {
+	char *path;
+	bool auto_connect;
+};
+
+static void auto_connect_cb_free(struct auto_connect_cb_data *cbd)
+{
+	g_free(cbd->path);
+	g_free(cbd);
+}
+
+static void auto_connect_cb(const DBusError *error, void *user_data)
+{
+	struct auto_connect_cb_data *cbd = user_data;
+	struct iwd_known_network *iwdkn;
+
+	iwdkn = g_hash_table_lookup(known_networks, cbd->path);
+	if (!iwdkn)
+		goto out;
+
+	if (dbus_error_is_set(error))
+		connman_warn("WiFi known network %s property auto connect %s",
+			cbd->path, error->message);
+
+	/* property is updated via watch known_network_property_change() */
+out:
+	auto_connect_cb_free(cbd);
+}
+
+static int set_auto_connect(struct iwd_known_network *iwdkn, bool auto_connect)
+{
+	dbus_bool_t dbus_auto_connect = auto_connect;
+	struct auto_connect_cb_data *cbd;
+
+	if (proxy_get_bool(iwdkn->proxy, "AutoConnect") == auto_connect)
+		return -EALREADY;
+
+	cbd = g_new(struct auto_connect_cb_data, 1);
+	cbd->path = g_strdup(iwdkn->path);
+	cbd->auto_connect = auto_connect;
+
+	if (!g_dbus_proxy_set_property_basic(iwdkn->proxy, "AutoConnect",
+						DBUS_TYPE_BOOLEAN,
+						&dbus_auto_connect,
+						auto_connect_cb, cbd, NULL)) {
+		auto_connect_cb_free(cbd);
+		return -EIO;
+	}
+
+	return -EINPROGRESS;
+}
+
+static gboolean disable_auto_connect_cb(gpointer data)
+{
+	char *path = data;
+	struct iwd_known_network *iwdkn;
+
+	iwdkn = g_hash_table_lookup(known_networks, path);
+	if (!iwdkn)
+		return FALSE;
+
+	if (set_auto_connect(iwdkn, false) != -EINPROGRESS)
+		connman_warn("Failed to disable auto connect");
+
+	iwdkn->auto_connect_id = 0;
+	return FALSE;
+}
+
+static void disable_auto_connect(struct iwd_known_network *iwdkn)
+{
+	if (iwdkn->auto_connect_id)
+		return;
+
+	iwdkn->auto_connect_id = g_timeout_add_full(G_PRIORITY_DEFAULT,
+						0,
+						disable_auto_connect_cb,
+						g_strdup(iwdkn->path),
+						g_free);
+}
+
+static void known_network_property_change(GDBusProxy *proxy, const char *name,
+		DBusMessageIter *iter, void *user_data)
+{
+	struct iwd_known_network *iwdkn;
+	const char *path;
+
+	path = g_dbus_proxy_get_path(proxy);
+	iwdkn = g_hash_table_lookup(known_networks, path);
+	if (!iwdkn)
+		return;
+
+	if (!strcmp(name, "AutoConnect")) {
+		dbus_bool_t auto_connect;
+
+		dbus_message_iter_get_basic(iter, &auto_connect);
+		iwdkn->auto_connect = auto_connect;
+
+		DBG("%p auto_connect %d", path, iwdkn->auto_connect);
+
+		if (iwdkn->auto_connect)
+			disable_auto_connect(iwdkn);
+	}
+}
+
+static void create_know_network(GDBusProxy *proxy)
+{
+	const char *path = g_dbus_proxy_get_path(proxy);
+	struct iwd_known_network *iwdkn;
+
+	iwdkn = g_try_new0(struct iwd_known_network, 1);
+	if (!iwdkn) {
+		connman_error("Out of memory creating IWD known network");
+		return;
+	}
+
+	iwdkn->path = g_strdup(path);
+	g_hash_table_replace(known_networks, iwdkn->path, iwdkn);
+
+	iwdkn->proxy = g_dbus_proxy_ref(proxy);
+
+	if (!iwdkn->proxy) {
+		connman_error("Cannot create IWD known network watcher %s", path);
+		g_hash_table_remove(known_networks, path);
+		return;
+	}
+
+	iwdkn->name = g_strdup(proxy_get_string(proxy, "Name"));
+	iwdkn->type = g_strdup(proxy_get_string(proxy, "Type"));
+	iwdkn->hidden = proxy_get_bool(proxy, "Hidden");
+	iwdkn->last_connected_time =
+		g_strdup(proxy_get_string(proxy, "LastConnectedTime"));
+	iwdkn->auto_connect = proxy_get_bool(proxy, "AutoConnect");
+
+	DBG("name '%s' type %s hidden %d, last_connection_time %s auto_connect %d",
+		iwdkn->name, iwdkn->type, iwdkn->hidden,
+		iwdkn->last_connected_time, iwdkn->auto_connect);
+
+	g_dbus_proxy_set_property_watch(iwdkn->proxy,
+			known_network_property_change, NULL);
+
+	if (iwdkn->auto_connect)
+		disable_auto_connect(iwdkn);
+}
+
+static void create_station(GDBusProxy *proxy)
+{
+	const char *path = g_dbus_proxy_get_path(proxy);
+	struct iwd_station *iwds;
+
+	iwds = g_try_new0(struct iwd_station, 1);
+	if (!iwds) {
+		connman_error("Out of memory creating IWD station");
+		return;
+	}
+
+	iwds->path = g_strdup(path);
+	g_hash_table_replace(stations, iwds->path, iwds);
+
+	iwds->proxy = g_dbus_proxy_ref(proxy);
+
+	if (!iwds->proxy) {
+		connman_error("Cannot create IWD station watcher %s", path);
+		g_hash_table_remove(stations, path);
+		return;
+	}
+
+	iwds->state = g_strdup(proxy_get_string(proxy, "State"));
+	iwds->connected_network = g_strdup(proxy_get_string(proxy, "ConnectedNetwork"));
+	iwds->scanning = proxy_get_bool(proxy, "Scanning");
+
+	DBG("state '%s' connected_network %s scanning %d",
+		iwds->state, iwds->connected_network, iwds->scanning);
+
+	g_dbus_proxy_set_property_watch(iwds->proxy,
+			station_property_change, NULL);
+}
+
+static void create_ap(GDBusProxy *proxy)
+{
+	const char *path = g_dbus_proxy_get_path(proxy);
+	struct iwd_ap *iwdap;
+
+	iwdap = g_try_new0(struct iwd_ap, 1);
+	if (!iwdap) {
+		connman_error("Out of memory creating IWD access point");
+		return;
+	}
+	iwdap->index = -1;
+
+	iwdap->path = g_strdup(path);
+	g_hash_table_replace(access_points, iwdap->path, iwdap);
+
+	iwdap->proxy = g_dbus_proxy_ref(proxy);
+
+	if (!iwdap->proxy) {
+		connman_error("Cannot create IWD access point watcher %s", path);
+		g_hash_table_remove(access_points, path);
+		return;
+	}
+
+	iwdap->started = proxy_get_bool(proxy, "Started");
+
+	DBG("started %d", iwdap->started);
+
+	g_dbus_proxy_set_property_watch(iwdap->proxy,
+			ap_property_change, NULL);
 }
 
 static void object_added(GDBusProxy *proxy, void *user_data)
@@ -989,6 +1681,12 @@ static void object_added(GDBusProxy *proxy, void *user_data)
 		create_device(proxy);
 	else if (!strcmp(interface, IWD_NETWORK_INTERFACE))
 		create_network(proxy);
+	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
+		create_know_network(proxy);
+	else if (!strcmp(interface, IWD_STATION_INTERFACE))
+		create_station(proxy);
+	else if (!strcmp(interface, IWD_AP_INTERFACE))
+		create_ap(proxy);
 }
 
 static void object_removed(GDBusProxy *proxy, void *user_data)
@@ -1013,6 +1711,12 @@ static void object_removed(GDBusProxy *proxy, void *user_data)
 		g_hash_table_remove(devices, path);
 	else if (!strcmp(interface, IWD_NETWORK_INTERFACE))
 		g_hash_table_remove(networks, path);
+	else if (!strcmp(interface, IWD_KNOWN_NETWORK_INTERFACE))
+		g_hash_table_remove(known_networks, path);
+	else if (!strcmp(interface, IWD_STATION_INTERFACE))
+		g_hash_table_remove(stations, path);
+	else if (!strcmp(interface, IWD_AP_INTERFACE))
+		g_hash_table_remove(access_points, path);
 }
 
 static int iwd_init(void)
@@ -1029,6 +1733,15 @@ static int iwd_init(void)
 
 	networks = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
 			network_free);
+
+	known_networks = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			known_network_free);
+
+	stations = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			station_free);
+
+	access_points = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+			ap_free);
 
 	if (connman_technology_driver_register(&tech_driver) < 0) {
 		connman_warn("Failed to initialize technology for IWD");
@@ -1069,6 +1782,15 @@ out:
 	if (networks)
 		g_hash_table_destroy(networks);
 
+	if (known_networks)
+		g_hash_table_destroy(known_networks);
+
+	if (stations)
+		g_hash_table_destroy(stations);
+
+	if (access_points)
+		g_hash_table_destroy(access_points);
+
 	if (adapters)
 		g_hash_table_destroy(adapters);
 
@@ -1086,6 +1808,9 @@ static void iwd_exit(void)
 
 	g_dbus_client_unref(client);
 
+	g_hash_table_destroy(access_points);
+	g_hash_table_destroy(stations);
+	g_hash_table_destroy(known_networks);
 	g_hash_table_destroy(networks);
 	g_hash_table_destroy(devices);
 	g_hash_table_destroy(adapters);

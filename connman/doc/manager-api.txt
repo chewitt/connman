@@ -149,7 +149,7 @@ Methods		dict GetProperties()
 			creation of a tun/tap interface, and IP
 			configuration, NAT and IP forwarding on that
 			interface.
-			An object path, a dictionnary and a file descriptor
+			An object path, a dictionary and a file descriptor
 			with IP settings are returned.
 
 			Possible Errors: [service].Error.InvalidArguments

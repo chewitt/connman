@@ -3226,7 +3226,7 @@ void vpn_provider_set_index(struct vpn_provider *provider, int index)
 		provider->ipconfig_ipv4 = __vpn_ipconfig_create(index,
 								AF_INET);
 		if (!provider->ipconfig_ipv4) {
-			DBG("Couldnt create ipconfig for IPv4");
+			DBG("Couldn't create ipconfig for IPv4");
 			goto done;
 		}
 	}
@@ -3237,7 +3237,7 @@ void vpn_provider_set_index(struct vpn_provider *provider, int index)
 		provider->ipconfig_ipv6 = __vpn_ipconfig_create(index,
 								AF_INET6);
 		if (!provider->ipconfig_ipv6) {
-			DBG("Couldnt create ipconfig for IPv6");
+			DBG("Couldn't create ipconfig for IPv6");
 			goto done;
 		}
 	}
@@ -3339,7 +3339,7 @@ int vpn_provider_set_nameservers(struct vpn_provider *provider,
 	if (!nameservers)
 		return 0;
 
-	provider->nameservers = g_strsplit(nameservers, " ", 0);
+	provider->nameservers = g_strsplit_set(nameservers, ", ", 0);
 
 	return 0;
 }
@@ -3462,7 +3462,6 @@ void vpn_provider_driver_unregister(struct vpn_provider_driver *driver)
 		struct vpn_provider *provider = value;
 
 		if (provider && provider->driver &&
-				provider->driver->type == driver->type &&
 				g_strcmp0(provider->driver->name,
 							driver->name) == 0) {
 			/*

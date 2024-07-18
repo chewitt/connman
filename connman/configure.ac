@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(connman, 1.37)
+AC_INIT(connman, 1.38)
 
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -392,10 +392,20 @@ if (test "${firewall_type}" = "iptables"); then
 fi
 AM_CONDITIONAL(XTABLES, test "${found_iptables}" != "no")
 
+found_libmnl="no"
+if (test "${firewall_type}" = "nftables" -o \
+		"${enable_wireguard}" != "no"); then
+	PKG_CHECK_MODULES(LIBMNL, [libmnl >= 1.0.0], [found_libmnl="yes"],
+		AC_MSG_ERROR([libmnl >= 1.0.0 not found]))
+	AC_SUBST(LIBMNL_CFLAGS)
+	AC_SUBST(LIBMNL_LIBS)
+fi
+AM_CONDITIONAL(LIBMNL, test "${found_libmnl}" != "no")
+
 found_nftables="no"
 if (test "${firewall_type}" = "nftables"); then
-	PKG_CHECK_MODULES(NFTABLES, [libnftnl >= 1.0.4 libmnl >= 1.0.0], [found_nftables="yes"],
-		AC_MSG_ERROR([libnftnl >= 1.0.4 or libmnl >= 1.0.0 not found]))
+	PKG_CHECK_MODULES(NFTABLES, [libnftnl >= 1.0.4], [found_nftables="yes"],
+		AC_MSG_ERROR([libnftnl >= 1.0.4]))
 	AC_SUBST(NFTABLES_CFLAGS)
 	AC_SUBST(NFTABLES_LIBS)
 fi
@@ -437,6 +447,12 @@ AC_ARG_ENABLE(ethernet, AC_HELP_STRING([--disable-ethernet],
 				[disable Ethernet support]),
 					[enable_ethernet=${enableval}])
 AM_CONDITIONAL(ETHERNET, test "${enable_ethernet}" != "no")
+
+AC_ARG_ENABLE(wireguard, AC_HELP_STRING([--disable-wireguard],
+				[disable Wireguard support]),
+					[enable_wireguard=${enableval}])
+AM_CONDITIONAL(WIREGUARD, test "${enable_wireguard}" != "no")
+AM_CONDITIONAL(WIREGUARD_BUILTIN, test "${enable_wireguard}" = "builtin")
 
 AC_ARG_ENABLE(gadget, AC_HELP_STRING([--disable-gadget],
 				[disable USB Gadget support]),
@@ -647,7 +663,8 @@ AM_CONDITIONAL(VPN, test "${enable_openconnect}" != "no" -o \
 			"${enable_openvpn}" != "no" -o \
 			"${enable_vpnc}" != "no" -o \
 			"${enable_l2tp}" != "no" -o \
-			"${enable_pptp}" != "no")
+			"${enable_pptp}" != "no" -o \
+			"${enable_wireguard}" != "no")
 
 AC_MSG_CHECKING(which DNS backend to use)
 AC_ARG_WITH(dns-backend, AC_HELP_STRING([--with-dns-backend=TYPE],
