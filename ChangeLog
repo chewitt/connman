@@ -1,3 +1,16 @@
+ver 1.43:
+	Fix issue with device creation when using LTE.
+	Fix issue with regulatory domain when powering up.
+	Fix issue with resolving ISO3166 code from timezone data.
+	Fix issue with handling DNS proxy zero termination of buffers.
+	Fix issue with handling DHCP packet length in L3 mode.
+	Fix issue with handling DHCP upper length checks.
+	Fix issue with handling IPv6 and URL parsing.
+	Fix issue with handling online check updates.
+	Fix issue with handling proxy method and WISPr.
+	Fix issue with handling default gateway setup.
+	Add support for low-priority default routes.
+
 ver 1.42:
 	Fix issue with iwd and signal strength calculation.
 	Fix issue with iwd and handling service removal.

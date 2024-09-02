@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([connman], [1.42])
+AC_INIT([connman], [1.43])
 
 AC_CONFIG_MACRO_DIR([m4])
 
