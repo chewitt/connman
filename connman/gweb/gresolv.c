@@ -115,6 +115,7 @@ struct _GResolv {
 
 	GResolvDebugFunc debug_func;
 	gpointer debug_data;
+	int err;
 };
 
 #include "log.h"
@@ -1074,7 +1075,8 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 	if (resolv->result_family != AF_INET6) {
 		if (add_query(lookup, hostname, ns_t_a)) {
 			g_free(lookup);
-			return -EIO;
+			resolv->err = -EIO;
+			return 0;
 		}
 	}
 
@@ -1087,7 +1089,8 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 			}
 
 			g_free(lookup);
-			return -EIO;
+			resolv->err = -EIO;
+			return 0;
 		}
 	}
 
@@ -1132,4 +1135,12 @@ bool g_resolv_set_address_family(GResolv *resolv, int family)
 	resolv->result_family = family;
 
 	return true;
+}
+
+int g_resolv_get_error(GResolv *resolv)
+{
+	if (!resolv)
+		return 0;
+
+	return resolv->err;
 }
