@@ -395,14 +395,15 @@ unit_test_sailfish_access_LDADD = @GLIB_LIBS@ @DBUSACCESS_LIBS@ -ldl
 unit_test_vpn_settings_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DDEFAULT_VPN_STATEDIR=\""$(vpn_statedir)"\" \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\"
-unit_test_vpn_settings_SOURCES = $(backtrace_sources) unit/test-vpn-settings.c \
+unit_test_vpn_settings_SOURCES = $(backtrace_sources) $(gweb_sources) \
+				unit/test-vpn-settings.c \
 				vpn/vpn-settings.c src/log.c vpn/vpn-util.c
-unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl
+unit_test_vpn_settings_LDADD = @GLIB_LIBS@ -ldl -lresolv
 
 unit_test_vpn_util_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS)
-unit_test_vpn_util_SOURCES = unit/test-vpn-util.c src/log.c vpn/vpn-util.c \
-				$(backtrace_sources)
-unit_test_vpn_util_LDADD = @GLIB_LIBS@ -ldl
+unit_test_vpn_util_SOURCES = $(backtrace_sources) $(gweb_sources) \
+				unit/test-vpn-util.c src/log.c vpn/vpn-util.c
+unit_test_vpn_util_LDADD = @GLIB_LIBS@ -ldl -lresolv
 
 unit_test_service_CFLAGS = $(COVERAGE_OPT) $(AM_CFLAGS) \
 				-DDEFAULT_USER_STORAGE=\""$(userstorage)"\" \
