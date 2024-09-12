@@ -65,6 +65,7 @@ struct wireguard_info {
 	GResolv *resolv;
 	guint resolv_id;
 	guint remove_resolv_id;
+	guint dying_id;
 };
 
 struct sockaddr_u {
@@ -89,6 +90,31 @@ struct {
 	{"WireGuard.EndpointPort", true},
 	{"WireGuard.PersistentKeepalive", true}
 };
+
+static struct wireguard_info *create_private_data(struct vpn_provider *provider)
+{
+	struct wireguard_info *info;
+
+	info = g_malloc0(sizeof(struct wireguard_info));
+	info->peer.flags = WGPEER_HAS_PUBLIC_KEY | WGPEER_REPLACE_ALLOWEDIPS;
+	info->device.flags = WGDEVICE_HAS_PRIVATE_KEY;
+	info->device.first_peer = &info->peer;
+	info->device.last_peer = &info->peer;
+	info->provider = vpn_provider_ref(provider);
+
+	return info;
+}
+
+static void free_private_data(struct wireguard_info *info)
+{
+	if (vpn_provider_get_plugin_data(info->provider) == info)
+		vpn_provider_set_plugin_data(info->provider, NULL);
+
+	vpn_provider_unref(info->provider);
+	g_free(info->endpoint_fqdn);
+	g_free(info->port);
+	g_free(info);
+}
 
 static int parse_key(const char *str, wg_key key)
 {
@@ -422,6 +448,8 @@ static void resolve_endpoint_cb(GResolvResultStatus status,
 	run_dns_reresolve(info);
 }
 
+static int disconnect(struct vpn_provider *provider, int error);
+
 static gboolean wg_dns_reresolve_cb(gpointer user_data)
 {
 	struct wireguard_info *info = user_data;
@@ -450,7 +478,7 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 	if (!info->resolv_id && err) {
 		connman_error("failed to start hostname lookup for %s, err %d",
 						info->endpoint_fqdn, err);
-		vpn_died(NULL, err, info->provider);
+		disconnect(info->provider, err);
 	}
 
 	return G_SOURCE_REMOVE;
@@ -464,7 +492,7 @@ static void run_dns_reresolve(struct wireguard_info *info)
 	if (vpn_provider_get_connection_errors(info->provider) >=
 						DNS_RERESOLVE_ERROR_LIMIT) {
 		connman_warn("reresolve error limit reached");
-		vpn_died(NULL, -ENONET, info->provider);
+		disconnect(info->provider, -ENONET);
 		info->reresolve_id = 0;
 		return;
 	}
@@ -484,12 +512,7 @@ static int wg_connect(struct vpn_provider *provider,
 	char *ifname;
 	int err = -EINVAL;
 
-	info = g_malloc0(sizeof(struct wireguard_info));
-	info->peer.flags = WGPEER_HAS_PUBLIC_KEY | WGPEER_REPLACE_ALLOWEDIPS;
-	info->device.flags = WGDEVICE_HAS_PRIVATE_KEY;
-	info->device.first_peer = &info->peer;
-	info->device.last_peer = &info->peer;
-	info->provider = vpn_provider_ref(provider);
+	info = create_private_data(provider);
 
 	DBG("");
 
@@ -643,8 +666,34 @@ error:
 	goto done;
 }
 
-static void wg_disconnect(struct vpn_provider *provider)
+struct wireguard_exit_data {
+	struct vpn_provider *provider;
+	int err;
+};
+
+static gboolean wg_died(gpointer user_data)
 {
+	struct wireguard_exit_data *data = user_data;
+	struct wireguard_info *info;
+
+	DBG("");
+
+	/* No task for no daemon VPN - use vpn_died() with no task. */
+	vpn_died(NULL, data->err, data->provider);
+
+	info = vpn_provider_get_plugin_data(data->provider);
+	if (info)
+		free_private_data(info);
+
+	g_free(data);
+
+	return G_SOURCE_REMOVE;
+}
+
+/* Allow to overrule the exit code for vpn_died */
+static int disconnect(struct vpn_provider *provider, int err)
+{
+	struct wireguard_exit_data *data;
 	struct wireguard_info *info;
 	int exit_code;
 
@@ -652,7 +701,10 @@ static void wg_disconnect(struct vpn_provider *provider)
 
 	info = vpn_provider_get_plugin_data(provider);
 	if (!info)
-		return;
+		return -ENODATA;
+
+	if (info->dying_id)
+		return -EALREADY;
 
 	if (info->reresolve_id > 0)
 		g_source_remove(info->reresolve_id);
@@ -660,21 +712,29 @@ static void wg_disconnect(struct vpn_provider *provider)
 	if (info->resolv || info->resolv_id)
 		remove_resolv(info);
 
-	vpn_provider_set_plugin_data(provider, NULL);
-
 	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_DISCONNECT);
 
 	exit_code = wg_del_device(info->device.name);
 
-	vpn_provider_unref(info->provider);
-	g_free(info->endpoint_fqdn);
-	g_free(info->port);
-	g_free(info);
+	/* Simulate a task-running VPN to issue vpn_died after exiting this */
+	data = g_malloc0(sizeof(struct wireguard_exit_data));
+	data->provider = provider;
+	data->err = err ? err : exit_code;
 
-	DBG("exiting with %d", exit_code);
+	info->dying_id = g_timeout_add(1, wg_died, data);
 
-	/* No task for no daemon VPN - use VPN died with no task. */
-	vpn_died(NULL, exit_code, provider);
+	return exit_code;
+}
+
+static void wg_disconnect(struct vpn_provider *provider)
+{
+	int exit_code;
+
+	DBG("");
+
+	exit_code = disconnect(provider, 0);
+
+	DBG("exited with %d", exit_code);
 }
 
 static int wg_error_code(struct vpn_provider *provider, int exit_code)
@@ -711,12 +771,18 @@ static int wg_save(struct vpn_provider *provider, GKeyFile *keyfile)
 	return 0;
 }
 
+bool wg_uses_vpn_agent(struct vpn_provider *provider)
+{
+	return false;
+}
+
 static struct vpn_driver vpn_driver = {
 	.flags		= VPN_FLAG_NO_TUN | VPN_FLAG_NO_DAEMON,
 	.connect	= wg_connect,
 	.disconnect	= wg_disconnect,
 	.save		= wg_save,
-	.error_code	= wg_error_code
+	.error_code	= wg_error_code,
+	.uses_vpn_agent = wg_uses_vpn_agent
 };
 
 static int wg_init(void)
