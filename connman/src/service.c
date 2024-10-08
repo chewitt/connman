@@ -4900,6 +4900,30 @@ int connman_service_reset_ipconfig_to_address(struct connman_service *service,
 	return err;
 }
 
+// TODO: make this into a configuration option
+static bool autoconnect_controls_service(struct connman_service *service)
+{
+	if (!service)
+		return false;
+
+	switch (service->type) {
+	case CONNMAN_SERVICE_TYPE_BLUETOOTH:
+	case CONNMAN_SERVICE_TYPE_CELLULAR:
+	case CONNMAN_SERVICE_TYPE_ETHERNET:
+	case CONNMAN_SERVICE_TYPE_GADGET:
+	case CONNMAN_SERVICE_TYPE_GPS:
+	case CONNMAN_SERVICE_TYPE_P2P:
+	case CONNMAN_SERVICE_TYPE_SYSTEM:
+	case CONNMAN_SERVICE_TYPE_UNKNOWN:
+	case CONNMAN_SERVICE_TYPE_WIFI:
+		break;
+	case CONNMAN_SERVICE_TYPE_VPN:
+		return true;
+	}
+
+	return false;
+}
+
 static void disable_autoconnect_for_services(struct connman_service *exclude,
 	enum connman_service_type type)
 {
@@ -4917,6 +4941,9 @@ static void disable_autoconnect_for_services(struct connman_service *exclude,
 		if (connman_service_set_autoconnect(service, false)) {
 			service_save(service);
 			DBG("disabled autoconnect for %s", service->name);
+
+			if (autoconnect_controls_service(service))
+				__connman_service_disconnect(service);
 		}
 	}
 }
@@ -5004,6 +5031,8 @@ static DBusMessage *set_property(DBusConnection *conn,
 			if (autoconnect)
 				do_auto_connect(service,
 					CONNMAN_SERVICE_CONNECT_REASON_AUTO);
+			else if (autoconnect_controls_service(service))
+				__connman_service_disconnect(service);
 		}
 	} else if (g_str_equal(name, "Nameservers.Configuration")) {
 		DBusMessageIter entry;
