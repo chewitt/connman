@@ -891,6 +891,24 @@ static void do_connect_later(struct vpn_provider *provider,
 					do_connect_timeout_free);
 }
 
+static bool is_valid_method_caller(const char *method, const char *sender)
+{
+	bool valid = true;
+
+	if (!g_strcmp0(method, "Connect") || !g_strcmp0(method, "Connect2") ||
+					!g_strcmp0(method, "Disconnect")) {
+		valid = !g_strcmp0(sender, connman_dbus_name);
+		if (!valid)
+			connman_warn("D-Bus API %s.%s is not allowed for %s."
+						"Use %s to connect a service",
+						VPN_CONNECTION_INTERFACE,
+						method, sender,
+						CONNMAN_SERVICE_INTERFACE);
+	}
+
+	return valid;
+}
+
 static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
@@ -921,6 +939,9 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 		}
 	}
 
+	if (!is_valid_method_caller(dbus_message_get_member(msg), sender))
+		return __connman_error_permission_denied(msg);
+
 	/* Cancel delayed connection if connmand is online. */
 	if (provider->do_connect_timeout) {
 		g_source_remove(provider->do_connect_timeout);
@@ -937,6 +958,10 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 static DBusMessage *do_connect2(DBusConnection *conn, DBusMessage *msg,
 								void *data)
 {
+	if (!is_valid_method_caller(dbus_message_get_member(msg),
+					dbus_message_get_sender(msg)))
+		return __connman_error_permission_denied(msg);
+
 	return do_connect(conn, msg, data);
 }
 
@@ -953,6 +978,9 @@ static DBusMessage *do_disconnect(DBusConnection *conn, DBusMessage *msg,
 		DBG("access denied for %s", sender);
 		return __connman_error_permission_denied(msg);
 	}
+
+	if (!is_valid_method_caller(dbus_message_get_member(msg), sender))
+		return __connman_error_permission_denied(msg);
 
 	DBG("conn %p provider %p", conn, provider);
 
