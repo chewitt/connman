@@ -245,50 +245,97 @@ static int parse_endpoint(const char *host, const char *port, struct sockaddr_u 
 	return 0;
 }
 
-static int parse_address(const char *address, const char *gateway,
-		struct connman_ipaddress **ipaddress)
+struct wg_ipaddresses {
+	struct connman_ipaddress *ipaddress_ipv4;
+	struct connman_ipaddress *ipaddress_ipv6;
+};
+
+static int parse_addresses(const char *address, const char *gateway,
+		struct wg_ipaddresses *ipaddresses)
 {
 	char buf[INET6_ADDRSTRLEN];
 	unsigned char prefixlen;
+	char **addresses;
 	char **tokens;
 	char *end, *netmask;
 	int err;
+	int i;
 
-	tokens = g_strsplit(address, "/", -1);
-	if (g_strv_length(tokens) != 2) {
-		g_strfreev(tokens);
+	addresses = g_strsplit(address, ", ", -1);
+	if (!g_strv_length(addresses)) {
+		g_strfreev(addresses);
 		return -EINVAL;
 	}
 
-	prefixlen = g_ascii_strtoull(tokens[1], &end, 10);
+	for (i = 0; addresses[i]; i++) {
+		struct connman_ipaddress *ipaddress = NULL;
+		int family = 0;
 
-	if (inet_pton(AF_INET, tokens[0], buf) == 1) {
-		netmask = g_strdup_printf("%d.%d.%d.%d",
+		tokens = g_strsplit(addresses[i], "/", -1);
+		if (g_strv_length(tokens) != 2) {
+			g_strfreev(tokens);
+			DBG("Invalid Wireguard.Address value %s", addresses[i]);
+			continue;
+		}
+
+		DBG("address %s", addresses[i]);
+
+		prefixlen = g_ascii_strtoull(tokens[1], &end, 10);
+
+		if (inet_pton(AF_INET, tokens[0], buf) == 1) {
+			if (ipaddresses->ipaddress_ipv4) {
+				g_strfreev(tokens);
+				DBG("IPv4 address already set");
+				err = -EALREADY;
+				continue;
+			}
+
+			family = AF_INET;
+			netmask = g_strdup_printf("%d.%d.%d.%d",
 				((0xffffffff << (32 - prefixlen)) >> 24) & 0xff,
 				((0xffffffff << (32 - prefixlen)) >> 16) & 0xff,
 				((0xffffffff << (32 - prefixlen)) >> 8) & 0xff,
 				((0xffffffff << (32 - prefixlen)) >> 0) & 0xff);
 
-		*ipaddress = connman_ipaddress_alloc(AF_INET);
-		err = connman_ipaddress_set_ipv4(*ipaddress, tokens[0],
-						netmask, gateway);
-		g_free(netmask);
-	} else if (inet_pton(AF_INET6, tokens[0], buf) == 1) {
-		*ipaddress = connman_ipaddress_alloc(AF_INET6);
-		err = connman_ipaddress_set_ipv6(*ipaddress, tokens[0],
-						prefixlen, gateway);
-	} else {
-		DBG("Invalid Wireguard.Address value");
-		err = -EINVAL;
+			ipaddress = connman_ipaddress_alloc(family);
+			err = connman_ipaddress_set_ipv4(ipaddress, tokens[0],
+							netmask, gateway);
+			g_free(netmask);
+		} else if (inet_pton(AF_INET6, tokens[0], buf) == 1) {
+			if (ipaddresses->ipaddress_ipv6) {
+				g_strfreev(tokens);
+				DBG("IPv6 address already set");
+				err = -EALREADY;
+				continue;
+			}
+
+			family = AF_INET6;
+			ipaddress = connman_ipaddress_alloc(family);
+			err = connman_ipaddress_set_ipv6(ipaddress, tokens[0],
+							prefixlen, gateway);
+		} else {
+			DBG("Invalid Wireguard.Address value");
+			err = -EINVAL;
+		}
+
+		g_strfreev(tokens);
+		if (err) {
+			connman_ipaddress_free(ipaddress);
+			continue;
+		}
+
+		connman_ipaddress_set_p2p(ipaddress, true);
+
+		if (family == AF_INET)
+			ipaddresses->ipaddress_ipv4 = ipaddress;
+		else if (family == AF_INET6)
+			ipaddresses->ipaddress_ipv6 = ipaddress;
 	}
 
-	connman_ipaddress_set_p2p(*ipaddress, true);
+	g_strfreev(addresses);
 
-	g_strfreev(tokens);
-	if (err)
-		connman_ipaddress_free(*ipaddress);
-
-	return err;
+	return (ipaddresses->ipaddress_ipv4 || ipaddresses->ipaddress_ipv6) ?
+				0 : -EINVAL;
 }
 
 struct ifname_data {
@@ -525,7 +572,7 @@ static int wg_connect(struct vpn_provider *provider,
 			vpn_provider_connect_cb_t cb,
 			const char *dbus_sender, void *user_data)
 {
-	struct connman_ipaddress *ipaddress = NULL;
+	struct wg_ipaddresses ipaddresses = { 0 };
 	struct wireguard_info *info;
 	const char *option, *gateway;
 	char *ifname;
@@ -632,9 +679,9 @@ static int wg_connect(struct vpn_provider *provider,
 		DBG("Missing WireGuard.Address configuration");
 		goto error;
 	}
-	err = parse_address(option, gateway, &ipaddress);
+	err = parse_addresses(option, gateway, &ipaddresses);
 	if (err) {
-		DBG("Failed to parse address %s gateway %s", option, gateway);
+		DBG("Failed to parse addresses %s gateway %s", option, gateway);
 		goto error;
 	}
 
@@ -660,14 +707,21 @@ static int wg_connect(struct vpn_provider *provider,
 	}
 
 	vpn_set_ifname(provider, info->device.name);
-	if (ipaddress)
-		vpn_provider_set_ipaddress(provider, ipaddress);
+
+	if (ipaddresses.ipaddress_ipv4)
+		vpn_provider_set_ipaddress(provider,
+						ipaddresses.ipaddress_ipv4);
+
+	if (ipaddresses.ipaddress_ipv6)
+		vpn_provider_set_ipaddress(provider,
+						ipaddresses.ipaddress_ipv6);
 
 done:
 	if (cb)
 		cb(provider, user_data, -err);
 
-	connman_ipaddress_free(ipaddress);
+	connman_ipaddress_free(ipaddresses.ipaddress_ipv4);
+	connman_ipaddress_free(ipaddresses.ipaddress_ipv6);
 
 	if (!err)
 		run_dns_reresolve(info);
