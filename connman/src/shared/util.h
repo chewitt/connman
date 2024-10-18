@@ -24,6 +24,12 @@
 #include <sys/time.h>
 
 #include <glib.h>
+#include <stdbool.h>
+#include <inet.h>
+
+#define AF_INET_POS 0
+#define AF_INET6_POS 1
+#define AF_ARRAY_LENGTH 2
 
 typedef void (*util_debug_func_t)(const char *str, void *user_data);
 
@@ -53,3 +59,7 @@ static inline struct cb_data *cb_data_new(void *cb, void *user_data)
 
 void util_iso8601_to_timeval(char *str, struct timeval *time);
 char *util_timeval_to_iso8601(struct timeval *time);
+
+void util_set_afs(bool *afs, int family);
+bool util_get_afs(bool *afs, int family);
+void util_reset_afs(bool *afs);
