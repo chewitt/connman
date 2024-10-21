@@ -1708,7 +1708,7 @@ static int add_or_replace_bss_to_network(struct g_supplicant_bss *bss)
 	network->config_table = g_hash_table_new_full(g_str_hash, g_str_equal,
 							g_free, g_free);
 
-	g_hash_table_replace(interface->network_table,
+	g_hash_table_insert(interface->network_table,
 						network->group, network);
 
 	callback_network_added(network);
@@ -1735,9 +1735,8 @@ done:
 	}
 
 	g_hash_table_replace(interface->bss_mapping, bss->path, network);
-	g_hash_table_replace(network->bss_table, bss->path, bss);
-
 	g_hash_table_replace(bss_mapping, bss->path, interface);
+	g_hash_table_replace(network->bss_table, bss->path, bss);
 
 	return 0;
 }
