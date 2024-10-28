@@ -268,9 +268,9 @@ int connman_provider_get_index(struct connman_provider *provider)
 	return provider ? provider->index : -1;
 }
 
-int connman_provider_get_family(struct connman_provider *provider)
+bool connman_provider_get_family(struct connman_provider *provider, int family)
 {
-	return provider ? provider->family : PF_UNSPEC;
+	return provider && provider->family == family;
 }
 
 int __connman_provider_create_and_connect(DBusMessage *msg) { return 0; }
