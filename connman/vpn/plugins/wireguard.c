@@ -53,6 +53,7 @@
 
 #define DNS_RERESOLVE_TIMEOUT 20
 #define DNS_RERESOLVE_ERROR_LIMIT 5
+#define ROUTE_SETUP_TIMEOUT 200 // ms
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
 struct wireguard_info {
@@ -66,6 +67,7 @@ struct wireguard_info {
 	guint resolv_id;
 	guint remove_resolv_id;
 	guint dying_id;
+	guint route_setup_id;
 };
 
 struct sockaddr_u {
@@ -262,6 +264,25 @@ struct wg_ipaddresses {
 	struct connman_ipaddress *ipaddress_ipv6;
 };
 
+static char *cidr_to_netmask(int family, unsigned char cidr)
+{
+	switch (family) {
+	case AF_INET:
+		return g_strdup_printf("%d.%d.%d.%d",
+				((0xffffffff << (32 - cidr)) >> 24) & 0xff,
+				((0xffffffff << (32 - cidr)) >> 16) & 0xff,
+				((0xffffffff << (32 - cidr)) >> 8) & 0xff,
+				((0xffffffff << (32 - cidr)) >> 0) & 0xff);
+
+	case AF_INET6:
+		return g_strdup_printf("%u", cidr);
+	default:
+		break;
+	}
+
+	return NULL;
+}
+
 static int parse_addresses(const char *address, const char *gateway,
 		struct wg_ipaddresses *ipaddresses)
 {
@@ -303,12 +324,7 @@ static int parse_addresses(const char *address, const char *gateway,
 			}
 
 			family = AF_INET;
-			netmask = g_strdup_printf("%d.%d.%d.%d",
-				((0xffffffff << (32 - prefixlen)) >> 24) & 0xff,
-				((0xffffffff << (32 - prefixlen)) >> 16) & 0xff,
-				((0xffffffff << (32 - prefixlen)) >> 8) & 0xff,
-				((0xffffffff << (32 - prefixlen)) >> 0) & 0xff);
-
+			netmask = cidr_to_netmask(family, prefixlen);
 			ipaddress = connman_ipaddress_alloc(family);
 			err = connman_ipaddress_set_ipv4(ipaddress, tokens[0],
 							netmask, gateway);
@@ -401,6 +417,7 @@ static bool sockaddr_cmp_addr(struct sockaddr_u *a, struct sockaddr_u *b)
 }
 
 static void run_dns_reresolve(struct wireguard_info *info);
+static void run_route_setup(struct wireguard_info *info, guint timeout);
 
 static void remove_resolv(struct wireguard_info *info)
 {
@@ -524,6 +541,13 @@ static void resolve_endpoint_cb(GResolvResultStatus status,
 			info->device.name);
 
 	run_dns_reresolve(info);
+
+	/*
+	 * Endpoint has changed and only one peer is used -> all old routes
+	 * are invalid. Redo them without delay.
+	 */
+	vpn_provider_delete_all_routes(info->provider);
+	run_route_setup(info, 0);
 }
 
 static int disconnect(struct vpn_provider *provider, int error);
@@ -562,21 +586,120 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 	return G_SOURCE_REMOVE;
 }
 
+static const char *endpoint_to_str(struct wg_peer *peer, char *buf,
+							socklen_t len)
+{
+	struct sockaddr_u *addr;
+	int family;
+
+	addr = (struct sockaddr_u *)&peer->endpoint.addr;
+	family = peer->endpoint.addr.sa_family;
+
+	switch (family) {
+	case AF_INET:
+		return inet_ntop(family, &addr->sin.sin_addr, buf, len);
+	case AF_INET6:
+		return inet_ntop(family, &addr->sin6.sin6_addr, buf, len);
+	default:
+		break;
+	}
+
+	return NULL;
+}
+
+static gboolean wg_route_setup_cb(gpointer user_data)
+{
+	struct wireguard_info *info = user_data;
+	struct wg_allowedip *allowedip;
+	char addr[INET6_ADDRSTRLEN] = { 0 };
+	char endpoint[INET6_ADDRSTRLEN] = { 0 };
+	char *netmask;
+	int family;
+	unsigned long idx = 0;
+
+	info->route_setup_id = 0;
+
+	family = info->peer.endpoint.addr.sa_family;
+
+	if (!endpoint_to_str(&info->peer, endpoint, INET6_ADDRSTRLEN)) {
+		DBG("Faulty endpoint set, use endpoint_fqdn");
+		memcpy(&endpoint, info->endpoint_fqdn, INET6_ADDRSTRLEN);
+		family = connman_inet_check_ipaddress(info->endpoint_fqdn);
+	}
+
+	wg_for_each_allowedip(&info->peer, allowedip) {
+		// TODO: search peers when multiple peers are supported
+		if (allowedip->family != family) {
+			DBG("Ignoring AllowedIP with different family as host");
+			continue;
+		}
+
+		memset(&addr, 0, INET6_ADDRSTRLEN);
+
+		switch (allowedip->family) {
+		case AF_INET:
+			if (!inet_ntop(allowedip->family, &allowedip->ip4, addr,
+							INET6_ADDRSTRLEN)) {
+				DBG("ignore invalid IPv4 address");
+				continue;
+			}
+
+			break;
+		case AF_INET6:
+			if (!inet_ntop(allowedip->family, &allowedip->ip6, addr,
+							INET6_ADDRSTRLEN)) {
+				DBG("ignore invalid IPv6 address");
+				continue;
+			}
+
+			break;
+		default:
+			DBG("ignore invalid IP family");
+			continue;
+		}
+
+		if (connman_inet_is_any_addr(addr, allowedip->family)) {
+			DBG("ignore any addr %s", addr);
+			continue;
+		}
+
+		netmask = cidr_to_netmask(allowedip->family, allowedip->cidr);
+
+		vpn_provider_append_route_complete(info->provider, idx,
+						allowedip->family, addr,
+						netmask, endpoint);
+
+		g_free(netmask);
+		++idx;
+	}
+
+	return G_SOURCE_REMOVE;
+}
+
 static void run_dns_reresolve(struct wireguard_info *info)
 {
 	if (info->reresolve_id)
 		g_source_remove(info->reresolve_id);
 
+	info->reresolve_id = 0;
+
 	if (vpn_provider_get_connection_errors(info->provider) >=
 						DNS_RERESOLVE_ERROR_LIMIT) {
 		connman_warn("reresolve error limit reached");
 		disconnect(info->provider, -ENONET);
-		info->reresolve_id = 0;
 		return;
 	}
 
 	info->reresolve_id = g_timeout_add_seconds(DNS_RERESOLVE_TIMEOUT,
 						wg_dns_reresolve_cb, info);
+}
+
+static void run_route_setup(struct wireguard_info *info, guint timeout)
+{
+	if (info->route_setup_id)
+		g_source_remove(info->route_setup_id);
+
+	info->route_setup_id = g_timeout_add(timeout, wg_route_setup_cb, info);
 }
 
 static int wg_connect(struct vpn_provider *provider,
@@ -660,6 +783,7 @@ static int wg_connect(struct vpn_provider *provider,
 	vpn_provider_set_boolean(provider, "SplitRouting", do_split_routing,
 							false);
 
+
 	option = vpn_provider_get_string(provider,
 					"WireGuard.PersistentKeepalive");
 	if (option) {
@@ -739,8 +863,10 @@ done:
 	connman_ipaddress_free(ipaddresses.ipaddress_ipv4);
 	connman_ipaddress_free(ipaddresses.ipaddress_ipv6);
 
-	if (!err)
+	if (!err) {
 		run_dns_reresolve(info);
+		run_route_setup(info, ROUTE_SETUP_TIMEOUT);
+	}
 
 	return err;
 
@@ -795,8 +921,11 @@ static int disconnect(struct vpn_provider *provider, int err)
 	if (info->dying_id)
 		return -EALREADY;
 
-	if (info->reresolve_id > 0)
+	if (info->reresolve_id)
 		g_source_remove(info->reresolve_id);
+
+	if (info->route_setup_id)
+		g_source_remove(info->route_setup_id);
 
 	if (info->resolv || info->resolv_id)
 		remove_resolv(info);
@@ -871,7 +1000,7 @@ static struct vpn_driver vpn_driver = {
 	.disconnect	= wg_disconnect,
 	.save		= wg_save,
 	.error_code	= wg_error_code,
-	.uses_vpn_agent = wg_uses_vpn_agent
+	.uses_vpn_agent	= wg_uses_vpn_agent
 };
 
 static int wg_init(void)
