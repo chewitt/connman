@@ -134,7 +134,8 @@ static int parse_key(const char *str, wg_key key)
 	return 0;
 }
 
-static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer)
+static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer,
+							bool *do_split_routing)
 {
 	struct wg_allowedip *curaip, *allowedip;
 	char buf[INET6_ADDRSTRLEN];
@@ -142,6 +143,7 @@ static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer)
 	char *send;
 	int i;
 
+	*do_split_routing = true;
 	curaip = NULL;
 	tokens = g_strsplit(allowed_ips, ", ", -1);
 	for (i = 0; tokens[i]; i++) {
@@ -168,6 +170,16 @@ static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer)
 		}
 
 		allowedip->cidr = g_ascii_strtoull(toks[1], &send, 10);
+
+		/*
+		 * Force split routing off if any address is detected as using
+		 * these as allowed IPs indicates that WireGuard is to be used
+		 * to route all traffic.
+		 */
+		if (connman_inet_is_any_addr(toks[0], allowedip->family))
+			*do_split_routing = false;
+
+		g_strfreev(toks);
 
 		if (!curaip)
 			peer->first_allowedip = allowedip;
@@ -576,6 +588,7 @@ static int wg_connect(struct vpn_provider *provider,
 	struct wireguard_info *info;
 	const char *option, *gateway;
 	char *ifname;
+	bool do_split_routing = true;
 	int err = -EINVAL;
 
 	info = create_private_data(provider);
@@ -638,11 +651,14 @@ static int wg_connect(struct vpn_provider *provider,
 		DBG("WireGuard.AllowedIPs is missing");
 		goto error;
 	}
-	err = parse_allowed_ips(option, &info->peer);
+	err = parse_allowed_ips(option, &info->peer, &do_split_routing);
 	if (err) {
 		DBG("Failed to parse allowed IPs %s", option);
 		goto error;
 	}
+
+	vpn_provider_set_boolean(provider, "SplitRouting", do_split_routing,
+							false);
 
 	option = vpn_provider_get_string(provider,
 					"WireGuard.PersistentKeepalive");
