@@ -118,7 +118,7 @@ void connman_provider_set_autoconnect(struct connman_provider *provider,
 bool connman_provider_is_split_routing(struct connman_provider *provider);
 int connman_provider_set_split_routing(struct connman_provider *provider,
 							bool split_routing);
-int connman_provider_get_family(struct connman_provider *provider);
+bool connman_provider_get_family(struct connman_provider *provider, int family);
 void connman_provider_set_ipv6_data_leak_prevention(
 					struct connman_provider *provider,
 					bool enable);
