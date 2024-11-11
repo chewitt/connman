@@ -90,7 +90,8 @@ struct {
 	{"WireGuard.PublicKey", true},
 	{"WireGuard.AllowedIPs", true},
 	{"WireGuard.EndpointPort", true},
-	{"WireGuard.PersistentKeepalive", true}
+	{"WireGuard.PersistentKeepalive", true},
+	{"WireGuard.DisableIPv6", true}
 };
 
 static struct wireguard_info *create_private_data(struct vpn_provider *provider)
@@ -712,6 +713,7 @@ static int wg_connect(struct vpn_provider *provider,
 	const char *option, *gateway;
 	char *ifname;
 	bool do_split_routing = true;
+	bool disable_ipv6 = false;
 	int err = -EINVAL;
 
 	info = create_private_data(provider);
@@ -855,6 +857,16 @@ static int wg_connect(struct vpn_provider *provider,
 	if (ipaddresses.ipaddress_ipv6)
 		vpn_provider_set_ipaddress(provider,
 						ipaddresses.ipaddress_ipv6);
+	else
+		/*
+		 * No IPv6 address when using as default route with IPv6
+		 * prevention enabled = do not tunnel IPv6.
+		 */
+		disable_ipv6 = vpn_provider_get_boolean(provider,
+					"WireGuard.DisableIPv6", false) &&
+					!do_split_routing;
+
+	vpn_provider_set_supported_ip_networks(provider, true, !disable_ipv6);
 
 done:
 	if (cb)
