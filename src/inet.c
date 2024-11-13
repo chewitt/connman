@@ -829,7 +829,7 @@ static int inet_modify_host_or_network_route(int cmd,
 	memset(&rth, 0, sizeof(rth));
 
 	rth.req.n.nlmsg_len   = NLMSG_LENGTH(sizeof(struct rtmsg));
-	rth.req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+	rth.req.n.nlmsg_flags = NLM_F_REQUEST;
 	rth.req.n.nlmsg_type  = cmd;
 
 	rth.req.u.r.rt.rtm_family   = family;
@@ -840,6 +840,9 @@ static int inet_modify_host_or_network_route(int cmd,
 							RT_SCOPE_LINK;
 	rth.req.u.r.rt.rtm_type     = RTN_UNICAST;
 	rth.req.u.r.rt.rtm_dst_len  = prefixlen;
+
+	if (cmd == RTM_NEWROUTE)
+		rth.req.n.nlmsg_flags |= NLM_F_CREATE | NLM_F_EXCL;
 
 	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req),
 				RTA_DST, host_or_network_buf, addr_len);
@@ -4717,7 +4720,7 @@ static int iproute_default_modify(int cmd, uint32_t table_id, uint32_t metric,
 	memset(&rth, 0, sizeof(rth));
 
 	rth.req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-	rth.req.n.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+	rth.req.n.nlmsg_flags = NLM_F_REQUEST;
 	rth.req.n.nlmsg_type = cmd;
 	rth.req.u.r.rt.rtm_family = family;
 	rth.req.u.r.rt.rtm_table = RT_TABLE_MAIN;
@@ -4725,6 +4728,9 @@ static int iproute_default_modify(int cmd, uint32_t table_id, uint32_t metric,
 	rth.req.u.r.rt.rtm_scope = RT_SCOPE_UNIVERSE;
 	rth.req.u.r.rt.rtm_type = RTN_UNICAST;
 	rth.req.u.r.rt.rtm_dst_len = prefixlen;
+
+	if (cmd == RTM_NEWROUTE)
+		rth.req.n.nlmsg_flags |= NLM_F_CREATE | NLM_F_EXCL;
 
 	__connman_inet_rtnl_addattr_l(&rth.req.n, sizeof(rth.req),
 		prefixlen > 0 ? RTA_DST : RTA_GATEWAY, buf, len);
