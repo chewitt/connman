@@ -4107,13 +4107,14 @@ static void wifi_device_newlink(unsigned int flags, unsigned int change,
 		DBG("interface %s", (flags & IFF_UP) ? "up" : "down");
 	}
 	if ((old_flags & IFF_LOWER_UP) != (flags & IFF_LOWER_UP)) {
-		if (flags & IFF_LOWER_UP) {
+		if (flags & IFF_LOWER_UP)
 			DBG("carrier on");
-			wifi_device_bridge_check(dev);
-		} else {
+		else
 			DBG("carrier off");
-		}
 	}
+
+	if (flags & IFF_LOWER_UP)
+		wifi_device_bridge_check(dev);
 }
 
 static gboolean wifi_device_autoscan_restart_cb(void *user_data)
