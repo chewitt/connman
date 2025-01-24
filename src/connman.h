@@ -787,6 +787,8 @@ int __connman_service_connect(struct connman_service *service,
 int __connman_service_disconnect(struct connman_service *service);
 void __connman_service_set_active_session(bool enable, GSList *list);
 void __connman_service_auto_connect(enum connman_service_connect_reason reason);
+void __connman_service_start_connect_timeout(struct connman_service *service,
+				bool restart);
 bool __connman_service_remove(struct connman_service *service);
 void __connman_service_set_hidden_data(struct connman_service *service,
 				gpointer user_data);
