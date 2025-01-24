@@ -201,7 +201,9 @@ static void agent_receive_message(DBusPendingCall *call, void *user_data)
 	if (dbus_message_is_error(reply,
 			"org.freedesktop.DBus.Error.Timeout") ||
 			dbus_message_is_error(reply,
-			"org.freedesktop.DBus.Error.TimedOut")) {
+			"org.freedesktop.DBus.Error.TimedOut") ||
+			dbus_message_is_error(reply,
+			"org.freedesktop.DBus.Error.NoReply")) {
 		send_cancel_request(agent, agent->pending);
 	}
 
