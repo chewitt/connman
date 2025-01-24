@@ -219,6 +219,9 @@ static int vpn_set_state(struct vpn_provider *provider,
 	case VPN_PROVIDER_STATE_IDLE:
 		data->state = VPN_STATE_IDLE;
 		break;
+	case VPN_PROVIDER_STATE_ASSOCIATION:
+		data->state = VPN_STATE_ASSOCIATION;
+		break;
 	case VPN_PROVIDER_STATE_CONNECT:
 	case VPN_PROVIDER_STATE_READY:
 		data->state = VPN_STATE_CONNECT;
@@ -281,6 +284,12 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 
 	switch (state) {
 	case VPN_STATE_CONNECT:
+		if (data->state == VPN_STATE_ASSOCIATION) {
+			data->state = VPN_STATE_CONNECT;
+			vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_CONNECT);
+		}
+		/* fall through */
 	case VPN_STATE_READY:
 		if (data->state == VPN_STATE_READY) {
 			/*
@@ -333,6 +342,16 @@ static DBusMessage *vpn_notify(struct connman_task *task,
 		break;
 
 	case VPN_STATE_UNKNOWN:
+		break;
+
+	/* State transition to ASSOCIATION via notify is not allowed */
+	case VPN_STATE_ASSOCIATION:
+		connman_warn("Invalid %s vpn_notify() state transition "
+					"from %d to %d (ASSOCIATION)."
+					"VPN provider %p is disconnected",
+					vpn_driver_data->name, data->state,
+					state, provider);
+		/* fall through */
 	case VPN_STATE_IDLE:
 	case VPN_STATE_DISCONNECT:
 	case VPN_STATE_FAILURE:
@@ -565,6 +584,7 @@ static int vpn_connect(struct vpn_provider *provider,
 		data->state = VPN_STATE_IDLE;
 		break;
 
+	case VPN_STATE_ASSOCIATION:
 	case VPN_STATE_CONNECT:
 		return -EINPROGRESS;
 
@@ -645,7 +665,7 @@ static int vpn_connect(struct vpn_provider *provider,
 	DBG("%s started with dev %s",
 		vpn_driver_data->provider_driver.name, data->if_name);
 
-	data->state = VPN_STATE_CONNECT;
+	data->state = VPN_STATE_ASSOCIATION;
 
 	return -EINPROGRESS;
 
