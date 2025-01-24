@@ -270,6 +270,13 @@ static bool provider_is_connected(struct connection_data *data)
 			g_str_equal(data->state, "configuration"));
 }
 
+static bool provider_is_connected_or_connecting(struct connection_data *data)
+{
+	return data && (g_str_equal(data->state, "ready") ||
+			g_str_equal(data->state, "configuration") ||
+			g_str_equal(data->state, "association"));
+}
+
 static void set_provider_state(struct connection_data *data)
 {
 	enum connman_provider_state state = CONNMAN_PROVIDER_STATE_UNKNOWN;
@@ -278,7 +285,11 @@ static void set_provider_state(struct connection_data *data)
 
 	DBG("provider %p new state %s", data->provider, data->state);
 
-	connected = provider_is_connected(data);
+	/*
+	 * To avoid clearing transport ident when VPN is waiting for agent
+	 * take also connecting state into account.
+	 */
+	connected = provider_is_connected_or_connecting(data);
 
 	if (g_str_equal(data->state, "ready")) {
 		state = CONNMAN_PROVIDER_STATE_READY;
@@ -1076,7 +1087,7 @@ static int provider_disconnect(struct connman_provider *provider)
 	if (!data)
 		return -EINVAL;
 
-	if (provider_is_connected(data))
+	if (provider_is_connected_or_connecting(data))
 		err = disconnect_provider(data);
 
 	if (data->call) {
@@ -1730,7 +1741,7 @@ static void destroy_provider(struct connection_data *data)
 {
 	DBG("data %p", data);
 
-	if (provider_is_connected(data))
+	if (provider_is_connected_or_connecting(data))
 		connman_provider_disconnect(data->provider);
 
 	connman_provider_set_data(data->provider, NULL);
@@ -2183,7 +2194,7 @@ static bool vpn_is_valid_transport(struct connman_service *transport)
 
 static void vpn_disconnect_check_provider(struct connection_data *data)
 {
-	if (provider_is_connected(data)) {
+	if (provider_is_connected_or_connecting(data)) {
 		/* With NULL service ident NULL is returned immediately */
 		struct connman_service *service =
 			connman_service_lookup_from_identifier
