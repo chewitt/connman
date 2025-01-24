@@ -66,7 +66,12 @@ VPN agent interface described in vpn-agent-api.txt is used for
 interaction between the connectivity UI and ConnMan. A VPN agent
 registered via Management interface gets requests from the VPN plugins
 to input credentials or other authentication information for the VPN
-connection and offers information about the VPN to be connected.
+connection and offers information about the VPN to be connected. When
+waiting for input via VPN agent the state of the VPN is "association"
+and after getting the input the state transitions to "connect". If the
+VPN does not wish to use VPN agent this can be explicitly defined by
+implementing "uses_vpn_agent()" returning "false" indicating that the
+state is transitioned to "connect" when connecting the VPN.
 
 In addition to basic credentials, there are additional types of optional
 and control parameters. The user can dictate whether to store the
