@@ -134,3 +134,13 @@ bool vpn_settings_is_system_user(const char *user);
 struct passwd *vpn_util_get_passwd(const char *username);
 struct group *vpn_util_get_group(const char *groupname);
 int vpn_util_create_path(const char *path, uid_t uid, gid_t grp, int mode);
+
+#include <gweb/gresolv.h>
+
+unsigned int vpn_util_resolve_hostname(GResolv *resolv,
+				const char *hostname, GResolvResultFunc func,
+				gpointer user_data);
+bool vpn_util_cancel_resolve(GResolv *resolv, unsigned int id);
+GResolv *vpn_util_resolve_new(int index);
+void vpn_util_resolve_unref(GResolv *resolv);
+int vpn_util_get_resolve_error(GResolv *resolv);

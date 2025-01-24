@@ -222,3 +222,33 @@ out:
 	return err;
 }
 
+unsigned int vpn_util_resolve_hostname(GResolv *resolv,
+				const char *hostname, GResolvResultFunc func,
+				gpointer user_data)
+{
+	DBG("resolve %s", hostname);
+
+	return g_resolv_lookup_hostname(resolv, hostname, func, user_data);
+}
+
+bool vpn_util_cancel_resolve(GResolv *resolv, unsigned int id)
+{
+	DBG("");
+
+	return g_resolv_cancel_lookup(resolv, id);
+}
+
+GResolv *vpn_util_resolve_new(int index)
+{
+	return g_resolv_new(index);
+}
+
+void vpn_util_resolve_unref(GResolv *resolv)
+{
+	g_resolv_unref(resolv);
+}
+
+int vpn_util_get_resolve_error(GResolv *resolv)
+{
+	return g_resolv_get_error(resolv);
+}
