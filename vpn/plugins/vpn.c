@@ -75,6 +75,7 @@ static int stop_vpn(struct vpn_provider *provider)
 {
 	struct vpn_data *data = vpn_provider_get_data(provider);
 	struct vpn_driver_data *vpn_driver_data;
+	const struct vpn_driver *vpn_driver = NULL;
 	const char *name;
 	struct ifreq ifr;
 	int fd, err;
@@ -87,16 +88,19 @@ static int stop_vpn(struct vpn_provider *provider)
 		return -EINVAL;
 
 	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
+	if (vpn_driver_data)
+		vpn_driver = vpn_driver_data->vpn_driver;
 
-	if (vpn_driver_data && vpn_driver_data->vpn_driver &&
-			vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_TUN) {
+	if (vpn_driver && vpn_driver->flags & VPN_FLAG_NO_TUN) {
 		/*
 		 * Disconnect only VPNs with daemon, otherwise in error return
 		 * there is a double free with vpn_died() or the failure state
 		 * is overridden by changes made by disconnect to state.
 		 */
-		if (!(vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_DAEMON))
-			vpn_driver_data->vpn_driver->disconnect(data->provider);
+		if (!(vpn_driver->flags & VPN_FLAG_NO_DAEMON) &&
+							vpn_driver->disconnect)
+			vpn_driver->disconnect(data->provider);
+
 		return 0;
 	}
 
