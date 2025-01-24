@@ -43,6 +43,8 @@
 #include <connman/setting.h>
 #include <connman/vpn-dbus.h>
 
+#include <gweb/gresolv.h>
+
 #include "../vpn-provider.h"
 #include "../vpn.h"
 
@@ -59,7 +61,10 @@ struct wireguard_info {
 	struct wg_peer peer;
 	char *endpoint_fqdn;
 	char *port;
-	int reresolve_id;
+	guint reresolve_id;
+	GResolv *resolv;
+	guint resolv_id;
+	guint remove_resolv_id;
 };
 
 struct sockaddr_u {
@@ -293,43 +298,120 @@ static bool sockaddr_cmp_addr(struct sockaddr_u *a, struct sockaddr_u *b)
 
 static void run_dns_reresolve(struct wireguard_info *info);
 
-static gboolean wg_dns_reresolve_cb(gpointer user_data)
+static void remove_resolv(struct wireguard_info *info)
+{
+	DBG("");
+
+	if (info->remove_resolv_id)
+		g_source_remove(info->remove_resolv_id);
+
+	if (info->resolv && info->resolv_id) {
+		DBG("cancel resolv lookup");
+		vpn_util_cancel_resolve(info->resolv, info->resolv_id);
+	}
+
+	info->resolv_id = 0;
+	info->remove_resolv_id = 0;
+
+	vpn_util_resolve_unref(info->resolv);
+	info->resolv = NULL;
+}
+
+static gboolean remove_resolv_cb(gpointer user_data)
+{
+	struct wireguard_info *info = user_data;
+
+	remove_resolv(info);
+
+	return G_SOURCE_REMOVE;
+}
+
+static void resolve_endpoint_cb(GResolvResultStatus status,
+					char **results, gpointer user_data)
 {
 	struct wireguard_info *info = user_data;
 	struct sockaddr_u addr;
 	int err;
 
-	if (vpn_provider_get_connection_errors(info->provider) >=
-						DNS_RERESOLVE_ERROR_LIMIT) {
-		connman_warn("reresolve error limit reached");
-		vpn_died(NULL, -ENONET, info->provider);
-		return G_SOURCE_REMOVE;
+	DBG("");
+
+	if (!info->resolv && info->resolv_id) {
+		DBG("resolv already removed");
+		return;
 	}
 
-	/* If this fails after being connected it means configuration error
-	 * that results in connection errors. */
-	err = parse_endpoint(info->endpoint_fqdn,
-			info->port, &addr);
+	/*
+	 * We cannot unref the resolver here as resolv struct is manipulated
+	 * by gresolv.c after we return from this callback. By clearing the
+	 * resolv_id no attempt to cancel the lookup that has been executed
+	 * here is done.
+	 */
+	info->remove_resolv_id = g_timeout_add(0, remove_resolv_cb, info);
+	info->resolv_id = 0;
+
+	switch (status) {
+	case G_RESOLV_RESULT_STATUS_SUCCESS:
+		if (!results || !g_strv_length(results)) {
+			DBG("no resolved results");
+			if (info->provider)
+				vpn_provider_add_error(info->provider,
+					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+
+			return;
+		}
+
+		DBG("resolv success, parse endpoint");
+		break;
+	/* request timeouts or an server issue is not an error, try again */
+	case G_RESOLV_RESULT_STATUS_NO_RESPONSE:
+	case G_RESOLV_RESULT_STATUS_SERVER_FAILURE:
+		DBG("retry DNS reresolve");
+		if (info->provider)
+			vpn_provider_add_error(info->provider,
+					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+
+		run_dns_reresolve(info);
+		return;
+	/* Consider these as non-continuable errors */
+	case G_RESOLV_RESULT_STATUS_ERROR:
+	case G_RESOLV_RESULT_STATUS_FORMAT_ERROR:
+	case G_RESOLV_RESULT_STATUS_NAME_ERROR:
+	case G_RESOLV_RESULT_STATUS_NOT_IMPLEMENTED:
+	case G_RESOLV_RESULT_STATUS_REFUSED:
+	case G_RESOLV_RESULT_STATUS_NO_ANSWER:
+		DBG("stop DNS reresolve");
+		if (info->provider)
+			vpn_provider_add_error(info->provider,
+					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+
+		return;
+	}
+
+	/*
+	 * If this fails after being connected it means configuration error
+	 * that results in connection errors.
+	 */
+	err = parse_endpoint(info->endpoint_fqdn, info->port, &addr);
 	if (err) {
 		if (info->provider)
 			vpn_provider_add_error(info->provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
 		run_dns_reresolve(info);
-		return G_SOURCE_REMOVE;
+		return;
 	}
 
 	if (sockaddr_cmp_addr(&addr,
 			(struct sockaddr_u *)&info->peer.endpoint.addr)) {
 		run_dns_reresolve(info);
-		return G_SOURCE_REMOVE;
+		return;
 	}
 
 	if (addr.sa.sa_family == AF_INET)
 		memcpy(&info->peer.endpoint.addr, &addr.sin,
-			sizeof(info->peer.endpoint.addr4));
+					sizeof(info->peer.endpoint.addr4));
 	else
 		memcpy(&info->peer.endpoint.addr, &addr.sin6,
-			sizeof(info->peer.endpoint.addr6));
+					sizeof(info->peer.endpoint.addr6));
 
 	DBG("Endpoint address has changed, udpate WireGuard device");
 	err = wg_set_device(&info->device);
@@ -338,6 +420,39 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 			info->device.name);
 
 	run_dns_reresolve(info);
+}
+
+static gboolean wg_dns_reresolve_cb(gpointer user_data)
+{
+	struct wireguard_info *info = user_data;
+	int err;
+
+	DBG("");
+
+	info->reresolve_id = 0;
+
+	if (info->resolv_id > 0) {
+		DBG("previous query was running, abort it");
+		remove_resolv(info);
+	}
+
+	info->resolv = vpn_util_resolve_new(0);
+	if (!info->resolv) {
+		connman_error("cannot create GResolv");
+		return G_SOURCE_REMOVE;
+	}
+
+	info->resolv_id = vpn_util_resolve_hostname(info->resolv,
+						info->endpoint_fqdn,
+						resolve_endpoint_cb, info);
+
+	err = vpn_util_get_resolve_error(info->resolv);
+	if (!info->resolv_id && err) {
+		connman_error("failed to start hostname lookup for %s, err %d",
+						info->endpoint_fqdn, err);
+		vpn_died(NULL, err, info->provider);
+	}
+
 	return G_SOURCE_REMOVE;
 }
 
@@ -345,6 +460,14 @@ static void run_dns_reresolve(struct wireguard_info *info)
 {
 	if (info->reresolve_id)
 		g_source_remove(info->reresolve_id);
+
+	if (vpn_provider_get_connection_errors(info->provider) >=
+						DNS_RERESOLVE_ERROR_LIMIT) {
+		connman_warn("reresolve error limit reached");
+		vpn_died(NULL, -ENONET, info->provider);
+		info->reresolve_id = 0;
+		return;
+	}
 
 	info->reresolve_id = g_timeout_add_seconds(DNS_RERESOLVE_TIMEOUT,
 						wg_dns_reresolve_cb, info);
@@ -446,6 +569,12 @@ static int wg_connect(struct vpn_provider *provider,
 		option = "51820";
 
 	gateway = vpn_provider_get_string(provider, "Host");
+	/*
+	 * Use the resolve timeout only with re-resolve. Here the network
+	 * is setup as the transport is used. In succeeding attempts resolving
+	 * is needed as it is done over potentially misconfigured WireGuard
+	 * connection that may end up blocking vpnd with getaddrinfo().
+	 */
 	err = parse_endpoint(gateway, option,
 			(struct sockaddr_u *)&info->peer.endpoint.addr);
 	if (err) {
@@ -527,6 +656,9 @@ static void wg_disconnect(struct vpn_provider *provider)
 
 	if (info->reresolve_id > 0)
 		g_source_remove(info->reresolve_id);
+
+	if (info->resolv || info->resolv_id)
+		remove_resolv(info);
 
 	vpn_provider_set_plugin_data(provider, NULL);
 
