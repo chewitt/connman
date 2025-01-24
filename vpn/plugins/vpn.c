@@ -90,7 +90,13 @@ static int stop_vpn(struct vpn_provider *provider)
 
 	if (vpn_driver_data && vpn_driver_data->vpn_driver &&
 			vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_TUN) {
-		vpn_driver_data->vpn_driver->disconnect(data->provider);
+		/*
+		 * Disconnect only VPNs with daemon, otherwise in error return
+		 * there is a double free with vpn_died() or the failure state
+		 * is overridden by changes made by disconnect to state.
+		 */
+		if (!(vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_DAEMON))
+			vpn_driver_data->vpn_driver->disconnect(data->provider);
 		return 0;
 	}
 
@@ -130,16 +136,27 @@ void vpn_died(struct connman_task *task, int exit_code, void *user_data)
 {
 	struct vpn_provider *provider = user_data;
 	struct vpn_data *data = vpn_provider_get_data(provider);
+	struct vpn_driver_data *vpn_data = NULL;
+	const char *name;
 	int state = VPN_STATE_FAILURE;
 	enum vpn_provider_error ret;
+	bool no_daemon = false;
 
-	DBG("provider %p data %p", provider, data);
+	name = vpn_provider_get_driver_name(provider);
+	if (name) {
+		vpn_data = g_hash_table_lookup(driver_hash, name);
+		if (vpn_data && vpn_data->vpn_driver)
+			no_daemon = vpn_data->vpn_driver->flags &
+							VPN_FLAG_NO_DAEMON;
+	}
+
+	DBG("provider %p data %p no_daemon %d", provider, data, no_daemon);
 
 	if (!data)
 		goto vpn_exit;
 
 	/* The task may die after we have already started the new one */
-	if (data->task != task)
+	if (!no_daemon && data->task != task)
 		goto done;
 
 	state = data->state;
@@ -155,15 +172,7 @@ void vpn_died(struct connman_task *task, int exit_code, void *user_data)
 
 vpn_exit:
 	if (state != VPN_STATE_READY && state != VPN_STATE_DISCONNECT) {
-		const char *name;
-		struct vpn_driver_data *vpn_data = NULL;
-
-		name = vpn_provider_get_driver_name(provider);
-		if (name)
-			vpn_data = g_hash_table_lookup(driver_hash, name);
-
-		if (vpn_data &&
-				vpn_data->vpn_driver->error_code)
+		if (vpn_data && vpn_data->vpn_driver->error_code)
 			ret = vpn_data->vpn_driver->error_code(provider,
 					exit_code);
 		else
@@ -182,7 +191,8 @@ vpn_exit:
 	}
 
 done:
-	connman_task_destroy(task);
+	if (!no_daemon)
+		connman_task_destroy(task);
 }
 
 int vpn_set_ifname(struct vpn_provider *provider, const char *ifname)
@@ -543,6 +553,8 @@ static gboolean update_provider_state(gpointer data)
 	vpn_data->watch = vpn_rtnl_add_newlink_watch(index,
 						vpn_newlink, provider);
 	connman_inet_ifup(index);
+	vpn_data->state = VPN_STATE_CONNECT;
+	vpn_provider_set_state(provider, VPN_PROVIDER_STATE_CONNECT);
 
 	return FALSE;
 }
@@ -618,18 +630,10 @@ static int vpn_connect(struct vpn_provider *provider,
 
 		ret = vpn_driver_data->vpn_driver->connect(provider,
 					NULL, NULL, cb, dbus_sender, user_data);
-		if (ret) {
-			stop_vpn(provider);
-			goto exist_err;
-		}
+		if (!ret)
+			g_timeout_add(1, update_provider_state, provider);
 
-		DBG("%s started with dev %s",
-			vpn_driver_data->provider_driver.name, data->if_name);
-
-		data->state = VPN_STATE_CONNECT;
-
-		g_timeout_add(1, update_provider_state, provider);
-		return -EINPROGRESS;
+		goto done;
 	}
 
 	vpn_plugin_data =
@@ -655,9 +659,12 @@ static int vpn_connect(struct vpn_provider *provider,
 	ret = vpn_driver_data->vpn_driver->connect(provider, data->task,
 						data->if_name, cb, dbus_sender,
 						user_data);
+
+done:
 	if (ret < 0 && ret != -EINPROGRESS) {
 		stop_vpn(provider);
-		connman_task_destroy(data->task);
+		if (data->task)
+			connman_task_destroy(data->task);
 		data->task = NULL;
 		goto exist_err;
 	}
