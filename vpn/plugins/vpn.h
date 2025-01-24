@@ -57,6 +57,7 @@ struct vpn_driver {
 	int (*route_env_parse) (struct vpn_provider *provider, const char *key,
 			int *family, unsigned long *idx,
 			enum vpn_provider_route_type *type);
+	bool (*uses_vpn_agent) (struct vpn_provider *provider);
 };
 
 int vpn_register(const char *name, const struct vpn_driver *driver,
