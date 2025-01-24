@@ -427,8 +427,8 @@ static int extract_ip(DBusMessageIter *array, int family,
 			dbus_message_iter_get_basic(&value, &netmask);
 			DBG("netmask %s", netmask);
 		} else if (g_str_equal(key, "PrefixLength")) {
-			dbus_message_iter_get_basic(&value, &netmask);
-			DBG("prefix length %s", netmask);
+			dbus_message_iter_get_basic(&value, &prefix_len);
+			DBG("prefix length %u", prefix_len);
 		} else if (g_str_equal(key, "Peer")) {
 			dbus_message_iter_get_basic(&value, &peer);
 			DBG("peer %s", peer);
@@ -451,7 +451,6 @@ static int extract_ip(DBusMessageIter *array, int family,
 								gateway);
 		break;
 	case AF_INET6:
-		prefix_len = atoi(netmask);
 		connman_ipaddress_set_ipv6(data->ip, address, prefix_len,
 								gateway);
 		break;
