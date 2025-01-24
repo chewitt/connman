@@ -349,8 +349,10 @@ static int wg_connect(struct vpn_provider *provider,
 	option = vpn_provider_get_string(provider, "WireGuard.DNS");
 	if (option) {
 		err = vpn_provider_set_nameservers(provider, option);
-		if (err)
+		if (err) {
+			DBG("Cannot set nameservers %s", option);
 			goto done;
+		}
 	}
 
 	option = vpn_provider_get_string(provider, "WireGuard.PrivateKey");
@@ -359,8 +361,10 @@ static int wg_connect(struct vpn_provider *provider,
 		goto done;
 	}
 	err = parse_key(option, info->device.private_key);
-	if (err)
+	if (err) {
+		DBG("Failed to parse private key");
 		goto done;
+	}
 
 	option = vpn_provider_get_string(provider, "WireGuard.PublicKey");
 	if (!option) {
@@ -368,15 +372,19 @@ static int wg_connect(struct vpn_provider *provider,
 		goto done;
 	}
 	err = parse_key(option, info->peer.public_key);
-	if (err)
+	if (err) {
+		DBG("Failed to parse public key");
 		goto done;
+	}
 
 	option = vpn_provider_get_string(provider, "WireGuard.PresharedKey");
 	if (option) {
 		info->peer.flags |= WGPEER_HAS_PRESHARED_KEY;
 		err = parse_key(option, info->peer.preshared_key);
-		if (err)
+		if (err) {
+			DBG("Failed to parse pre-shared key");
 			goto done;
+		}
 	}
 
 	option = vpn_provider_get_string(provider, "WireGuard.AllowedIPs");
@@ -385,8 +393,10 @@ static int wg_connect(struct vpn_provider *provider,
 		goto done;
 	}
 	err = parse_allowed_ips(option, &info->peer);
-	if (err)
+	if (err) {
+		DBG("Failed to parse allowed IPs %s", option);
 		goto done;
+	}
 
 	option = vpn_provider_get_string(provider,
 					"WireGuard.PersistentKeepalive");
@@ -404,8 +414,10 @@ static int wg_connect(struct vpn_provider *provider,
 	gateway = vpn_provider_get_string(provider, "Host");
 	err = parse_endpoint(gateway, option,
 			(struct sockaddr_u *)&info->peer.endpoint.addr);
-	if (err)
+	if (err) {
+		DBG("Failed to parse endpoint %s gateway %s", option, gateway);
 		goto done;
+	}
 
 	info->endpoint_fqdn = g_strdup(gateway);
 	info->port = g_strdup(option);
@@ -416,8 +428,10 @@ static int wg_connect(struct vpn_provider *provider,
 		goto done;
 	}
 	err = parse_address(option, gateway, &ipaddress);
-	if (err)
+	if (err) {
+		DBG("Failed to parse address %s gateway %s", option, gateway);
 		goto done;
+	}
 
 	ifname = get_ifname();
 	if (!ifname) {
@@ -446,7 +460,7 @@ static int wg_connect(struct vpn_provider *provider,
 
 done:
 	if (cb)
-		cb(provider, user_data, err);
+		cb(provider, user_data, -err);
 
 	connman_ipaddress_free(ipaddress);
 
