@@ -71,6 +71,8 @@ bool g_resolv_cancel_lookup(GResolv *resolv, guint id);
 
 bool g_resolv_set_address_family(GResolv *resolv, int family);
 
+int g_resolv_get_error(GResolv *resolv);
+
 #ifdef __cplusplus
 }
 #endif
