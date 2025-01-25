@@ -3704,10 +3704,10 @@ int __connman_gateway_add(struct connman_service *service,
 					is_gateway_config_vpn(
 						new_gateway->ipv4_config);
 
-		is_vpn6 = do_ipv4 &&
-					new_gateway->ipv4_config &&
+		is_vpn6 = do_ipv6 &&
+					new_gateway->ipv6_config &&
 					is_gateway_config_vpn(
-						new_gateway->ipv4_config);
+						new_gateway->ipv6_config);
 
 	} else {
 		if (do_ipv4 && new_gateway->ipv4_config)
