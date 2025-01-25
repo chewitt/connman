@@ -1697,16 +1697,6 @@ int connman_inet_add_network_route(int index, const char *host,
 	addr.sin_addr.s_addr = inet_addr(host);
 	memcpy(&rt.rt_dst, &addr, sizeof(rt.rt_dst));
 
-	/*
-	 * Don't add a routes for link-local or unspecified
-	 * destination address coupled with unspecified gateway.
-	 */
-	if ((!host || is_addr_ll(AF_INET, (struct sockaddr *)&addr) || __connman_inet_is_any_addr(host, AF_INET))
-			&& (!gateway || __connman_inet_is_any_addr(gateway, AF_INET))) {
-		close(sk);
-		return -EINVAL;
-	}
-
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	if (gateway)
@@ -2128,26 +2118,12 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 					const char *gateway,
 					unsigned char prefix_len)
 {
-	struct sockaddr_in6 addr;
 	struct in6_rtmsg rt;
 	int sk, err = 0;
 
 	DBG("index %d host %s gateway %s", index, host, gateway);
 
 	if (!host)
-		return -EINVAL;
-
-	if (inet_pton(AF_INET6, host, &addr.sin6_addr) != 1) {
-		err = -errno;
-		goto out;
-	}
-
-	/*
-	 * Don't add a route for link-local or unspecified
-	 * destination address coupled with unspecified gateway.
-	 */
-	if ((!host || is_addr_ll(AF_INET6, (struct sockaddr *)&addr) || __connman_inet_is_any_addr(host, AF_INET6))
-			&& (!gateway || __connman_inet_is_any_addr(gateway, AF_INET6)))
 		return -EINVAL;
 
 	memset(&rt, 0, sizeof(rt));
