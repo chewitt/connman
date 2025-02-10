@@ -1415,7 +1415,11 @@ static void cm_get_contexts_reply(DBusPendingCall *call, void *user_data)
 		dbus_message_iter_next(&entry);
 		dbus_message_iter_recurse(&entry, &value);
 
-		if (add_cm_context(modem, context_path, &value))
+		/*
+		 * If a context of type 'internet' is found, stop iterating;
+		 * we have the desired context.
+		 */
+		if (add_cm_context(modem, context_path, &value) == 0)
 			break;
 
 		dbus_message_iter_next(&dict);
