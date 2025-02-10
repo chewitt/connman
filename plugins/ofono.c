@@ -1147,6 +1147,35 @@ static int set_context_ipconfig(struct network_context *context,
 	return 0;
 }
 
+/**
+ *  @brief
+ *    Attempt to add an oFono context.
+ *
+ *  This evaluates the oFono context with the specified path and
+ *  dictionary. If it finds one of type 'internet', it adds the
+ *  context to the modem context list; adds the modem to the context
+ *  hash, keyed off the context path; and, if the context has a valid
+ *  APN, the modem is attached, and has a network registration
+ *  interface, a connman network object is created for the context.
+ *
+ *  @param[in,out]  modem         A pointer to the mutable modem data
+ *                                instance associated with @a
+ *                                context_path.
+ *  @param[in]      context_path  A pointer to an immutable, null-
+ *                                terminated C string containing the
+ *                                path of the context to evaluate.
+ *  @param[in]      dict          A pointer to a D-Bus message iterator
+ *                                for the dictionary associated with
+ *                                the context to evaluate.
+ *
+ *  @retval  0        If successful.
+ *  @retval  -ENOMEM  If memory could not be allocated for a context
+ *                    instance.
+ *  @retval  -EINVAL  If the context was not of type 'internet'.
+ *
+ *  @private
+ *
+ */
 static int add_cm_context(struct modem_data *modem, const char *context_path,
 				DBusMessageIter *dict)
 {
