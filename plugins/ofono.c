@@ -167,6 +167,9 @@ struct modem_data {
 	DBusPendingCall *call_get_contexts;
 };
 
+static int cm_get_contexts(struct modem_data *modem);
+static int cm_get_properties(struct modem_data *modem);
+
 static const char *api2string(enum ofono_api api)
 {
 	switch (api) {
@@ -1038,6 +1041,27 @@ static bool try_create_device(struct modem_data *modem)
 
 	modem->device = device;
 	connman_device_set_powered(modem->device, modem->online);
+
+	/*
+	 * The order in which the LTE and Connection Manager interfaces
+	 * arrive may not always be the same.
+	 *
+	 * If the latter arrived before the former and a modem device was
+	 * successfully created, this represents a secondary opportunity
+	 * to get Connection Manager properties and contexts, both
+	 * essential to successfully creating a Connection Manager
+	 * Cellular network and service.
+	 *
+	 * The primary opportunity would have been with api_added in
+	 * modem_update_interfaces; however, that would have been skipped
+	 * since the LTE interface did not yet exist in such a scenario
+	 * and this call would exit early due to the LTE_CAPABLE and
+	 * OFONO_API_LTE conditional checks above.
+	 */
+	if (has_interface(modem->interfaces, OFONO_API_CM)) {
+		cm_get_properties(modem);
+		cm_get_contexts(modem);
+	}
 
 	return true;
 }
