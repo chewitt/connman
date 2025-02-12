@@ -1190,12 +1190,15 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 	struct network_context *context = NULL;
 	dbus_bool_t active = FALSE;
 	const char *ip_protocol = NULL;
+	int err = 0;
 
 	DBG("%s context path %s", modem->path, context_path);
 
 	context = network_context_alloc(context_path);
-	if (!context)
-		return -ENOMEM;
+	if (!context) {
+		err = -ENOMEM;
+		goto done;
+	}
 
 	while (dbus_message_iter_get_arg_type(dict) == DBUS_TYPE_DICT_ENTRY) {
 		DBusMessageIter entry, value;
@@ -1247,7 +1250,8 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 
 	if (g_strcmp0(context_type, "internet") != 0) {
 		network_context_unref(context);
-		return -EINVAL;
+		err = -EINVAL;
+		goto done;
 	}
 
 	if (ip_protocol)
@@ -1262,7 +1266,10 @@ static int add_cm_context(struct modem_data *modem, const char *context_path,
 	    has_interface(modem->interfaces, OFONO_API_NETREG))
 		add_network(modem, context);
 
-	return 0;
+done:
+	DBG("err %d", err);
+
+	return err;
 }
 
 static void remove_cm_context(struct modem_data *modem,
