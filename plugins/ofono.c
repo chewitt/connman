@@ -1334,6 +1334,12 @@ static gboolean context_changed(DBusConnection *conn,
 
 	DBG("context_path %s", context_path);
 
+	/*
+	 * If there is no modem in the context hash for the associated
+	 * context path, then there is nothing to do at the moment as
+	 * the context must first be added before we can process changes
+	 * to it.
+	 */
 	modem = g_hash_table_lookup(context_hash, context_path);
 	if (!modem)
 		return TRUE;
