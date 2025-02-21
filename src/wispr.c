@@ -1118,6 +1118,26 @@ static char *parse_proxy(const char *proxy)
 	return proxy_server;
 }
 
+/**
+ *  @brief
+ *    Log a Wireless Internet Service Provider roaming (WISPr) proxy
+ *    auto-configuration (PAC)-related online reachability check
+ *    failure.
+ *
+ *  @param[in]  wp_context  A pointer to the immutable WISPr/portal
+ *                          context for which to log the proxy
+ *                          auto-configuration (PAC)-related online
+ *                          reachability check failure.
+ *  @param[in]  reason      A pointer to an immutable, null-terminated
+ *                          C string containing the reason for the
+ *                          proxy auto-configuration (PAC)-related
+ *                          online reachability check failure which
+ *                          will be included at the start of the log
+ *                          message.
+ *
+ *  @private
+ *
+ */
 static void wispr_log_proxy_failure(
 		struct connman_wispr_portal_context const *wp_context,
 		const char *reason)
