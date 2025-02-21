@@ -1147,7 +1147,7 @@ static void proxy_callback(const char *proxy, void *user_data)
 		return;
 
 	if (!proxy) {
-		DBG("no valid proxy");
+		wispr_log_proxy_failure(wp_context, "No valid proxy");
 
 		wp_context->cb(wp_context->service,
 				wp_context->type,
@@ -1320,6 +1320,8 @@ static int wispr_portal_detect(struct connman_wispr_portal_context *wp_context,
 						proxy_callback, wp_context);
 
 		if (wp_context->proxy_token == 0) {
+			wispr_log_proxy_failure(wp_context, "Failed to lookup");
+
 			err = -EINVAL;
 			wispr_portal_context_unref(wp_context);
 		}
