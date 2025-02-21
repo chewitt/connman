@@ -233,6 +233,7 @@ static struct connman_ipconfig *create_ip4config(struct connman_service *service
 static struct connman_ipconfig *create_ip6config(struct connman_service *service,
 		int index);
 static void dns_changed(struct connman_service *service);
+static void proxy_changed(struct connman_service *service);
 static void vpn_auto_connect(void);
 static void trigger_autoconnect(struct connman_service *service);
 static void service_list_sort(const char *function);
@@ -566,6 +567,32 @@ static void service_log_pac(const struct connman_service *service,
 				 interface,
 				 __connman_service_type2string(service->type),
 				 url ? url : "is not set");
+}
+
+static void service_set_pac(struct connman_service *service,
+				const char *pac,
+				bool dochanged)
+{
+	DBG("service %p (%s) pac %p (%s) dochanged %u",
+		service, connman_service_get_identifier(service),
+		pac,
+		pac ? pac : "<null>",
+		dochanged);
+
+	if (service->hidden)
+		return;
+
+	service_log_pac(service, pac);
+
+	g_free(service->pac);
+
+	if (pac && strlen(pac) > 0)
+		service->pac = g_strstrip(g_strdup(pac));
+	else
+		service->pac = NULL;
+
+	if (dochanged)
+		proxy_changed(service);
 }
 
 static int service_load(struct connman_service *service)
