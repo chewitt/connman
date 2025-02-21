@@ -556,6 +556,21 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	return 0;
 }
 
+/**
+ *  @brief
+ *    Log the proxy auto-configuration (PAC) URL associated with the
+ *    specified service.
+ *
+ *  @param[in]  service  A pointer to the immutable network
+ *                       service for which to log the proxy
+ *                       auto-configuration (PAC) URL.
+ *  @param[in]  url      An optional pointer to the immutable null-
+ *                       terminated C string containing the proxy
+ *                       auto-configuration (PAC) URL.
+ *
+ *  @private
+ *
+ */
 static void service_log_pac(const struct connman_service *service,
 				const char *url)
 {
