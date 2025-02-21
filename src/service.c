@@ -555,6 +555,19 @@ int __connman_service_load_modifiable(struct connman_service *service)
 	return 0;
 }
 
+static void service_log_pac(const struct connman_service *service,
+				const char *url)
+{
+	g_autofree char *interface = NULL;
+
+	interface = connman_service_get_interface(service);
+
+	connman_info("Interface %s [ %s ] proxy auto-configuration (PAC) URL %s.",
+				 interface,
+				 __connman_service_type2string(service->type),
+				 url ? url : "is not set");
+}
+
 static int service_load(struct connman_service *service)
 {
 	GKeyFile *keyfile;
