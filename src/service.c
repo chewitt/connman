@@ -584,6 +584,30 @@ static void service_log_pac(const struct connman_service *service,
 				 url ? url : "is not set");
 }
 
+/**
+ *  @brief
+ *    Set and log the proxy auto-configuration (PAC) URL for the
+ *    specified service.
+ *
+ *  If the specified service is a hidden service, no set or log
+ *  actions are taken.
+ *
+ *  @param[in,out]  service    A pointer to the mutable network
+ *                             service for which to set the proxy
+ *                             auto-configuration (PAC) URL.
+ *  @param[in]      url        An pointer to the immutable null-
+ *                             terminated C string containing the proxy
+ *                             auto-configuration (PAC) URL to set.
+ *  @param[in]      dochanged  A Boolean indicating whether or a D-Bus
+ *                             change notification should be sent for
+ *                             the service "Proxy" property.
+ *
+ *  @sa proxy_changed
+ *  @sa service_log_pac
+ *
+ *  @private
+ *
+ */
 static void service_set_pac(struct connman_service *service,
 				const char *pac,
 				bool dochanged)
