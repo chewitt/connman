@@ -5601,8 +5601,12 @@ const char *connman_service_get_proxy_url(const struct connman_service *service)
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url)
 {
+	const bool dochanged = true;
+
 	if (!service || service->hidden)
 		return;
+
+	service_set_pac(service, url, !dochanged);
 
 	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_AUTO;
 
