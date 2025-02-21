@@ -1118,6 +1118,24 @@ static char *parse_proxy(const char *proxy)
 	return proxy_server;
 }
 
+static void wispr_log_proxy_failure(
+		struct connman_wispr_portal_context const *wp_context,
+		const char *reason)
+{
+	g_autofree char *interface = NULL;
+
+	interface = connman_service_get_interface(wp_context->service);
+
+	connman_error("%s with proxy auto-configuration (PAC) URL %s "
+			"for %s [ %s ] online check URL %s",
+			reason,
+			connman_service_get_proxy_url(wp_context->service),
+			interface,
+			__connman_service_type2string(
+				connman_service_get_type(wp_context->service)),
+			wp_context->status_url);
+}
+
 static void proxy_callback(const char *proxy, void *user_data)
 {
 	struct connman_wispr_portal_context *wp_context = user_data;
