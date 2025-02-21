@@ -312,12 +312,12 @@ static char **parse_fallback_nameservers(char **nameservers, gsize len)
 	return servers;
 }
 
-static void check_config(GKeyFile *config)
+static void check_config(GKeyFile *config, const char *file)
 {
 	char **keys;
 	int j;
 
-	if (!config)
+	if (!config || !file)
 		return;
 
 	keys = g_key_file_get_groups(config, NULL);
@@ -325,7 +325,7 @@ static void check_config(GKeyFile *config)
 	for (j = 0; keys && keys[j]; j++) {
 		if (g_strcmp0(keys[j], GENERAL_GROUP) != 0)
 			connman_warn("Unknown group %s in %s",
-						keys[j], MAINFILE);
+						keys[j], file);
 	}
 
 	g_strfreev(keys);
@@ -345,7 +345,7 @@ static void check_config(GKeyFile *config)
 		}
 		if (!found && !supported_options[i])
 			connman_warn("Unknown option %s in %s",
-						keys[j], MAINFILE);
+						keys[j], file);
 	}
 
 	g_strfreev(keys);
@@ -419,7 +419,7 @@ static void online_check_settings_log(void)
 		connman_settings.online_check_successes_threshold);
 }
 
-static void parse_config(GKeyFile *config)
+static void parse_config(GKeyFile *config, const char *file)
 {
 	GError *error = NULL;
 	bool boolean;
@@ -432,7 +432,7 @@ static void parse_config(GKeyFile *config)
 	int integer;
 	double real;
 
-	if (!config) {
+	if (!config || !file) {
 		connman_settings.auto_connect =
 			parse_service_types(default_auto_connect,
 					CONF_ARRAY_SIZE(default_auto_connect));
@@ -450,7 +450,7 @@ static void parse_config(GKeyFile *config)
 		return;
 	}
 
-	DBG("parsing %s", MAINFILE);
+	DBG("parsing %s", file);
 
 	boolean = g_key_file_get_boolean(config, GENERAL_GROUP,
 						CONF_BG_SCAN, &error);
@@ -828,8 +828,8 @@ static int config_init(const char *file)
 	GKeyFile *config;
 
 	config = load_config(file);
-	check_config(config);
-	parse_config(config);
+	check_config(config, file);
+	parse_config(config, file);
 	if (config)
 		g_key_file_free(config);
 
