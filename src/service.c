@@ -4004,6 +4004,8 @@ static int start_online_check_if_connected(struct connman_service *service)
 int __connman_service_wispr_start(struct connman_service *service,
 					enum connman_ipconfig_type type)
 {
+	int err;
+
 	DBG("service %p (%s) type %d (%s)",
 		service,
 		connman_service_get_identifier(service),
@@ -4035,14 +4037,17 @@ int __connman_service_wispr_start(struct connman_service *service,
 		service->online_check_state_ipv6.interval =
 					online_check_initial_interval;
 
-	__connman_wispr_start(service, type,
+	err = __connman_wispr_start(service, type,
 			online_check_connect_timeout_ms, complete_online_check);
+	if (err < 0)
+		goto done;
 
 	/* Mark the online check state as active. */
 
 	online_check_active_set(service, type);
 
-	return 0;
+done:
+	return err;
 }
 
 /**
