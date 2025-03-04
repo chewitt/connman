@@ -5618,19 +5618,13 @@ static void service_set_proxy_method(struct connman_service *service,
 void connman_service_set_proxy_method(struct connman_service *service,
 					enum connman_service_proxy_method method)
 {
-	DBG("service %p (%s) method %d (%s)",
-		service, connman_service_get_identifier(service),
-		method, proxymethod2string(method));
+	const bool donotifier = method != CONNMAN_SERVICE_PROXY_METHOD_AUTO;
 
-	if (!service || service->hidden)
-		return;
-
-	service->proxy = method;
-
-	proxy_changed(service);
-
-	if (method != CONNMAN_SERVICE_PROXY_METHOD_AUTO)
-		__connman_notifier_proxy_changed(service);
+	service_set_proxy_method(service,
+		method,
+		donotifier,
+		NULL,
+		NULL);
 }
 
 enum connman_service_proxy_method connman_service_get_proxy_method(
