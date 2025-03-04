@@ -1091,37 +1091,22 @@ static void add_header_field(struct web_session *session)
 	}
 }
 
-static gboolean received_data(GIOChannel *channel, GIOCondition cond,
-							gpointer user_data)
+static void received_data_finalize(struct web_session *session)
 {
-	struct web_session *session = user_data;
+	const guint16 code = GWEB_HTTP_STATUS_CODE_UNKNOWN;
+
+	session->transport_watch = 0;
+
+	session->result.buffer = NULL;
+	session->result.length = 0;
+
+	call_result_func(session, code);
+}
+
+static bool received_data_continue(struct web_session *session,
+				gsize bytes_read)
+{
 	guint8 *ptr = session->receive_buffer;
-	gsize bytes_read;
-	GIOStatus status;
-
-	cancel_connect_timeout(session);
-
-	if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
-		session->transport_watch = 0;
-		session->result.buffer = NULL;
-		session->result.length = 0;
-		call_result_func(session, GWEB_HTTP_STATUS_CODE_BAD_REQUEST);
-		return FALSE;
-	}
-
-	status = g_io_channel_read_chars(channel,
-				(gchar *) session->receive_buffer,
-				session->receive_space - 1, &bytes_read, NULL);
-
-	debug(session->web, "bytes read %zu", bytes_read);
-
-	if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_AGAIN) {
-		session->transport_watch = 0;
-		session->result.buffer = NULL;
-		session->result.length = 0;
-		call_result_func(session, GWEB_HTTP_STATUS_CODE_UNKNOWN);
-		return FALSE;
-	}
 
 	session->receive_buffer[bytes_read] = '\0';
 
@@ -1208,6 +1193,57 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 	}
 
 	return TRUE;
+}
+
+static gboolean received_data(GIOChannel *channel, GIOCondition cond,
+							gpointer user_data)
+{
+	struct web_session *session = user_data;
+	gsize bytes_read;
+	GIOStatus status;
+
+	/* We received some data or condition, cancel the connect timeout. */
+
+	cancel_connect_timeout(session);
+
+	/* If there was a low-level I/O condition or error, there is
+	 * nothing more to do; simply fail the request.
+	 */
+
+	if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
+		session->transport_watch = 0;
+
+		session->result.buffer = NULL;
+		session->result.length = 0;
+
+		call_result_func(session, GWEB_HTTP_STATUS_CODE_BAD_REQUEST);
+
+		return FALSE;
+	}
+
+	/* Attempt to read received data from the channel. */
+
+	status = g_io_channel_read_chars(channel,
+				(gchar *) session->receive_buffer,
+				session->receive_space - 1, &bytes_read, NULL);
+
+	debug(session->web, "bytes read %zu status %d", bytes_read,
+		status);
+
+	/* Handle post-channel read errors, which could be either
+	 * G_IO_STATUS_ERROR or G_IO_STATUS_EOF.
+	 */
+	if (status != G_IO_STATUS_NORMAL && status != G_IO_STATUS_AGAIN) {
+		received_data_finalize(session);
+
+		return FALSE;
+	}
+
+	/* Otherwise, continue the session request and process the
+	 * received data.
+	 */
+
+	return received_data_continue(session, bytes_read);
 }
 
 static int bind_to_address(int sk, const char *interface, int family)
