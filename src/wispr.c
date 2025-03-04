@@ -633,6 +633,16 @@ static void wispr_portal_error(struct connman_wispr_portal_context *wp_context)
 	wp_context->wispr_result = CONNMAN_WISPR_RESULT_FAILED;
 }
 
+static void portal_manage_failure_status(
+			struct connman_wispr_portal_context *wp_context,
+			int err)
+{
+	struct connman_service *service = wp_context->service;
+	enum connman_ipconfig_type type = wp_context->type;
+
+	wp_context->cb(service, type, false, err);
+}
+
 /**
  *  @brief
  *    Handle a successful "online" HTTP-based Internet reachability
@@ -773,10 +783,7 @@ static void wispr_portal_request_portal(
 					wp_context, &err);
 
 	if (wp_context->request_id == 0) {
-		wp_context->cb(wp_context->service,
-						wp_context->type,
-						false,
-						err);
+		portal_manage_failure_status(wp_context, err);
 		wispr_portal_error(wp_context);
 		wispr_portal_context_unref(wp_context);
 	}
@@ -1049,24 +1056,15 @@ static bool wispr_portal_web_result(GWebResult *result, gpointer user_data)
 
 		goto done;
 	case GWEB_HTTP_STATUS_CODE_BAD_REQUEST:
-		wp_context->cb(wp_context->service,
-				wp_context->type,
-				false,
-				-EINVAL);
+		portal_manage_failure_status(wp_context, -EINVAL);
 		break;
 
 	case GWEB_HTTP_STATUS_CODE_NOT_FOUND:
-		wp_context->cb(wp_context->service,
-				wp_context->type,
-				false,
-				-ENOENT);
+		portal_manage_failure_status(wp_context, -ENOENT);
 		break;
 
 	case GWEB_HTTP_STATUS_CODE_REQUEST_TIMEOUT:
-		wp_context->cb(wp_context->service,
-				wp_context->type,
-				false,
-				-ETIMEDOUT);
+		portal_manage_failure_status(wp_context, -ETIMEDOUT);
 		break;
 
 	case GWEB_HTTP_STATUS_CODE_HTTP_VERSION_NOT_SUPPORTED:
@@ -1169,10 +1167,7 @@ static void proxy_callback(const char *proxy, void *user_data)
 	if (!proxy) {
 		wispr_log_proxy_failure(wp_context, "No valid proxy");
 
-		wp_context->cb(wp_context->service,
-				wp_context->type,
-				false,
-				-EINVAL);
+		portal_manage_failure_status(wp_context, -EINVAL);
 
 		return;
 	}
@@ -1519,7 +1514,7 @@ int __connman_wispr_start(struct connman_service *service,
 free_wp:
 	DBG("err %d wp_context %p", err, wp_context);
 
-	wp_context->cb(wp_context->service, wp_context->type, false, err);
+	portal_manage_failure_status(wp_context, err);
 
 	g_hash_table_remove(wispr_portal_hash, GINT_TO_POINTER(index));
 	return err;
@@ -1605,10 +1600,7 @@ int __connman_wispr_cancel(struct connman_service *service,
 
 	cancel_connman_wispr_portal_context(wp_context);
 
-	wp_context->cb(wp_context->service,
-			wp_context->type,
-			false,
-			-ECANCELED);
+	portal_manage_failure_status(wp_context, -ECANCELED);
 
 	wispr_portal_context_unref(wp_context);
 
