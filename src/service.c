@@ -5697,6 +5697,36 @@ const char *connman_service_get_proxy_url(const struct connman_service *service)
 	return service->pac;
 }
 
+/**
+ *  @brief
+ *    A post-mutation handler for the service proxy method when the
+ *    method is #CONNMAN_SERVICE_PROXY_METHOD_AUTO.
+ *
+ *  @param[in,out]  service     A pointer to the mutable network
+ *                              service for which the proxy method was
+ *                              set.
+ *  @param[in]      method      The network service proxy method @a
+ *                              service was set to.
+ *  @param[in]      context     An pointer to immutable context
+ *                              that was passed, along with @a
+ *                              service, @a method, and this handler,
+ *                              to #service_set_proxy_method. For this
+ *                              handler, @a context is an optional
+ *                              null-terminated C string containing
+ *                              the service proxy auto-configuration
+ *                              (PAC) URL.
+ *
+ *  @returns
+ *    True if #service_set_proxy_method should continue with state
+ *    change notifications and processing proxy notifier changes after
+ *    the handler returns; otherwise, false.
+ *
+ *  @sa __connman_ipconfig_set_proxy_autoconfig
+ *  @sa service_set_proxy_method
+ *
+ *  @private
+ *
+ */
 static bool service_set_proxy_method_auto_handler(
 				struct connman_service *service,
 				enum connman_service_proxy_method method,
