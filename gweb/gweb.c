@@ -1189,7 +1189,7 @@ static gboolean received_data(GIOChannel *channel, GIOCondition cond,
 
 		str = session->current_header->str;
 
-		if (session->result.status == 0) {
+		if (session->result.status == GWEB_HTTP_STATUS_CODE_UNKNOWN) {
 			unsigned int code;
 
 			if (sscanf(str, "HTTP/%*s %u %*s", &code) == 1)
@@ -2429,7 +2429,7 @@ bool g_web_cancel_request(GWeb *web, guint id)
 guint16 g_web_result_get_status(GWebResult *result)
 {
 	if (!result)
-		return 0;
+		return GWEB_HTTP_STATUS_CODE_UNKNOWN;
 
 	return result->status;
 }
