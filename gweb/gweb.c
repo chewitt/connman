@@ -2504,6 +2504,22 @@ bool g_web_result_get_header(GWebResult *result,
 	return true;
 }
 
+bool g_web_result_has_headers(const GWebResult *result,
+				guint *count)
+{
+	guint size;
+
+	if (!result)
+		return false;
+
+	size = g_hash_table_size(result->headers);
+
+	if (count)
+		*count = size;
+
+	return size > 0;
+}
+
 struct _GWebParser {
 	gint ref_count;
 	char *begin_token;

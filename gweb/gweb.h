@@ -166,6 +166,8 @@ guint16 g_web_result_get_status(GWebResult *result);
 
 bool g_web_result_get_header(GWebResult *result,
 				const char *header, const char **value);
+bool g_web_result_has_headers(const GWebResult *result,
+				guint *count);
 bool g_web_result_get_chunk(GWebResult *result,
 				const guint8 **chunk, gsize *length);
 
