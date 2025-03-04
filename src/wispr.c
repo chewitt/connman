@@ -685,7 +685,7 @@ static void portal_manage_failure_status(
  *                              Internet reachability check this is
  *                              handling.
  *  @param[in,out]  wp_context  A pointer to the mutable WISPr portal
- *                              detection context associated the
+ *                              detection context associated with the
  *                              successful "online" HTTP-based
  *                              Internet reachability check this is
  *                              handling.
