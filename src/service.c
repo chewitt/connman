@@ -808,10 +808,10 @@ static int service_load(struct connman_service *service)
 
 	str = g_key_file_get_string(keyfile,
 				service->identifier, "Proxy.URL", NULL);
-	if (str) {
-		g_free(service->pac);
-		service->pac = str;
-	}
+	if (str)
+		service_set_pac(service, str, false);
+
+	g_free(str);
 
 	service->mdns_config = g_key_file_get_boolean(keyfile,
 				service->identifier, "mDNS", NULL);
@@ -5800,12 +5800,9 @@ void __connman_service_timeserver_changed(struct connman_service *service,
 void __connman_service_set_pac(struct connman_service *service,
 					const char *pac)
 {
-	if (service->hidden)
-		return;
-	g_free(service->pac);
-	service->pac = g_strdup(pac);
+	const bool dochanged = true;
 
-	proxy_changed(service);
+	service_set_pac(service, pac, dochanged);
 }
 
 void __connman_service_set_agent_identity(struct connman_service *service,
@@ -6092,12 +6089,7 @@ static int update_proxy_configuration(struct connman_service *service,
 
 		break;
 	case CONNMAN_SERVICE_PROXY_METHOD_AUTO:
-		g_free(service->pac);
-
-		if (url && strlen(url) > 0)
-			service->pac = g_strstrip(g_strdup(url));
-		else
-			service->pac = NULL;
+		service_set_pac(service, url, false);
 
 		/* if we are connected:
 		   - if service->pac == NULL
