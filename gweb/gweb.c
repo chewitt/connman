@@ -2504,6 +2504,25 @@ bool g_web_result_get_header(GWebResult *result,
 	return true;
 }
 
+/**
+ *  @brief
+ *    Return whether the web session request result has any HTTP
+ *    headers.
+ *
+ *  @param[in]  result  A pointer to the immutable web session
+ *                      request result for which to determine if there
+ *                      are any HTTP headers.
+ *  @param[out]  count  An optional pointer to mutable storage for the
+ *                      number of HTTP headers associated with @a
+ *                      result.
+ *
+ *  @returns
+ *    True if there are one or more HTTP headers associated with @a
+ *    result; otherwise, false.
+ *
+ *  @sa g_web_result_get_header
+ *
+ */
 bool g_web_result_has_headers(const GWebResult *result,
 				guint *count)
 {
