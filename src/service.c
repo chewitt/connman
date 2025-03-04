@@ -5748,6 +5748,23 @@ static bool service_set_proxy_method_auto_handler(
 	return true;
 }
 
+/**
+ *  @brief
+ *    Set the network service proxy method to # and proxy
+ *    auto-configuation (PAC) URL.
+ *
+ *  @param[in,out]  service  A pointer to the mutable network
+ *                           service for which to set the proxy
+ *                           method.
+ *  @param[in]  url          An optional pointer to the immutable
+ *                           null-terminated C string containing the
+ *                           proxy auto-configuration (PAC) URL.
+ *
+ *  @sa service_set_pac
+ *  @sa service_set_proxy_method
+ *  @sa service_set_proxy_method_auto_handler
+ *
+ */
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url)
 {
