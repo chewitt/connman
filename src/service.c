@@ -5569,6 +5569,37 @@ const char * const *connman_service_get_timeservers(const struct connman_service
 	return (const char * const *)service->timeservers;
 }
 
+static void service_set_proxy_method(struct connman_service *service,
+			enum connman_service_proxy_method method,
+			bool donotifier,
+			bool (*handler)(struct connman_service *service,
+				enum connman_service_proxy_method method,
+				const void *context),
+			const void *context)
+{
+	DBG("service %p (%s) method %d (%s) donotifier %u "
+		"handler %p, context %p",
+		service, connman_service_get_identifier(service),
+		method, proxymethod2string(method),
+		donotifier,
+		handler,
+		context);
+
+	if (!service || service->hidden)
+		return;
+
+	service->proxy = method;
+
+	if (handler != NULL)
+		if (handler(service, method, context) != true)
+			return;
+
+	proxy_changed(service);
+
+	if (donotifier)
+		__connman_notifier_proxy_changed(service);
+}
+
 /**
  *  @brief
  *    Set the web proxy method of the specified service.
