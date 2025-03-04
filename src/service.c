@@ -5662,32 +5662,46 @@ const char *connman_service_get_proxy_url(const struct connman_service *service)
 	return service->pac;
 }
 
+static bool service_set_proxy_method_auto_handler(
+				struct connman_service *service,
+				enum connman_service_proxy_method method,
+				const void *context)
+{
+	const char * const url = context;
+
+	if (service->ipconfig_ipv4) {
+		if (__connman_ipconfig_set_proxy_autoconfig(
+				service->ipconfig_ipv4, url) < 0)
+			return false;
+	} else if (service->ipconfig_ipv6) {
+		if (__connman_ipconfig_set_proxy_autoconfig(
+				service->ipconfig_ipv6, url) < 0)
+			return false;
+	} else
+		return false;
+
+	return true;
+}
+
 void __connman_service_set_proxy_autoconfig(struct connman_service *service,
 							const char *url)
 {
 	const bool dochanged = true;
+	const bool donotifier = true;
 
-	if (!service || service->hidden)
-		return;
+	DBG("service %p (%s) url %p (%s)",
+		service,
+		connman_service_get_identifier(service),
+		url,
+		url ? url : "<null>");
 
 	service_set_pac(service, url, !dochanged);
 
-	service->proxy = CONNMAN_SERVICE_PROXY_METHOD_AUTO;
-
-	if (service->ipconfig_ipv4) {
-		if (__connman_ipconfig_set_proxy_autoconfig(
-			    service->ipconfig_ipv4, url) < 0)
-			return;
-	} else if (service->ipconfig_ipv6) {
-		if (__connman_ipconfig_set_proxy_autoconfig(
-			    service->ipconfig_ipv6, url) < 0)
-			return;
-	} else
-		return;
-
-	proxy_changed(service);
-
-	__connman_notifier_proxy_changed(service);
+	service_set_proxy_method(service,
+		CONNMAN_SERVICE_PROXY_METHOD_AUTO,
+		donotifier,
+		service_set_proxy_method_auto_handler,
+		url);
 }
 
 const char *connman_service_get_proxy_autoconfig(struct connman_service *service)
