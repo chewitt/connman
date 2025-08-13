@@ -128,3 +128,43 @@ char *util_timeval_to_iso8601(struct timeval *time)
 
 	return g_strdup(buf);
 }
+
+void util_set_afs(struct supported_afs *afs, int family)
+{
+	if (!afs)
+		return;
+
+	switch (family) {
+	case AF_INET:
+		afs->af_inet = true;
+		break;
+	case AF_INET6:
+		afs->af_inet6 = true;
+		break;
+	default:
+		break;
+	}
+}
+
+bool util_get_afs(struct supported_afs *afs, int family)
+{
+	if (!afs)
+		return false;
+
+	switch (family) {
+	case AF_INET:
+		return afs->af_inet;
+	case AF_INET6:
+		return afs->af_inet6;
+	default:
+		return false;
+	}
+}
+
+void util_reset_afs(struct supported_afs *afs)
+{
+	if (!afs)
+		return;
+
+	afs->af_inet = afs->af_inet6 = false;
+}
