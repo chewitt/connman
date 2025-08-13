@@ -175,6 +175,7 @@ struct vpn_provider_driver {
 			int *family, unsigned long *idx,
 			enum vpn_provider_route_type *type);
 	bool (*uses_vpn_agent) (struct vpn_provider *provider);
+	int (*get_flags)(struct vpn_provider *provider);
 };
 
 int vpn_provider_driver_register(struct vpn_provider_driver *driver);

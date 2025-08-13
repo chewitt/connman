@@ -125,7 +125,14 @@ static unsigned int get_connman_state_timeout;
 static guint connman_signal_watch;
 static guint connman_service_watch;
 
-static bool connman_online;
+enum connman_state {
+	CONNMAN_IDLE = 0,
+	CONNMAN_OFFLINE,
+	CONNMAN_READY,
+	CONNMAN_ONLINE
+};
+
+static enum connman_state connman_online_state = CONNMAN_IDLE;
 static bool state_query_completed;
 
 
@@ -164,22 +171,46 @@ static void set_state(const char *new_state)
 	if (!new_state || !*new_state)
 		return;
 
-	DBG("old state %s new state %s",
-				connman_online ?
-				CONNMAN_STATE_ONLINE "/" CONNMAN_STATE_READY :
-				CONNMAN_STATE_OFFLINE "/" CONNMAN_STATE_IDLE,
-				new_state);
+	DBG("received %s, old state %d", new_state, connman_online_state);
 
-	/* States "online" and "ready" mean connman is online */
-	if (!g_ascii_strcasecmp(new_state, CONNMAN_STATE_ONLINE) ||
-			!g_ascii_strcasecmp(new_state, CONNMAN_STATE_READY))
-		connman_online = true;
-	/* Everything else means connman is offline */
+	if (!g_ascii_strcasecmp(new_state, CONNMAN_STATE_ONLINE))
+		connman_online_state = CONNMAN_ONLINE;
+	else if (!g_ascii_strcasecmp(new_state, CONNMAN_STATE_READY))
+		connman_online_state = CONNMAN_READY;
+	else if (!g_ascii_strcasecmp(new_state, CONNMAN_STATE_OFFLINE))
+		connman_online_state = CONNMAN_OFFLINE;
 	else
-		connman_online = false;
+		connman_online_state = CONNMAN_IDLE;
 
-	DBG("set state %s connman_online=%s ", new_state,
-				connman_online ? "true" : "false");
+	DBG("new state %d ", connman_online_state);
+}
+
+static bool is_connman_connected(struct vpn_provider *provider)
+{
+	int flags = 0;
+
+	DBG("provider %p connmand state %d", provider, connman_online_state);
+
+	if (provider && provider->driver && provider->driver->get_flags)
+		flags = provider->driver->get_flags(provider);
+
+	switch (connman_online_state) {
+	case CONNMAN_IDLE:
+	case CONNMAN_OFFLINE:
+		return false;
+	case CONNMAN_READY:
+		/* VPNs without daemon may require that network is setup. */
+		if (flags & VPN_FLAG_NO_DAEMON) {
+			DBG("daemonless provider, return false in ready");
+			return false;
+		}
+
+		/* fall-through */
+	case CONNMAN_ONLINE:
+		break;
+	}
+
+	return true;
 }
 
 static void free_route(gpointer data)
@@ -832,8 +863,8 @@ static gboolean do_connect_timeout_function(gpointer data)
 
 	DBG("");
 
-	/* Keep in main loop if connman is not online. */
-	if (!connman_online)
+	/* Keep in main loop if connman is not ready for this VPN. */
+	if (!is_connman_connected(provider))
 		return G_SOURCE_CONTINUE;
 
 	provider->do_connect_timeout = 0;
@@ -887,7 +918,7 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 
 	DBG("conn %p provider %p", conn, provider);
 
-	if (!connman_online) {
+	if (!is_connman_connected(provider)) {
 		if (state_query_completed) {
 			DBG("%s not started - ConnMan not online/ready",
 				provider->identifier);
