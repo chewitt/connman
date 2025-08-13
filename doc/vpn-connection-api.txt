@@ -104,8 +104,8 @@ Properties	string State [readonly]
 
 			The connection state information.
 
-			Valid states are "idle", "failure", "configuration",
-			"ready", "disconnect".
+			Valid states are "idle", "failure", "association",
+			"configuration", "ready", "disconnect".
 
 		string Type [readonly]
 
