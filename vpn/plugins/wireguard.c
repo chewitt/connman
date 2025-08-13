@@ -50,6 +50,7 @@
 #include "wireguard.h"
 
 #define DNS_RERESOLVE_TIMEOUT 20
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
 struct wireguard_info {
 	struct wg_device device;
@@ -65,6 +66,21 @@ struct sockaddr_u {
 		struct sockaddr_in sin;
 		struct sockaddr_in6 sin6;
 	};
+};
+
+struct {
+	const char	*opt;
+	bool		save;
+} wg_options[] = {
+	{"WireGuard.Address", true},
+	{"WireGuard.ListenPort", true},
+	{"WireGuard.DNS", true},
+	{"WireGuard.PrivateKey", true}, // TODO set false after agent support
+	{"WireGuard.PresharedKey", true}, // TODO set false after agent support
+	{"WireGuard.PublicKey", true},
+	{"WireGuard.AllowedIPs", true},
+	{"WireGuard.EndpointPort", true},
+	{"WireGuard.PersistentKeepalive", true}
 };
 
 static int parse_key(const char *str, wg_key key)
@@ -462,10 +478,32 @@ static void wg_disconnect(struct vpn_provider *provider)
 	g_free(info);
 }
 
+static int wg_save(struct vpn_provider *provider, GKeyFile *keyfile)
+{
+	const char *option;
+	int i;
+
+	for (i = 0; i < (int)ARRAY_SIZE(wg_options); i++) {
+		if (!wg_options[i].save)
+			continue;
+
+		option = vpn_provider_get_string(provider, wg_options[i].opt);
+		if (!option)
+			continue;
+
+		g_key_file_set_string(keyfile,
+					vpn_provider_get_save_group(provider),
+					wg_options[i].opt, option);
+	}
+
+	return 0;
+}
+
 static struct vpn_driver vpn_driver = {
 	.flags		= VPN_FLAG_NO_TUN | VPN_FLAG_NO_DAEMON,
 	.connect	= wg_connect,
 	.disconnect	= wg_disconnect,
+	.save		= wg_save,
 };
 
 static int wg_init(void)
