@@ -4929,6 +4929,30 @@ static void dns_configuration_changed(struct connman_service *service)
 	dns_changed(service);
 }
 
+static void vpn_transport_dns_changed(struct connman_service *service)
+{
+	struct connman_service *transport;
+	const char *ident;
+
+	if (!service || service->type != CONNMAN_SERVICE_TYPE_VPN)
+		return;
+
+	ident = connman_provider_get_string(service->provider, "Transport");
+	if (!ident)
+		return;
+
+	transport = connman_service_lookup_from_identifier(ident);
+	if (!transport)
+		return;
+
+	DBG("transport %p/%s", transport, ident);
+
+	connman_dbus_property_changed_array(service->path,
+				CONNMAN_SERVICE_INTERFACE,
+				"TransportNameservers",
+				DBUS_TYPE_STRING, append_dns, transport);
+}
+
 static void domain_changed(struct connman_service *service)
 {
 	if (!allow_property_changed(service))
@@ -9400,6 +9424,9 @@ static int service_indicate_state(struct connman_service *service)
 			connman_network_set_bool(service->network,
 							"WiFi.UseWPS", false);
 		}
+
+		if (service->type == CONNMAN_SERVICE_TYPE_VPN)
+			vpn_transport_dns_changed(service);
 
 		gettimeofday(&service->modified, NULL);
 		service_save(service);
