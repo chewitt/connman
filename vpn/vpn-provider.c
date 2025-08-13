@@ -920,6 +920,15 @@ static DBusMessage *do_connect(DBusConnection *conn, DBusMessage *msg,
 
 	if (!is_connman_connected(provider)) {
 		if (state_query_completed) {
+			/* Query done but connmand not online for daemonless */
+			if (connman_online_state >= CONNMAN_READY) {
+				DBG("Provider %s start delayed, wait for "
+						"connman online state",
+						provider->identifier);
+				do_connect_later(provider, conn, msg);
+				return NULL;
+			}
+
 			DBG("%s not started - ConnMan not online/ready",
 				provider->identifier);
 			return __connman_error_failed(msg, ENOLINK);
