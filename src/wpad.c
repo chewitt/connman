@@ -111,7 +111,7 @@ static void wpad_result(GResolvResultStatus status,
 	DBG("hostname %s", wpad->hostname);
 
 	g_resolv_lookup_hostname(wpad->resolv, wpad->hostname,
-							wpad_result, wpad);
+						wpad_result, wpad, NULL);
 
 	return;
 
@@ -176,7 +176,7 @@ int __connman_wpad_start(struct connman_service *service)
 	wpad->service = connman_service_ref(service);
 
 	g_resolv_lookup_hostname(wpad->resolv, wpad->hostname,
-							wpad_result, wpad);
+						wpad_result, wpad, NULL);
 
 	g_hash_table_replace(wpad_list, GINT_TO_POINTER(index), wpad);
 

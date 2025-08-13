@@ -204,7 +204,7 @@ static void sync_next(void)
 
 		DBG("Resolving timeserver %s", ts_current);
 		resolv_id = g_resolv_lookup_hostname(resolv, ts_current,
-						resolv_result, NULL);
+						resolv_result, NULL, NULL);
 		return;
 	}
 

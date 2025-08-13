@@ -40,6 +40,9 @@
 
 #include "gresolv.h"
 
+#define G_RESOLV_ERROR g_resolv_error_quark ()
+G_DEFINE_QUARK (g-resolv-error-quark, g_resolv_error)
+
 struct sort_result {
 	int precedence;
 	int src_scope;
@@ -116,6 +119,7 @@ struct _GResolv {
 
 	GResolvDebugFunc debug_func;
 	gpointer debug_data;
+	int err;
 };
 
 #define debug(resolv, format, arg...)				\
@@ -1014,9 +1018,11 @@ static gint add_query(struct resolv_lookup *lookup, const char *hostname, int ty
 }
 
 guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
-				GResolvResultFunc func, gpointer user_data)
+				GResolvResultFunc func, gpointer user_data,
+				GError **error)
 {
 	struct resolv_lookup *lookup;
+	gint err;
 
 	if (!resolv)
 		return 0;
@@ -1058,14 +1064,23 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 	lookup->id = resolv->next_lookup_id++;
 
 	if (resolv->result_family != AF_INET6) {
-		if (add_query(lookup, hostname, ns_t_a)) {
+		err = add_query(lookup, hostname, ns_t_a);
+		if (err) {
 			g_free(lookup);
-			return -EIO;
+
+			g_set_error(error,
+					G_RESOLV_ERROR,
+					G_RESOLV_ERROR_ADD_QUERY,
+					"Failed to add query: %s",
+					g_strerror(-err));
+
+			return 0;
 		}
 	}
 
 	if (resolv->result_family != AF_INET) {
-		if (add_query(lookup, hostname, ns_t_aaaa)) {
+		err = add_query(lookup, hostname, ns_t_aaaa);
+		if (err) {
 			if (resolv->result_family != AF_INET6) {
 				g_queue_remove(resolv->query_queue,
 						lookup->ipv4_query);
@@ -1073,7 +1088,14 @@ guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
 			}
 
 			g_free(lookup);
-			return -EIO;
+
+			g_set_error(error,
+					G_RESOLV_ERROR,
+					G_RESOLV_ERROR_ADD_QUERY,
+					"Failed to add query: %s",
+					g_strerror(-err));
+
+			return 0;
 		}
 	}
 
@@ -1118,4 +1140,12 @@ bool g_resolv_set_address_family(GResolv *resolv, int family)
 	resolv->result_family = family;
 
 	return true;
+}
+
+int g_resolv_get_error(GResolv *resolv)
+{
+	if (!resolv)
+		return 0;
+
+	return resolv->err;
 }

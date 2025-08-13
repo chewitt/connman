@@ -75,7 +75,7 @@ static void resolv_result(GResolvResultStatus status,
 
 	str = g_strdup_printf("wpad.%s", ptr + 1);
 
-	g_resolv_lookup_hostname(resolv, str, resolv_result, str);
+	g_resolv_lookup_hostname(resolv, str, resolv_result, str, NULL);
 
 	g_free(hostname);
 
@@ -118,7 +118,8 @@ static void start_wpad(const char *search)
 
 	hostname = g_strdup_printf("wpad.%s", domainname);
 
-	g_resolv_lookup_hostname(resolv, hostname, resolv_result, hostname);
+	g_resolv_lookup_hostname(resolv, hostname, resolv_result, hostname,
+					NULL);
 
 	return;
 

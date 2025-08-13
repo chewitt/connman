@@ -243,7 +243,7 @@ static void resolv_host_addr(struct connection_data *data)
 	DBG("Trying to resolv %s", data->host);
 
 	data->resolv_id = g_resolv_lookup_hostname(data->resolv, data->host,
-						resolv_result, data);
+						resolv_result, data, NULL);
 }
 
 static void free_config_cb_data(struct config_create_data *cb_data)

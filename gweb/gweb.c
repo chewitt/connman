@@ -2673,7 +2673,7 @@ static guint do_request(GWeb *web, const char *url,
 		session->address_action = g_idle_add(already_resolved, session);
 	} else {
 		session->resolv_action = g_resolv_lookup_hostname(web->resolv,
-					host, resolv_result, session);
+					host, resolv_result, session, NULL);
 		if (session->resolv_action <= 0) {
 			free_session(session);
 			/*

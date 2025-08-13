@@ -47,6 +47,11 @@ typedef enum {
 	G_RESOLV_RESULT_STATUS_NO_ANSWER,
 } GResolvResultStatus;
 
+typedef enum {
+	G_RESOLV_ERROR_ADD_QUERY,
+	G_RESOLV_ERROR_NO_ERROR,
+} GResolvError;
+
 typedef void (*GResolvResultFunc)(GResolvResultStatus status,
 					char **results, gpointer user_data);
 
@@ -65,7 +70,8 @@ bool g_resolv_add_nameserver(GResolv *resolv, const char *address,
 void g_resolv_flush_nameservers(GResolv *resolv);
 
 guint g_resolv_lookup_hostname(GResolv *resolv, const char *hostname,
-				GResolvResultFunc func, gpointer user_data);
+				GResolvResultFunc func, gpointer user_data,
+				GError **error);
 
 bool g_resolv_cancel_lookup(GResolv *resolv, guint id);
 

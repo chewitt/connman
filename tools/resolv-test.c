@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 	timer = g_timer_new();
 
 	if (g_resolv_lookup_hostname(resolv, argv[1],
-					resolv_result, NULL) == 0) {
+					resolv_result, NULL, NULL) == 0) {
 		printf("failed to start lookup\n");
 		return 1;
 	}

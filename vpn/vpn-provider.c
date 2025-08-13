@@ -980,7 +980,7 @@ static void provider_resolv_host_addr(struct vpn_provider *provider)
 	vpn_provider_ref(provider);
 
 	g_resolv_lookup_hostname(provider->resolv, provider->host,
-				resolv_result, provider);
+				resolv_result, provider, NULL);
 }
 
 void __vpn_provider_append_properties(struct vpn_provider *provider,
