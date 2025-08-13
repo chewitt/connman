@@ -3253,6 +3253,60 @@ int vpn_provider_append_route(struct vpn_provider *provider,
 	return 0;
 }
 
+int vpn_provider_append_route_complete(struct vpn_provider *provider,
+				unsigned long idx, int family,
+				const char *network, const char *netmask,
+				const char *gateway)
+{
+	struct vpn_route *route;
+
+	DBG("provider %p idx %lu family %d network %s netmask %s gateway %s",
+						provider, idx, family, network,
+						netmask, gateway);
+
+	if (!netmask || !gateway || !network)
+		return -EINVAL;
+
+	if (g_hash_table_lookup(provider->routes, GINT_TO_POINTER(idx)))
+		return -EALREADY;
+
+	route = g_new0(struct vpn_route, 1);
+	route->family = family;
+	route->network = g_strdup(network);
+	route->netmask = g_strdup(netmask);
+	route->gateway = g_strdup(gateway);
+
+	g_hash_table_replace(provider->routes, GINT_TO_POINTER(idx), route);
+	provider_schedule_changed(provider);
+
+	return 0;
+}
+
+void vpn_provider_delete_all_routes(struct vpn_provider *provider)
+{
+	DBG("provider %p", provider);
+;
+	if (!__vpn_provider_check_routes(provider))
+		return;
+
+	g_hash_table_remove_all(provider->routes);
+	provider_schedule_changed(provider);
+}
+
+int vpn_provider_delete_route(struct vpn_provider *provider,
+							unsigned long idx)
+{
+	if (!__vpn_provider_check_routes(provider))
+		return -ENOENT;
+
+	if (!g_hash_table_remove(provider->routes, GINT_TO_POINTER(idx)))
+		return -EINVAL;
+
+	provider_schedule_changed(provider);
+
+	return 0;
+}
+
 const char *vpn_provider_get_driver_name(struct vpn_provider *provider)
 {
 	if (!provider->driver)

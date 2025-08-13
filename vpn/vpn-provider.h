@@ -124,6 +124,13 @@ int vpn_provider_set_nameservers(struct vpn_provider *provider,
 					const char *nameservers);
 int vpn_provider_append_route(struct vpn_provider *provider,
 					const char *key, const char *value);
+int vpn_provider_append_route_complete(struct vpn_provider *provider,
+				unsigned long idx, int family,
+				const char *address, const char *netmask,
+				const char *gateway);
+void vpn_provider_delete_all_routes(struct vpn_provider *provider);
+int vpn_provider_delete_route(struct vpn_provider *provider,
+							unsigned long index);
 
 const char *vpn_provider_get_driver_name(struct vpn_provider *provider);
 const char *vpn_provider_get_save_group(struct vpn_provider *provider);
