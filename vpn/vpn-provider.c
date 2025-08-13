@@ -1653,8 +1653,19 @@ int __vpn_provider_connect(struct vpn_provider *provider, DBusMessage *msg)
 	} else
 		return -EOPNOTSUPP;
 
-	if (err == -EINPROGRESS)
-		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_ASSOCIATION);
+	if (err == -EINPROGRESS) {
+		vpn_provider_set_state(provider,
+					VPN_PROVIDER_STATE_ASSOCIATION);
+
+		/*
+		 * If the VPN does not use VPN agent do direct transition to
+		 * connect in order to support the complete state machine.
+		 */
+		if (provider->driver && provider->driver->uses_vpn_agent &&
+				!provider->driver->uses_vpn_agent(provider))
+			vpn_provider_set_state(provider,
+						VPN_PROVIDER_STATE_CONNECT);
+	}
 
 	return err;
 }
