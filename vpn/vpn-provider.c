@@ -55,6 +55,7 @@
 #include "vpn-provider.h"
 #include "vpn.h"
 #include "plugins/vpn.h"
+#include "../src/shared/util.h"
 
 static DBusConnection *connection;
 static GHashTable *provider_hash;
@@ -85,7 +86,7 @@ struct vpn_provider {
 	char *type;
 	char *host;
 	char *domain;
-	int family;
+	struct supported_afs family;
 	bool do_split_routing;
 	GHashTable *routes;
 	struct vpn_provider_driver *driver;
@@ -126,6 +127,31 @@ static guint connman_service_watch;
 
 static bool connman_online;
 static bool state_query_completed;
+
+
+static bool provider_get_family(struct vpn_provider *provider, int family)
+{
+	if (!provider)
+		return false;
+
+	return util_get_afs(&provider->family, family);
+}
+
+static void provider_set_family(struct vpn_provider *provider, int family)
+{
+	if (!provider)
+		return;
+
+	util_set_afs(&provider->family, family);
+}
+
+static void provider_reset_family(struct vpn_provider *provider)
+{
+	if (!provider)
+		return;
+
+	util_reset_afs(&provider->family);
+}
 
 static void append_properties(DBusMessageIter *iter,
 				struct vpn_provider *provider);
@@ -1875,11 +1901,11 @@ static int provider_indicate_state(struct vpn_provider *provider,
 					VPN_CONNECTION_INTERFACE, "Index",
 					DBUS_TYPE_INT32, &provider->index);
 
-		if (provider->family == AF_INET)
+		if (provider_get_family(provider, AF_INET))
 			connman_dbus_property_changed_dict(provider->path,
 					VPN_CONNECTION_INTERFACE, "IPv4",
 					append_ipv4, provider);
-		else if (provider->family == AF_INET6)
+		if (provider_get_family(provider, AF_INET6))
 			connman_dbus_property_changed_dict(provider->path,
 					VPN_CONNECTION_INTERFACE, "IPv6",
 					append_ipv6, provider);
@@ -1976,10 +2002,10 @@ static void append_properties(DBusMessageIter *iter,
 	connman_dbus_dict_append_basic(&dict, "SplitRouting",
 					DBUS_TYPE_BOOLEAN, &split_routing);
 
-	if (provider->family == AF_INET)
+	if (provider_get_family(provider, AF_INET))
 		connman_dbus_dict_append_dict(&dict, "IPv4", append_ipv4,
 						provider);
-	else if (provider->family == AF_INET6)
+	if (provider_get_family(provider, AF_INET6))
 		connman_dbus_dict_append_dict(&dict, "IPv6", append_ipv6,
 						provider);
 
@@ -2032,18 +2058,16 @@ static void connection_added_signal(struct vpn_provider *provider)
 static int set_connected(struct vpn_provider *provider,
 					bool connected)
 {
-	struct vpn_ipconfig *ipconfig;
-
 	DBG("provider %p id %s connected %d", provider,
 					provider->identifier, connected);
 
 	if (connected) {
-		if (provider->family == AF_INET6)
-			ipconfig = provider->ipconfig_ipv6;
-		else
-			ipconfig = provider->ipconfig_ipv4;
-
-		__vpn_ipconfig_address_add(ipconfig, provider->family);
+		if (provider_get_family(provider, AF_INET))
+			__vpn_ipconfig_address_add(provider->ipconfig_ipv4,
+								AF_INET);
+		if (provider_get_family(provider, AF_INET6))
+			__vpn_ipconfig_address_add(provider->ipconfig_ipv6,
+								AF_INET6);
 
 		provider_indicate_state(provider,
 					VPN_PROVIDER_STATE_READY);
@@ -2053,6 +2077,7 @@ static int set_connected(struct vpn_provider *provider,
 
 		provider_indicate_state(provider,
 					VPN_PROVIDER_STATE_IDLE);
+		provider_reset_family(provider);
 	}
 
 	return 0;
@@ -3077,7 +3102,7 @@ int vpn_provider_set_ipaddress(struct vpn_provider *provider,
 	if (!ipconfig)
 		return -EINVAL;
 
-	provider->family = ipaddress->family;
+	provider_set_family(provider, ipaddress->family);
 
 	if (provider->state == VPN_PROVIDER_STATE_CONNECT ||
 			provider->state == VPN_PROVIDER_STATE_READY) {
@@ -3367,18 +3392,13 @@ unsigned int vpn_provider_get_connection_errors(
 
 void vpn_provider_change_address(struct vpn_provider *provider)
 {
-	switch (provider->family) {
-	case AF_INET:
+	if (provider_get_family(provider, AF_INET))
 		connman_inet_set_address(provider->index,
 			__vpn_ipconfig_get_address(provider->ipconfig_ipv4));
-		break;
-	case AF_INET6:
+
+	if (provider_get_family(provider, AF_INET6))
 		connman_inet_set_ipv6_address(provider->index,
 			__vpn_ipconfig_get_address(provider->ipconfig_ipv6));
-		break;
-	default:
-		break;
-	}
 }
 
 void vpn_provider_clear_address(struct vpn_provider *provider, int family)
