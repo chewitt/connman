@@ -187,8 +187,25 @@ static int parse_endpoint(const char *host, const char *port, struct sockaddr_u 
 {
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
+	char **tokens;
 	int sk;
 	int err;
+	unsigned int len;
+
+	/*
+	 * getaddrinfo() relies on inet_pton() that suggests using addresses
+	 * without CIDR notation. Host should contain the address in CIDR
+	 * notation to be able to pass the prefix length to ConnMan via D-Bus.
+	 */
+	tokens = g_strsplit(host, "/", -1);
+	len = g_strv_length(tokens);
+	if (len > 2 || len < 1) {
+		DBG("Failure tokenizing host %s", host);
+		g_strfreev(tokens);
+		return -EINVAL;
+	}
+
+	DBG("using host %s", tokens[0]);
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
@@ -196,7 +213,9 @@ static int parse_endpoint(const char *host, const char *port, struct sockaddr_u 
 	hints.ai_flags = 0;
 	hints.ai_protocol = 0;
 
-	err = getaddrinfo(host, port, &hints, &result);
+	err = getaddrinfo(tokens[0], port, &hints, &result);
+	g_strfreev(tokens);
+
 	if (err < 0) {
 		DBG("Failed to resolve host address: %s", gai_strerror(err));
 		return -EINVAL;
