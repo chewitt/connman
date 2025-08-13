@@ -827,6 +827,22 @@ static bool vpn_uses_vpn_agent(struct vpn_provider *provider)
 	return !(vpn_driver_data->vpn_driver->flags & VPN_FLAG_NO_AGENT);
 }
 
+static int vpn_get_flags(struct vpn_provider *provider)
+{
+	struct vpn_driver_data *vpn_driver_data = NULL;
+	const char *name = NULL;
+
+	if (!provider)
+		return 0;
+
+	name = vpn_provider_get_driver_name(provider);
+	vpn_driver_data = g_hash_table_lookup(driver_hash, name);
+	if (vpn_driver_data)
+		return vpn_driver_data->vpn_driver->flags;
+
+	return 0;
+}
+
 int vpn_register(const char *name, const struct vpn_driver *vpn_driver,
 			const char *program)
 {
@@ -853,6 +869,7 @@ int vpn_register(const char *name, const struct vpn_driver *vpn_driver,
 	data->provider_driver.set_state = vpn_set_state;
 	data->provider_driver.route_env_parse = vpn_route_env_parse;
 	data->provider_driver.uses_vpn_agent = vpn_uses_vpn_agent;
+	data->provider_driver.get_flags = vpn_get_flags;
 
 	if (!driver_hash)
 		driver_hash = g_hash_table_new_full(g_str_hash,
