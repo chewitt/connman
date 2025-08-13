@@ -232,7 +232,7 @@ static bool is_addr_ll(int family, struct sockaddr *addr)
 	}
 }
 
-bool __connman_inet_is_any_addr(const char *address, int family)
+bool connman_inet_is_any_addr(const char *address, int family)
 {
 	bool ret = false;
 	struct addrinfo hints;
@@ -1687,7 +1687,7 @@ int connman_inet_add_network_route(int index, const char *host,
 	 * since given IPv4 any address (0.0.0.0) equals the value set with
 	 * INADDR_ANY.
 	 */
-	if (gateway && !__connman_inet_is_any_addr(gateway, AF_INET))
+	if (gateway && !connman_inet_is_any_addr(gateway, AF_INET))
 		rt.rt_flags |= RTF_GATEWAY;
 	if (!netmask)
 		rt.rt_flags |= RTF_HOST;
@@ -2145,7 +2145,7 @@ int connman_inet_add_ipv6_network_route(int index, const char *host,
 	 * NULL or IPv6 any address should have the same effect.
 	 */
 
-	if (gateway && !__connman_inet_is_any_addr(gateway, AF_INET6) &&
+	if (gateway && !connman_inet_is_any_addr(gateway, AF_INET6) &&
 		inet_pton(AF_INET6, gateway, &rt.rtmsg_gateway) == 1)
 		rt.rtmsg_flags |= RTF_GATEWAY;
 
@@ -4496,8 +4496,8 @@ bool connman_inet_is_ipv6_supported()
 bool connman_inet_is_default_route(int family, const char *host,
 				const char *gateway, const char *netmask)
 {
-	return __connman_inet_is_any_addr(host, family) &&
-				__connman_inet_is_any_addr(netmask, family);
+	return connman_inet_is_any_addr(host, family) &&
+				connman_inet_is_any_addr(netmask, family);
 }
 
 int __connman_inet_get_interface_address(int index, int family, void *address)
