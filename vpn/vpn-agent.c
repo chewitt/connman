@@ -257,8 +257,12 @@ int vpn_agent_check_and_process_reply_error(DBusMessage *reply,
 
 	dbus_error_init(&error);
 
-	if (!dbus_set_error_from_message(&error, reply))
+	if (!dbus_set_error_from_message(&error, reply)) {
+		DBG("Dialog without error, set provider %p to CONNECT",
+					provider);
+		vpn_provider_set_state(provider, VPN_PROVIDER_STATE_CONNECT);
 		return 0;
+	}
 
 	if (!g_strcmp0(error.name, VPN_AGENT_INTERFACE ".Error.Canceled"))
 		err = ECANCELED;
