@@ -9950,16 +9950,19 @@ static int service_connect(struct connman_service *service)
 	else
 		return -EOPNOTSUPP;
 
-	if (err < 0) {
-		if (err != -EINPROGRESS) {
-			__connman_service_ipconfig_indicate_state(service,
+	switch (err) {
+	case 0:
+	case -EALREADY:
+	case -EINPROGRESS:
+		break;
+	default:
+		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_FAILURE,
 						CONNMAN_IPCONFIG_TYPE_IPV4);
-			__connman_service_ipconfig_indicate_state(service,
+		__connman_service_ipconfig_indicate_state(service,
 						CONNMAN_SERVICE_STATE_FAILURE,
 						CONNMAN_IPCONFIG_TYPE_IPV6);
-			__connman_stats_service_unregister(service);
-		}
+		__connman_stats_service_unregister(service);
 	}
 
 	return err;
