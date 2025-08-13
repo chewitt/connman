@@ -249,10 +249,35 @@ static int get_endpoint_addr(const char *host, const char *port, int flags,
 	return 0;
 }
 
-static int parse_endpoint_hostname(const char *host, const char *port,
-							struct sockaddr_u *addr)
+static const char *endpoint_to_str(struct wg_peer *peer, char *buf,
+							socklen_t len)
 {
+	struct sockaddr_u *addr;
+	int family;
+
+	addr = (struct sockaddr_u *)&peer->endpoint.addr;
+	family = peer->endpoint.addr.sa_family;
+
+	switch (family) {
+	case AF_INET:
+		return inet_ntop(family, &addr->sin.sin_addr, buf, len);
+	case AF_INET6:
+		return inet_ntop(family, &addr->sin6.sin6_addr, buf, len);
+	default:
+		break;
+	}
+
+	return NULL;
+}
+
+static int parse_endpoint_hostname(const char *host, const char *port,
+							struct wg_peer *peer,
+							char **gateway_resolved)
+{
+	struct sockaddr_u *addr;
 	char **tokens;
+	const char *gw = NULL;
+	char buf[INET6_ADDRSTRLEN] = { 0 };
 	unsigned int len;
 	int err;
 
@@ -271,9 +296,21 @@ static int parse_endpoint_hostname(const char *host, const char *port,
 
 	DBG("using host %s", tokens[0]);
 
+	addr = (struct sockaddr_u *)&peer->endpoint.addr;
+
 	err = get_endpoint_addr(tokens[0], port, 0, addr);
-	if (!err)
+	if (!err) {
+		/*
+		 * In case the endpoint is an host address use the resolved
+		 * IP address as gateway for DNS over WireGuard to work.
+		 */
+		if (connman_inet_check_ipaddress(tokens[0]) <= 0)
+			gw = endpoint_to_str(peer, buf, INET6_ADDRSTRLEN);
+
 		DBG("success");
+	}
+
+	*gateway_resolved = gw ? g_strdup(gw) : g_strdup(tokens[0]);
 
 	g_strfreev(tokens);
 
@@ -651,27 +688,6 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 	return G_SOURCE_REMOVE;
 }
 
-static const char *endpoint_to_str(struct wg_peer *peer, char *buf,
-							socklen_t len)
-{
-	struct sockaddr_u *addr;
-	int family;
-
-	addr = (struct sockaddr_u *)&peer->endpoint.addr;
-	family = peer->endpoint.addr.sa_family;
-
-	switch (family) {
-	case AF_INET:
-		return inet_ntop(family, &addr->sin.sin_addr, buf, len);
-	case AF_INET6:
-		return inet_ntop(family, &addr->sin6.sin6_addr, buf, len);
-	default:
-		break;
-	}
-
-	return NULL;
-}
-
 static gboolean wg_route_setup_cb(gpointer user_data)
 {
 	struct wireguard_info *info = user_data;
@@ -770,7 +786,9 @@ static int wg_connect(struct vpn_provider *provider,
 {
 	struct wg_ipaddresses ipaddresses = { 0 };
 	struct wireguard_info *info;
-	const char *option, *gateway;
+	const char *option;
+	const char *endpoint;
+	char *gateway = NULL;
 	char *ifname;
 	bool do_split_routing = true;
 	int err = -EINVAL;
@@ -859,21 +877,20 @@ static int wg_connect(struct vpn_provider *provider,
 	if (!option)
 		option = "51820";
 
-	gateway = vpn_provider_get_string(provider, "Host");
+	endpoint = vpn_provider_get_string(provider, "Host");
 	/*
 	 * Use the resolve timeout only with re-resolve. Here the network
 	 * is setup as the transport is used. In succeeding attempts resolving
 	 * is needed as it is done over potentially misconfigured WireGuard
 	 * connection that may end up blocking vpnd with getaddrinfo().
 	 */
-	err = parse_endpoint_hostname(gateway, option,
-			(struct sockaddr_u *)&info->peer.endpoint.addr);
+	err = parse_endpoint_hostname(endpoint, option, &info->peer, &gateway);
 	if (err) {
-		DBG("Failed to parse endpoint %s:%s", gateway, option);
+		DBG("Failed to parse endpoint %s:%s", endpoint, option);
 		goto error;
 	}
 
-	info->endpoint_fqdn = g_strdup(gateway);
+	info->endpoint_fqdn = g_strdup(endpoint);
 	info->port = g_strdup(option);
 
 	option = vpn_provider_get_string(provider, "WireGuard.Address");
@@ -881,11 +898,14 @@ static int wg_connect(struct vpn_provider *provider,
 		DBG("Missing WireGuard.Address configuration");
 		goto error;
 	}
+
 	err = parse_addresses(option, gateway, &ipaddresses);
 	if (err) {
-		DBG("Failed to parse addresses %s gateway %s", option, gateway);
+		DBG("Failed to parse addresses %s endpoint %s gateway %s",
+						option, endpoint, gateway);
 		goto error;
 	}
+	g_free(gateway);
 
 	ifname = get_ifname();
 	if (!ifname) {
