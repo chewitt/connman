@@ -156,6 +156,8 @@ static const char *get_string(struct connman_provider *provider,
 		return data->domain;
 	else if (g_str_equal(key, "Transport"))
 		return data->service_ident;
+	else if (g_str_equal(key, "State"))
+		return data->state;
 
 	return g_hash_table_lookup(data->setting_strings, key);
 }
@@ -283,6 +285,8 @@ static void set_provider_state(struct connection_data *data)
 		goto set;
 	} else if (g_str_equal(data->state, "configuration")) {
 		state = CONNMAN_PROVIDER_STATE_CONNECT;
+	} else if (g_str_equal(data->state, "association")) {
+		state = CONNMAN_PROVIDER_STATE_ASSOCIATION;
 	} else if (g_str_equal(data->state, "idle")) {
 		state = CONNMAN_PROVIDER_STATE_IDLE;
 	} else if (g_str_equal(data->state, "disconnect")) {
