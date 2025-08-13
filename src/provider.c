@@ -310,6 +310,10 @@ static int set_connected(struct connman_provider *provider,
 			provider->driver->set_routes(provider,
 						CONNMAN_PROVIDER_ROUTE_ALL);
 
+		__connman_service_nameserver_add_routes(provider->vpn_service,
+					provider->driver->get_property(
+						provider, "HostIP"));
+
 	} else {
 		if (ipconfig_ipv4) {
 			provider_indicate_state(provider,
