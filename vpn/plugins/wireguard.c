@@ -147,7 +147,7 @@ static int parse_allowed_ips(const char *allowed_ips, wg_peer *peer,
 
 	*do_split_routing = true;
 	curaip = NULL;
-	tokens = g_strsplit(allowed_ips, ", ", -1);
+	tokens = g_strsplit_set(allowed_ips, ", ", -1);
 	for (i = 0; tokens[i]; i++) {
 		toks = g_strsplit(tokens[i], "/", -1);
 		if (g_strv_length(toks) != 2) {
@@ -294,7 +294,7 @@ static int parse_addresses(const char *address, const char *gateway,
 	int err;
 	int i;
 
-	addresses = g_strsplit(address, ", ", -1);
+	addresses = g_strsplit_set(address, ", ", -1);
 	if (!g_strv_length(addresses)) {
 		g_strfreev(addresses);
 		return -EINVAL;
@@ -631,12 +631,6 @@ static gboolean wg_route_setup_cb(gpointer user_data)
 	}
 
 	wg_for_each_allowedip(&info->peer, allowedip) {
-		// TODO: search peers when multiple peers are supported
-		if (allowedip->family != family) {
-			DBG("Ignoring AllowedIP with different family as host");
-			continue;
-		}
-
 		memset(&addr, 0, INET6_ADDRSTRLEN);
 
 		switch (allowedip->family) {
@@ -661,7 +655,9 @@ static gboolean wg_route_setup_cb(gpointer user_data)
 			continue;
 		}
 
-		if (connman_inet_is_any_addr(addr, allowedip->family)) {
+		/* Ignore any routes for this peer family to avoid duplicates */
+		if (connman_inet_is_any_addr(addr, allowedip->family) &&
+						allowedip->family == family) {
 			DBG("ignore any addr %s", addr);
 			continue;
 		}
@@ -881,6 +877,7 @@ error:
 	 */
 	vpn_provider_add_error(provider, VPN_PROVIDER_ERROR_LOGIN_FAILED);
 	err = -ECONNABORTED;
+
 	goto done;
 }
 
