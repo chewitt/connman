@@ -230,7 +230,8 @@ static int parse_endpoint(const char *host, const char *port, struct sockaddr_u 
 	err = getaddrinfo(tokens[0], port, &hints, &result);
 	g_strfreev(tokens);
 
-	if (err < 0) {
+	/* Any non-zero return from getaddrinfo is an error */
+	if (err) {
 		DBG("Failed to resolve host address: %s", gai_strerror(err));
 		return -EINVAL;
 	}
@@ -249,8 +250,9 @@ static int parse_endpoint(const char *host, const char *port, struct sockaddr_u 
 	}
 
 	if (!rp) {
+		DBG("no connectable address found in results");
 		freeaddrinfo(result);
-		return -EINVAL;
+		return -EHOSTUNREACH;
 	}
 
 	memcpy(addr, rp->ai_addr, rp->ai_addrlen);
@@ -572,6 +574,7 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 		return G_SOURCE_REMOVE;
 	}
 
+	DBG("endpoint_fqdn %s", info->endpoint_fqdn);
 	info->resolv_id = g_resolv_lookup_hostname(info->resolv,
 						info->endpoint_fqdn,
 						resolve_endpoint_cb, info,
@@ -875,8 +878,14 @@ error:
 	 * looping when parameters are incorrect and VPN stays in failed
 	 * state.
 	 */
-	vpn_provider_add_error(provider, VPN_PROVIDER_ERROR_LOGIN_FAILED);
-	err = -ECONNABORTED;
+	if (err == -EHOSTUNREACH) {
+		vpn_provider_add_error(provider,
+					VPN_PROVIDER_ERROR_CONNECT_FAILED);
+	} else {
+		vpn_provider_add_error(provider,
+					VPN_PROVIDER_ERROR_LOGIN_FAILED);
+		err = -ECONNABORTED;
+	}
 
 	goto done;
 }
