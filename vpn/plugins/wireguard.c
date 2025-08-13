@@ -53,6 +53,7 @@
 
 #define DNS_RERESOLVE_TIMEOUT 20
 #define DNS_RERESOLVE_ERROR_LIMIT 5
+#define DNS_DEFAULT_PORT 53
 #define ROUTE_SETUP_TIMEOUT 200 // ms
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
@@ -90,7 +91,8 @@ struct {
 	{"WireGuard.PublicKey", true},
 	{"WireGuard.AllowedIPs", true},
 	{"WireGuard.EndpointPort", true},
-	{"WireGuard.PersistentKeepalive", true}
+	{"WireGuard.PersistentKeepalive", true},
+	{"WireGuard.ReresolveUseTransportDNS", false}
 };
 
 static struct wireguard_info *create_private_data(struct vpn_provider *provider)
@@ -532,7 +534,7 @@ static void resolve_endpoint_cb(GResolvResultStatus status,
 	case G_RESOLV_RESULT_STATUS_NO_ANSWER:
 	case G_RESOLV_RESULT_STATUS_NO_RESPONSE:
 	case G_RESOLV_RESULT_STATUS_SERVER_FAILURE:
-		DBG("retry DNS reresolve");
+		DBG("retry DNS reresolve, status %d", status);
 		if (info->provider)
 			vpn_provider_add_error(info->provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
@@ -544,7 +546,7 @@ static void resolve_endpoint_cb(GResolvResultStatus status,
 	case G_RESOLV_RESULT_STATUS_FORMAT_ERROR:
 	case G_RESOLV_RESULT_STATUS_NOT_IMPLEMENTED:
 	case G_RESOLV_RESULT_STATUS_REFUSED:
-		DBG("stop DNS reresolve, error %d", status);
+		DBG("stop DNS reresolve, status %d", status);
 		if (err && info->provider)
 			vpn_provider_add_error(info->provider,
 					VPN_PROVIDER_ERROR_CONNECT_FAILED);
@@ -599,6 +601,9 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 {
 	struct wireguard_info *info = user_data;
 	GError *error = NULL;
+	char **nameservers;
+	bool option;
+	int i;
 
 	DBG("");
 
@@ -616,6 +621,19 @@ static gboolean wg_dns_reresolve_cb(gpointer user_data)
 	}
 
 	DBG("endpoint_fqdn %s", info->endpoint_fqdn);
+
+	option = vpn_provider_get_boolean(info->provider,
+					"WireGuard.ReresolveUseTransportDNS",
+					false);
+	if (option) {
+		nameservers = vpn_provider_get_string_list(info->provider,
+						"TransportNameservers");
+		for (i = 0; nameservers && nameservers[i]; i++)
+			g_resolv_add_nameserver(info->resolv,
+							nameservers[i],
+							DNS_DEFAULT_PORT, 0);
+	}
+
 	info->resolv_id = g_resolv_lookup_hostname(info->resolv,
 						info->endpoint_fqdn,
 						resolve_endpoint_cb, info,
