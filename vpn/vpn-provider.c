@@ -112,6 +112,7 @@ struct vpn_provider {
 	unsigned int signal_watch;
 	unsigned int auth_error_limit;
 	time_t previous_connect_time;
+	char **transport_nameservers;
 };
 
 struct vpn_provider_connect_data {
@@ -1504,6 +1505,7 @@ static void provider_destruct(struct vpn_provider *provider)
 	g_free(provider->config_entry);
 	connman_ipaddress_free(provider->prev_ipv4_addr);
 	connman_ipaddress_free(provider->prev_ipv6_addr);
+	g_strfreev(provider->transport_nameservers);
 	g_free(provider);
 }
 
@@ -2243,6 +2245,41 @@ static gboolean provider_property_changed(DBusConnection *conn,
 		 */
 		vpn_provider_set_boolean(provider, "SplitRouting",
 					split_routing, true);
+	} else if (g_str_equal(key, "TransportNameservers")) {
+		DBusMessageIter entry;
+		char **nameservers = NULL;
+		int i = 0;
+
+		DBG("TransportNameservers");
+
+		dbus_message_iter_recurse(&value, &entry);
+
+		while (dbus_message_iter_get_arg_type(&entry) ==
+							DBUS_TYPE_STRING) {
+			const char *nameserver;
+
+			dbus_message_iter_get_basic(&entry, &nameserver);
+
+			DBG("DNS%d: %s", i, nameserver);
+
+			nameservers = g_try_renew(char *, nameservers, i + 2);
+			if (!nameservers)
+				break;
+
+			nameservers[i] = g_strdup(nameserver);
+			if (!nameservers[i]) {
+				g_strfreev(nameservers);
+				nameservers = NULL;
+				break;
+			}
+
+			nameservers[++i] = NULL;
+
+			dbus_message_iter_next(&entry);
+		}
+
+		g_strfreev(provider->transport_nameservers);
+		provider->transport_nameservers = nameservers;
 	}
 
 out:
@@ -2983,6 +3020,17 @@ const char *vpn_provider_get_string(struct vpn_provider *provider,
 		return NULL;
 
 	return setting->value;
+}
+
+char **vpn_provider_get_string_list(struct vpn_provider *provider,
+							const char *key)
+{
+	DBG("provider %p key %s", provider, key);
+
+	if (g_str_equal(key, "TransportNameservers"))
+		return provider->transport_nameservers;
+
+	return NULL;
 }
 
 int vpn_provider_set_boolean(struct vpn_provider *provider, const char *key,
