@@ -25,7 +25,6 @@
 
 #include <glib.h>
 #include <stdbool.h>
-#include <inet.h>
 #include <arpa/inet.h>
 
 typedef void (*util_debug_func_t)(const char *str, void *user_data);
